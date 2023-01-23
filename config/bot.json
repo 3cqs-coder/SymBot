@@ -1,0 +1,21 @@
+{
+	"apiKey": "",
+	"apiPassphrase": null,
+	"apiPassword": null,
+	"apiSecret": "",
+	"dcaMaxOrder": 46,
+	"dcaOrderAmount": 45,
+	"dcaOrderSizeMultiplier": 1.08,
+	"dcaOrderStartDistance": 1.3,
+	"dcaOrderStepPercent": 0.05,
+	"dcaOrderStepPercentMultiplier": 1.0,
+	"dcaTakeProfitPercent": 1.5,
+	"exchange": "coinbasepro",
+	"exchangeFee": 0,
+	"firstOrderAmount": 20,
+	"firstOrderLimitPrice": 1300,
+	"firstOrderType": "MARKET",
+	"pair": "",
+	"sandBox": true,
+	"sandBoxWallet": 100
+}

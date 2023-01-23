@@ -1,0 +1,23 @@
+{
+  "name": "SymBot",
+  "version": "0.6.5-beta.0",
+  "description": "SymBot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node symbot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "3CQS",
+  "license": "CC BY-NC-SA 4.0",
+  "dependencies": {
+    "ccxt": "^2.6.22",
+    "colors": "^1.4.0",
+    "delay": "^5.0.0",
+    "easy-table": "^1.2.0",
+    "mongodb": "^4.13.0",
+    "mongoose": "^6.8.3",
+    "percentagejs": "^1.0.2",
+    "prompt-sync": "^4.2.0",
+    "socket.io-client": "^4.5.4"
+  }
+}
