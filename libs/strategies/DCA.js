@@ -944,8 +944,12 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									status: 1
 								});
 
-								Common.logger(colors.bgRed('DCA Bot Finished.'));
-								process.exit(0);
+								Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
+
+								if (Object.keys(dealTracker).length == 0) {
+								
+									process.exit(0);
+								}
 							}
 						}
 						else {
