@@ -102,11 +102,6 @@ async function startBot(data, start, reload) {
 				// Config reloaded from db so bot and continue
 				//await delay(1000);
 
-				dealTracker[isActive.dealId]['deal'] = {};
-				dealTracker[isActive.dealId]['info'] = {};
-
-				dealTracker[isActive.dealId]['deal'] = JSON.parse(JSON.stringify(isActive));
-
 				await dcaFollow(config, exchange, isActive.dealId);
 			}
 		}
@@ -374,6 +369,12 @@ async function startBot(data, start, reload) {
 					});
 
 					await deal.save();
+
+					dealTracker[dealId] = {};
+					dealTracker[dealId]['deal'] = {};
+					dealTracker[dealId]['info'] = {};
+
+					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
 					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
