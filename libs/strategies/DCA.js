@@ -17,6 +17,7 @@ const prompt = require('prompt-sync')({
 });
 
 
+let dealTracker = {};
 let shareData;
 
 
@@ -90,6 +91,17 @@ async function startBot(data, start, reload) {
 
 				// Config reloaded from db so bot and continue
 				//await delay(1000);
+
+				if (dealTracker[isActive.dealId] != undefined && dealTracker[isActive.dealId] != null) {
+
+					Common.logger(
+							colors.bgCyan.bold('Deal ID ' + isActive.dealId + ' already running for ' + pair + '...')
+					);
+				
+					return;
+				}
+
+				dealTracker[isActive.dealId] = isActive;
 
 				await dcaFollow(config, exchange, isActive.dealId);
 			}
@@ -1037,6 +1049,27 @@ const checkActiveDeal = async (pair) => {
 };
 
 
+const getDeals = async (query) => {
+	
+	if (query == undefined || query == null) {
+
+		query = {};
+	}
+
+
+	try {
+
+		const deals = await Deals.find(query);
+
+		return deals;
+	}
+	catch (e) {
+
+		Common.logger(JSON.stringify(e));
+	}
+};
+
+		
 const getBalance = async (exchange, symbol) => {
 
 	try {
@@ -1087,6 +1120,32 @@ const sellOrder = async (exchange, pair, qty) => {
 };
 
 
+async function resumeBots() {
+
+	// Check for active deals and resume bots
+	const dealsActive = await getDeals({ 'status': 0 });
+
+	if (dealsActive.length > 0) {
+
+		Common.logger(
+						colors.bgBrightYellow.bold('Resuming ' + dealsActive.length + ' active DCA bot deals...')
+					 );
+
+		for (let i = 0; i < dealsActive.length; i++) {
+
+			const deal = dealsActive[i];
+
+			const dealId = deal.dealId;
+			const config = deal.config;
+			const pair = deal.pair;
+
+			dealTracker.dealId = JSON.parse(JSON.stringify(deal));
+
+			startBot(config, true, true);
+		}
+	}
+}
+
 
 module.exports = {
 
@@ -1097,5 +1156,7 @@ module.exports = {
 	init: function(obj) {
 
 		shareData = obj;
+
+		resumeBots();
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "SymBot",
-  "version": "0.6.5-beta.0",
+  "version": "0.6.7-beta.0",
   "description": "SymBot",
   "main": "index.js",
   "scripts": {
@@ -14,7 +14,6 @@
     "colors": "^1.4.0",
     "delay": "^5.0.0",
     "easy-table": "^1.2.0",
-    "mongodb": "^4.13.0",
     "mongoose": "^6.8.3",
     "percentagejs": "^1.0.2",
     "prompt-sync": "^4.2.0",
