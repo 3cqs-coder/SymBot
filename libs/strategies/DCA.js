@@ -80,18 +80,6 @@ async function startBot(data, start, reload) {
 
 				// Active deal found so get original config from db and restart bot
 
-				Common.logger(
-					colors.bgCyan.bold('Found active DCA deal for ' + pair + '...')
-				);
-
-				startBot(isActive.config, true, true);
-				return;
-			}
-			else {
-
-				// Config reloaded from db so bot and continue
-				//await delay(1000);
-
 				if (dealTracker[isActive.dealId] != undefined && dealTracker[isActive.dealId] != null) {
 
 					Common.logger(
@@ -101,7 +89,23 @@ async function startBot(data, start, reload) {
 					return;
 				}
 
-				dealTracker[isActive.dealId] = isActive;
+				Common.logger(
+					colors.bgCyan.bold('Found active DCA deal for ' + pair + '...')
+				);
+
+				startBot(isActive.config, true, true);
+
+				return;
+			}
+			else {
+
+				// Config reloaded from db so bot and continue
+				//await delay(1000);
+
+				dealTracker[isActive.dealId]['deal'] = {};
+				dealTracker[isActive.dealId]['info'] = {};
+
+				dealTracker[isActive.dealId]['deal'] = JSON.parse(JSON.stringify(isActive));
 
 				await dcaFollow(config, exchange, isActive.dealId);
 			}
@@ -377,8 +381,11 @@ async function startBot(data, start, reload) {
 				}
 				else {
 
-					Common.logger(colors.bgRed.bold(shareData.appData.name + ' is stopping... '));
-					process.exit(0);
+					if (Object.keys(dealTracker).length == 0) {
+
+						Common.logger(colors.bgRed.bold(shareData.appData.name + ' is stopping... '));
+						process.exit(0);
+					}
 				}
 			}
 			else {
@@ -630,9 +637,12 @@ async function startBot(data, start, reload) {
 				}
 				else {
 
-					Common.logger(colors.bgRed.bold(shareData.appData.name + ' is stopping... '));
+					if (Object.keys(dealTracker).length == 0) {
 
-					process.exit(0);
+						Common.logger(colors.bgRed.bold(shareData.appData.name + ' is stopping... '));
+
+						process.exit(0);
+					}
 				}
 			}
 		}
@@ -858,6 +868,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								}
 							}
 
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profit);
+
 							Common.logger(
 								colors.blue.bold.italic(
 									'Pair: ' +
@@ -902,6 +914,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									}
 								}
 
+								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profit);
+
 								Common.logger(
 									colors.blue.bold.italic(
 										'Pair: ' +
@@ -934,6 +948,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							}
 						}
 						else {
+
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profit);
 
 							Common.logger(
 								'Pair: ' +
@@ -1120,6 +1136,20 @@ const sellOrder = async (exchange, pair, qty) => {
 };
 
 
+async function 	updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc) {
+
+	const dealObj = {
+						'updated': new Date(),
+						'price_last': priceLast,
+						'price_average': priceAverage,
+						'price_target': priceTarget,
+						'take_profit_percentage': takeProfitPerc
+					};
+
+	dealTracker[dealId]['info'] = dealObj;
+}
+
+
 async function resumeBots() {
 
 	// Check for active deals and resume bots
@@ -1139,7 +1169,10 @@ async function resumeBots() {
 			const config = deal.config;
 			const pair = deal.pair;
 
-			dealTracker.dealId = JSON.parse(JSON.stringify(deal));
+			dealTracker[dealId] = {};
+			dealTracker[dealId]['info'] = {};
+
+			dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
 			startBot(config, true, true);
 		}
