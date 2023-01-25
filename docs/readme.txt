@@ -10,6 +10,11 @@ Installation:
 8. Follow the prompts to confirm starting the bot
 
 
+Once running you can access SymBot through your web browser like this:
+
+http://127.0.0.1:3000
+
+
 Configuration:
 
 These files are located in the "config" directory
