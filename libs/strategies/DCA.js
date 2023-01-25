@@ -62,6 +62,16 @@ async function startBot(data, start, reload) {
 		const isActive = await checkActiveDeal(pair);
 		const symbol = await getSymbol(exchange, pair);
 
+		if (symbol == undefined || symbol == null) {
+
+			if (Object.keys(dealTracker).length == 0) {
+
+				process.exit(0);
+			}
+
+			return;
+		}
+
 		let askPrice = symbol.askPrice;
 
 		if (symbol.askPrice == undefined || symbol.askPrice == null) {
@@ -333,6 +343,8 @@ async function startBot(data, start, reload) {
 				let sendOrders;
 
 				if (start == undefined || start == null || start == false) {
+
+					//return t.toString();
 
 					sendOrders = prompt(
 						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
@@ -672,6 +684,16 @@ const dcaFollow = async (configData, exchange, dealId) => {
 			const pair = deal.pair;
 			const symbol = await getSymbol(exchange, pair);
 
+			if (symbol == undefined || symbol == null) {
+
+				if (Object.keys(dealTracker).length == 0) {
+
+					process.exit(0);
+				}
+
+				return;
+			}
+
 			let bidPrice = symbol.bidPrice;
 
 			if (symbol.bidPrice == undefined || symbol.bidPrice == null) {
@@ -1008,17 +1030,19 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 const getSymbol = async (exchange, pair) => {
 
+	let symbolInfo;
+
 	try {
 
 		const symbol = await exchange.fetchTicker(pair);
-		return symbol.info;
+		symbolInfo = symbol.info;
 	}
 	catch (e) {
 
-		//console.log(e)
-		Common.logger(colors.bgRed.bold.italic(pair + ' is not a valid pair.'));
-		process.exit(0);
+		Common.logger(colors.bgRed.bold.italic(pair + ' is not a valid pair: ' + JSON.stringify(e)));
 	}
+
+	return symbolInfo;
 };
 
 
@@ -1141,7 +1165,7 @@ const sellOrder = async (exchange, pair, qty) => {
 };
 
 
-async function 	updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc) {
+async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc) {
 
 	const dealObj = {
 						'updated': new Date(),
