@@ -1,60 +1,14 @@
-<!DOCTYPE html>
-<html>
-<head>
-<title><%- appData.name %> <%- appData.version %></title>
+<%- include('./partialsHeaderView'); %>
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<main>
 
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-<meta http-equiv="Pragma" content="no-cache" />
-<meta http-equiv="Expires" content="0" />
-
-
-<script>
-
-	setTimeout(() => { window.location.reload(); }, 5000);
-
-</script>
-
-
-</head>
-
-<body>
-
-<h2><%- appData.name %> <%- appData.version %></h2>
-
-
-<table border=0 cellspacing=0 cellpadding=0 style="width: 50%;">
-
-<tr style="font-weight: bold; text-align: left;">
-	<th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th>
-</tr>
-
-<%
-	for (let dealId in deals) {
-
-		let profitPercColor = 'green';
-
-		let deal = deals[dealId];
-		let profitPerc = deal['info']['take_profit_percentage'];
-		
-		if (profitPerc < 0) {
-
-			profitPercColor = 'red';
-		}
-%>
-
-	<tr>
-		<td><%- dealId %></td>
-		<td><%- deal['deal']['pair'] %></td>
-		<td>$<%- deal['info']['price_last'] %></td>
-		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
-		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
-	</tr>
+	<b><a href="/deals/new">Create New Deal</a></b>
 	
-<% 	} %>
+	<br><br>
 
-</table>
+	<b><a href="/deals/active">Show Active Deals</a></b>
 
-</body>
-</html>
+</main>
+
+
+<%- include('./partialsFooterView'); %>

@@ -97,9 +97,25 @@ function initRoutes() {
 
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'homeView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
+		res.render( 'homeView', { 'appData': shareData.appData } );
 	});
 
+
+	router.get('/deals/new', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		res.render( 'dealsNewView', { 'appData': shareData.appData } );
+	});
+
+
+	router.get('/deals/active', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		res.render( 'dealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
+	});
+	
 
 	router.all('*', (req, res) => {
 
