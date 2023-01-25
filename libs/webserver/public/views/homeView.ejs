@@ -1,2 +1,51 @@
-<%- appData.name %> v <%- appData.version %> is running
+<!DOCTYPE html>
+<html>
+<head>
+<title><%- appData.name %> <%- appData.version %></title>
 
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+
+
+<script>
+
+	setTimeout(() => { window.location.reload(); }, 5000);
+
+</script>
+
+
+</head>
+
+<body>
+
+<h2><%- appData.name %> <%- appData.version %></h2>
+
+
+<table border=0 cellspacing=0 cellpadding=0 style="width: 50%;">
+
+<tr style="font-weight: bold; text-align: left;">
+	<th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th>
+</tr>
+
+<%
+	for (let dealId in deals) {
+
+		let deal = deals[dealId];
+%>
+
+	<tr>
+		<td><%- dealId %></td>
+		<td><%- deal['deal']['pair'] %></td>
+		<td>$<%- deal['info']['price_last'] %></td>
+		<td><%- deal['info']['take_profit_percentage'] %>%</td>
+	</tr>
+	
+<% 	} %>
+
+</table>
+
+</body>
+</html>

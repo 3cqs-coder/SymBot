@@ -856,6 +856,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 				);
 
 				profit = Number(profit).toFixed(2);
+				let profitPerc = profit;
 
 				profit =
 					profit > 0 ?
@@ -891,7 +892,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								}
 							}
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profit);
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc);
 
 							Common.logger(
 								colors.blue.bold.italic(
@@ -937,7 +938,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									}
 								}
 
-								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profit);
+								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc);
 
 								Common.logger(
 									colors.blue.bold.italic(
@@ -976,7 +977,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						}
 						else {
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profit);
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc);
 
 							Common.logger(
 								'Pair: ' +
@@ -1218,6 +1219,8 @@ module.exports = {
 	init: function(obj) {
 
 		shareData = obj;
+
+		shareData['dealTracker'] = dealTracker;
 
 		resumeBots();
     }

@@ -51,7 +51,8 @@ async function init() {
 	let shareData = {
 						'appData': {
 										'name': packageJson.description,
-										'version': packageJson.version
+										'version': packageJson.version,
+										'started': new Date()
 								   },
 						'DB': DB,
 						'DCA': DCA,

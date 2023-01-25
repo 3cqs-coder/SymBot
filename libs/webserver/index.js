@@ -97,7 +97,7 @@ function initRoutes() {
 
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'homeView', { 'appData': shareData.appData } );
+		res.render( 'homeView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
 	});
 
 
