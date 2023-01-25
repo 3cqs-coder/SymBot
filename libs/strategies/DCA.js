@@ -892,7 +892,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								}
 							}
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc);
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length);
 
 							Common.logger(
 								colors.blue.bold.italic(
@@ -938,7 +938,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									}
 								}
 
-								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc);
+								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length);
 
 								Common.logger(
 									colors.blue.bold.italic(
@@ -977,7 +977,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						}
 						else {
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc);
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length);
 
 							Common.logger(
 								'Pair: ' +
@@ -1166,10 +1166,12 @@ const sellOrder = async (exchange, pair, qty) => {
 };
 
 
-async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc) {
+async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax) {
 
 	const dealObj = {
 						'updated': new Date(),
+						'safety_orders_used': ordersUsed,
+						'safety_orders_max': ordersMax - 1,
 						'price_last': priceLast,
 						'price_average': priceAverage,
 						'price_target': priceTarget,
