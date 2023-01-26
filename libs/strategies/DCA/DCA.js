@@ -48,7 +48,8 @@ async function startBot(data, start, reload) {
 
 		if (pairConfig == undefined || pairConfig == null || pairConfig == '') {
 
-			pair = prompt(colors.bgGreen('Please enter pair (BASE/QUOTE): '));
+			//pair = prompt(colors.bgGreen('Please enter pair (BASE/QUOTE): '));
+			return;
 		}
 		else {
 
@@ -72,7 +73,7 @@ async function startBot(data, start, reload) {
 				process.exit(0);
 			}
 
-			return;
+			return ( { 'success': false, 'data': 'Invalid Pair' } )
 		}
 
 		let askPrice = symbol.askPrice;
@@ -95,11 +96,13 @@ async function startBot(data, start, reload) {
 
 				if (dealTracker[isActive.dealId] != undefined && dealTracker[isActive.dealId] != null) {
 
+					let msg = 'Deal ID ' + isActive.dealId + ' already running for ' + pair + '...';
+
 					Common.logger(
-							colors.bgCyan.bold('Deal ID ' + isActive.dealId + ' already running for ' + pair + '...')
+							colors.bgCyan.bold(msg)
 					);
-				
-					return;
+
+					return ( { 'success': false, 'data': msg } );
 				}
 
 				Common.logger(
@@ -347,8 +350,8 @@ async function startBot(data, start, reload) {
 
 				if (start == undefined || start == null || start == false) {
 
-					//return t.toString();
-
+					return ( { 'success': true, 'data': t.toString() } );
+/*
 					sendOrders = prompt(
 						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
 					);
@@ -363,6 +366,7 @@ async function startBot(data, start, reload) {
 						startBot(configStart, true);
 						return;
 					}
+*/
 				}
 
 
@@ -623,12 +627,31 @@ async function startBot(data, start, reload) {
 				}
 
 				//console.log('\n');
+				let sendOrders;
 
-				const sendOrders = prompt(
-					colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
-				);
+				if (start == undefined || start == null || start == false) {
 
-				if (sendOrders == 'y') {
+					return ( { 'success': true, 'data': t.toString() } );
+/*
+					sendOrders = prompt(
+						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
+					);
+
+					if (sendOrders.toUpperCase() == 'Y') {
+
+						let configStart = JSON.parse(JSON.stringify(config));
+
+						// Set pair
+						configStart.pair = pair;
+
+						startBot(configStart, true);
+						return;
+					}
+*/
+				}
+
+
+				if (start) {
 
 					Common.logger(colors.green.bold('Please wait, ' + shareData.appData.name + ' is starting... '));
 
@@ -646,6 +669,10 @@ async function startBot(data, start, reload) {
 					});
 
 					await deal.save();
+
+					dealTracker[dealId] = {};
+					dealTracker[dealId]['deal'] = {};
+					dealTracker[dealId]['info'] = {};
 
 					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 

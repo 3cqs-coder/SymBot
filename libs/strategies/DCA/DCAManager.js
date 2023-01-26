@@ -43,6 +43,7 @@ async function viewActiveDeals(req, res) {
 
 async function apiCreateDeal(req, res) {
 
+	let resData;
 	let success = true;
 
 	const body = req.body;
@@ -63,9 +64,22 @@ async function apiCreateDeal(req, res) {
 	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
-	shareData.DCA.startBot(botData, true, true);
+	// Only get orders, don't start bot
+	let orders = await shareData.DCA.startBot(botData, false);
 
-	res.send( { 'date': new Date(), 'success': success, 'data': {} } );
+	resData = orders.data;
+
+	if (!orders.success) {
+
+		success = false;
+	}
+	else {
+
+		// Start bot
+		shareData.DCA.startBot(botData, true, true);
+	}
+
+	res.send( { 'date': new Date(), 'success': success, 'data': resData } );
 }
 
 

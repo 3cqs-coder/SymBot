@@ -28,11 +28,13 @@
 
 						if (!data.success) {
 
-							alert(JSON.stringify(data));
+							//alert(JSON.stringify(data));
+							alert(data.data);
 						}
 						else {
 
-							alert('Success');
+							$('#orders').html('<pre>' + data.data + '</pre><br>');
+							alert('Bot Started');
 						}
 					},
 					error: function(data) {
@@ -85,6 +87,7 @@
 	
 	</table>
 
+	<div id="orders" style="width: 100%; height: 200px;"></div>
 
 	</center>
 
