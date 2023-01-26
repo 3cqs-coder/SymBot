@@ -43,10 +43,13 @@ async function viewActiveDeals(req, res) {
 
 async function apiCreateDeal(req, res) {
 
+	let orders;
 	let resData;
+
 	let success = true;
 
 	const body = req.body;
+	const createStep = body.createStep;
 
 	const botConfig = await shareData.Common.getConfig('bot.json');
 
@@ -65,7 +68,7 @@ async function apiCreateDeal(req, res) {
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
 	// Only get orders, don't start bot
-	let orders = await shareData.DCA.startBot(botData, false);
+	orders = await shareData.DCA.startBot(botData, false);
 
 	resData = orders.data;
 
@@ -75,11 +78,14 @@ async function apiCreateDeal(req, res) {
 	}
 	else {
 
-		// Start bot
-		shareData.DCA.startBot(botData, true, true);
+		if (createStep.toLowerCase() != 'getorders') {
+
+			// Start bot
+			shareData.DCA.startBot(botData, true, true);
+		}
 	}
 
-	res.send( { 'date': new Date(), 'success': success, 'data': resData } );
+	res.send( { 'date': new Date(), 'success': success, 'step': createStep, 'data': resData } );
 }
 
 

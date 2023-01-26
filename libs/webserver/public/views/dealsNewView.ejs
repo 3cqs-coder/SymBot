@@ -7,9 +7,29 @@
 		const form = '#formDealsCreate';
 		const submitUrl = $(form).attr('action');
 
-		$('#formSubmit').on('click', function(e) {
+		const createStep = $('#createStep').val();
+
+		$('[id^="formSubmit"]').on('click', function(e) {
 
 			e.preventDefault();
+
+			const id = $(this).attr('id');
+
+			if (id.match(/start/i)) {
+
+				let confirmStart = confirm('Start bot?');
+
+				if (confirmStart) {
+
+					$('#createStep').val('start');
+				}
+				else {
+
+					return;
+				}
+			}
+
+			$('#formSubmitStart').hide();
 
 			const formData = $(form).serializeArray().reduce((o, {name: n, value: v}) => Object.assign(o, { [n]: v }), {});
 
@@ -34,24 +54,37 @@
 						else {
 
 							$('#orders').html('<pre>' + data.data + '</pre><br>');
-							alert('Bot Started');
+							
+							if (data.step.toLowerCase() != 'getorders') {
+
+								alert('Bot Started');
+							}
+							else {
+
+								$('#formSubmitStart').show();
+								alert('Verify bot orders and confirm to start bot');
+							}
 						}
 					},
 					error: function(data) {
 
 						// Some error in ajax call
+						$('#formSubmitStart').hide();
 						alert('Error: ' + JSON.stringify(data));
 				}
 			});
+
+			// Reset value
+			$('#createStep').val(createStep);
 		});
 	});
 
 
 	$(document).on('keypress', '#dealsCreate input', function(e) {
 
-		let id = $(this).attr('id');
+		const id = $(this).attr('id');
 
-		let charCode = (e.which) ? e.which : e.keyCode;
+		const charCode = (e.which) ? e.which : e.keyCode;
 
 		if (id != 'pair') {
 
@@ -71,6 +104,8 @@
 
 	<form id="formDealsCreate" action="/api/deals/create">
 
+		<input type=hidden id="createStep" name="createStep" value="getorders">
+
 		<tr><td style="width: 175px;">Pair:</td> <td><input id="pair" name="pair" style="width: 100px;"></td></tr>
 		<tr><td>Base Order:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" style="width: 60px;"></td></tr>
 		<tr><td>Safety Order:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" style="width: 60px;"></td></tr>
@@ -81,7 +116,10 @@
 		<tr><td>dcaOrderStepPercentMultiplier:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" style="width: 60px;"></td></tr>
 		<tr><td>dcaTakeProfitPercent:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" style="width: 60px;"></td></tr>
 
-		<tr><td colspan=2 style="padding-top: 25px; text-align: center;"><input type=button id="formSubmit" value="Create Bot Deal" style="width: 125px; cursor: pointer;"></td></tr>
+		<tr>
+			<td style="padding-top: 25px; text-align: center;"><input type=button id="formSubmitPreview" value="Preview Bot Deal" style="width: 125px; cursor: pointer;"></td>
+			<td style="padding-top: 25px; text-align: center;"><input type=button id="formSubmitStart" value="Start Bot Deal" style="display: none; width: 125px; cursor: pointer; background-color: #81df6f;"></td>
+		</tr>
 
 	</form>
 	

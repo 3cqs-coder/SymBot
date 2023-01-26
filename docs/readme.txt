@@ -20,7 +20,7 @@ These files are located in the "config" directory
 		- For quick set up, create a free account at https://cloud.mongodb.com and copy the URL given into the app config. It begins with something like: mongodb+srv://
 		- For better security running your own local database is recommended
 
-	- "signals" contains a section to use signals with SymBot. There is a 3CQS signals section by default. If have an API key just copy it there or create an account at https://www.3CQS.com to get one.
+	- "signals" contains a section to use signals with SymBot. There is a 3CQS signals section by default. If you have an API key just copy it there or create an account at https://www.3CQS.com to get one.
 	
 
 * bot.json
