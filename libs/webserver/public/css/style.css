@@ -163,6 +163,7 @@ table#dealsCreate {
 
 table#dealsCreate td {
 
+	font-weight: bold;
 	padding-bottom: 5px;
 }
 

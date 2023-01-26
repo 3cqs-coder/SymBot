@@ -11,6 +11,14 @@
 
 			e.preventDefault();
 
+			const formData = $(form).serializeArray().reduce((o, {name: n, value: v}) => Object.assign(o, { [n]: v }), {});
+
+			if (formData.pair == undefined || formData.pair == null || formData.pair == '' || !formData.pair.match(/\//)) {
+
+				alert('Invalid Pair');
+				return;
+			}
+
 			$.ajax({
 						type: 'POST',
 						url: submitUrl,
