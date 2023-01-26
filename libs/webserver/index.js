@@ -121,24 +121,13 @@ function initRoutes() {
 
 		res.set('Cache-Control', 'no-store');
 
-		let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
+		shareData.DCAManager.apiGetDeals(req, res);
+	});
 
-		// Remove sensitive data
-		for (let dealId in dealsObj) {
 
-			let deal = dealsObj[dealId];
-			let config = deal['deal']['config'];
+	router.post('/api/deals/create', (req, res) => {
 
-			for (let key in config) {
-
-				if (key.substring(0, 3).toLowerCase() == 'api') {
-
-					delete config[key];
-				}
-			}
-		}
-
-		res.send( { 'date': new Date(), 'data': dealsObj } );
+		shareData.DCAManager.apiCreateDeal(req, res);
 	});
 
 

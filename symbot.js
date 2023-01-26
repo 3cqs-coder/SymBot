@@ -11,7 +11,8 @@
 
 
 const DB = require(__dirname + '/libs/mongodb');
-const DCA = require(__dirname + '/libs/strategies/DCA.js');
+const DCA = require(__dirname + '/libs/strategies/DCA/DCA.js');
+const DCAManager = require(__dirname + '/libs/strategies/DCA/DCAManager.js');
 const Signals3CQS = require(__dirname + '/libs/signals/3CQS/3cqs-signals-client.js');
 const Common = require(__dirname + '/libs/Common.js');
 const WebServer = require(__dirname + '/libs/webserver');
@@ -56,12 +57,14 @@ async function init() {
 								   },
 						'DB': DB,
 						'DCA': DCA,
+						'DCAManager': DCAManager,
 						'Common': Common,
 						'WebServer': WebServer
 					};
 
 	DB.init(shareData);
 	DCA.init(shareData);
+	DCAManager.init(shareData);
 	WebServer.init(shareData);
 	Signals3CQS.init(shareData);
 	Common.init(shareData);

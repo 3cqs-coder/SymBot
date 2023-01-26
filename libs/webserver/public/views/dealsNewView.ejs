@@ -1,11 +1,67 @@
 <%- include('./partialsHeaderView'); %>
 
+<script>
+
+	$(document).ready(function () {
+
+		const form = '#formDealsCreate';
+		const submitUrl = $(form).attr('action');
+
+		$('#formSubmit').on('click', function(e) {
+
+			e.preventDefault();
+
+			$.ajax({
+						type: 'POST',
+						url: submitUrl,
+						data: $(form).serialize(),
+						dataType: 'json',
+						success: function(data) {
+
+						if (!data.success) {
+
+							alert(JSON.stringify(data));
+						}
+						else {
+
+							alert('Success');
+						}
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						alert('Error: ' + JSON.stringify(data));
+				}
+			});
+		});
+	});
+
+</script>
+
+
+<center>
 <main>
 
-	<center>
-		<h1>Coming Soon</h1>
-	</center>
+	<h2>Coming Soon - Under Development</h2>
+
+	<div style="text-align: left;">
+
+	<form id="formDealsCreate" action="/api/deals/create">
+
+		Base Order: <input id="firstOrderAmount" name="firstOrderAmount" style="width: 100px;"><br>
+		Safety Order: <input id="dcaOrderAmount" name="dcaOrderAmount" style="width: 100px;"><br>
+		Max Safety Orders: <input id="dcaMaxOrder" name="dcaMaxOrder" style="width: 100px;">
+
+		<br><br>
+
+		<input type=button id="formSubmit" value="Create Deal" style="width: 100px; cursor: pointer;">
+
+	</form>
+
+	</div>
 
 </main>
+</center>
+
 
 <%- include('./partialsFooterView'); %>

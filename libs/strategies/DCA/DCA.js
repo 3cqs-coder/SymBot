@@ -2,7 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const pathRoot = path.dirname(fs.realpathSync(__dirname));
+
+let pathRoot = path.dirname(fs.realpathSync(__dirname));
+pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
+
 
 const colors = require('colors');
 const delay = require('delay');
@@ -1214,6 +1217,12 @@ async function resumeBots() {
 }
 
 
+async function start() {
+
+	resumeBots();
+}
+
+
 module.exports = {
 
 	colors,
@@ -1226,6 +1235,6 @@ module.exports = {
 
 		shareData['dealTracker'] = dealTracker;
 
-		resumeBots();
+		start();
     }
 }
