@@ -27,11 +27,43 @@ async function apiGetDeals(req, res) {
 }
 
 
+async function viewCreateDeal(req, res) {
+
+	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	res.render( 'dealsNewView', { 'appData': shareData.appData, 'botData': botConfig.data } );
+}
+
+
+async function viewActiveDeals(req, res) {
+
+	res.render( 'dealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
+}
+
+
 async function apiCreateDeal(req, res) {
 
 	let success = true;
 
 	const body = req.body;
+
+	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	let botData = botConfig.data;
+
+	botData.sandBox = true;
+
+	botData.pair = body.pair;
+	botData.firstOrderAmount = body.firstOrderAmount;
+	botData.dcaOrderAmount = body.dcaOrderAmount;
+	botData.dcaMaxOrder = body.dcaMaxOrder;
+	botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
+	botData.dcaOrderStartDistance = body.dcaOrderStartDistance;
+	botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
+	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
+	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
+
+	shareData.DCA.startBot(botData, true, true);
 
 	res.send( { 'date': new Date(), 'success': success, 'data': {} } );
 }
@@ -43,6 +75,8 @@ module.exports = {
 
 	apiGetDeals,
 	apiCreateDeal,
+	viewCreateDeal,
+	viewActiveDeals,
 
 	init: function(obj) {
 

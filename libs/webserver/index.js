@@ -105,7 +105,7 @@ function initRoutes() {
 
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'dealsNewView', { 'appData': shareData.appData } );
+		shareData.DCAManager.viewCreateDeal(req, res);
 	});
 
 
@@ -113,7 +113,7 @@ function initRoutes() {
 
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'dealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
+		shareData.DCAManager.viewActiveDeals(req, res);
 	});
 	
 

@@ -42,15 +42,21 @@
 <center>
 <main>
 
-	<h2>Coming Soon - Under Development</h2>
+	<h2>Under Development</h2>
 
 	<div style="text-align: left;">
 
 	<form id="formDealsCreate" action="/api/deals/create">
 
-		Base Order: <input id="firstOrderAmount" name="firstOrderAmount" style="width: 100px;"><br>
-		Safety Order: <input id="dcaOrderAmount" name="dcaOrderAmount" style="width: 100px;"><br>
-		Max Safety Orders: <input id="dcaMaxOrder" name="dcaMaxOrder" style="width: 100px;">
+		Pair: <input id="pair" name="pair" style="width: 100px;"><br>
+		Base Order: <input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" style="width: 100px;"><br>
+		Safety Order: <input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" style="width: 100px;"><br>
+		Max Safety Orders: <input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" style="width: 100px;"><br>
+		dcaOrderSizeMultiplier: <input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" style="width: 100px;"><br>
+		dcaOrderStartDistance: <input id="dcaOrderStartDistance" name="dcaOrderStartDistance" value="<%- botData.dcaOrderStartDistance %>" style="width: 100px;"><br>
+		dcaOrderStepPercent: <input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent %>" style="width: 100px;"><br>
+		dcaOrderStepPercentMultiplier: <input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" style="width: 100px;"><br>
+		dcaTakeProfitPercent: <input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" style="width: 100px;"><br>
 
 		<br><br>
 
