@@ -58,7 +58,7 @@ html {
 
 	font-family: "Heebo", sans-serif;
 	#font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
-	font-size: 14px;
+	font-size: 12px;
 }
 
 body {
@@ -148,5 +148,56 @@ form textarea {
 #formResult {
 
 	color: #da1f38;
+}
+
+
+table#dealsActive {
+
+	font-size: 1.0rem;
+	color: #e7e7e7;
+	width: 90%;
+	cursor: pointer;
+	border-collapse: collapse;
+}
+
+
+table#dealsActive th {
+ 
+	padding: 3px;
+	font-size: 1.1rem;
+	background: #000000;
+}
+
+
+table#dealsActive td {
+ 
+ 	padding: 4px;
+ 	color: #000000;
+ 	font-weight: bold;
+    border: 1px solid #b2b2b2;
+}
+
+
+table#dealsActive tr:nth-child(even) {
+
+	background: #dddddd;
+}
+
+
+table#dealsActive tr:nth-child(odd) {
+
+	background: #dddddd;
+}
+
+
+table#dealsActive tr:nth-child(1) {
+
+	background: none;
+}
+
+
+table#dealsActive tr:not(:first-child):hover {
+
+    background-color: #c5c5c5;
 }
 

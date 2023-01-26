@@ -967,6 +967,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									status: 1
 								});
 
+								delete dealTracker[dealId];
+
 								Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
 
 								if (Object.keys(dealTracker).length == 0) {

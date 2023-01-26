@@ -99,7 +99,7 @@ function initRoutes() {
 
 		res.render( 'homeView', { 'appData': shareData.appData } );
 	});
-
+	
 
 	router.get('/deals/new', (req, res) => {
 
@@ -116,6 +116,31 @@ function initRoutes() {
 		res.render( 'dealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
 	});
 	
+
+	router.get('/api/deals', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
+
+		// Remove sensitive data
+		for (let dealId in dealsObj) {
+
+			let deal = dealsObj[dealId];
+			let config = deal['deal']['config'];
+
+			for (let key in config) {
+
+				if (key.substring(0, 3).toLowerCase() == 'api') {
+
+					delete config[key];
+				}
+			}
+		}
+
+		res.send( { 'date': new Date(), 'data': dealsObj } );
+	});
+
 
 	router.all('*', (req, res) => {
 

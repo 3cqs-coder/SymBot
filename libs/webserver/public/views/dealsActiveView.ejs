@@ -11,10 +11,10 @@
 
 </script>
 
-
+<center>
 <main>
 
-	<table border=0 cellspacing=0 cellpadding=0 style="width: 50%;">
+	<table id="dealsActive" border=0 cellspacing=0 cellpadding=0>
 
 	<tr style="font-weight: bold; text-align: left;">
 		<th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th>
@@ -24,14 +24,14 @@
 	
 		for (let dealId in deals) {
 
-			let profitPercColor = 'green';
+			let profitPercColor = '#1a9f00';
 
 			let deal = deals[dealId];
 			let profitPerc = deal['info']['take_profit_percentage'];
 		
 			if (profitPerc < 0) {
 
-				profitPercColor = 'red';
+				profitPercColor = '#d82715';
 			}
 	%>
 
@@ -48,6 +48,6 @@
 	</table>
 
 </main>
-
+</center>
 
 <%- include('./partialsFooterView'); %>
