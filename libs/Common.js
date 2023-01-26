@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const pathRoot = path.dirname(fs.realpathSync(__dirname));
+const pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
 
 
 let shareData;

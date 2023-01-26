@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let pathRoot = path.dirname(fs.realpathSync(__dirname));
+let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
 pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 
 
