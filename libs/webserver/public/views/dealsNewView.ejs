@@ -36,6 +36,19 @@
 		});
 	});
 
+
+	$(document).on('keypress', '#dealsCreate input', function(e) {
+
+		let id = $(this).attr('id');
+
+		let charCode = (e.which) ? e.which : e.keyCode;
+
+		if (id != 'pair') {
+
+			if (String.fromCharCode(charCode).match(/[^0-9\.]/g)) { return false; }
+		}
+	});
+
 </script>
 
 
@@ -44,27 +57,28 @@
 
 	<h2>Under Development</h2>
 
-	<div style="text-align: left;">
+	<table id="dealsCreate" cellpadding=0 cellspacing=0>
 
 	<form id="formDealsCreate" action="/api/deals/create">
 
-		Pair: <input id="pair" name="pair" style="width: 100px;"><br>
-		Base Order: <input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" style="width: 100px;"><br>
-		Safety Order: <input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" style="width: 100px;"><br>
-		Max Safety Orders: <input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" style="width: 100px;"><br>
-		dcaOrderSizeMultiplier: <input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" style="width: 100px;"><br>
-		dcaOrderStartDistance: <input id="dcaOrderStartDistance" name="dcaOrderStartDistance" value="<%- botData.dcaOrderStartDistance %>" style="width: 100px;"><br>
-		dcaOrderStepPercent: <input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent %>" style="width: 100px;"><br>
-		dcaOrderStepPercentMultiplier: <input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" style="width: 100px;"><br>
-		dcaTakeProfitPercent: <input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" style="width: 100px;"><br>
+		<tr><td style="width: 175px;">Pair:</td> <td><input id="pair" name="pair" style="width: 100px;"></td></tr>
+		<tr><td>Base Order:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" style="width: 60px;"></td></tr>
+		<tr><td>Safety Order:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" style="width: 60px;"></td></tr>
+		<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" style="width: 60px;"></td></tr>
+		<tr><td>dcaOrderSizeMultiplier:</td> <td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" style="width: 60px;"></td></tr>
+		<tr><td>dcaOrderStartDistance:</td> <td><input id="dcaOrderStartDistance" name="dcaOrderStartDistance" value="<%- botData.dcaOrderStartDistance %>" style="width: 60px;"></td></tr>
+		<tr><td>dcaOrderStepPercent:</td> <td><input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent %>" style="width: 60px;"></td></tr>
+		<tr><td>dcaOrderStepPercentMultiplier:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" style="width: 60px;"></td></tr>
+		<tr><td>dcaTakeProfitPercent:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" style="width: 60px;"></td></tr>
 
-		<br><br>
-
-		<input type=button id="formSubmit" value="Create Deal" style="width: 100px; cursor: pointer;">
+		<tr><td colspan=2 style="padding-top: 25px; text-align: center;"><input type=button id="formSubmit" value="Create Bot Deal" style="width: 125px; cursor: pointer;"></td></tr>
 
 	</form>
+	
+	</table>
 
-	</div>
+
+	</center>
 
 </main>
 </center>

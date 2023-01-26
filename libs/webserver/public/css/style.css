@@ -151,6 +151,22 @@ form textarea {
 }
 
 
+table#dealsCreate {
+
+	font-size: 1.0rem;
+	color: #000000;
+	border: 0;
+	width: 500px;
+	text-align: left;
+}
+
+
+table#dealsCreate td {
+
+	padding-bottom: 5px;
+}
+
+
 table#dealsActive {
 
 	font-size: 1.0rem;
