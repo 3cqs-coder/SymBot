@@ -64,9 +64,10 @@ async function startBot(data, start, reload) {
 		}
 
 		const isActive = await checkActiveDeal(pair);
-		const symbol = await getSymbol(exchange, pair);
+		const symbolData = await getSymbol(exchange, pair);
+		const symbol = symbolData.info;
 
-		if (symbol == undefined || symbol == null) {
+		if (symbolData.invalid) {
 
 			if (Object.keys(dealTracker).length == 0) {
 
@@ -303,6 +304,8 @@ async function startBot(data, start, reload) {
 					t.newRow();
 				});
 
+				const maxDeviation = await getDeviation(Number(orders[0].price), Number(orders[orders.length - 1].price));
+
 				console.log(t.toString());
 				//Common.logger(t.toString());
 
@@ -350,7 +353,7 @@ async function startBot(data, start, reload) {
 
 				if (start == undefined || start == null || start == false) {
 
-					return ( { 'success': true, 'data': t.toString() } );
+					return ( { 'success': true, 'data': t.toString() + '\n\nMax. Deviation: ' + maxDeviation.toFixed(2) + '%' } );
 /*
 					sendOrders = prompt(
 						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
@@ -712,9 +715,11 @@ const dcaFollow = async (configData, exchange, dealId) => {
 		if (deal) {
 
 			const pair = deal.pair;
-			const symbol = await getSymbol(exchange, pair);
+			const symbolData = await getSymbol(exchange, pair);
+			const symbol = symbolData.info;
 
-			if (symbol == undefined || symbol == null) {
+			// Error getting symbol data
+			if (symbolData.error != undefined && symbolData.error != null) {
 
 				if (Object.keys(dealTracker).length == 0) {
 
@@ -1064,6 +1069,9 @@ const dcaFollow = async (configData, exchange, dealId) => {
 const getSymbol = async (exchange, pair) => {
 
 	let symbolInfo;
+	let symbolError;
+
+	let symbolInvalid = false;
 
 	try {
 
@@ -1072,10 +1080,17 @@ const getSymbol = async (exchange, pair) => {
 	}
 	catch (e) {
 
-		Common.logger(colors.bgRed.bold.italic(pair + ' is not a valid pair: ' + JSON.stringify(e)));
+		symbolError = e;
+
+		if (e instanceof ccxt.BadSymbol) {
+
+			symbolInvalid = true;
+		}
+
+		Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + JSON.stringify(e)));
 	}
 
-	return symbolInfo;
+	return ( { 'info': symbolInfo, 'invalid': symbolInvalid, 'error': symbolError } );
 };
 
 
@@ -1196,6 +1211,12 @@ const sellOrder = async (exchange, pair, qty) => {
 		return 'Error : ' + e.message;
 	}
 };
+
+
+const getDeviation = async (a, b) => {
+
+	return (Math.abs( ( a - b ) / ( (a +b ) / 2 ) ) * 100);
+}
 
 
 async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax) {
