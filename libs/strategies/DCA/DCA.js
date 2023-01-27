@@ -118,8 +118,18 @@ async function startBot(data, start, reload) {
 
 				// Config reloaded from db so bot and continue
 				//await delay(1000);
+				
+				let followSuccess = false;
 
-				await dcaFollow(config, exchange, isActive.dealId);
+				while (!followSuccess) {
+
+					followSuccess = await dcaFollow(config, exchange, isActive.dealId);
+					
+					if (!followSuccess) {
+
+						await delay(1000);
+					}
+				}
 			}
 		}
 		else {
@@ -400,7 +410,17 @@ async function startBot(data, start, reload) {
 
 					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
-					await dcaFollow(config, exchange, dealId);
+					let followSuccess = false;
+
+					while (!followSuccess) {
+
+						followSuccess = await dcaFollow(config, exchange, dealId);
+
+						if (!followSuccess) {
+
+							await delay(1000);
+						}
+					}
 				}
 				else {
 
@@ -679,7 +699,17 @@ async function startBot(data, start, reload) {
 
 					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
-					await dcaFollow(config, exchange, dealId);
+					let followSuccess = false;
+
+					while (!followSuccess) {
+					
+						followSuccess = await dcaFollow(config, exchange, dealId);
+
+						if (!followSuccess) {
+
+							await delay(1000);
+						}
+					}
 				}
 				else {
 
@@ -705,6 +735,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(configData)));
 
+	let success = true;
+
 	try {
 
 		const deal = await Deals.findOne({
@@ -721,12 +753,14 @@ const dcaFollow = async (configData, exchange, dealId) => {
 			// Error getting symbol data
 			if (symbolData.error != undefined && symbolData.error != null) {
 
+				success = false;
+
 				if (Object.keys(dealTracker).length == 0) {
 
-					process.exit(0);
+					//process.exit(0);
 				}
 
-				return;
+				return false;
 			}
 
 			let bidPrice = symbol.bidPrice;
@@ -876,7 +910,18 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						);
 
 						await delay(1000);
-						await dcaFollow(config, exchange, dealId);
+						
+						let followSuccess = false;
+
+						while (!followSuccess) {
+
+							followSuccess = await dcaFollow(config, exchange, dealId);
+
+							if (!followSuccess) {
+
+								await delay(1000);
+							}
+						}
 					}
 				}
 			}
@@ -1052,7 +1097,17 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 			}
 
-			await dcaFollow(config, exchange, dealId);
+			let followSuccess = false;
+
+			while (!followSuccess) {
+
+				followSuccess = await dcaFollow(config, exchange, dealId);
+
+				if (!followSuccess) {
+
+					await delay(1000);
+				}
+			}
 		}
 		else {
 
@@ -1061,8 +1116,12 @@ const dcaFollow = async (configData, exchange, dealId) => {
 	}
 	catch (e) {
 
+		success = false;
+
 		Common.logger(JSON.stringify(e));
 	}
+
+	return success;
 };
 
 
@@ -1215,7 +1274,7 @@ const sellOrder = async (exchange, pair, qty) => {
 
 const getDeviation = async (a, b) => {
 
-	return (Math.abs( ( a - b ) / ( (a +b ) / 2 ) ) * 100);
+	return (Math.abs( ( a - b ) / ( (a + b ) / 2 ) ) * 100);
 }
 
 
