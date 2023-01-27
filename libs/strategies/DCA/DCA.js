@@ -20,6 +20,9 @@ const prompt = require('prompt-sync')({
 });
 
 
+const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA orders!';
+
+
 let dealTracker = {};
 let shareData;
 
@@ -73,7 +76,7 @@ async function startBot(data, start, reload) {
 
 			if (Object.keys(dealTracker).length == 0) {
 
-				process.exit(0);
+				//process.exit(0);
 			}
 
 			return ( { 'success': false, 'data': 'Invalid Pair' } )
@@ -351,11 +354,15 @@ async function startBot(data, start, reload) {
 				Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
 				//console.log('\n');
 
+				let contentAdd = '\n\n';
+
 				if (wallet < lastDcaOrderSum) {
+
+					contentAdd += '<b>' + insufficientFundsMsg + '</b>\n\n';
 
 					Common.logger(
 						colors.red.bold.italic(
-							'Your wallet does not have enough for all DCA orders !'
+							insufficientFundsMsg
 						)
 					);
 				}
@@ -365,7 +372,11 @@ async function startBot(data, start, reload) {
 
 				if (start == undefined || start == null || start == false) {
 
-					return ( { 'success': true, 'data': t.toString() + '\n\nMax. Deviation: ' + maxDeviation.toFixed(2) + '%' } );
+					contentAdd += 'Current Balance: $' + wallet + '\n';
+					contentAdd += 'Max. Funds: $' + lastDcaOrderSum + '\n';
+					contentAdd += 'Max. Deviation: ' + maxDeviation.toFixed(2) + '%\n';
+
+					return ( { 'success': true, 'data': t.toString() + contentAdd } );
 /*
 					sendOrders = prompt(
 						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
@@ -427,12 +438,13 @@ async function startBot(data, start, reload) {
 					}
 				}
 				else {
-
+/*
 					if (Object.keys(dealTracker).length == 0) {
 
 						Common.logger(colors.bgRed.bold(shareData.appData.name + ' is stopping... '));
 						process.exit(0);
 					}
+*/
 				}
 			}
 			else {
@@ -648,7 +660,7 @@ async function startBot(data, start, reload) {
 
 					Common.logger(
 						colors.red.bold.italic(
-							'Your wallet does not have enough for all DCA orders !'
+							insufficientFundsMsg
 						)
 					);
 				}
@@ -719,12 +731,14 @@ async function startBot(data, start, reload) {
 				}
 				else {
 
+/*
 					if (Object.keys(dealTracker).length == 0) {
 
 						Common.logger(colors.bgRed.bold(shareData.appData.name + ' is stopping... '));
 
 						process.exit(0);
 					}
+*/
 				}
 			}
 		}
@@ -1057,10 +1071,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 								Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
 
-								if (Object.keys(dealTracker).length == 0) {
-								
-									process.exit(0);
-								}
+								return success;
 							}
 						}
 						else {
