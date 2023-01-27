@@ -112,11 +112,6 @@ async function start() {
 
 		// Get signals and start bot accordingly
 		//const socket = await Signals3CQS.start(appConfig['data']['signals']['3CQS']['api_key']);
-
-		// Wait for startup to finish
-		//await DCA.delay(1000);
-
-		//DCA.startBot(botConfig.data);
 	}
 	else {
 

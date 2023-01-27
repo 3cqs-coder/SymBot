@@ -11,6 +11,7 @@ const cookieParser = require('cookie-parser');
 const express = require('express');
 const app = express();
 const router = express.Router();
+const Routes = require(pathRoot + '/webserver/routes.js');
 
 
 
@@ -86,60 +87,8 @@ function initApp() {
 	}));
 
 	app.use('/', router);
-	
-	initRoutes();
-}
 
-
-function initRoutes() {
-
-	router.get('/', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		res.render( 'homeView', { 'appData': shareData.appData } );
-	});
-	
-
-	router.get('/deals/new', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		shareData.DCAManager.viewCreateDeal(req, res);
-	});
-
-
-	router.get('/deals/active', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		shareData.DCAManager.viewActiveDeals(req, res);
-	});
-	
-
-	router.get('/api/deals', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		shareData.DCAManager.apiGetDeals(req, res);
-	});
-
-
-	router.post('/api/deals/create', (req, res) => {
-
-		shareData.DCAManager.apiCreateDeal(req, res);
-	});
-
-
-	router.all('*', (req, res) => {
-
-		let obj = {
-
-			'error': 'Not Found'
-		};
-
-		res.status(404).send(obj);
-	});
+	Routes.start(router);
 }
 
 
@@ -159,6 +108,7 @@ module.exports = {
 	init: function(obj) {
 
 		shareData = obj;
+		Routes.init(shareData);
     }
 }
 
