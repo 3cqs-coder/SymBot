@@ -1,5 +1,8 @@
 {
 	"mongo_db_url": "",
+	"web_server": {
+					"port": 3000
+				},
 	"signals": {
 				 	"3CQS": {
 					 			"api_key": ""

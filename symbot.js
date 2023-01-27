@@ -87,7 +87,10 @@ async function init() {
 		success = false;
 	}
 
-	WebServer.start();
+	if (success) {
+
+		WebServer.start(appConfig['data']['web_server']['port']);
+	}
 
 	return({ 'success': success, 'app_config': appConfig });
 }

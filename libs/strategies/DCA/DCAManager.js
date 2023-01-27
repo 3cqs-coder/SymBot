@@ -31,13 +31,13 @@ async function viewCreateDeal(req, res) {
 
 	const botConfig = await shareData.Common.getConfig('bot.json');
 
-	res.render( 'dealsNewView', { 'appData': shareData.appData, 'botData': botConfig.data } );
+	res.render( 'DCADealsNewView', { 'appData': shareData.appData, 'botData': botConfig.data } );
 }
 
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'dealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
+	res.render( 'DCADealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
 }
 
 

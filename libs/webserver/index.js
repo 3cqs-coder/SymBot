@@ -15,8 +15,6 @@ const Routes = require(pathRoot + '/webserver/routes.js');
 
 
 
-const port = process.env.PORT || 3000;
-
 
 let shareData;
 
@@ -92,7 +90,7 @@ function initApp() {
 }
 
 
-function start() {
+function start(port) {
 
 	initApp();
 

@@ -27,6 +27,8 @@ let shareData;
 
 async function startBot(data, start, reload) {
 
+	data = await setConfigData(data);
+
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
 	const exchange = new ccxt.pro[config.exchange]({
@@ -316,7 +318,7 @@ async function startBot(data, start, reload) {
 
 				const maxDeviation = await getDeviation(Number(orders[0].price), Number(orders[orders.length - 1].price));
 
-				console.log(t.toString());
+				//console.log(t.toString());
 				//Common.logger(t.toString());
 
 				let wallet = 0;
@@ -387,6 +389,8 @@ async function startBot(data, start, reload) {
 
 					Common.logger(colors.green.bold('Please wait, ' + shareData.appData.name + ' is starting... '));
 
+					const configSave = await removeConfigData(config);
+
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
 
 					const deal = new Deals({
@@ -395,7 +399,7 @@ async function startBot(data, start, reload) {
 						pair: pair,
 						date: Date.now(),
 						status: 0,
-						config: config,
+						config: configSave,
 						orders: orders,
 						isStart: 0
 					});
@@ -607,7 +611,7 @@ async function startBot(data, start, reload) {
 					t.newRow();
 				});
 
-				console.log(t.toString());
+				//console.log(t.toString());
 				//Common.logger(t.toString());
 
 				let wallet = 0;
@@ -678,6 +682,8 @@ async function startBot(data, start, reload) {
 
 					Common.logger(colors.green.bold('Please wait, ' + shareData.appData.name + ' is starting... '));
 
+					const configSave = await removeConfigData(config);
+
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
 
 					const deal = new Deals({
@@ -686,7 +692,7 @@ async function startBot(data, start, reload) {
 						pair: pair,
 						date: Date.now(),
 						status: 0,
-						config: config,
+						config: configSave,
 						orders: orders,
 						isStart: 0
 					});
@@ -830,7 +836,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						t.newRow();
 					});
 
-					console.log(t.toString());
+					//console.log(t.toString());
 					//Common.logger(t.toString());
 
 					await Deals.updateOne({
@@ -889,7 +895,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							t.newRow();
 						});
 
-						console.log(t.toString());
+						//console.log(t.toString());
 						//Common.logger(t.toString());
 
 						await Deals.updateOne({
@@ -1274,7 +1280,7 @@ const sellOrder = async (exchange, pair, qty) => {
 
 const getDeviation = async (a, b) => {
 
-	return (Math.abs( ( a - b ) / ( (a + b ) / 2 ) ) * 100);
+	return (Math.abs( (a - b) / ( (a + b) / 2 ) ) * 100);
 }
 
 
@@ -1291,6 +1297,40 @@ async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeP
 					};
 
 	dealTracker[dealId]['info'] = dealObj;
+}
+
+
+async function setConfigData(config) {
+
+	let configObj = JSON.parse(JSON.stringify(config));
+
+	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	for (let key in botConfig.data) {
+
+		if (key.substring(0, 3).toLowerCase() == 'api') {
+
+			configObj[key] = botConfig.data[key];
+		}
+	}
+
+	return configObj;
+}
+
+
+async function removeConfigData(config) {
+
+	let configObj = JSON.parse(JSON.stringify(config));
+
+	for (let key in configObj) {
+
+		if (key.substring(0, 3).toLowerCase() == 'api') {
+
+			delete configObj[key];
+		}
+	}
+
+	return configObj;
 }
 
 

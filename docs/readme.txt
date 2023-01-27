@@ -16,6 +16,8 @@ These files are located in the "config" directory
 
 * app.json
 
+	- "web_server" contains settings for the SymBot web server. The default port is 3000.
+
 	- "mongo_db_url" is the URL to your MongoDB instance.
 		- For quick set up, create a free account at https://cloud.mongodb.com and copy the URL given into the app config. It begins with something like: mongodb+srv://
 		- For better security running your own local database is recommended
