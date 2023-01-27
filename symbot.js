@@ -80,11 +80,14 @@ async function init() {
 		success = false;
 	}
 
-	let dbStarted =	await DB.start(appConfig.data.mongo_db_url);
+	if (success) {
 
-	if (!dbStarted) {
+		let dbStarted =	await DB.start(appConfig.data.mongo_db_url);
 
-		success = false;
+		if (!dbStarted) {
+
+			success = false;
+		}
 	}
 
 	if (success) {

@@ -34,17 +34,28 @@ async function startBot(data, start, reload) {
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
-	const exchange = new ccxt.pro[config.exchange]({
-
-		apiKey: config.apiKey,
-		secret: config.apiSecret
-	});
+	let exchange;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
 
 	let pair = '';
 	let pairConfig = config.pair;
+
+
+	try {
+	
+		exchange = new ccxt.pro[config.exchange]({
+
+			apiKey: config.apiKey,
+			secret: config.apiSecret
+		});
+	}
+	catch(e) {
+
+		return ( { 'success': false, 'data': 'Invalid exchange: ' + config.exchange } );
+	}
+
 
 	try {
 
@@ -72,6 +83,7 @@ async function startBot(data, start, reload) {
 		const symbolData = await getSymbol(exchange, pair);
 		const symbol = symbolData.info;
 
+		// Check for valid symbol data on start
 		if (symbolData.invalid) {
 
 			if (Object.keys(dealTracker).length == 0) {
@@ -79,7 +91,11 @@ async function startBot(data, start, reload) {
 				//process.exit(0);
 			}
 
-			return ( { 'success': false, 'data': 'Invalid Pair' } )
+			return ( { 'success': false, 'data': 'Invalid Pair' } );
+		}
+		else if (symbolData.error != undefined && symbolData.error != null) {
+
+			return ( { 'success': false, 'data': JSON.stringify(symbolData.error) } );
 		}
 
 		let askPrice = symbol.askPrice;
