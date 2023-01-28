@@ -31,13 +31,13 @@ async function viewCreateDeal(req, res) {
 
 	const botConfig = await shareData.Common.getConfig('bot.json');
 
-	res.render( 'DCADealsNewView', { 'appData': shareData.appData, 'botData': botConfig.data } );
+	res.render( 'DCABotDealsCreateView', { 'appData': shareData.appData, 'botData': botConfig.data } );
 }
 
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'DCADealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
+	res.render( 'DCABotDealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
 }
 
 
@@ -68,7 +68,7 @@ async function apiCreateDeal(req, res) {
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
 	// Only get orders, don't start bot
-	orders = await shareData.DCA.startBot(botData, false);
+	orders = await shareData.DCABot.start(botData, false);
 
 	resData = orders.data;
 
@@ -81,7 +81,7 @@ async function apiCreateDeal(req, res) {
 		if (createStep.toLowerCase() != 'getorders') {
 
 			// Start bot
-			shareData.DCA.startBot(botData, true, true);
+			shareData.DCABot.start(botData, true, true);
 		}
 	}
 

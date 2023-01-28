@@ -1,3 +1,10 @@
+Requirements:
+
+- Node.js must be install on your system
+- Reliable internet connection
+
+
+
 Installation:
 
 1. Open a command line terminal

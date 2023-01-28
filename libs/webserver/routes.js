@@ -18,7 +18,7 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCAManager.viewCreateDeal(req, res);
+		shareData.DCABotManager.viewCreateDeal(req, res);
 	});
 
 
@@ -26,7 +26,7 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCAManager.viewActiveDeals(req, res);
+		shareData.DCABotManager.viewActiveDeals(req, res);
 	});
 	
 
@@ -34,13 +34,13 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCAManager.apiGetDeals(req, res);
+		shareData.DCABotManager.apiGetDeals(req, res);
 	});
 
 
 	router.post('/api/deals/create', (req, res) => {
 
-		shareData.DCAManager.apiCreateDeal(req, res);
+		shareData.DCABotManager.apiCreateDeal(req, res);
 	});
 
 

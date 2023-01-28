@@ -28,7 +28,7 @@ let shareData;
 
 
 
-async function startBot(data, start, reload) {
+async function start(data, start, reload) {
 
 	data = await setConfigData(data);
 
@@ -131,7 +131,7 @@ async function startBot(data, start, reload) {
 					colors.bgCyan.bold('Found active DCA deal for ' + pair + '...')
 				);
 
-				startBot(isActive.config, true, true);
+				start(isActive.config, true, true);
 
 				return;
 			}
@@ -405,7 +405,7 @@ async function startBot(data, start, reload) {
 						// Set pair
 						configStart.pair = pair;
 
-						startBot(configStart, true);
+						start(configStart, true);
 						return;
 					}
 */
@@ -699,7 +699,7 @@ async function startBot(data, start, reload) {
 						// Set pair
 						configStart.pair = pair;
 
-						startBot(configStart, true);
+						start(configStart, true);
 						return;
 					}
 */
@@ -730,6 +730,8 @@ async function startBot(data, start, reload) {
 					dealTracker[dealId] = {};
 					dealTracker[dealId]['deal'] = {};
 					dealTracker[dealId]['info'] = {};
+
+					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
 					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
@@ -1158,6 +1160,15 @@ const dcaFollow = async (configData, exchange, dealId) => {
 };
 
 
+const getSymbolsAll = async (exchange) => {
+
+	const markets = await exchange.loadMarkets();
+	const symbols = exchange.symbols;
+
+	return symbols;
+}
+
+
 const getSymbol = async (exchange, pair) => {
 
 	let symbolInfo;
@@ -1385,13 +1396,13 @@ async function resumeBots() {
 
 			dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
-			startBot(config, true, true);
+			start(config, true, true);
 		}
 	}
 }
 
 
-async function start() {
+async function initApp() {
 
 	resumeBots();
 }
@@ -1401,7 +1412,7 @@ module.exports = {
 
 	colors,
 	delay,
-	startBot,
+	start,
 
 	init: function(obj) {
 
@@ -1409,6 +1420,6 @@ module.exports = {
 
 		shareData['dealTracker'] = dealTracker;
 
-		start();
+		initApp();
     }
 }
