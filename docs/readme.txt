@@ -1,6 +1,7 @@
 Requirements:
 
-- Node.js must be install on your system
+- Node.js must be installed on your system
+- MongoDB or a host provider
 - Reliable internet connection
 
 

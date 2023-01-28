@@ -1,6 +1,17 @@
-<%- include('./partialsHeaderView'); %>
+<%- include('../../partialsHeaderView'); %>
 
 <script>
+
+	function resetForm(form) {
+
+		$('#formSubmitPreview').show();
+		$('#formSubmitReset').hide();
+		$('#formSubmitStart').hide();
+		$('#ordersBox').hide();
+
+		$('input').not('[type=button]').prop('disabled', false);
+	}
+
 
 	$(document).ready(function () {
 
@@ -14,6 +25,12 @@
 			e.preventDefault();
 
 			const id = $(this).attr('id');
+
+			if (id.match(/reset/i)) {
+
+				resetForm(form);
+				return;
+			}
 
 			if (id.match(/start/i)) {
 
@@ -29,10 +46,18 @@
 				}
 			}
 
+			$('#formSubmitPreview').hide();
+			$('#formSubmitReset').hide();
 			$('#formSubmitStart').hide();
 			$('#ordersBox').hide();
 
+			// Enable form so data is retrievable
+			$('input').not('[type=button]').prop('disabled', false);
+
+			const formDataSubmit = $(form).serialize();
 			const formData = $(form).serializeArray().reduce((o, {name: n, value: v}) => Object.assign(o, { [n]: v }), {});
+
+			$('input').not('[type=button]').prop('disabled', true);
 
 			if (formData.pair == undefined || formData.pair == null || formData.pair == '' || !formData.pair.match(/\//)) {
 
@@ -43,11 +68,14 @@
 			$.ajax({
 						type: 'POST',
 						url: submitUrl,
-						data: $(form).serialize(),
+						data: formDataSubmit,
 						dataType: 'json',
 						success: function(data) {
 
 						if (!data.success) {
+
+							$('#formSubmitPreview').show();
+							$('input').not('[type=button]').prop('disabled', false);
 
 							//alert(JSON.stringify(data));
 							alert(data.data);
@@ -58,11 +86,16 @@
 							
 							if (data.step.toLowerCase() != 'getorders') {
 
+								resetForm(form);
+
 								alert('Bot Started');
 							}
 							else {
 
+								$('input').not('[type=button]').prop('disabled', true);
+
 								$('#ordersBox').show();
+								$('#formSubmitReset').show();
 								$('#formSubmitStart').show();
 
 								alert('Verify bot orders and confirm to start bot');
@@ -122,8 +155,12 @@
 		<tr><td>dcaTakeProfitPercent:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" style="width: 60px;"></td></tr>
 
 		<tr>
-			<td style="padding-top: 25px; text-align: center;"><input type=button id="formSubmitPreview" value="Preview Bot Deal" style="width: 125px; cursor: pointer;"></td>
-			<td style="padding-top: 25px; text-align: center;"><input type=button id="formSubmitStart" value="Start Bot Deal" style="display: none; width: 125px; cursor: pointer; background-color: #81df6f;"></td>
+			<td style="padding-top: 25px; text-align: center;" colspan=2>
+				
+				<input type=button id="formSubmitPreview" value="Preview Bot Deal" style="width: 125px; cursor: pointer;">
+				<input type=button id="formSubmitReset" value="Make Changes" style="display: none; width: 125px; cursor: pointer;">
+				&nbsp;&nbsp;&nbsp; <input type=button id="formSubmitStart" value="Start Bot Deal" style="display: none; width: 125px; cursor: pointer; background-color: #81df6f;">
+			</td>
 		</tr>
 
 	</form>
@@ -138,4 +175,4 @@
 </center>
 
 
-<%- include('./partialsFooterView'); %>
+<%- include('../../partialsFooterView'); %>
