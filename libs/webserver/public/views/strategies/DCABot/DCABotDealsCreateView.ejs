@@ -46,7 +46,6 @@
 				}
 			}
 
-			$('#formSubmitPreview').hide();
 			$('#formSubmitReset').hide();
 			$('#formSubmitStart').hide();
 			$('#ordersBox').hide();
@@ -57,13 +56,14 @@
 			const formDataSubmit = $(form).serialize();
 			const formData = $(form).serializeArray().reduce((o, {name: n, value: v}) => Object.assign(o, { [n]: v }), {});
 
-			$('input').not('[type=button]').prop('disabled', true);
-
 			if (formData.pair == undefined || formData.pair == null || formData.pair == '' || !formData.pair.match(/\//)) {
 
 				alert('Invalid Pair');
 				return;
 			}
+
+			$('#formSubmitPreview').hide();
+			$('input').not('[type=button]').prop('disabled', true);
 
 			$.ajax({
 						type: 'POST',
