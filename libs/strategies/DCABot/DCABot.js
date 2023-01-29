@@ -1322,6 +1322,27 @@ const getDeviation = async (a, b) => {
 }
 
 
+async function checkTracker() {
+
+	// Monitor existing deals if they weren't updated after n minutes to take potential action
+	const maxMins = 3;
+
+	for (let dealId in dealTracker) {
+
+		let deal = dealTracker[dealId]['info'];
+
+		let diffSec = (new Date().getTime() - new Date(deal['updated']).getTime()) / 1000;
+
+		if (diffSec > (60 * maxMins)) {
+
+			diffSec = (diffSec / 60).toFixed(2);
+
+			Common.logger('WARNING: ' + dealId + ' exceeds last updated time by ' + diffSec + ' minutes');
+		}
+	}
+}
+
+
 async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax) {
 
 	const dealObj = {
@@ -1403,6 +1424,12 @@ async function resumeBots() {
 
 
 async function initApp() {
+
+	setInterval(() => {
+
+		checkTracker();
+
+	}, (60000 * 1));
 
 	resumeBots();
 }
