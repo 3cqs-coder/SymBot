@@ -119,12 +119,25 @@
 	$(document).on('keypress', '#dealsCreate input', function(e) {
 
 		const id = $(this).attr('id');
+		const val = $('#' + id).val();
 
 		const charCode = (e.which) ? e.which : e.keyCode;
 
-		if (id != 'pair') {
+		if (id.toLowerCase() != 'pair' && id.toLowerCase() != 'botname') {
 
-			if (String.fromCharCode(charCode).match(/[^0-9\.]/g)) { return false; }
+			let regEx = /[^0-9\.]/g;
+
+			if (id.toLowerCase() == 'dealmax') {
+
+				regEx = /[^0-9]/g;
+			}
+
+			if (charCode == 46 && (val.split('.').length - 1) > 0) {
+
+				return false;
+			}
+
+			if (String.fromCharCode(charCode).match(regEx)) { return false; }
 		}
 	});
 
@@ -144,7 +157,8 @@
 
 		<input type=hidden id="createStep" name="createStep" value="getorders">
 
-		<tr><td style="width: 175px;">Pair:</td> <td><input id="pair" name="pair" style="width: 100px; text-transform: uppercase;"></td></tr>
+		<tr><td style="width: 175px;">Bot Name:</td> <td><input id="botName" name="botName" style="width: 200px;"></td></tr>
+		<tr><td>Pair:</td> <td><input id="pair" name="pair" style="width: 100px; text-transform: uppercase;"></td></tr>
 		<tr><td>Base Order:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" style="width: 60px;"></td></tr>
 		<tr><td>Safety Order:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" style="width: 60px;"></td></tr>
 		<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" style="width: 60px;"></td></tr>

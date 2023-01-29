@@ -19,7 +19,7 @@
 	<table id="dealsActive" border=0 cellspacing=0 cellpadding=0>
 
 	<tr style="font-weight: bold; text-align: left;">
-		<th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th>
+		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th>
 	</tr>
 
 	<%
@@ -38,6 +38,7 @@
 	%>
 
 	<tr>
+		<td><%- deal['info']['bot_name'] %></td>
 		<td><%- dealId %></td>
 		<td><%- deal['deal']['pair'] %></td>
 		<td>$<%- deal['info']['price_last'] %></td>

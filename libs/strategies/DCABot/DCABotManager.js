@@ -68,6 +68,16 @@ async function apiCreateDeal(req, res) {
 	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
+	// Set bot name
+	let botName = body.botName;
+
+	if (botName == undefined || botName == null || botName == '') {
+
+		botName = 'DCA Bot ' + botData.pair.toUpperCase();
+	}
+
+	botData.botName = botName;
+
 	// Only get orders, don't start bot
 	orders = await shareData.DCABot.start(botData, false);
 

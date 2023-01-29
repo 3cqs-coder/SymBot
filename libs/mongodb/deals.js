@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const DealSchema = new Schema({
+	botId: String,
+	botName: String,
 	dealId: String,
 	exchange: String,
 	pair: String,

@@ -10,6 +10,7 @@ pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 const colors = require('colors');
 const delay = require('delay');
 const ccxt = require('ccxt');
+const { v4: uuidv4 } = require('uuid');
 const Table = require('easy-table');
 const Percentage = require('percentagejs');
 const Common = require(pathRoot + '/Common.js');
@@ -443,6 +444,8 @@ async function start(data, startBot, reload) {
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
 
 					const deal = new Deals({
+						botId: config.botId,
+						botName: config.botName,
 						dealId: dealId,
 						exchange: config.exchange,
 						pair: pair,
@@ -743,6 +746,8 @@ async function start(data, startBot, reload) {
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
 
 					const deal = new Deals({
+						botId: config.botId,
+						botName: config.botName,
 						dealId: dealId,
 						exchange: config.exchange,
 						pair: pair,
@@ -1063,7 +1068,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								}
 							}
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+							updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							Common.logger(
 								colors.blue.bold.italic(
@@ -1109,7 +1114,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									}
 								}
 
-								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+								updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 								Common.logger(
 									colors.blue.bold.italic(
@@ -1150,7 +1155,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						}
 						else {
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+							updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							Common.logger(
 								'Pair: ' +
@@ -1406,10 +1411,11 @@ async function checkTracker() {
 }
 
 
-async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax, dealCount, dealMax) {
+async function updateTracker(botName, dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax, dealCount, dealMax) {
 
 	const dealObj = {
 						'updated': new Date(),
+						'bot_name': botName,
 						'safety_orders_used': ordersUsed,
 						'safety_orders_max': ordersMax - 1,
 						'price_last': priceLast,
@@ -1436,6 +1442,12 @@ async function setConfigData(config) {
 
 			configObj[key] = botConfig.data[key];
 		}
+	}
+
+	// Set bot id
+	if (configObj['botId'] == undefined || configObj['botId'] == null || configObj['botId'] == '') {
+
+		configObj['botId'] = uuidv4();
 	}
 
 	// Set initial deal count
@@ -1481,14 +1493,18 @@ async function resumeBots() {
 
 			let deal = dealsActive[i];
 
+			const botId = deal.botId;
+			const botName = deal.botName;
 			const dealId = deal.dealId;
 			const pair = deal.pair;
 			const dealCount = deal.dealCount;
-			const dealMax = deal.dealMax
+			const dealMax = deal.dealMax;
 
 			// Set previous deal counts
 			let config = deal.config;
 
+			config['botId'] = botId;
+			config['botName'] = botName;
 			config['dealCount'] = dealCount;
 			config['dealMax'] = dealMax;
 
