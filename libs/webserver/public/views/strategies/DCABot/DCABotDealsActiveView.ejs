@@ -19,7 +19,7 @@
 	<table id="dealsActive" border=0 cellspacing=0 cellpadding=0>
 
 	<tr style="font-weight: bold; text-align: left;">
-		<th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th>
+		<th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th>
 	</tr>
 
 	<%
@@ -31,7 +31,7 @@
 			let deal = deals[dealId];
 			let profitPerc = deal['info']['take_profit_percentage'];
 		
-			if (profitPerc < 0) {
+			if (profitPerc <= 0) {
 
 				profitPercColor = '#d82715';
 			}
@@ -43,6 +43,7 @@
 		<td>$<%- deal['info']['price_last'] %></td>
 		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
 		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
+		<td><%- deal['info']['deal_count'] %> / <%- deal['info']['deal_max'] %></td>
 	</tr>
 	
 	<% 	} %>

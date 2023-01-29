@@ -26,11 +26,11 @@ const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA
 let dealTracker = {};
 let shareData;
 
+let counter = 0;
 
+async function start(data, startBot, reload) {
 
-async function start(data, start, reload) {
-
-	data = await setConfigData(data);
+	data = await setConfigData(JSON.parse(JSON.stringify(data)));
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
@@ -41,7 +41,18 @@ async function start(data, start, reload) {
 
 	let pair = '';
 	let pairConfig = config.pair;
+	let dealCount = config.dealCount;
+	let dealMax = config.dealMax;
 
+	if (dealCount == undefined || dealCount == null) {
+
+		dealCount = 0;
+	}
+
+	if (dealMax == undefined || dealMax == null) {
+
+		dealMax = 0;
+	}
 
 	try {
 	
@@ -131,7 +142,9 @@ async function start(data, start, reload) {
 					colors.bgCyan.bold('Found active DCA deal for ' + pair + '...')
 				);
 
-				start(isActive.config, true, true);
+				let configObj = JSON.parse(JSON.stringify(isActive.config));
+
+				start(configObj, true, true);
 
 				return;
 			}
@@ -139,17 +152,26 @@ async function start(data, start, reload) {
 
 				// Config reloaded from db so bot and continue
 				//await delay(1000);
-				
+
 				let followSuccess = false;
+				let followFinished = false;
 
 				while (!followSuccess) {
 
-					followSuccess = await dcaFollow(config, exchange, isActive.dealId);
-					
+					let followRes = await dcaFollow(config, exchange, isActive.dealId);
+
+					followSuccess = followRes['success'];
+					followFinished = followRes['finished'];
+
 					if (!followSuccess) {
 
 						await delay(1000);
 					}
+				}
+
+				if (followFinished) {
+
+					//break;
 				}
 			}
 		}
@@ -386,7 +408,7 @@ async function start(data, start, reload) {
 				//console.log('\n');
 				let sendOrders;
 
-				if (start == undefined || start == null || start == false) {
+				if (startBot == undefined || startBot == null || startBot == false) {
 
 					contentAdd += 'Current Balance: $' + wallet + '\n';
 					contentAdd += 'Max. Funds: $' + lastDcaOrderSum + '\n';
@@ -412,7 +434,7 @@ async function start(data, start, reload) {
 				}
 
 
-				if (start) {
+				if (startBot) {
 
 					Common.logger(colors.green.bold('Please wait, ' + shareData.appData.name + ' is starting... '));
 
@@ -428,7 +450,9 @@ async function start(data, start, reload) {
 						status: 0,
 						config: configSave,
 						orders: orders,
-						isStart: 0
+						isStart: 0,
+						dealCount: dealCount,
+						dealMax: dealMax
 					});
 
 					await deal.save();
@@ -442,10 +466,14 @@ async function start(data, start, reload) {
 					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
 					let followSuccess = false;
+					let followFinished = false;
 
 					while (!followSuccess) {
 
-						followSuccess = await dcaFollow(config, exchange, dealId);
+						let followRes = await await dcaFollow(config, exchange, dealId);
+
+						followSuccess = followRes['success'];
+						followFinished = followRes['finished'];
 
 						if (!followSuccess) {
 
@@ -684,7 +712,7 @@ async function start(data, start, reload) {
 				//console.log('\n');
 				let sendOrders;
 
-				if (start == undefined || start == null || start == false) {
+				if (startBot == undefined || startBot == null || startBot == false) {
 
 					return ( { 'success': true, 'data': t.toString() } );
 /*
@@ -706,7 +734,7 @@ async function start(data, start, reload) {
 				}
 
 
-				if (start) {
+				if (startBot) {
 
 					Common.logger(colors.green.bold('Please wait, ' + shareData.appData.name + ' is starting... '));
 
@@ -722,7 +750,9 @@ async function start(data, start, reload) {
 						status: 0,
 						config: configSave,
 						orders: orders,
-						isStart: 0
+						isStart: 0,
+						dealCount: dealCount,
+						dealMax: dealMax
 					});
 
 					await deal.save();
@@ -736,10 +766,14 @@ async function start(data, start, reload) {
 					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
 					let followSuccess = false;
+					let followFinished = false;
 
 					while (!followSuccess) {
-					
-						followSuccess = await dcaFollow(config, exchange, dealId);
+
+						let followRes = await await dcaFollow(config, exchange, dealId);
+
+						followSuccess = followRes['success'];
+						followFinished = followRes['finished'];
 
 						if (!followSuccess) {
 
@@ -766,6 +800,20 @@ async function start(data, start, reload) {
 		Common.logger(e);
 		//console.log(e);
 	}
+
+	//console.log('Finished: ' + pair);
+
+	// Start another bot deal if max deals have not been reached
+	if (dealCount < dealMax || dealMax == 0) {
+
+		let configObj = JSON.parse(JSON.stringify(config));
+
+		configObj['dealCount']++;
+
+		Common.logger(colors.bgGreen('Starting new bot deal for ' + configObj.pair.toUpperCase() + ' ' + configObj['dealCount'] + ' / ' + configObj['dealMax']));
+
+		start(configObj, true, true);
+	}
 }
 
 
@@ -774,6 +822,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 	const config = Object.freeze(JSON.parse(JSON.stringify(configData)));
 
 	let success = true;
+	let finished = false;
 
 	try {
 
@@ -950,10 +999,14 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						await delay(1000);
 						
 						let followSuccess = false;
+						let followFinished = false;
 
 						while (!followSuccess) {
 
-							followSuccess = await dcaFollow(config, exchange, dealId);
+							let followRes = await await dcaFollow(config, exchange, dealId);
+
+							followSuccess = followRes['success'];
+							followFinished = followRes['finished'];
 
 							if (!followSuccess) {
 
@@ -1010,7 +1063,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								}
 							}
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length);
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							Common.logger(
 								colors.blue.bold.italic(
@@ -1056,7 +1109,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									}
 								}
 
-								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length);
+								updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 								Common.logger(
 									colors.blue.bold.italic(
@@ -1089,12 +1142,15 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 								Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
 
-								return success;
+								success = true;
+								finished = true;
+
+								return ( { 'success': success, 'finished': finished } );
 							}
 						}
 						else {
 
-							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length);
+							updateTracker(dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							Common.logger(
 								'Pair: ' +
@@ -1133,10 +1189,14 @@ const dcaFollow = async (configData, exchange, dealId) => {
 			}
 
 			let followSuccess = false;
+			let followFinished = false;
 
 			while (!followSuccess) {
 
-				followSuccess = await dcaFollow(config, exchange, dealId);
+				let followRes = await await dcaFollow(config, exchange, dealId);
+
+				followSuccess = followRes['success'];
+				followFinished = followRes['finished'];
 
 				if (!followSuccess) {
 
@@ -1146,7 +1206,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 		}
 		else {
 
-			Common.logger('No Deal ID Found');
+			if (!followFinished) {
+
+				Common.logger('No deal ID found for ' + config.pair);
+			}
 		}
 	}
 	catch (e) {
@@ -1156,7 +1219,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 		Common.logger(JSON.stringify(e));
 	}
 
-	return success;
+	return ( { 'success': success, 'finished': finished } );
 };
 
 
@@ -1343,7 +1406,7 @@ async function checkTracker() {
 }
 
 
-async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax) {
+async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax, dealCount, dealMax) {
 
 	const dealObj = {
 						'updated': new Date(),
@@ -1352,7 +1415,9 @@ async function updateTracker(dealId, priceLast, priceAverage, priceTarget, takeP
 						'price_last': priceLast,
 						'price_average': priceAverage,
 						'price_target': priceTarget,
-						'take_profit_percentage': takeProfitPerc
+						'take_profit_percentage': takeProfitPerc,
+						'deal_count': dealCount,
+						'deal_max': dealMax
 					};
 
 	dealTracker[dealId]['info'] = dealObj;
@@ -1371,6 +1436,12 @@ async function setConfigData(config) {
 
 			configObj[key] = botConfig.data[key];
 		}
+	}
+
+	// Set initial deal count
+	if (configObj['dealCount'] == undefined || configObj['dealCount'] == null || configObj['dealCount'] == 0) {
+
+		configObj['dealCount'] = 1;
 	}
 
 	return configObj;
@@ -1396,6 +1467,8 @@ async function removeConfigData(config) {
 async function resumeBots() {
 
 	// Check for active deals and resume bots
+	// New logic needed to find bots that have not reached max deals and are currently not running an active deal
+
 	const dealsActive = await getDeals({ 'status': 0 });
 
 	if (dealsActive.length > 0) {
@@ -1406,11 +1479,20 @@ async function resumeBots() {
 
 		for (let i = 0; i < dealsActive.length; i++) {
 
-			const deal = dealsActive[i];
+			let deal = dealsActive[i];
 
 			const dealId = deal.dealId;
-			const config = deal.config;
 			const pair = deal.pair;
+			const dealCount = deal.dealCount;
+			const dealMax = deal.dealMax
+
+			// Set previous deal counts
+			let config = deal.config;
+
+			config['dealCount'] = dealCount;
+			config['dealMax'] = dealMax;
+
+			deal['config'] = config;
 
 			dealTracker[dealId] = {};
 			dealTracker[dealId]['info'] = {};

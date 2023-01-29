@@ -10,7 +10,9 @@ const DealSchema = new Schema({
 	status: Number,
 	config: Object,
 	orders: Object,
-	isStart: Number
+	isStart: Number,
+	dealCount: Number,
+	dealMax: Number
 }, {
 	collection: 'deals',
 	timestamps: true

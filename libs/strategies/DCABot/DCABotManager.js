@@ -58,6 +58,7 @@ async function apiCreateDeal(req, res) {
 	botData.sandBox = true;
 
 	botData.pair = body.pair;
+	botData.dealMax = body.dealMax;
 	botData.firstOrderAmount = body.firstOrderAmount;
 	botData.dcaOrderAmount = body.dcaOrderAmount;
 	botData.dcaMaxOrder = body.dcaMaxOrder;
