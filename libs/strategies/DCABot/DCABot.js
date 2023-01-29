@@ -470,7 +470,7 @@ async function start(data, startBot, reload) {
 
 					while (!followSuccess) {
 
-						let followRes = await await dcaFollow(config, exchange, dealId);
+						let followRes = await dcaFollow(config, exchange, dealId);
 
 						followSuccess = followRes['success'];
 						followFinished = followRes['finished'];
@@ -770,7 +770,7 @@ async function start(data, startBot, reload) {
 
 					while (!followSuccess) {
 
-						let followRes = await await dcaFollow(config, exchange, dealId);
+						let followRes = await dcaFollow(config, exchange, dealId);
 
 						followSuccess = followRes['success'];
 						followFinished = followRes['finished'];
@@ -1003,7 +1003,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 						while (!followSuccess) {
 
-							let followRes = await await dcaFollow(config, exchange, dealId);
+							let followRes = await dcaFollow(config, exchange, dealId);
 
 							followSuccess = followRes['success'];
 							followFinished = followRes['finished'];
@@ -1193,7 +1193,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 			while (!followSuccess) {
 
-				let followRes = await await dcaFollow(config, exchange, dealId);
+				let followRes = await dcaFollow(config, exchange, dealId);
 
 				followSuccess = followRes['success'];
 				followFinished = followRes['finished'];
