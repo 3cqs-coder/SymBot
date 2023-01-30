@@ -4,6 +4,8 @@
 
 	function resetForm(form) {
 
+		$('#spinner-overlay').fadeOut(100);
+
 		$('#formSubmitPreview').show();
 		$('#formSubmitReset').hide();
 		$('#formSubmitStart').hide();
@@ -62,6 +64,8 @@
 				return;
 			}
 
+			$('#spinner-overlay').fadeIn(100);
+
 			$('#formSubmitPreview').hide();
 			$('input').not('[type=button]').prop('disabled', true);
 
@@ -73,6 +77,8 @@
 						success: function(data) {
 
 						if (!data.success) {
+
+							$('#spinner-overlay').fadeOut(100);
 
 							$('#formSubmitPreview').show();
 							$('input').not('[type=button]').prop('disabled', false);
@@ -92,6 +98,8 @@
 							}
 							else {
 
+								$('#spinner-overlay').fadeOut(100);
+
 								$('input').not('[type=button]').prop('disabled', true);
 
 								$('#ordersBox').show();
@@ -105,6 +113,8 @@
 					error: function(data) {
 
 						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
 						$('#formSubmitStart').hide();
 						alert('Error: ' + JSON.stringify(data));
 				}
@@ -143,6 +153,10 @@
 
 </script>
 
+
+<div id="spinner-overlay">
+	<div class="spinner-container"><span class="spinner"></span></div>
+</div>
 
 <center>
 <main>
