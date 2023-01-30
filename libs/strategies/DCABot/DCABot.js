@@ -431,11 +431,11 @@ async function start(data, startBot, reload) {
 
 				if (startBot) {
 
-					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
-
 					const configSave = await removeConfigData(config);
 
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
+
+					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
 
 					const deal = new Deals({
 						botId: config.botId,
@@ -725,11 +725,11 @@ async function start(data, startBot, reload) {
 
 				if (startBot) {
 
-					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
-
 					const configSave = await removeConfigData(config);
 
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
+
+					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
 
 					const deal = new Deals({
 						botId: config.botId,
