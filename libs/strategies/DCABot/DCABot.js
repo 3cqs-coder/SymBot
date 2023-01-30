@@ -40,13 +40,14 @@ async function start(data, startBot, reload) {
 
 	let exchange;
 	let dealIdMain;
-	let dealActive = true;
+	let botActive = true;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
 
 	let pair = '';
 	let pairConfig = config.pair;
+	let botIdMain = config.botId;
 	let dealCount = config.dealCount;
 	let dealMax = config.dealMax;
 
@@ -804,14 +805,14 @@ async function start(data, startBot, reload) {
 
 	try {
 
-		const deal = await Deals.findOne({
-			dealId: dealIdMain,
+		const bot = await Bots.findOne({
+			botId: botIdMain,
 			active: false
 		});
 
-		if (deal) {
+		if (bot) {
 
-			dealActive = false;
+			botActive = false;
 		}
 	}
 	catch(e) {
@@ -819,7 +820,7 @@ async function start(data, startBot, reload) {
 	}
 
 	// Start another bot deal if max deals have not been reached
-	if (dealActive && (dealCount < dealMax || dealMax == 0)) {
+	if (botActive && (dealCount < dealMax || dealMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
