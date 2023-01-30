@@ -1,6 +1,17 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+const BotSchema = new Schema({
+	botId: String,
+	botName: String,
+	config: Object,
+	date: Date,
+}, {
+	collection: 'bots',
+	timestamps: true
+});
+
+
 const DealSchema = new Schema({
 	botId: String,
 	botName: String,
@@ -20,4 +31,10 @@ const DealSchema = new Schema({
 	timestamps: true
 });
 
-module.exports = mongoose.model('Deals', DealSchema);
+
+module.exports = {
+
+	'Bots': mongoose.model('Bots', BotSchema),
+	'Deals': mongoose.model('Deals', DealSchema)
+};
+

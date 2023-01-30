@@ -14,7 +14,10 @@ const { v4: uuidv4 } = require('uuid');
 const Table = require('easy-table');
 const Percentage = require('percentagejs');
 const Common = require(pathRoot + '/Common.js');
-const Deals = require(pathRoot + '/mongodb/deals');
+const Schema = require(pathRoot + '/mongodb/DCABotSchema');
+
+const Bots = Schema.Bots;
+const Deals = Schema.Deals;
 
 const prompt = require('prompt-sync')({
 	sigint: true
@@ -31,7 +34,7 @@ let counter = 0;
 
 async function start(data, startBot, reload) {
 
-	data = await setConfigData(JSON.parse(JSON.stringify(data)));
+	data = await initBot(JSON.parse(JSON.stringify(data)));
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
@@ -157,7 +160,7 @@ async function start(data, startBot, reload) {
 				let followSuccess = false;
 				let followFinished = false;
 
-				while (!followSuccess) {
+				while (!followSuccess && !followFinished) {
 
 					let followRes = await dcaFollow(config, exchange, isActive.dealId);
 
@@ -471,7 +474,7 @@ async function start(data, startBot, reload) {
 					let followSuccess = false;
 					let followFinished = false;
 
-					while (!followSuccess) {
+					while (!followSuccess && !followFinished) {
 
 						let followRes = await dcaFollow(config, exchange, dealId);
 
@@ -773,7 +776,7 @@ async function start(data, startBot, reload) {
 					let followSuccess = false;
 					let followFinished = false;
 
-					while (!followSuccess) {
+					while (!followSuccess && !followFinished) {
 
 						let followRes = await dcaFollow(config, exchange, dealId);
 
@@ -1006,7 +1009,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						let followSuccess = false;
 						let followFinished = false;
 
-						while (!followSuccess) {
+						while (!followSuccess && !followFinished) {
 
 							let followRes = await dcaFollow(config, exchange, dealId);
 
@@ -1196,7 +1199,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 			let followSuccess = false;
 			let followFinished = false;
 
-			while (!followSuccess) {
+			while (!followSuccess && !followFinished) {
 
 				let followRes = await dcaFollow(config, exchange, dealId);
 
@@ -1427,6 +1430,41 @@ async function updateTracker(botName, dealId, priceLast, priceAverage, priceTarg
 					};
 
 	dealTracker[dealId]['info'] = dealObj;
+}
+
+
+async function initBot(config) {
+
+	let configObj = JSON.parse(JSON.stringify(config));
+	let configSave = await removeConfigData(JSON.parse(JSON.stringify(config)));
+
+	configObj = await setConfigData(configObj);
+
+	try {
+
+		const bot = await Bots.findOne({
+			botId: configObj.botId,
+		});
+
+		if (!bot) {
+
+			const bot = new Bots({
+						
+							botId: configObj.botId,
+							botName: configObj.botName,
+							config: configSave,
+							date: Date.now(),
+						});
+
+			await bot.save();
+		}
+	}
+	catch (e) {
+
+		//console.log(e);
+	}
+
+	return configObj;
 }
 
 
