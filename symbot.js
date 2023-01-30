@@ -49,10 +49,15 @@ async function init() {
 
 	let success = true;
 
+	Common.logger(DCABot.colors.bgBrightGreen.bold('Starting ' + packageJson.description + ' v' + packageJson.version));
+
+	const appConfig = await Common.getConfig('app.json');
+
 	let shareData = {
 						'appData': {
 										'name': packageJson.description,
 										'version': packageJson.version,
+										'verboseLog': appConfig.data.verbose_log,
 										'started': new Date()
 								   },
 						'DB': DB,
@@ -68,10 +73,6 @@ async function init() {
 	WebServer.init(shareData);
 	Signals3CQS.init(shareData);
 	Common.init(shareData);
-
-	Common.logger(DCABot.colors.bgBrightGreen.bold('Starting ' + shareData.appData.name + ' v' + shareData.appData.version));
-
-	const appConfig = await Common.getConfig('app.json');
 
 	if (!appConfig.success) {
 

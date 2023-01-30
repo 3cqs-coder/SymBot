@@ -7,5 +7,6 @@
 				 	"3CQS": {
 					 			"api_key": ""
 				 			}
-			   }
+			   },
+	"verbose_log": true
 }

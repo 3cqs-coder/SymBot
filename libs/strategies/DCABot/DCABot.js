@@ -91,7 +91,7 @@ async function start(data, startBot, reload) {
 
 		if (!reload) {
 
-			Common.logger(colors.green('Getting pair information for ' + pair + '...'));
+			if (shareData.appData.verboseLog) { Common.logger(colors.green('Getting pair information for ' + pair + '...')); }
 		}
 
 		const isActive = await checkActiveDeal(pair);
@@ -135,16 +135,12 @@ async function start(data, startBot, reload) {
 
 					let msg = 'Deal ID ' + isActive.dealId + ' already running for ' + pair + '...';
 
-					Common.logger(
-							colors.bgCyan.bold(msg)
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold(msg) ); }
 
 					return ( { 'success': false, 'data': msg } );
 				}
 
-				Common.logger(
-					colors.bgCyan.bold('Found active DCA deal for ' + pair + '...')
-				);
+				if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Found active DCA deal for ' + pair + '...') ); }
 
 				let configObj = JSON.parse(JSON.stringify(isActive.config));
 
@@ -190,7 +186,8 @@ async function start(data, startBot, reload) {
 			if (config.firstOrderType.toUpperCase() == 'MARKET') {
 
 				//first order market
-				Common.logger(colors.bgGreen('Calculating orders for ' + pair + '...'));
+				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + '...')); }
+
 				await delay(1000);
 
 				let firstOrderSize = config.firstOrderAmount / askPrice;
@@ -198,7 +195,8 @@ async function start(data, startBot, reload) {
 
 				if (!firstOrderSize) {
 
-					Common.logger(colors.bgRed('First order amount not valid.'));
+					if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('First order amount not valid.')); }
+
 					return false;
 				}
 				else {
@@ -380,21 +378,18 @@ async function start(data, startBot, reload) {
 
 				if (config.sandBox) {
 
-					Common.logger(
-						colors.bgYellow.bold('WARNING: Your bot will run in SANDBOX MODE!')
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold('WARNING: Your bot will run in SANDBOX MODE!') ); }
 				}
 				else {
 
-					Common.logger(
-						colors.bgRed.bold('WARNING: Your bot will run in LIVE MODE!')
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.bgRed.bold('WARNING: Your bot will run in LIVE MODE!') ); }
 				}
 
-				Common.logger(colors.bgWhite('Your Balance: $' + wallet));
-
-				Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
-				//console.log('\n');
+				if (shareData.appData.verboseLog) {
+					
+					Common.logger(colors.bgWhite('Your Balance: $' + wallet));
+					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
+				}
 
 				let contentAdd = '\n\n';
 
@@ -402,11 +397,7 @@ async function start(data, startBot, reload) {
 
 					contentAdd += '<b>' + insufficientFundsMsg + '</b>\n\n';
 
-					Common.logger(
-						colors.red.bold.italic(
-							insufficientFundsMsg
-						)
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.red.bold.italic(insufficientFundsMsg)); }
 				}
 
 				//console.log('\n');
@@ -440,7 +431,7 @@ async function start(data, startBot, reload) {
 
 				if (startBot) {
 
-					Common.logger(colors.green.bold('Please wait, ' + shareData.appData.name + ' is starting... '));
+					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
 
 					const configSave = await removeConfigData(config);
 
@@ -468,8 +459,6 @@ async function start(data, startBot, reload) {
 					dealTracker[dealId]['info'] = {};
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
-
-					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
 					let followSuccess = false;
 					let followFinished = false;
@@ -501,7 +490,8 @@ async function start(data, startBot, reload) {
 
 				//first order limit
 
-				Common.logger(colors.bgGreen('Calculating orders...'));
+				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders...')); }
+
 				await delay(1000);
 
 				askPrice = config.firstOrderLimitPrice;
@@ -511,7 +501,8 @@ async function start(data, startBot, reload) {
 
 				if (!firstOrderSize) {
 
-					Common.logger(colors.bgRed('First order amount not valid.'));
+					if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('First order amount not valid.')); }
+
 					return false;
 				}
 				else {
@@ -690,32 +681,24 @@ async function start(data, startBot, reload) {
 
 				if (config.sandBox) {
 
-					Common.logger(
-						colors.bgRed.bold('WARNING: Your bot work on SANDBOX MODE !')
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.bgRed.bold('WARNING: Your bot work on SANDBOX MODE !') ); }
 				}
 				else {
 
-					Common.logger(
-						colors.bgGreen.bold('WARNING: Your bot work on LIVE MODE !')
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.bgGreen.bold('WARNING: Your bot work on LIVE MODE !') ); }
 				}
 
-				Common.logger(colors.bgWhite('Your Balance: $' + wallet));
-
-				Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
-				//console.log('\n');
+				if (shareData.appData.verboseLog) {
+				
+					Common.logger(colors.bgWhite('Your Balance: $' + wallet));
+					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
+				}
 
 				if (wallet < lastDcaOrderSum) {
 
-					Common.logger(
-						colors.red.bold.italic(
-							insufficientFundsMsg
-						)
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.red.bold.italic(insufficientFundsMsg) ); }
 				}
 
-				//console.log('\n');
 				let sendOrders;
 
 				if (startBot == undefined || startBot == null || startBot == false) {
@@ -742,7 +725,7 @@ async function start(data, startBot, reload) {
 
 				if (startBot) {
 
-					Common.logger(colors.green.bold('Please wait, ' + shareData.appData.name + ' is starting... '));
+					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
 
 					const configSave = await removeConfigData(config);
 
@@ -770,8 +753,6 @@ async function start(data, startBot, reload) {
 					dealTracker[dealId]['info'] = {};
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
-
-					Common.logger(colors.bgGreen.bold(shareData.appData.name + ' is running... '));
 
 					let followSuccess = false;
 					let followFinished = false;
@@ -818,7 +799,10 @@ async function start(data, startBot, reload) {
 
 		configObj['dealCount']++;
 
-		Common.logger(colors.bgGreen('Starting new bot deal for ' + configObj.pair.toUpperCase() + ' ' + configObj['dealCount'] + ' / ' + configObj['dealMax']));
+		if (shareData.appData.verboseLog) {
+
+			Common.logger(colors.bgGreen('Starting new bot deal for ' + configObj.pair.toUpperCase() + ' ' + configObj['dealCount'] + ' / ' + configObj['dealMax']));
+		}
 
 		start(configObj, true, true);
 	}
@@ -892,8 +876,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 					orders[0].filled = 1;
 
-					Common.logger(
-						colors.green.bold.italic(
+					if (shareData.appData.verboseLog) {
+					
+						Common.logger(
+							colors.green.bold.italic(
 							'Pair:' +
 							pair +
 							'\tQty:' +
@@ -903,10 +889,9 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							'\tAmount:' +
 							baseOrder.amount +
 							'\tStatus:Filled'
-						)
-					);
-
-					//console.log('\n');
+							)
+						);
+					}
 
 					orders.forEach(function (order) {
 						t.cell('No', order.orderNo);
@@ -951,8 +936,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 						orders[0].filled = 1;
 
-						Common.logger(
-							colors.green.bold.italic(
+						if (shareData.appData.verboseLog) {
+						
+							Common.logger(
+								colors.green.bold.italic(
 								'Pair:' +
 								pair +
 								'\tQty:' +
@@ -962,10 +949,9 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								'\tAmount:' +
 								baseOrder.amount +
 								'\tStatus:Filled'
-							)
-						);
-
-						//console.log('\n');
+								)
+							);
+						}
 
 						orders.forEach(function (order) {
 							t.cell('No', order.orderNo);
@@ -996,13 +982,16 @@ const dcaFollow = async (configData, exchange, dealId) => {
 					}
 					else {
 
-						Common.logger(
-							'DCA BOT will start when price react ' +
-							baseOrder.price +
-							', now price is ' +
-							price +
-							''
-						);
+						if (shareData.appData.verboseLog) {
+						
+							Common.logger(
+								'DCA BOT will start when price react ' +
+								baseOrder.price +
+								', now price is ' +
+								price +
+								''
+							);
+						}
 
 						await delay(1000);
 						
@@ -1073,8 +1062,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 							updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
-							Common.logger(
-								colors.blue.bold.italic(
+							if (shareData.appData.verboseLog) {
+							
+								Common.logger(
+									colors.blue.bold.italic(
 									'Pair: ' +
 									pair +
 									'\tQty: ' +
@@ -1091,8 +1082,9 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									'\tProfit: ' +
 									profit +
 									''
-								)
-							);
+									)
+								);
+							}
 
 							orders[i].filled = 1;
 
@@ -1119,8 +1111,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 								updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
-								Common.logger(
-									colors.blue.bold.italic(
+								if (shareData.appData.verboseLog) {
+								
+									Common.logger(
+										colors.blue.bold.italic(
 										'Pair: ' +
 										pair +
 										'\tQty: ' +
@@ -1137,8 +1131,9 @@ const dcaFollow = async (configData, exchange, dealId) => {
 										'\tProfit: ' +
 										profit +
 										''
-									)
-								);
+										)
+									);
+								}
 
 								await Deals.updateOne({
 									dealId: dealId
@@ -1148,7 +1143,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 								delete dealTracker[dealId];
 
-								Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
+								if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.')); }
 
 								success = true;
 								finished = true;
@@ -1160,7 +1155,9 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 							updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
-							Common.logger(
+							if (shareData.appData.verboseLog) {
+							
+								Common.logger(
 								'Pair: ' +
 								pair +
 								'\tLast Price: $' +
@@ -1174,7 +1171,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								'\tProfit: ' +
 								profit +
 								''
-							);
+								);
+							}
 						}
 
 						await delay(2000);
@@ -1187,9 +1185,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 				//if (ordersFilledTotal >= config.dcaMaxOrder) {
 				if (maxSafetyOrdersUsed) {
 
-					Common.logger(
-						colors.bgYellow.bold(pair + ' Max safety orders used.') + '\tLast Price: $' + price + '\tTarget: $' + currentOrder.target + '\tProfit: ' + profit
-					);
+					if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold(pair + ' Max safety orders used.') + '\tLast Price: $' + price + '\tTarget: $' + currentOrder.target + '\tProfit: ' + profit); }
 					
 					//await delay(2000);
 				}
@@ -1216,7 +1212,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 			if (!followFinished) {
 
-				Common.logger('No deal ID found for ' + config.pair);
+				if (shareData.appData.verboseLog) { Common.logger('No deal ID found for ' + config.pair); }
 			}
 		}
 	}
@@ -1523,9 +1519,7 @@ async function resumeBots() {
 
 	if (dealsActive.length > 0) {
 
-		Common.logger(
-						colors.bgBrightYellow.bold('Resuming ' + dealsActive.length + ' active DCA bot deals...')
-					 );
+		Common.logger( colors.bgBrightYellow.bold('Resuming ' + dealsActive.length + ' active DCA bot deals...') );
 
 		for (let i = 0; i < dealsActive.length; i++) {
 
