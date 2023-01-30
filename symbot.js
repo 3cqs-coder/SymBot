@@ -47,8 +47,6 @@ process.on('uncaughtException', function(err) {
 
 async function init() {
 
-	let success = true;
-
 	Common.logger(DCABot.colors.bgBrightGreen.bold('Starting ' + packageJson.description + ' v' + packageJson.version));
 
 	const appConfig = await Common.getConfig('app.json');
@@ -73,6 +71,8 @@ async function init() {
 	WebServer.init(shareData);
 	Signals3CQS.init(shareData);
 	Common.init(shareData);
+
+	let success = true;
 
 	if (!appConfig.success) {
 

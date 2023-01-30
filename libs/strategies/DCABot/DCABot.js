@@ -39,6 +39,8 @@ async function start(data, startBot, reload) {
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
 	let exchange;
+	let dealIdMain;
+	let dealActive = true;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
@@ -126,6 +128,8 @@ async function start(data, startBot, reload) {
 		const orders = [];
 
 		if (isActive) {
+
+			dealIdMain = isActive.dealId;
 
 			if (!reload) {
 
@@ -435,6 +439,8 @@ async function start(data, startBot, reload) {
 
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
 
+					dealIdMain = dealId;
+
 					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
 
 					const deal = new Deals({
@@ -448,6 +454,7 @@ async function start(data, startBot, reload) {
 						config: configSave,
 						orders: orders,
 						isStart: 0,
+						active: true,
 						dealCount: dealCount,
 						dealMax: dealMax
 					});
@@ -729,6 +736,8 @@ async function start(data, startBot, reload) {
 
 					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
 
+					dealIdMain = dealId;
+
 					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
 
 					const deal = new Deals({
@@ -742,6 +751,7 @@ async function start(data, startBot, reload) {
 						config: configSave,
 						orders: orders,
 						isStart: 0,
+						active: true,
 						dealCount: dealCount,
 						dealMax: dealMax
 					});
@@ -792,8 +802,24 @@ async function start(data, startBot, reload) {
 
 	//console.log('Finished: ' + pair);
 
+	try {
+
+		const deal = await Deals.findOne({
+			dealId: dealIdMain,
+			active: false
+		});
+
+		if (deal) {
+
+			dealActive = false;
+		}
+	}
+	catch(e) {
+
+	}
+
 	// Start another bot deal if max deals have not been reached
-	if (dealCount < dealMax || dealMax == 0) {
+	if (dealActive && (dealCount < dealMax || dealMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
@@ -1449,6 +1475,7 @@ async function initBot(config) {
 							botId: configObj.botId,
 							botName: configObj.botName,
 							config: configSave,
+							active: true,
 							date: Date.now(),
 						});
 

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const BotSchema = new Schema({
+	active: Boolean,
 	botId: String,
 	botName: String,
 	config: Object,
@@ -13,6 +14,7 @@ const BotSchema = new Schema({
 
 
 const DealSchema = new Schema({
+	active: Boolean,
 	botId: String,
 	botName: String,
 	dealId: String,
