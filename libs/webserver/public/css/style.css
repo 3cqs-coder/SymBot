@@ -262,18 +262,17 @@ table#dealsCreate td {
 }
 
 
-table#dealsActive {
+table#deals {
 
 	position: relative;
 	font-size: 1.0rem;
 	color: #e7e7e7;
 	width: 90%;
-	cursor: pointer;
 	border-collapse: collapse;
 }
 
 
-table#dealsActive th {
+table#deals th {
  
 	padding: 3px;
 	font-size: 1.1rem;
@@ -281,19 +280,19 @@ table#dealsActive th {
 }
 
 
-table#dealsActive th:first-child{
+table#deals th:first-child{
 
 	border-radius: 5px 0 0 0;
 }
 
 
-table#dealsActive th:last-child{
+table#deals th:last-child{
 
 	border-radius: 0 5px 0 0;
 }
 
 
-table#dealsActive td {
+table#deals td {
  
  	padding: 4px;
  	color: #000000;
@@ -302,26 +301,27 @@ table#dealsActive td {
 }
 
 
-table#dealsActive tr:nth-child(even) {
+table#deals tr:nth-child(even) {
 
 	background: #dddddd;
 }
 
 
-table#dealsActive tr:nth-child(odd) {
+table#deals tr:nth-child(odd) {
 
 	background: #dddddd;
 }
 
 
-table#dealsActive tr:nth-child(1) {
+table#deals tr:nth-child(1) {
 
 	background: none;
 }
 
 
-table#dealsActive tr:not(:first-child):hover {
+table#deals tr:not(:first-child):hover {
 
     background-color: #c5c5c5;
+    cursor: pointer;
 }
 

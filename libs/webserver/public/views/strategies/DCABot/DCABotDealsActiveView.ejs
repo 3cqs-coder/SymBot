@@ -16,10 +16,12 @@
 
 	<div id="contentBox" style="width: 90%;">
 
-	<table id="dealsActive" border=0 cellspacing=0 cellpadding=0>
+	<h3>Active DCA Deals</h3>
+
+	<table id="deals" border=0 cellspacing=0 cellpadding=0>
 
 	<tr style="font-weight: bold; text-align: left;">
-		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th>
+		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th>
 	</tr>
 
 	<%
@@ -30,21 +32,31 @@
 
 			let deal = deals[dealId];
 			let profitPerc = deal['info']['take_profit_percentage'];
-		
+
+			let duration = timeDiff(new Date(), new Date(deal['deal']['date']));
+
 			if (profitPerc <= 0) {
 
 				profitPercColor = '#d82715';
 			}
+
+			if (deal['info']['deal_max'] == 0) {
+
+				deal['info']['deal_max'] = '&#8734;';
+			}
+
+			let dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
 	%>
 
 	<tr>
 		<td><%- deal['info']['bot_name'] %></td>
 		<td><%- dealId %></td>
 		<td><%- deal['deal']['pair'] %></td>
+		<td><%- duration %></td>
 		<td>$<%- deal['info']['price_last'] %></td>
 		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
 		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
-		<td><%- deal['info']['deal_count'] %> / <%- deal['info']['deal_max'] %></td>
+		<td><%- dealCount %></td>
 	</tr>
 	
 	<% 	} %>

@@ -37,7 +37,15 @@ async function viewCreateDeal(req, res) {
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'deals': shareData.dealTracker } );
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(shareData.dealTracker)) } );
+}
+
+
+async function viewHistoryDeals(req, res) {
+
+	const deals = await shareData.DCABot.getDealsHistory();
+
+	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals)) } );
 }
 
 
@@ -106,6 +114,7 @@ module.exports = {
 	apiCreateDeal,
 	viewCreateDeal,
 	viewActiveDeals,
+	viewHistoryDeals,
 
 	init: function(obj) {
 

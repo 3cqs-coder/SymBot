@@ -24,6 +24,7 @@ const DealSchema = new Schema({
 	date: Date,
 	status: Number,
 	config: Object,
+	sellData: Object,
 	orders: Object,
 	isStart: Number,
 	dealCount: Number,

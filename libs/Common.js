@@ -42,9 +42,63 @@ async function logger(data) {
 }
 
 
+function sortByKey(array, key) {
+
+	return array.sort(function(a, b) {
+
+		let x = a[key]; var y = b[key];
+		return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+	});
+}
+
+
+function timeDiff(dateStart, dateEnd) {
+
+	let diff = Math.abs(dateEnd - dateStart) / 1000;
+
+	let diffString = '';
+
+	let days = Math.floor(diff / 86400);
+	diff -= days * 86400;
+
+	let hours = Math.floor(diff / 3600) % 24;
+	diff -= hours * 3600;
+
+	let minutes = Math.floor(diff / 60) % 60;
+	diff -= minutes * 60;
+
+	let seconds = Math.floor(diff / 1) % 60;
+	diff -= seconds * 60;
+
+	if (days > 0) {
+
+		diffString += (days === 1) ? `${days}d` : `${days}d`;
+	}
+
+	if (hours > 0) {
+
+		diffString += (hours === 1) ? ` ${hours}h` : ` ${hours}h`;
+	}
+
+	if (minutes > 0) {
+
+		diffString += (minutes === 1) ? ` ${minutes}m` : ` ${minutes}m`;
+	}
+
+	if (seconds > 0) {
+
+		diffString += (seconds === 1) ? ` ${seconds}s` : ` ${seconds}s`;
+	}
+
+	return diffString;
+}
+
+
 module.exports = {
 
+	sortByKey,
 	getConfig,
+	timeDiff,
 	logger,
 
 	init: function(obj) {

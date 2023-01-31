@@ -918,7 +918,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						const buy = await buyOrder(exchange, pair, baseOrder.qty);
 
 						if (!buy) {
-							console.error(buy);
+
+							Commong.logger(buy);
 						}
 					}
 
@@ -978,7 +979,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							const buy = await buyOrder(exchange, pair, baseOrder.qty);
 
 							if (!buy) {
-								console.error(buy);
+
+								Common.logger(buy);
 							}
 						}
 
@@ -1104,7 +1106,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								const buy = await buyOrder(exchange, pair, order.qty);
 
 								if (!buy) {
-									console.error(buy);
+
+									Common.logger(buy);
 								}
 							}
 
@@ -1153,14 +1156,15 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									const sell = await sellOrder(exchange, pair, order.qtySum);
 
 									if (!sell) {
-										console.error(sell);
+
+										Common.logger(sell);
 									}
 								}
 
 								updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 								if (shareData.appData.verboseLog) {
-								
+
 									Common.logger(
 										colors.blue.bold.italic(
 										'Pair: ' +
@@ -1183,9 +1187,19 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									);
 								}
 
+								const sellData = {
+													'date': new Date(),
+													'qtySum': currentOrder.qtySum,
+													'price': price,
+													'average': currentOrder.average,
+													'target': currentOrder.target,
+													'profit': profitPerc
+												 };
+
 								await Deals.updateOne({
 									dealId: dealId
 								}, {
+									sellData: sellData,
 									status: 1
 								});
 
@@ -1559,6 +1573,59 @@ async function removeConfigData(config) {
 }
 
 
+async function getDealsHistory() {
+
+	let dealsArr = [];
+
+	const dealsHistory = await getDeals({ 'sellData': { $exists: true }, 'status': 1 });
+
+	if (dealsHistory != undefined && dealsHistory != null && dealsHistory != '') {
+
+		for (let i = 0; i < dealsHistory.length; i++) {
+
+			const deal = dealsHistory[i];
+			const sellData = deal.sellData;
+			const orders = deal.orders;
+
+			let orderCount = 0;
+
+			for (let x = 0; x < orders.length; x++) {
+
+				const order = orders[x];
+
+				if (order['filled']) {
+
+					orderCount++;
+				}
+			}
+
+			if (orderCount > 0 && (sellData.date != undefined && sellData.date != undefined != null)) {
+
+				const profitPerc = Number(sellData.profit);
+
+				const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
+
+				const dataObj = {
+									'deal_id': deal.dealId,
+									'pair': deal.pair.toUpperCase(),
+									'date_start': new Date(deal.date),
+									'date_end': new Date(sellData.date),
+									'profit': profit,
+									'profit_percent': profitPerc,
+									'safety_orders': orderCount - 1
+								};
+
+				dealsArr.push(dataObj);
+			}
+		}
+	}
+
+	dealsArr = Common.sortByKey(dealsArr, 'date_end');
+
+	return dealsArr.reverse();
+}
+
+
 async function resumeBots() {
 
 	// Check for active deals and resume bots
@@ -1597,6 +1664,8 @@ async function resumeBots() {
 			dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
 			start(config, true, true);
+
+			await delay(1000);
 		}
 	}
 }
@@ -1620,6 +1689,7 @@ module.exports = {
 	delay,
 	start,
 	update,
+	getDealsHistory,
 
 	init: function(obj) {
 

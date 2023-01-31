@@ -1,0 +1,57 @@
+<%- include('../../partialsHeaderView'); %>
+
+
+
+<center>
+<main>
+
+	<div id="contentBox" style="width: 90%;">
+
+	<h3>DCA Bot Deals History</h3>
+
+	<table id="deals" border=0 cellspacing=0 cellpadding=0>
+
+	<tr style="font-weight: bold; text-align: left;">
+		<th>Date</th> <th>Duration</th> <th>Deal ID</th> <th>Pair</th> <th>Profit</th> <th>Safety Orders</th>
+	</tr>
+
+	<%
+
+		for (let i = 0; i < deals.length; i++) {
+
+			let profitPercColor = '#1a9f00';
+
+			let deal = deals[i];
+			let profit = deal['profit'];
+			let profitPerc = deal['profit_percent'];
+			let dateEnd = new Date(deal['date_end']).toLocaleString();
+
+			let duration = timeDiff(new Date(deal['date_start']), new Date(deal['date_end']));
+
+			dateEnd = dateEnd.replaceAll(',', '');
+			dateEnd = dateEnd.replaceAll('/', '-');
+
+			if (profitPerc <= 0) {
+
+				profitPercColor = '#d82715';
+			}
+	%>
+
+	<tr>
+		<td><%- dateEnd %></td>
+		<td><%- duration %></td>
+		<td><%- deal['deal_id'] %></td>
+		<td><%- deal['pair'] %></td>
+		<td style="color: <%- profitPercColor %>;">$<%- profit %> <span style="float: right;"><%- profitPerc %>%</span></td>
+		<td><%- deal['safety_orders'] %></td>
+	</tr>
+	
+	<% 	} %>
+
+	</table>
+	</div>
+
+</main>
+</center>
+
+<%- include('../../partialsFooterView'); %>

@@ -28,7 +28,15 @@ function initRoutes(router) {
 
 		shareData.DCABotManager.viewActiveDeals(req, res);
 	});
-	
+
+
+	router.get('/deals/history', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		shareData.DCABotManager.viewHistoryDeals(req, res);
+	});
+
 
 	router.get('/api/deals', (req, res) => {
 
