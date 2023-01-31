@@ -51,6 +51,8 @@ async function start(data, startBot, reload) {
 	let dealCount = config.dealCount;
 	let dealMax = config.dealMax;
 
+	//await update(botIdMain, { 'active': false });
+
 	if (dealCount == undefined || dealCount == null) {
 
 		dealCount = 0;
@@ -65,8 +67,10 @@ async function start(data, startBot, reload) {
 	
 		exchange = new ccxt.pro[config.exchange]({
 
-			apiKey: config.apiKey,
-			secret: config.apiSecret
+			'apiKey': config.apiKey,
+			'secret': config.apiSecret,
+			'passphrase': config.apiPassphrase,
+			'password': config.apiPassword,			
 		});
 	}
 	catch(e) {
@@ -836,6 +840,23 @@ async function start(data, startBot, reload) {
 }
 
 
+async function update(botId, data) {
+
+	let botData;
+
+	try {
+
+		botData = await Bots.updateOne({
+						botId: botId
+					}, data);
+	}
+	catch (e) {
+
+		Common.logger(JSON.stringify(e));
+	}
+}
+
+
 const dcaFollow = async (configData, exchange, dealId) => {
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(configData)));
@@ -1598,6 +1619,7 @@ module.exports = {
 	colors,
 	delay,
 	start,
+	update,
 
 	init: function(obj) {
 

@@ -55,8 +55,6 @@ async function apiCreateDeal(req, res) {
 
 	let botData = botConfig.data;
 
-	botData.sandBox = true;
-
 	botData.pair = body.pair;
 	botData.dealMax = body.dealMax;
 	botData.firstOrderAmount = body.firstOrderAmount;
