@@ -16,16 +16,6 @@
 		$('input').not('[type=button]').prop('disabled', false);
 	}
 
-	function alertBox(msg) {
-
-		$.alert({
-					title: false,
-					boxWidth: '50%',
-					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>'
-		});
-	}
-
 	$(document).ready(function () {
 
 		const form = '#formDealsCreate';
@@ -58,7 +48,7 @@
 
 											btnClass: 'btn-default',
 											text: '<div style="color: #4aa602;">Start Bot</div>',
-											function () {
+											action: function () {
 
 												confirmStart = true;
 											
@@ -70,7 +60,7 @@
 
 									 		btnClass: 'btn-default',
 										 	text: '<div style="color: #d80f08;">Cancel</div>',	
-										 	function () { }
+										 	action: function () { }
 									 	}
 									 }
 				});
@@ -187,10 +177,6 @@
 </script>
 
 
-<div id="spinner-overlay">
-	<div class="spinner-container"><span class="spinner"></span></div>
-</div>
-
 <center>
 <main>
 
@@ -200,7 +186,7 @@
 
 	<table id="dealsCreate" cellpadding=0 cellspacing=0>
 
-	<form id="formDealsCreate" autocomplete="off" action="/api/deals/create">
+	<form id="formDealsCreate" autocomplete="off" action="/api/bots/create">
 
 		<input type=hidden id="createStep" name="createStep" value="getorders">
 

@@ -14,11 +14,11 @@ function initRoutes(router) {
 	});
 	
 
-	router.get('/deals/new', (req, res) => {
+	router.get('/bots/create', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCABotManager.viewCreateDeal(req, res);
+		shareData.DCABotManager.viewCreateBot(req, res);
 	});
 
 
@@ -46,9 +46,15 @@ function initRoutes(router) {
 	});
 
 
-	router.post('/api/deals/create', (req, res) => {
+	router.post('/api/bots/stop', (req, res) => {
 
-		shareData.DCABotManager.apiCreateDeal(req, res);
+		shareData.DCABotManager.apiStopBot(req, res);
+	});
+	
+
+	router.post('/api/bots/create', (req, res) => {
+
+		shareData.DCABotManager.apiCreateBot(req, res);
 	});
 
 

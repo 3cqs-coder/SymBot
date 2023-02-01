@@ -3,9 +3,105 @@
 
 <script>
 
+	let timeOutId;
+
+	function setReloadTimeout() {
+
+		timeOutId = setTimeout(() => { window.location.reload(); }, 5000);
+	}
+
+	function stopBotConfirm(botName, data) {
+
+		clearTimeout(timeOutId);
+
+		$.confirm({
+
+					title: false,
+					boxWidth: '50%',
+					useBootstrap: false,
+					content: '<div style="font-size: 1.2rem; text-align: left;">Stop ' + botName + '?</div>',
+					buttons: {
+
+								ok: {
+										btnClass: 'btn-default',
+										text: '<div style="color: #4aa602;">Stop Bot</div>',
+										action: function () {
+
+											stopBot(data);
+										}
+									 },
+							 	cancel: {
+
+									 		btnClass: 'btn-default',
+									 		text: '<div style="color: #d80f08;">Cancel</div>',	
+										 	action: function () { setReloadTimeout(); }
+									 	}
+							 }
+		});
+	}
+
+
+	function stopBot(data) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'POST',
+					url: '/api/bots/stop',
+					data: data,
+					dataType: 'json',
+					success: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						if (!data.success) {
+
+							alertBox('Unable to stop bot');
+						}
+						else {
+
+							alertBox('Bot Stopped');
+						}
+						
+						setReloadTimeout();
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+						
+						setReloadTimeout();
+					}
+		});
+	}
+
+
 	$(document).ready(function() {
 
-		setTimeout(() => { window.location.reload(); }, 5000);
+		setReloadTimeout();
+
+		$('#deals tbody tr td').click(function() {
+
+			let col = $(this).index();
+			let row = $(this).closest('tr');
+
+			if (col == 8) {
+
+				let data = { 'bot_id': '' };
+
+				let botId = $(this).data('botid');
+				let botName = $(this).data('botname');
+
+				if (botId) {
+
+					data.bot_id = botId;
+
+					stopBotConfirm(botName, data);
+				}
+			}
+		});
 
 	});
 
@@ -19,13 +115,14 @@
 	<h3>Active DCA Bot Deals</h3>
 
 	<table id="deals" border=0 cellspacing=0 cellpadding=0>
+	<tbody>
 
 	<tr style="font-weight: bold; text-align: left;">
-		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th>
+		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th> <th>Stop</th>
 	</tr>
 
 	<%
-	
+
 		for (let dealId in deals) {
 
 			let profitPercColor = '#1a9f00';
@@ -57,10 +154,12 @@
 		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
 		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
 		<td><%- dealCount %></td>
+		<td data-botid="<%- deal['info']['bot_id'] %>" data-botname="<%- deal['info']['bot_name'] %>" style="text-align: center;">&#9726;</td>
 	</tr>
-	
+
 	<% 	} %>
 
+	</tbody>
 	</table>
 	</div>
 

@@ -51,8 +51,6 @@ async function start(data, startBot, reload) {
 	let dealCount = config.dealCount;
 	let dealMax = config.dealMax;
 
-	//await update(botIdMain, { 'active': false });
-
 	if (dealCount == undefined || dealCount == null) {
 
 		dealCount = 0;
@@ -844,6 +842,7 @@ async function start(data, startBot, reload) {
 async function update(botId, data) {
 
 	let botData;
+	let success = true;
 
 	try {
 
@@ -853,8 +852,18 @@ async function update(botId, data) {
 	}
 	catch (e) {
 
+		success = false;
+
 		Common.logger(JSON.stringify(e));
 	}
+	
+
+	if (botData == undefined || botData == null || botData['matchedCount'] < 1) {
+
+		success = false;
+	}
+
+	return( { 'success': success } );
 }
 
 
@@ -1112,7 +1121,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								}
 							}
 
-							updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+							updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							if (shareData.appData.verboseLog) {
 							
@@ -1162,7 +1171,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									}
 								}
 
-								updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+								updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 								if (shareData.appData.verboseLog) {
 
@@ -1216,7 +1225,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						}
 						else {
 
-							updateTracker(config.botName, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+							updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							if (shareData.appData.verboseLog) {
 							
@@ -1473,10 +1482,11 @@ async function checkTracker() {
 }
 
 
-async function updateTracker(botName, dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax, dealCount, dealMax) {
+async function updateTracker(botName, botId, dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax, dealCount, dealMax) {
 
 	const dealObj = {
 						'updated': new Date(),
+						'bot_id': botId,
 						'bot_name': botName,
 						'safety_orders_used': ordersUsed,
 						'safety_orders_max': ordersMax - 1,

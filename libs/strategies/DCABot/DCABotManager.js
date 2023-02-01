@@ -4,6 +4,28 @@
 let shareData;
 
 
+async function viewCreateBot(req, res) {
+
+	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	res.render( 'strategies/DCABot/DCABotCreateView', { 'appData': shareData.appData, 'botData': botConfig.data } );
+}
+
+
+async function viewActiveDeals(req, res) {
+
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(shareData.dealTracker)) } );
+}
+
+
+async function viewHistoryDeals(req, res) {
+
+	const deals = await shareData.DCABot.getDealsHistory();
+
+	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals)) } );
+}
+
+
 async function apiGetDeals(req, res) {
 
 	let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
@@ -27,29 +49,7 @@ async function apiGetDeals(req, res) {
 }
 
 
-async function viewCreateDeal(req, res) {
-
-	const botConfig = await shareData.Common.getConfig('bot.json');
-
-	res.render( 'strategies/DCABot/DCABotDealsCreateView', { 'appData': shareData.appData, 'botData': botConfig.data } );
-}
-
-
-async function viewActiveDeals(req, res) {
-
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(shareData.dealTracker)) } );
-}
-
-
-async function viewHistoryDeals(req, res) {
-
-	const deals = await shareData.DCABot.getDealsHistory();
-
-	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals)) } );
-}
-
-
-async function apiCreateDeal(req, res) {
+async function apiCreateBot(req, res) {
 
 	let orders;
 	let resData;
@@ -106,13 +106,32 @@ async function apiCreateDeal(req, res) {
 }
 
 
+async function apiStopBot(req, res) {
+
+	let success = true;
+
+	const body = req.body;
+
+	const botId = body.bot_id;
+
+	const data = await shareData.DCABot.update(botId, { 'active': false });;
+
+	if (!data.success) {
+
+		success = false;
+	}
+
+	res.send( { 'date': new Date(), 'success': success } );
+}
+
 
 
 module.exports = {
 
 	apiGetDeals,
-	apiCreateDeal,
-	viewCreateDeal,
+	apiCreateBot,
+	apiStopBot,
+	viewCreateBot,
 	viewActiveDeals,
 	viewHistoryDeals,
 

@@ -28,6 +28,16 @@
 		});
 	});
 
+	function alertBox(msg) {
+
+		$.alert({
+					title: false,
+					boxWidth: '50%',
+					useBootstrap: false,
+					content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>'
+		});
+	}
+
 	</script>
 
 </head>
@@ -42,3 +52,6 @@
 
 </div>
 
+<div id="spinner-overlay">
+	<div class="spinner-container"><span class="spinner"></span></div>
+</div>
