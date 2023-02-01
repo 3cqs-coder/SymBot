@@ -2,6 +2,8 @@
 
 <script>
 
+	let confirmStart = false;
+
 	function resetForm(form) {
 
 		$('#spinner-overlay').fadeOut(100);
@@ -14,6 +16,15 @@
 		$('input').not('[type=button]').prop('disabled', false);
 	}
 
+	function alertBox(msg) {
+
+		$.alert({
+					title: ' ',
+					boxWidth: '50%',
+					useBootstrap: false,
+					content: '<span style="font-size: 1.2rem; text-align: center;">' + msg + '</span>'
+		});
+	}
 
 	$(document).ready(function () {
 
@@ -34,19 +45,29 @@
 				return;
 			}
 
-			if (id.match(/start/i)) {
+			if (id.match(/start/i) && !confirmStart) {
 
-				let confirmStart = confirm('Start bot?');
+				$.confirm({
+							title: ' ',
+							boxWidth: '50%',
+							useBootstrap: false,
+							content: '<span style="font-size: 1.2rem; text-align: center;">Start Bot?</span>',
+							buttons: {
+										confirm: function () {
+									
+											confirmStart = true;
+											
+											$('#createStep').val('start');
+											$('#formSubmitStart').click();
+									 },
+									 	cancel: function () { }
+									 }
+				});
 
-				if (confirmStart) {
-
-					$('#createStep').val('start');
-				}
-				else {
-
-					return;
-				}
+				return;
 			}
+
+			confirmStart = false;
 
 			$('#formSubmitReset').hide();
 			$('#formSubmitStart').hide();
@@ -60,7 +81,8 @@
 
 			if (formData.pair == undefined || formData.pair == null || formData.pair == '' || !formData.pair.match(/\//)) {
 
-				alert('Invalid Pair');
+				alertBox('Invalid Pair');
+
 				return;
 			}
 
@@ -83,8 +105,8 @@
 							$('#formSubmitPreview').show();
 							$('input').not('[type=button]').prop('disabled', false);
 
-							//alert(JSON.stringify(data));
-							alert(data.data);
+							//alertBox(JSON.stringify(data));
+							alertBox(data.data);
 						}
 						else {
 
@@ -94,7 +116,7 @@
 
 								resetForm(form);
 
-								alert('Bot Started');
+								alertBox('Bot Started');
 							}
 							else {
 
@@ -106,7 +128,7 @@
 								$('#formSubmitReset').show();
 								$('#formSubmitStart').show();
 
-								alert('Verify bot orders and confirm to start bot');
+								alertBox('Verify bot orders and confirm to start bot');
 							}
 						}
 					},
@@ -116,7 +138,7 @@
 						$('#spinner-overlay').fadeOut(100);
 
 						$('#formSubmitStart').hide();
-						alert('Error: ' + JSON.stringify(data));
+						alertBox('Error: ' + JSON.stringify(data));
 				}
 			});
 
@@ -167,7 +189,7 @@
 
 	<table id="dealsCreate" cellpadding=0 cellspacing=0>
 
-	<form id="formDealsCreate" action="/api/deals/create">
+	<form id="formDealsCreate" autocomplete="off" action="/api/deals/create">
 
 		<input type=hidden id="createStep" name="createStep" value="getorders">
 
@@ -185,9 +207,9 @@
 		<tr>
 			<td style="padding-top: 25px; text-align: center;" colspan=2>
 				
-				<input type=button id="formSubmitPreview" value="Preview Bot" style="width: 125px; cursor: pointer;">
-				<input type=button id="formSubmitReset" value="Modify Bot" style="display: none; width: 125px; cursor: pointer;">
-				&nbsp;&nbsp;&nbsp; <input type=button id="formSubmitStart" value="Start Bot Deal" style="display: none; width: 125px; cursor: pointer; background-color: #81df6f;">
+				<button id="formSubmitPreview" class="btn">Preview Bot</button>
+				<button id="formSubmitReset" class="btn" style="display: none;">Modify Bot</button>
+				&nbsp;&nbsp;&nbsp; <button id="formSubmitStart" class="btn" style="display: none;">Start Bot</button>
 			</td>
 		</tr>
 
