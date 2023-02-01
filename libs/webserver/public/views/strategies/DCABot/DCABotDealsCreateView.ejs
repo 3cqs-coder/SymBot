@@ -173,14 +173,13 @@
 
 		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" class="form-field" style="width: 200px;"></td></tr>
 		<tr><td>Pair:</td> <td><input id="pair" name="pair" class="form-field" style="width: 100px; text-transform: uppercase;"></td></tr>
-		<tr><td>Base Order:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
-		<tr><td>Safety Order:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
+		<tr><td>Base Order Size:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Size:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" class="form-field"></td></tr>
-		<tr><td>dcaOrderSizeMultiplier:</td> <td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" class="form-field"></td></tr>
-		<tr><td>dcaOrderStartDistance:</td> <td><input id="dcaOrderStartDistance" name="dcaOrderStartDistance" value="<%- botData.dcaOrderStartDistance %>" class="form-field"></td></tr>
-		<tr><td>dcaOrderStepPercent:</td> <td><input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent %>" class="form-field"></td></tr>
-		<tr><td>dcaOrderStepPercentMultiplier:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" class="form-field"></td></tr>
-		<tr><td>dcaTakeProfitPercent:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Price Deviation:</td> <td><input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Volume Scale:</td> <td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Step Scale:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" class="form-field"></td></tr>
+		<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
 		<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="0" class="form-field"></td></tr>
 
 		<tr>

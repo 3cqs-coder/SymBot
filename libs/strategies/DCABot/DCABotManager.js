@@ -69,7 +69,7 @@ async function apiCreateDeal(req, res) {
 	botData.dcaOrderAmount = body.dcaOrderAmount;
 	botData.dcaMaxOrder = body.dcaMaxOrder;
 	botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
-	botData.dcaOrderStartDistance = body.dcaOrderStartDistance;
+	botData.dcaOrderStartDistance = body.dcaOrderStepPercent;
 	botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
 	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
