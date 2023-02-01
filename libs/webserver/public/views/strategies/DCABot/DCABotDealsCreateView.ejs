@@ -19,10 +19,10 @@
 	function alertBox(msg) {
 
 		$.alert({
-					title: ' ',
+					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<span style="font-size: 1.2rem; text-align: center;">' + msg + '</span>'
+					content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>'
 		});
 	}
 
@@ -48,19 +48,30 @@
 			if (id.match(/start/i) && !confirmStart) {
 
 				$.confirm({
-							title: ' ',
+							title: false,
 							boxWidth: '50%',
 							useBootstrap: false,
-							content: '<span style="font-size: 1.2rem; text-align: center;">Start Bot?</span>',
+							content: '<div style="font-size: 1.2rem; text-align: left;">Start Bot?</div>',
 							buttons: {
-										confirm: function () {
-									
-											confirmStart = true;
+
+										ok: {
+
+											btnClass: 'btn-default',
+											text: '<div style="color: #4aa602;">Start Bot</div>',
+											function () {
+
+												confirmStart = true;
 											
-											$('#createStep').val('start');
-											$('#formSubmitStart').click();
+												$('#createStep').val('start');
+												$('#formSubmitStart').click();
+										}
 									 },
-									 	cancel: function () { }
+									 	cancel: {
+
+									 		btnClass: 'btn-default',
+										 	text: '<div style="color: #d80f08;">Cancel</div>',	
+										 	function () { }
+									 	}
 									 }
 				});
 

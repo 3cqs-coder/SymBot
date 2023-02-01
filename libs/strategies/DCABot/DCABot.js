@@ -1600,7 +1600,7 @@ async function getDealsHistory() {
 				}
 			}
 
-			if (orderCount > 0 && (sellData.date != undefined && sellData.date != undefined != null)) {
+			if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
 
 				const profitPerc = Number(sellData.profit);
 
