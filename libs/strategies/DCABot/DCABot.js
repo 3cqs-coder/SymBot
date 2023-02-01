@@ -308,7 +308,8 @@ async function start(data, startBot, reload) {
 
 						price = await filterPrice(exchange, pair, price);
 
-						let dcaOrderSize = lastDcaOrderSize * config.dcaOrderSizeMultiplier;
+						//let dcaOrderSize = lastDcaOrderSize * config.dcaOrderSizeMultiplier;
+						let dcaOrderSize = (lastDcaOrderSize * (config.dcaOrderStepPercent / 100)) + lastDcaOrderSize * config.dcaOrderSizeMultiplier;
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let amount = price * dcaOrderSize;
