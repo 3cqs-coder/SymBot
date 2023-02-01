@@ -121,6 +121,8 @@ async function apiStopBot(req, res) {
 		success = false;
 	}
 
+	shareData.Common.logger('Bot stop id ' + botId + ' / Success: ' + success);
+
 	res.send( { 'date': new Date(), 'success': success } );
 }
 

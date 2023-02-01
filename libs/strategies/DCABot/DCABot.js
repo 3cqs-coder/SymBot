@@ -30,7 +30,7 @@ const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA
 let dealTracker = {};
 let shareData;
 
-let counter = 0;
+
 
 async function start(data, startBot, reload) {
 

@@ -3,6 +3,10 @@
 	"web_server": {
 					"port": 3000
 				},
+	"telegram": {
+					"token_id": "",
+					"notify_user_id": ""
+				},
 	"signals": {
 				 	"3CQS": {
 					 			"api_key": ""

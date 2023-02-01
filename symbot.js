@@ -15,9 +15,11 @@ const DCABot = require(__dirname + '/libs/strategies/DCABot/DCABot.js');
 const DCABotManager = require(__dirname + '/libs/strategies/DCABot/DCABotManager.js');
 const Signals3CQS = require(__dirname + '/libs/signals/3CQS/3cqs-signals-client.js');
 const Common = require(__dirname + '/libs/Common.js');
+const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const packageJson = require(__dirname + '/package.json');
 
+let appDataConfig;
 let gotSigInt = false;
 
 process.on('SIGINT', shutDown);
@@ -55,6 +57,7 @@ async function init() {
 						'appData': {
 										'name': packageJson.description,
 										'version': packageJson.version,
+										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
 										'verboseLog': appConfig.data.verbose_log,
 										'started': new Date()
 								   },
@@ -62,12 +65,16 @@ async function init() {
 						'DCABot': DCABot,
 						'DCABotManager': DCABotManager,
 						'Common': Common,
+						'Telegram': Telegram,
 						'WebServer': WebServer
 					};
+
+	appDataConfig = shareData.appData;
 
 	DB.init(shareData);
 	DCABot.init(shareData);
 	DCABotManager.init(shareData);
+	Telegram.init(shareData);
 	WebServer.init(shareData);
 	Signals3CQS.init(shareData);
 	Common.init(shareData);
@@ -93,11 +100,19 @@ async function init() {
 
 	if (success) {
 
+		Telegram.start(appConfig['data']['telegram']['token_id']);
 		WebServer.start(appConfig['data']['web_server']['port']);
+
+		setTimeout(() => {
+
+			Telegram.sendMessage(shareData.appData.telegram_id, shareData.appData.name + ' v' + shareData.appData.version + ' started at ' + new Date(shareData.appData.started).toISOString());
+
+		}, 1000);
 	}
 
 	return({ 'success': success, 'app_config': appConfig });
 }
+
 
 
 async function start() {
@@ -137,10 +152,15 @@ function shutDown() {
 
 		Common.logger('Received kill signal. Shutting down gracefully.');
 
+		if (appDataConfig != undefined && appDataConfig != null && appDataConfig != '') {
+
+			Telegram.sendMessage(appDataConfig.telegram_id, appDataConfig.name + ' v' + appDataConfig.version + ' shutting down at ' + new Date().toISOString());
+		}
+
 		setTimeout(() => {
 							process.exit(1);
 
-						 }, 1000);
+						 }, 2000);
 	}
 }
 
