@@ -40,7 +40,10 @@ async function start(data, startBot, reload) {
 
 	let exchange;
 	let dealIdMain;
+	let botConfigDb;
+
 	let botActive = true;
+	let botFoundDb = false;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
@@ -816,37 +819,49 @@ async function start(data, startBot, reload) {
 		//console.log(e);
 	}
 
-	//console.log('Finished: ' + pair);
+
+	// Refresh bot config in case any settings changed
 
 	try {
 
 		const bot = await Bots.findOne({
-			botId: botIdMain,
-			active: false
+			botId: botIdMain
 		});
 
 		if (bot) {
 
-			botActive = false;
+			botFoundDb = true;
+
+			if (!bot['active']) {
+
+				botActive = false;
+			}
+			else {
+
+				botConfigDb = bot['config'];
+				dealMax = botConfigDb['dealMax'];
+			}
 		}
 	}
 	catch(e) {
 
 	}
 
+
 	// Start another bot deal if max deals have not been reached
-	if (botActive && (dealCount < dealMax || dealMax == 0)) {
+	if (botFoundDb && botActive && (dealCount < dealMax || dealMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
 		configObj['dealCount']++;
+		botConfigDb['dealCount'] = configObj['dealCount'];
 
 		if (shareData.appData.verboseLog) {
 
-			Common.logger(colors.bgGreen('Starting new bot deal for ' + configObj.pair.toUpperCase() + ' ' + configObj['dealCount'] + ' / ' + configObj['dealMax']));
+			Common.logger(colors.bgGreen('Starting new bot deal for ' + botConfigDb.pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
 		}
 
-		start(configObj, true, true);
+		start(botConfigDb, true, true);
 	}
 }
 
