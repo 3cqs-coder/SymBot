@@ -11,7 +11,7 @@
 	"dcaOrderStepPercentMultiplier": 1.0,
 	"dcaTakeProfitPercent": 1.5,
 	"exchange": "coinbasepro",
-	"exchangeFee": 0,
+	"exchangeFee": 0.45,
 	"firstOrderAmount": 20,
 	"firstOrderLimitPrice": 1300,
 	"firstOrderType": "MARKET",

@@ -214,7 +214,9 @@ async function start(data, startBot, reload) {
 					const price = await filterPrice(exchange, pair, askPrice);
 
 					let amount = price * firstOrderSize;
-					amount = await filterPrice(exchange, pair, amount);
+					let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+
+					amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
 					let targetPrice = Percentage.addPerc(
 						price,
@@ -258,7 +260,9 @@ async function start(data, startBot, reload) {
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let dcaOrderAmount = dcaOrderSize * price;
-						dcaOrderAmount = await filterPrice(exchange, pair, dcaOrderAmount);
+						let exchangeFee = (dcaOrderAmount / 100) * Number(config.exchangeFee);
+
+						dcaOrderAmount = await filterPrice(exchange, pair, (dcaOrderAmount + exchangeFee));
 
 						let dcaOrderSum = parseFloat(dcaOrderAmount) + parseFloat(lastDcaOrderAmount);
 						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
@@ -311,7 +315,9 @@ async function start(data, startBot, reload) {
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let amount = price * dcaOrderSize;
-						amount = await filterPrice(exchange, pair, amount);
+						let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+
+						amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
 						let dcaOrderSum = parseFloat(amount) + parseFloat(lastDcaOrderSum);
 						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
@@ -524,7 +530,9 @@ async function start(data, startBot, reload) {
 					const price = await filterPrice(exchange, pair, askPrice);
 
 					let amount = price * firstOrderSize;
-					amount = await filterPrice(exchange, pair, amount);
+					let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+
+					amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
 					let targetPrice = Percentage.addPerc(
 						price,
@@ -568,7 +576,9 @@ async function start(data, startBot, reload) {
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let dcaOrderAmount = dcaOrderSize * price;
-						dcaOrderAmount = await filterPrice(exchange, pair, dcaOrderAmount);
+						let exchangeFee = (dcaOrderAmount  / 100) * Number(config.exchangeFee);
+
+						dcaOrderAmount = await filterPrice(exchange, pair, (dcaOrderAmount + exchangeFee));
 
 						let dcaOrderSum = parseFloat(dcaOrderAmount) + parseFloat(lastDcaOrderAmount);
 						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
@@ -619,7 +629,9 @@ async function start(data, startBot, reload) {
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let amount = price * dcaOrderSize;
-						amount = await filterPrice(exchange, pair, amount);
+						let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+
+						amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
 						let dcaOrderSum = parseFloat(amount) + parseFloat(lastDcaOrderSum);
 						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
