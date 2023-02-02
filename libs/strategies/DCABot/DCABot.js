@@ -1397,7 +1397,7 @@ const checkActiveDeal = async (pair) => {
 
 
 const getDeals = async (query) => {
-	
+
 	if (query == undefined || query == null) {
 
 		query = {};
@@ -1409,6 +1409,27 @@ const getDeals = async (query) => {
 		const deals = await Deals.find(query);
 
 		return deals;
+	}
+	catch (e) {
+
+		Common.logger(JSON.stringify(e));
+	}
+};
+
+
+const getBots = async (query) => {
+
+	if (query == undefined || query == null) {
+
+		query = {};
+	}
+
+
+	try {
+
+		const bots = await Bots.find(query);
+
+		return bots;
 	}
 	catch (e) {
 
@@ -1712,6 +1733,7 @@ module.exports = {
 	delay,
 	start,
 	update,
+	getBots,
 	getDealsHistory,
 
 	init: function(obj) {

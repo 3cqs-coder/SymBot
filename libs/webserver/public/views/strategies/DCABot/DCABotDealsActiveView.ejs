@@ -10,7 +10,7 @@
 		timeOutId = setTimeout(() => { window.location.reload(); }, 5000);
 	}
 
-	function stopBotConfirm(botName, data) {
+	function stopBotConfirm(botName, selector, data) {
 
 		clearTimeout(timeOutId);
 
@@ -27,7 +27,7 @@
 										text: '<div style="color: #d80f08;">Stop Bot</div>',
 										action: function () {
 
-											stopBot(data);
+											stopBot(selector, data);
 										}
 									 },
 							 	cancel: {
@@ -41,7 +41,7 @@
 	}
 
 
-	function stopBot(data) {
+	function stopBot(selector, data) {
 
 		$('#spinner-overlay').fadeIn(100);
 
@@ -60,6 +60,7 @@
 						}
 						else {
 
+							selector.text('');
 							alertBox('Bot Stopped');
 						}
 						
@@ -86,8 +87,9 @@
 
 			let col = $(this).index();
 			let row = $(this).closest('tr');
+			let content = $(this).text();
 
-			if (col == 8) {
+			if (col == 8 && content != '') {
 
 				let data = { 'bot_id': '' };
 
@@ -98,7 +100,7 @@
 
 					data.bot_id = botId;
 
-					stopBotConfirm(botName, data);
+					stopBotConfirm(botName, $(this), data);
 				}
 			}
 		});
@@ -125,12 +127,20 @@
 
 		for (let dealId in deals) {
 
+			let stopButton = '&#9726;';
 			let profitPercColor = '#1a9f00';
 
 			let deal = deals[dealId];
+
+			let botActive = deal['info']['bot_active'];
 			let profitPerc = deal['info']['take_profit_percentage'];
 
 			let duration = timeDiff(new Date(), new Date(deal['deal']['date']));
+
+			if (!botActive) {
+
+				stopButton = '';
+			}
 
 			if (profitPerc <= 0) {
 
@@ -154,7 +164,7 @@
 		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
 		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
 		<td><%- dealCount %></td>
-		<td data-botid="<%- deal['info']['bot_id'] %>" data-botname="<%- deal['info']['bot_name'] %>" style="text-align: center;">&#9726;</td>
+		<td data-botid="<%- deal['info']['bot_id'] %>" data-botname="<%- deal['info']['bot_name'] %>" style="text-align: center;"><%- stopButton %></td>
 	</tr>
 
 	<% 	} %>

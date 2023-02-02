@@ -14,7 +14,41 @@ async function viewCreateBot(req, res) {
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(shareData.dealTracker)) } );
+	let botsActiveObj = {};
+
+	const bots = await shareData.DCABot.getBots({ 'active': true });
+
+	let deals = JSON.parse(JSON.stringify(shareData.dealTracker));
+
+	if (bots.length > 0) {
+
+		for (let i = 0; i < bots.length; i++) {
+
+			let bot = bots[i];
+
+			const botId = bot.botId;
+			const botName = bot.botName;
+
+			botsActiveObj[botId] = botName;
+		}
+	}
+
+	for (let dealId in deals) {
+
+		let botActive = true;
+
+		let deal = deals[dealId];
+		let botId = deal['info']['bot_id'];
+
+		if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
+
+			botActive = false;
+		}
+
+		deal['info']['bot_active'] = botActive;
+	}
+
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': deals } );
 }
 
 
