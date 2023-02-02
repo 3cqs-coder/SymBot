@@ -1,0 +1,5 @@
+Below are the available commands you can use with {APP_NAME}
+
+/uptime Show length of time system has been running
+
+/help Show this help message

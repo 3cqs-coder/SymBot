@@ -1,5 +1,10 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
+const pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+
 const { Telegraf } = require('telegraf');
 
 
@@ -20,7 +25,13 @@ async function initApp(tokenId) {
 	});
 
 
-	bot.on('message', (ctx) => {
+	bot.command('help', (ctx) => {
+
+		helpCommand(ctx);
+	});
+
+
+	bot.command('uptime', (ctx) => {
 
 		let id = ctx.from.id;
 		let text = ctx.message.text;
@@ -30,6 +41,14 @@ async function initApp(tokenId) {
 		let upTime = shareData.Common.timeDiff(new Date(), new Date(dateStart));
 
 		sendMessage(id, shareData.appData.name + ' v' + shareData.appData.version + ' running for ' + upTime);
+	});
+	
+	
+	bot.on('message', (ctx) => {
+
+		let id = ctx.from.id;
+
+		sendMessage(id, 'Unknown command. Use /help to show available commands');
 	});
 
 
@@ -48,6 +67,27 @@ async function startCommand(ctx) {
 	let id = ctx.from.id;
 
 	sendMessage(id, 'Welcome to ' + shareData.appData.name);
+}
+
+
+async function helpCommand(ctx) {
+
+	let data;
+	let id = ctx.from.id;
+
+	let fileName = pathRoot + '/telegram/help.txt';
+
+	try {
+
+		data = fs.readFileSync(fileName, 'utf8');
+	}
+	catch(e) {
+
+	}
+
+	data = data.replace(/\{APP_NAME\}/, shareData.appData.name);
+
+	sendMessage(id, data);
 }
 
 

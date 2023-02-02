@@ -105,7 +105,7 @@ async function init() {
 
 		setTimeout(() => {
 
-			Telegram.sendMessage(shareData.appData.telegram_id, shareData.appData.name + ' v' + shareData.appData.version + ' started at ' + new Date(shareData.appData.started).toISOString());
+			Telegram.sendMessage(appDataConfig.telegram_id, appDataConfig.name + ' v' + appDataConfig.version + ' started at ' + new Date(appDataConfig.started).toISOString());
 
 		}, 1000);
 	}

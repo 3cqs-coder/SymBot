@@ -131,6 +131,8 @@ async function apiCreateBot(req, res) {
 
 		if (createStep.toLowerCase() != 'getorders') {
 
+			shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' (' + botData.pair.toUpperCase() + ') Started');
+
 			// Start bot
 			shareData.DCABot.start(botData, true, true);
 		}
@@ -148,6 +150,8 @@ async function apiStopBot(req, res) {
 
 	const botId = body.bot_id;
 
+	const bots = await shareData.DCABot.getBots({ 'botId': botId });
+
 	const data = await shareData.DCABot.update(botId, { 'active': false });;
 
 	if (!data.success) {
@@ -155,7 +159,15 @@ async function apiStopBot(req, res) {
 		success = false;
 	}
 
-	shareData.Common.logger('Bot stop id ' + botId + ' / Success: ' + success);
+	const bot = bots[0];
+	const botName = bot.botName;
+
+	shareData.Common.logger('Bot Stop ID ' + botId + ' / Success: ' + success);
+
+	if (success) {
+
+		shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' Stopped');
+	}
 
 	res.send( { 'date': new Date(), 'success': success } );
 }

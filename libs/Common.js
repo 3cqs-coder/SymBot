@@ -90,6 +90,8 @@ function timeDiff(dateStart, dateEnd) {
 		diffString += (seconds === 1) ? ` ${seconds}s` : ` ${seconds}s`;
 	}
 
+	diffString = diffString.trim();
+
 	return diffString;
 }
 

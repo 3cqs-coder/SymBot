@@ -1173,64 +1173,73 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 							if (deal.isStart == 1) {
 
+								let sellSuccess = true;
+
 								if (!config.sandBox) {
 
 									const sell = await sellOrder(exchange, pair, order.qtySum);
 
 									if (!sell) {
 
+										sellSuccess = false;
+
 										Common.logger(sell);
 									}
 								}
 
-								updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+								if (sellSuccess) {
 
-								if (shareData.appData.verboseLog) {
+									updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
-									Common.logger(
-										colors.blue.bold.italic(
-										'Pair: ' +
-										pair +
-										'\tQty: ' +
-										currentOrder.qtySum +
-										'\tLast Price: $' +
-										price +
-										'\tDCA Price: $' +
-										currentOrder.average +
-										'\tSell Price: $' +
-										currentOrder.target +
-										'\tStatus: ' +
-										colors.red('SELL') +
-										'' +
-										'\tProfit: ' +
-										profit +
-										''
-										)
-									);
+									if (shareData.appData.verboseLog) {
+
+										Common.logger(
+											colors.blue.bold.italic(
+											'Pair: ' +
+											pair +
+											'\tQty: ' +
+											currentOrder.qtySum +
+											'\tLast Price: $' +
+											price +
+											'\tDCA Price: $' +
+											currentOrder.average +
+											'\tSell Price: $' +
+											currentOrder.target +
+											'\tStatus: ' +
+											colors.red('SELL') +
+											'' +
+											'\tProfit: ' +
+											profit +
+											''
+											)
+										);
+									}
+
+									const sellData = {
+														'date': new Date(),
+														'qtySum': currentOrder.qtySum,
+														'price': price,
+														'average': currentOrder.average,
+														'target': currentOrder.target,
+														'profit': profitPerc
+													 };
+
+									await Deals.updateOne({
+										dealId: dealId
+									}, {
+										sellData: sellData,
+										status: 1
+									});
+
+									finished = true;
+									delete dealTracker[dealId];
+
+									if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.')); }
+
+									sendTelegramFinish(config.botName, dealId, pair, sellData);
 								}
 
-								const sellData = {
-													'date': new Date(),
-													'qtySum': currentOrder.qtySum,
-													'price': price,
-													'average': currentOrder.average,
-													'target': currentOrder.target,
-													'profit': profitPerc
-												 };
-
-								await Deals.updateOne({
-									dealId: dealId
-								}, {
-									sellData: sellData,
-									status: 1
-								});
-
-								delete dealTracker[dealId];
-
-								if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.')); }
-
 								success = true;
-								finished = true;
 
 								return ( { 'success': success, 'finished': finished } );
 							}
@@ -1509,7 +1518,11 @@ async function checkTracker() {
 
 			diffSec = (diffSec / 60).toFixed(2);
 
-			Common.logger('WARNING: ' + dealId + ' exceeds last updated time by ' + diffSec + ' minutes');
+			let msg = 'WARNING: ' + dealId + ' exceeds last updated time by ' + diffSec + ' minutes';
+
+			Common.logger(msg);
+
+			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 		}
 	}
 }
@@ -1667,6 +1680,37 @@ async function getDealsHistory() {
 	dealsArr = Common.sortByKey(dealsArr, 'date_end');
 
 	return dealsArr.reverse();
+}
+
+
+async function sendTelegramFinish(botName, dealId, pair, sellData) {
+
+	let orderCount = 0;
+
+	const dealData = await getDeals({ 'dealId': dealId });
+	const profitPerc = Number(sellData.profit);
+
+	const deal = dealData[0];
+	const orders = deal.orders;
+
+	for (let x = 0; x < orders.length; x++) {
+
+		const order = orders[x];
+
+		if (order['filled']) {
+
+			orderCount++;
+		}
+	}
+
+	const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
+	const duration = shareData.Common.timeDiff(new Date(), new Date(deal['date']));
+
+	let msg = botName + ' (' + pair.toUpperCase() + '): ';
+	msg += dealId + ' #profit $' + profit + ' (' + profitPerc + '% from total volume) ';
+	msg += duration;
+
+	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 }
 
 
