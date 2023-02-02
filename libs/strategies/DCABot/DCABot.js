@@ -509,9 +509,9 @@ async function start(data, startBot, reload) {
 
 				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders...')); }
 
-				await delay(1000);
+				//await delay(1000);
 
-				askPrice = config.firstOrderLimitPrice;
+				//askPrice = config.firstOrderLimitPrice;
 
 				let firstOrderSize = config.firstOrderAmount / askPrice;
 				firstOrderSize = await filterAmount(exchange, pair, firstOrderSize);

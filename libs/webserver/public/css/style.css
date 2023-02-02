@@ -276,6 +276,16 @@ form textarea {
 }
 
 
+table#login {
+
+	font-size: 1.2rem;
+	color: #000000;
+	border: 0;
+	width: 425px;
+	text-align: left;
+}
+
+
 table#dealsCreate {
 
 	font-size: 1.2rem;

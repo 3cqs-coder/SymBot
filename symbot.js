@@ -57,6 +57,7 @@ async function init() {
 						'appData': {
 										'name': packageJson.description,
 										'version': packageJson.version,
+										'password': appConfig['data']['password'],
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
 										'verboseLog': appConfig.data.verbose_log,
 										'started': new Date()

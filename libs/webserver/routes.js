@@ -10,15 +10,67 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'homeView', { 'appData': shareData.appData } );
-	});
-	
+		if (req.session.loggedIn) {
 
+			res.render( 'homeView', { 'appData': shareData.appData } );
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get('/login', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		res.render( 'loginView', { 'appData': shareData.appData } );
+	});
+
+
+	router.post('/login', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		const body = req.body;
+		const password = body.password;
+
+		if (password == shareData.appData.password) {
+
+			req.session.loggedIn = true;
+			
+			res.redirect('/');
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get('/logout', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		req.session.destroy((err) => {});
+
+		res.redirect('/login');
+	});
+
+	
 	router.get('/bots/create', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCABotManager.viewCreateBot(req, res);
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.viewCreateBot(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	});
 
 
@@ -26,7 +78,14 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCABotManager.viewActiveDeals(req, res);
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.viewActiveDeals(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	});
 
 
@@ -34,7 +93,14 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCABotManager.viewHistoryDeals(req, res);
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.viewHistoryDeals(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	});
 
 
@@ -42,19 +108,40 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		shareData.DCABotManager.apiGetDeals(req, res);
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.apiGetDeals(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	});
 
 
 	router.post('/api/bots/stop', (req, res) => {
 
-		shareData.DCABotManager.apiStopBot(req, res);
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.apiStopBot(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	});
 	
 
 	router.post('/api/bots/create', (req, res) => {
 
-		shareData.DCABotManager.apiCreateBot(req, res);
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.apiCreateBot(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	});
 
 

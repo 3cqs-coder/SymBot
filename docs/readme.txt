@@ -24,6 +24,8 @@ These files are located in the "config" directory
 
 * app.json
 
+	- "password" is the password used to login to the SymBot web portal. The default password is "admin".
+
 	- "web_server" contains settings for the SymBot web server. The default port is 3000.
 
 	- "telegram" contains an optional Telegram token id and user id to send SymBot notifications to. You must first create a Telegram bot with @BotFather to use.

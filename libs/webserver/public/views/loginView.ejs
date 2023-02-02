@@ -1,0 +1,34 @@
+<%- include('./partialsHeaderView'); %>
+
+<script>
+
+	$(document).ready(function () {
+
+		$('#password').focus();
+	});
+
+</script>
+
+<main>
+
+	<div id="contentBox">
+
+		<table id="login" cellpadding=0 cellspacing=0>
+
+		<form method=POST autocomplete="off" action="/login">
+
+			<tr>
+				<td>Password:</td> <td><input id="password" name="password" style="width: 200px;" class="form-field"></td> <td><input type=submit value="Login" class="btn"></td>
+			</tr>
+
+		</form>
+
+		</table>
+
+	</div>
+
+
+</main>
+
+
+<%- include('./partialsFooterView'); %>
