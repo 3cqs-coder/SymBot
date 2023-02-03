@@ -1,0 +1,67 @@
+<%- include('../../partialsHeaderView'); %>
+
+
+
+<center>
+<main>
+
+	<div id="contentBox" style="width: 90%;">
+
+	<h3>DCA Bots</h3>
+
+	<table id="deals" border=0 cellspacing=0 cellpadding=0>
+
+	<tr style="font-weight: bold; text-align: left;">
+		<th>Bot Name</th> <th>Pair</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>TP %</th> <th>Sandbox</th> <th>Active</th>
+	</tr>
+
+	<%
+		for (let i = 0; i < bots.length; i++) {
+
+			let bot = bots[i];
+			
+			let active = bot['active'];
+			let sandBox = bot['config']['sandBox'];
+
+			if (active) {
+				
+				active = 'Yes';
+			}
+			else {
+
+				active = 'No';
+			}
+
+			if (sandBox) {
+				
+				sandBox = 'Yes';
+			}
+			else {
+
+				sandBox = 'No';
+			}
+	%>
+
+	<tr>
+		<td><%- bot['botName'] %></td>
+		<td><%- bot['config']['pair'].toUpperCase() %></td>
+		<td><%- bot['config']['dcaOrderStepPercent'] %></td>
+		<td><%- bot['config']['dcaOrderSizeMultiplier'] %></td>
+		<td><%- bot['config']['dcaOrderStepPercentMultiplier'] %></td>
+		<td><%- bot['config']['firstOrderAmount'] %></td>
+		<td><%- bot['config']['dcaOrderAmount'] %></td>
+		<td><%- bot['config']['dcaMaxOrder'] %></td>
+		<td><%- bot['config']['dcaTakeProfitPercent'] %></td>
+		<td><%- sandBox %></td>
+		<td><%- active %></td>
+	</tr>
+
+	<% 	} %>
+
+	</table>
+	</div>
+
+</main>
+</center>
+
+<%- include('../../partialsFooterView'); %>

@@ -10,27 +10,40 @@ async function start(url) {
 	mongoose.Promise = Promise;
 
 	mongoose.connection.on('connected', () => {
+
 		shareData.Common.logger('DB Connected');
 	});
 
 	mongoose.connection.on('reconnected', () => {
-		shareData.Common.logger('DB Reconnected');
+
+		let msg = 'DB Reconnected';
+
+		log(msg);
 	});
 
 	mongoose.connection.on('disconnected', () => {
-		shareData.Common.logger('DB Disconnected');
+
+		let msg = 'DB Disconnected';
+
+		log(msg);
 	});
 
 	mongoose.connection.on('close', () => {
-		shareData.Common.logger('DB Closed');
+
+		let msg = 'DB Closed';
+
+		log(msg);
 	});
 
 	mongoose.connection.on('error', error => {
-		shareData.Common.logger('DB Error: ' + error);
+
+		let msg = 'DB Error: ' + error;
+
+		log(msg);
 	});
 
 	mongoose.set('strictQuery', false);
-	
+
 	const run = async () => {
 
 		await mongoose.connect(
@@ -48,6 +61,13 @@ async function start(url) {
 	return started;
 }
 
+
+async function log(msg) {
+
+	shareData.Common.logger(msg);
+
+	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+}
 
 
 module.exports = {

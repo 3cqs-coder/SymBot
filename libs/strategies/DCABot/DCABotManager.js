@@ -52,6 +52,37 @@ async function viewActiveDeals(req, res) {
 }
 
 
+async function viewBots(req, res) {
+
+	let bots;
+
+	let botsDb = await shareData.DCABot.getBots();
+
+	if (botsDb.length > 0) {
+
+		bots = JSON.parse(JSON.stringify(botsDb));
+
+		for (let i = 0; i < bots.length; i++) {
+
+			let bot = bots[i];
+
+			const botId = bot.botId;
+			const botName = bot.botName;
+
+			for (let key in bot) {
+
+				if (key.substr(0, 1) == '$' || key.substr(0, 1) == '_') {
+
+					delete bot[key];
+				}
+			}
+		}
+	}
+
+	res.render( 'strategies/DCABot/DCABotsView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'bots': bots } );
+}
+
+
 async function viewHistoryDeals(req, res) {
 
 	const deals = await shareData.DCABot.getDealsHistory();
@@ -60,7 +91,7 @@ async function viewHistoryDeals(req, res) {
 }
 
 
-async function apiGetDeals(req, res) {
+async function apiGetActiveDeals(req, res) {
 
 	let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
 
@@ -176,9 +207,10 @@ async function apiStopBot(req, res) {
 
 module.exports = {
 
-	apiGetDeals,
+	apiGetActiveDeals,
 	apiCreateBot,
 	apiStopBot,
+	viewBots,
 	viewCreateBot,
 	viewActiveDeals,
 	viewHistoryDeals,
