@@ -53,6 +53,7 @@ async function start(url) {
 module.exports = {
 
 	start,
+	mongoose,
 
 	init: function(obj) {
 

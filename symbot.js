@@ -19,6 +19,10 @@ const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const packageJson = require(__dirname + '/package.json');
 
+const prompt = require('prompt-sync')({
+	sigint: true
+});
+
 let appDataConfig;
 let gotSigInt = false;
 
@@ -99,6 +103,13 @@ async function init() {
 		}
 	}
 
+	if (success && process.argv[2] && process.argv[2].toLowerCase() == 'reset') {
+
+		reset();
+
+		return({ 'nostart': true });
+	}
+
 	if (success) {
 
 		Telegram.start(appConfig['data']['telegram']['token_id']);
@@ -115,10 +126,65 @@ async function init() {
 }
 
 
+async function reset() {
+
+	// Reset database from command line
+
+	let success = false;
+
+	let confirm;
+	let resetCode = Math.floor(Math.random() * 1000000000);
+
+	console.log('\n*** CAUTION *** Your are about to reset ' + appDataConfig.name + ' database!\n');
+
+	confirm = prompt('Do you want to continue? (Y/n): ');
+
+	if (confirm == 'Y') {
+
+		console.log('\nReset code: ' + resetCode);
+
+		confirm = prompt('Enter the reset code above to reset ' + appDataConfig.name + ' database: ');
+			
+		if (confirm == resetCode) {
+
+			confirm = prompt('Final warning before reset. Do you want to continue? (Y/n): ');
+
+			if (confirm == 'Y') {
+
+				success = true;
+
+				let collectionBots = await DB.mongoose.connection.db.dropCollection('bots').catch(e => {});
+				let collectionDeals = await DB.mongoose.connection.db.dropCollection('deals').catch(e => {});
+
+				console.log('Bots reset: ' + collectionBots);
+				console.log('Deals reset: ' + collectionDeals);
+
+				console.log('\nReset finished.');
+			}
+		}
+		else {
+
+			console.log('\nReset code incorrect.');
+		}
+	}
+
+	if (!success) {
+
+		console.log('\nReset aborted.');
+	}
+
+	process.exit(1);
+}
+
 
 async function start() {
 
 	let initData = await init();
+
+	if (initData.nostart) {
+
+		return;
+	}
 
 	if (initData.success) {
 

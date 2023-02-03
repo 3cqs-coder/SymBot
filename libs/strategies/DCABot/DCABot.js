@@ -480,6 +480,8 @@ async function start(data, startBot, reload) {
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
+					sendTelegramStart(config.botName, dealId, pair);
+
 					let followSuccess = false;
 					let followFinished = false;
 
@@ -1698,6 +1700,14 @@ async function getDealsHistory() {
 }
 
 
+async function sendTelegramStart(botName, dealId, pair) {
+
+	let msg = botName + ': Starting new deal. Pair: ' + pair.toUpperCase();
+
+	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+}
+
+
 async function sendTelegramFinish(botName, dealId, pair, sellData) {
 
 	let orderCount = 0;
@@ -1721,9 +1731,9 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 	const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
 	const duration = shareData.Common.timeDiff(new Date(), new Date(deal['date']));
 
-	let msg = botName + ' (' + pair.toUpperCase() + '): ';
-	msg += dealId + ' #profit $' + profit + ' (' + profitPerc + '% from total volume) ';
-	msg += duration;
+	let msg = botName + ' (' + pair.toUpperCase() + '): ' + dealId + ': Deal completed.';
+	msg += ' Profit: $' + profit + ' (' + profitPerc + '% from total volume)';
+	msg += ' #profit ' + duration;
 
 	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 }
