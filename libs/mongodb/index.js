@@ -37,7 +37,7 @@ async function start(url) {
 
 	mongoose.connection.on('error', error => {
 
-		let msg = 'DB Error: ' + error;
+		let msg = 'DB Error: ' + JSON.stringify(error);
 
 		log(msg);
 	});
@@ -56,8 +56,8 @@ async function start(url) {
 		return true;
 	};
 
-	let started = await run().catch(error => shareData.Common.logger(error));
-	
+	let started = await run().catch(error => log('DB Run Error: ' + JSON.stringify(error)));
+
 	return started;
 }
 
