@@ -3,6 +3,16 @@
 	https://www.3cqs.com
 */
 
+const fs = require('fs');
+const path = require('path');
+
+let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
+
+const Schema = require(pathRoot + '/mongodb/Signals3CQSSchema');
+
+const Signals = Schema.Signals3CQSSchema;
+
 
 let fatalError = false;
 
@@ -52,20 +62,25 @@ async function start(apiKey) {
 
 	socket.on('signal', (data) => {
 
-		let content = 'SIGNAL RECEIVED';
+		let content = '3CQS SIGNAL RECEIVED';
 
 		if (data['created_history'] != undefined && data['created_history'] != null && data['created_history'] != '') {
 
 			content += ' (HISTORY)';
 		}
 
-		showLog(content, data);
+		updateDb(data);
+
+		if (shareData.appData.verboseLog) {
+		
+			showLog(content, data);
+		}
 	});
 
 
 	socket.on('info', (data) => {
 
-		showLog('INFO', data);
+		showLog('3CQS SIGNAL INFO', data);
 	});
 
 
@@ -76,7 +91,7 @@ async function start(apiKey) {
 			fatalError = true;
 		}
 
-		showLog('ERROR', data);
+		showLog('3CQS SIGNAL ERROR', data);
 	});
 
 
@@ -84,7 +99,7 @@ async function start(apiKey) {
 
 		fatalError = true;
 
-		showLog('CONNECT_ERROR', data);
+		showLog('3CQS SIGNAL CONNECT_ERROR', data);
 	});
 
 
@@ -92,18 +107,18 @@ async function start(apiKey) {
 
 		fatalError = true;
 
-		showLog('CONNECT_FAILED', data);
+		showLog('3CQS SIGNAL CONNECT_FAILED', data);
 	});
 
 
 	socket.on('disconnect', (reason) => {
 
-		showLog('Client Disconnected: ' + reason);
+		showLog('3CQS SIGNAL Client Disconnected: ' + reason);
 
 		//Either 'io server disconnect' or 'io client disconnect'
 		if (!fatalError && reason === 'io server disconnect') {
 
-			showLog('Server disconnected the client. Trying to reconnect.');
+			showLog('3CQS SIGNAL Server disconnected the client. Trying to reconnect.');
 
 			// Disconnected by server,so reconnect again
 			socket.connect();
@@ -127,6 +142,26 @@ function randomString(len) {
 	}
 
 	return str;
+}
+
+
+async function updateDb(data) {
+
+	const signal = new Signals({
+									'signal_id': data.signal_id,
+									'signal_id_parent': data.signal_id_parent,
+									'created': data.created,
+									'created_parent': data.created_parent,
+									'signal_data': data
+							  });
+
+	await signal.save()
+			.catch(err => {
+							if (err.code === 11000) {
+
+								// Duplicate entry
+							}
+						  });
 }
 
 

@@ -3,6 +3,8 @@
 <script>
 
 	let confirmStart = false;
+	let formAction = '<%- formAction %>';
+	let isUpdate = false;
 
 	function resetForm(form) {
 
@@ -17,6 +19,21 @@
 	}
 
 	$(document).ready(function () {
+
+		let botText = 'Start Bot';
+		let headerText = 'Create DCA Bot';
+
+		// Set names depending on create or update bot
+		if (formAction.indexOf('update') > -1) {
+
+			isUpdate = true;
+
+			botText = 'Update Bot';
+			headerText = 'Update DCA Bot';
+		}
+
+		$('#headerText').text(headerText);
+		$('#formSubmitStart').text(botText);
 
 		const form = '#formDealsCreate';
 		const submitUrl = $(form).attr('action');
@@ -41,13 +58,13 @@
 							title: false,
 							boxWidth: '50%',
 							useBootstrap: false,
-							content: '<div style="font-size: 1.2rem; text-align: left;">Start Bot?</div>',
+							content: '<div style="font-size: 1.2rem; text-align: left;">' + botText + '?</div>',
 							buttons: {
 
 										ok: {
 
 											btnClass: 'btn-default',
-											text: '<div style="color: #4aa602;">Start Bot</div>',
+											text: '<div style="color: #4aa602;">' + botText + '</div>',
 											action: function () {
 
 												confirmStart = true;
@@ -117,7 +134,14 @@
 
 								resetForm(form);
 
-								alertBox('Bot Started');
+								if (!isUpdate) {
+
+									alertBox('Bot Started');
+								}
+								else {
+
+									alertBox('Bot Updated');
+								}
 							}
 							else {
 
@@ -129,7 +153,7 @@
 								$('#formSubmitReset').show();
 								$('#formSubmitStart').show();
 
-								alertBox('Verify bot orders and confirm to start bot');
+								alertBox('Verify orders and confirm to ' + botText);
 							}
 						}
 					},
@@ -182,16 +206,17 @@
 
 	<div id="contentBox" style="width: 90%;">
 
-	<h2>Create DCA Bot</h2>
+	<h2 id="headerText"></h2>
 
 	<table id="dealsCreate" cellpadding=0 cellspacing=0>
 
-	<form id="formDealsCreate" autocomplete="off" action="/api/bots/create">
+	<form id="formDealsCreate" autocomplete="off" action="<%- formAction %>">
 
 		<input type=hidden id="createStep" name="createStep" value="getorders">
+		<input type=hidden id="botId" name="botId" value="<%- botData.botId %>">
 
-		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" class="form-field" style="width: 200px;"></td></tr>
-		<tr><td>Pair:</td> <td><input id="pair" name="pair" class="form-field" style="width: 100px; text-transform: uppercase;"></td></tr>
+		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" value="<%- botData.botName %>" class="form-field" style="width: 200px;"></td></tr>
+		<tr><td>Pair:</td> <td><input id="pair" name="pair" class="form-field" value="<%- botData.pair %>" style="width: 100px; text-transform: uppercase;"></td></tr>
 		<tr><td>Base Order Size:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Safety Order Size:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" class="form-field"></td></tr>
@@ -199,14 +224,14 @@
 		<tr><td>Safety Order Volume Scale:</td> <td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" class="form-field"></td></tr>
 		<tr><td>Safety Order Step Scale:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" class="form-field"></td></tr>
 		<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
-		<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="0" class="form-field"></td></tr>
+		<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="<%- botData.dealMax %>" class="form-field"></td></tr>
 
 		<tr>
 			<td style="padding-top: 25px; text-align: center;" colspan=2>
-				
+
 				<button id="formSubmitPreview" class="btn">Preview Bot</button>
 				<button id="formSubmitReset" class="btn" style="display: none;">Modify Bot</button>
-				&nbsp;&nbsp;&nbsp; <button id="formSubmitStart" class="btn" style="display: none;">Start Bot</button>
+				&nbsp;&nbsp;&nbsp; <button id="formSubmitStart" class="btn" style="display: none;"></button>
 			</td>
 		</tr>
 

@@ -302,7 +302,7 @@ table#dealsCreate td {
 }
 
 
-table#deals {
+table#botsDeals {
 
 	position: relative;
 	font-size: 1.0rem;
@@ -312,7 +312,7 @@ table#deals {
 }
 
 
-table#deals th {
+table#botsDeals th {
  
 	padding: 3px;
 	font-size: 1.1rem;
@@ -320,19 +320,19 @@ table#deals th {
 }
 
 
-table#deals th:first-child{
+table#botsDeals th:first-child{
 
 	border-radius: 5px 0 0 0;
 }
 
 
-table#deals th:last-child{
+table#botsDeals th:last-child{
 
 	border-radius: 0 5px 0 0;
 }
 
 
-table#deals td {
+table#botsDeals td {
  
  	padding: 4px;
  	color: #000000;
@@ -341,25 +341,25 @@ table#deals td {
 }
 
 
-table#deals tr:nth-child(even) {
+table#botsDeals tr:nth-child(even) {
 
 	background: #dddddd;
 }
 
 
-table#deals tr:nth-child(odd) {
+table#botsDeals tr:nth-child(odd) {
 
 	background: #dddddd;
 }
 
 
-table#deals tr:nth-child(1) {
+table#botsDeals tr:nth-child(1) {
 
 	background: none;
 }
 
 
-table#deals tr:not(:first-child):hover {
+table#botsDeals tr:not(:first-child):hover {
 
     background-color: #c5c5c5;
     cursor: pointer;

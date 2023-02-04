@@ -199,8 +199,8 @@ async function start() {
 			return;
 		}
 
-		// Get signals and start bot accordingly
-		//const socket = await Signals3CQS.start(appConfig['data']['signals']['3CQS']['api_key']);
+		// Get signals and start bots accordingly
+		const socket = await Signals3CQS.start(appConfig['data']['signals']['3CQS']['api_key']);
 	}
 	else {
 

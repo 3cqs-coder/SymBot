@@ -1,5 +1,26 @@
 <%- include('../../partialsHeaderView'); %>
 
+<script>
+
+	$(document).ready(function() {
+
+		$('#botsDeals tbody tr td').click(function() {
+
+			let col = $(this).index();
+			let row = $(this).closest('tr');
+			let content = $(this).text();
+
+			let botId = $(row).data('botid');
+
+			if (botId) {
+
+				window.location.href = '/bots/' + botId;
+			}
+		});
+
+	});
+
+</script>
 
 
 <center>
@@ -9,18 +30,19 @@
 
 	<h3>DCA Bots</h3>
 
-	<table id="deals" border=0 cellspacing=0 cellpadding=0>
+	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0><tbody>
 
 	<tr style="font-weight: bold; text-align: left;">
-		<th>Bot Name</th> <th>Pair</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>TP %</th> <th>Sandbox</th> <th>Active</th>
+		<th>Bot Name</th> <th>Pair</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP %</th> <th>Max Deals</th> <th>Sandbox</th> <th>Active</th>
 	</tr>
 
 	<%
 		for (let i = 0; i < bots.length; i++) {
 
 			let bot = bots[i];
-			
+
 			let active = bot['active'];
+			let dealMax = bot['config']['dealMax'];
 			let sandBox = bot['config']['sandBox'];
 
 			if (active) {
@@ -40,25 +62,31 @@
 
 				sandBox = 'No';
 			}
+
+			if (dealMax == 0) {
+
+				dealMax = '&#8734;';
+			}
 	%>
 
-	<tr>
+	<tr data-botId="<%- bot['botId'] %>">
 		<td><%- bot['botName'] %></td>
 		<td><%- bot['config']['pair'].toUpperCase() %></td>
-		<td><%- bot['config']['dcaOrderStepPercent'] %></td>
-		<td><%- bot['config']['dcaOrderSizeMultiplier'] %></td>
-		<td><%- bot['config']['dcaOrderStepPercentMultiplier'] %></td>
 		<td><%- bot['config']['firstOrderAmount'] %></td>
 		<td><%- bot['config']['dcaOrderAmount'] %></td>
 		<td><%- bot['config']['dcaMaxOrder'] %></td>
+		<td><%- bot['config']['dcaOrderStepPercent'] %></td>
+		<td><%- bot['config']['dcaOrderSizeMultiplier'] %></td>
+		<td><%- bot['config']['dcaOrderStepPercentMultiplier'] %></td>
 		<td><%- bot['config']['dcaTakeProfitPercent'] %></td>
+		<td><%- dealMax %></td>
 		<td><%- sandBox %></td>
 		<td><%- active %></td>
 	</tr>
 
 	<% 	} %>
 
-	</table>
+	</tbody></table>
 	</div>
 
 </main>

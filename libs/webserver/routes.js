@@ -59,28 +59,37 @@ function initRoutes(router) {
 	});
 
 
-	router.get('/bots', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		if (req.session.loggedIn) {
-
-			shareData.DCABotManager.viewBots(req, res);
-		}
-		else {
-
-			res.redirect('/login');
-		}
-	});
-
-
 	router.get('/bots/create', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
 		if (req.session.loggedIn) {
 
-			shareData.DCABotManager.viewCreateBot(req, res);
+			shareData.DCABotManager.viewCreateUpdateBot(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+	
+
+	router.get([ '/bots', '/bots/:botId' ], (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		const botId = req.params.botId;
+
+		if (req.session.loggedIn) {
+
+			if (botId == undefined || botId == null || botId == '') {
+
+				shareData.DCABotManager.viewBots(req, res);
+			}
+			else {
+
+				shareData.DCABotManager.viewCreateUpdateBot(req, res, botId);
+			}
 		}
 		else {
 
@@ -127,7 +136,7 @@ function initRoutes(router) {
 
 		if (req.session.loggedIn) {
 
-			if (dealId == undefined || dealId == null || dealId == '' || dealsId == 'active') {
+			if (dealId == undefined || dealId == null || dealId == '' || dealId == 'active') {
 
 				shareData.DCABotManager.apiGetActiveDeals(req, res);
 			}
@@ -152,11 +161,11 @@ function initRoutes(router) {
 	});
 	
 
-	router.post('/api/bots/create', (req, res) => {
+	router.post([ '/api/bots/create', '/api/bots/update' ], (req, res) => {
 
 		if (req.session.loggedIn) {
 
-			shareData.DCABotManager.apiCreateBot(req, res);
+			shareData.DCABotManager.apiCreateUpdateBot(req, res);
 		}
 		else {
 

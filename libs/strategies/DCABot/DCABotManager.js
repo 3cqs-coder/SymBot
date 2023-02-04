@@ -4,11 +4,35 @@
 let shareData;
 
 
-async function viewCreateBot(req, res) {
+async function viewCreateUpdateBot(req, res, botId) {
 
-	const botConfig = await shareData.Common.getConfig('bot.json');
+	let botData;
+	let botUpdate = false;
 
-	res.render( 'strategies/DCABot/DCABotCreateView', { 'appData': shareData.appData, 'botData': botConfig.data } );
+	let formAction = '/api/bots/create';
+
+	if (botId != undefined && botId != null && botId != '') {
+
+		const bot = await shareData.DCABot.getBots({ 'botId': botId });
+
+		if (bot && bot.length > 0) {
+
+			botUpdate = true;
+			botData = bot[0]['config'];
+			
+			botData.botId = botId;
+
+			formAction = '/api/bots/update';
+		}
+	}
+
+	if (!botUpdate) {
+
+		const botConfig = await shareData.Common.getConfig('bot.json');
+		botData = botConfig.data;
+	}
+
+	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'botData': botData } );
 }
 
 
@@ -54,13 +78,13 @@ async function viewActiveDeals(req, res) {
 
 async function viewBots(req, res) {
 
-	let bots;
+	let botsSort = [];
 
-	let botsDb = await shareData.DCABot.getBots();
+	const botsDb = await shareData.DCABot.getBots();
 
 	if (botsDb.length > 0) {
 
-		bots = JSON.parse(JSON.stringify(botsDb));
+		const bots = JSON.parse(JSON.stringify(botsDb));
 
 		for (let i = 0; i < bots.length; i++) {
 
@@ -77,9 +101,12 @@ async function viewBots(req, res) {
 				}
 			}
 		}
+
+		botsSort = shareData.Common.sortByKey(bots, 'date');
+		botsSort = botsSort.reverse();
 	}
 
-	res.render( 'strategies/DCABot/DCABotsView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'bots': bots } );
+	res.render( 'strategies/DCABot/DCABotsView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'bots': botsSort } );
 }
 
 
@@ -114,15 +141,7 @@ async function apiGetActiveDeals(req, res) {
 }
 
 
-async function apiCreateBot(req, res) {
-
-	let orders;
-	let resData;
-
-	let success = true;
-
-	const body = req.body;
-	const createStep = body.createStep;
+async function calculateOrders(body) {
 
 	const botConfig = await shareData.Common.getConfig('bot.json');
 
@@ -139,6 +158,12 @@ async function apiCreateBot(req, res) {
 	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
+	// Check for bot id passed in from body for update
+	if (body.botId != undefined && body.botId != null && body.botId != '') {
+
+		botData.botId = body.botId;
+	}
+
 	// Set bot name
 	let botName = body.botName;
 
@@ -150,9 +175,31 @@ async function apiCreateBot(req, res) {
 	botData.botName = botName;
 
 	// Only get orders, don't start bot
-	orders = await shareData.DCABot.start(botData, false);
+	let orders = await shareData.DCABot.start(botData, false);
 
-	resData = orders.data;
+	return ({ 'orders': orders, 'botData': botData });
+}
+
+
+async function apiCreateUpdateBot(req, res) {
+
+	let reqPath = req.path;
+
+	let success = true;
+	let isUpdate = false;
+
+	if (reqPath.indexOf('update') > -1) {
+
+		isUpdate = true;
+	}
+
+	const body = req.body;
+	const createStep = body.createStep;
+
+	let data = await calculateOrders(body);
+
+	let orders = data['orders'];
+	let botData = data['botData'];
 
 	if (!orders.success) {
 
@@ -162,14 +209,30 @@ async function apiCreateBot(req, res) {
 
 		if (createStep.toLowerCase() != 'getorders') {
 
-			shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' (' + botData.pair.toUpperCase() + ') Start command received.');
+			if (!isUpdate) {
 
-			// Start bot
-			shareData.DCABot.start(botData, true, true);
+				shareData.Telegram.sendMessage(shareData.appData.telegram_id, botData.botName + ' (' + botData.pair.toUpperCase() + ') Start command received.');
+
+				// Start bot
+				shareData.DCABot.start(botData, true, true);
+			}
+			else {
+
+				// Update config data
+				const configData = await shareData.DCABot.removeConfigData(botData);
+
+				let dataObj = {
+								'botName': botData.botName,
+								'pair': botData.pair,
+								'config': configData
+							  };
+
+				const data = await shareData.DCABot.update(botData.botId, dataObj);
+			}
 		}
 	}
 
-	res.send( { 'date': new Date(), 'success': success, 'step': createStep, 'data': resData } );
+	res.send( { 'date': new Date(), 'success': success, 'step': createStep, 'data': orders.data } );
 }
 
 
@@ -183,7 +246,7 @@ async function apiStopBot(req, res) {
 
 	const bots = await shareData.DCABot.getBots({ 'botId': botId });
 
-	const data = await shareData.DCABot.update(botId, { 'active': false });;
+	const data = await shareData.DCABot.update(botId, { 'active': false });
 
 	if (!data.success) {
 
@@ -208,10 +271,10 @@ async function apiStopBot(req, res) {
 module.exports = {
 
 	apiGetActiveDeals,
-	apiCreateBot,
+	apiCreateUpdateBot,
 	apiStopBot,
 	viewBots,
-	viewCreateBot,
+	viewCreateUpdateBot,
 	viewActiveDeals,
 	viewHistoryDeals,
 

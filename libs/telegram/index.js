@@ -85,7 +85,7 @@ async function helpCommand(ctx) {
 
 	}
 
-	data = data.replace(/\{APP_NAME\}/, shareData.appData.name);
+	data = data.replace(/\{APP_NAME\}/g, shareData.appData.name);
 
 	sendMessage(id, data);
 }

@@ -34,7 +34,7 @@ let shareData;
 
 async function start(data, startBot, reload) {
 
-	data = await initBot(JSON.parse(JSON.stringify(data)));
+	data = await initBot(startBot, JSON.parse(JSON.stringify(data)));
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
@@ -102,7 +102,7 @@ async function start(data, startBot, reload) {
 			if (shareData.appData.verboseLog) { Common.logger(colors.green('Getting pair information for ' + pair + '...')); }
 		}
 
-		const isActive = await checkActiveDeal(pair);
+		const isActive = await checkActiveDeal(botIdMain, pair);
 		const symbolData = await getSymbol(exchange, pair);
 		const symbol = symbolData.info;
 
@@ -133,7 +133,7 @@ async function start(data, startBot, reload) {
 		var t = new Table();
 		const orders = [];
 
-		if (isActive) {
+		if (startBot && isActive) {
 
 			dealIdMain = isActive.dealId;
 
@@ -849,13 +849,26 @@ async function start(data, startBot, reload) {
 
 	}
 
+	if (dealCount >= dealMax && dealMax > 0) {
+
+		// Deactivate bot
+		const data = await shareData.DCABot.update(botIdMain, { 'active': false });
+
+		if (shareData.appData.verboseLog) {
+			
+			Common.logger( colors.bgYellow.bold(config.botName + ': Max deal count reached. Bot will not start another deal.') );
+		}
+	}
 
 	// Start another bot deal if max deals have not been reached
 	if (botFoundDb && botActive && (dealCount < dealMax || dealMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
+		// Be sure bot id is set on config reload and increment deal count
 		configObj['dealCount']++;
+
+		botConfigDb['botId'] = botIdMain;
 		botConfigDb['dealCount'] = configObj['dealCount'];
 
 		if (shareData.appData.verboseLog) {
@@ -885,7 +898,7 @@ async function update(botId, data) {
 
 		Common.logger(JSON.stringify(e));
 	}
-	
+
 
 	if (botData == undefined || botData == null || botData['matchedCount'] < 1) {
 
@@ -1404,11 +1417,12 @@ const filterPrice = async (exchange, pair, price) => {
 };
 
 
-const checkActiveDeal = async (pair) => {
+const checkActiveDeal = async (botId, pair) => {
 
 	try {
 
 		const deal = await Deals.findOne({
+			botId: botId,
 			pair: pair,
 			status: 0
 		});
@@ -1565,36 +1579,39 @@ async function updateTracker(botName, botId, dealId, priceLast, priceAverage, pr
 }
 
 
-async function initBot(config) {
+async function initBot(startBot, config) {
 
 	let configObj = JSON.parse(JSON.stringify(config));
 	let configSave = await removeConfigData(JSON.parse(JSON.stringify(config)));
 
 	configObj = await setConfigData(configObj);
 
-	try {
+	if (startBot) {
 
-		const bot = await Bots.findOne({
-			botId: configObj.botId,
-		});
+		try {
 
-		if (!bot) {
+			const bot = await Bots.findOne({
+		
+				botId: configObj.botId,
+			});
 
-			const bot = new Bots({
-						
-							botId: configObj.botId,
-							botName: configObj.botName,
-							config: configSave,
-							active: true,
-							date: Date.now(),
-						});
+			if (!bot) {
 
-			await bot.save();
+				const bot = new Bots({
+										botId: configObj.botId,
+										botName: configObj.botName,
+										config: configSave,
+										active: true,
+										date: Date.now(),
+									});
+
+				await bot.save();
+			}
 		}
-	}
-	catch (e) {
+		catch (e) {
 
-		//console.log(e);
+			//console.log(e);
+		}
 	}
 
 	return configObj;
@@ -1802,6 +1819,7 @@ module.exports = {
 	delay,
 	start,
 	update,
+	removeConfigData,
 	getBots,
 	getDealsHistory,
 
