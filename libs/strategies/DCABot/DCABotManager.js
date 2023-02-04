@@ -158,6 +158,11 @@ async function calculateOrders(body) {
 	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
+	if (botData.dealMax == undefined || botData.dealMax == null || botData.dealMax == '') {
+
+		botData.dealMax = 0;
+	}
+	
 	// Check for bot id passed in from body for update
 	if (body.botId != undefined && body.botId != null && body.botId != '') {
 
