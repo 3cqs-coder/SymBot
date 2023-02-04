@@ -1,10 +1,15 @@
 'use strict';
 
 
+let symbolList = { 'updated': 0, 'symbols': {} };
+
+
 let shareData;
 
 
 async function viewCreateUpdateBot(req, res, botId) {
+
+	let maxMins = 60;
 
 	let botData;
 	let botUpdate = false;
@@ -26,13 +31,27 @@ async function viewCreateUpdateBot(req, res, botId) {
 		}
 	}
 
+	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	const diffSec = (new Date().getTime() - new Date(symbolList['updated']).getTime()) / 1000;
+
+	// Get new list of symbols only after n minutes have passed
+	if (diffSec > (60 * maxMins)) {
+
+		const exchange = await shareData.DCABot.connectExchange(botConfig.data);
+		const symbols = await shareData.DCABot.getSymbolsAll(exchange);
+
+		symbolList['updated'] = new Date();
+		symbolList['symbols'] = [];
+		symbolList['symbols'] = symbols;
+	}
+
 	if (!botUpdate) {
 
-		const botConfig = await shareData.Common.getConfig('bot.json');
 		botData = botConfig.data;
 	}
 
-	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'botData': botData } );
+	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'symbols': symbolList['symbols'], 'botData': botData } );
 }
 
 

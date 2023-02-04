@@ -38,7 +38,6 @@ async function start(data, startBot, reload) {
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
-	let exchange;
 	let dealIdMain;
 	let botConfigDb;
 
@@ -64,21 +63,12 @@ async function start(data, startBot, reload) {
 		dealMax = 0;
 	}
 
-	try {
-	
-		exchange = new ccxt.pro[config.exchange]({
+	let exchange = await connectExchange(config);
 
-			'apiKey': config.apiKey,
-			'secret': config.apiSecret,
-			'passphrase': config.apiPassphrase,
-			'password': config.apiPassword,			
-		});
-	}
-	catch(e) {
+	if (exchange == undefined || exchange == null) {
 
 		return ( { 'success': false, 'data': 'Invalid exchange: ' + config.exchange } );
 	}
-
 
 	try {
 
@@ -881,34 +871,6 @@ async function start(data, startBot, reload) {
 }
 
 
-async function update(botId, data) {
-
-	let botData;
-	let success = true;
-
-	try {
-
-		botData = await Bots.updateOne({
-						botId: botId
-					}, data);
-	}
-	catch (e) {
-
-		success = false;
-
-		Common.logger(JSON.stringify(e));
-	}
-
-
-	if (botData == undefined || botData == null || botData['matchedCount'] < 1) {
-
-		success = false;
-	}
-
-	return( { 'success': success } );
-}
-
-
 const dcaFollow = async (configData, exchange, dealId) => {
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(configData)));
@@ -1534,6 +1496,63 @@ const getDeviation = async (a, b) => {
 }
 
 
+async function connectExchange(configObj) {
+
+	const config = JSON.parse(JSON.stringify(configObj));
+
+	let exchange;
+
+	try {
+
+		exchange = new ccxt.pro[config.exchange]({
+
+			'apiKey': config.apiKey,
+			'secret': config.apiSecret,
+			'passphrase': config.apiPassphrase,
+			'password': config.apiPassword,			
+		});
+	}
+	catch(e) {
+
+		let msg = 'Connect exchange error: ' + e;
+
+		Common.logger(msg);
+
+		shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+	}
+
+	return exchange;
+}
+
+
+async function update(botId, data) {
+
+	let botData;
+	let success = true;
+
+	try {
+
+		botData = await Bots.updateOne({
+						botId: botId
+					}, data);
+	}
+	catch (e) {
+
+		success = false;
+
+		Common.logger(JSON.stringify(e));
+	}
+
+
+	if (botData == undefined || botData == null || botData['matchedCount'] < 1) {
+
+		success = false;
+	}
+
+	return( { 'success': success } );
+}
+
+
 async function checkTracker() {
 
 	// Monitor existing deals if they weren't updated after n minutes to take potential action
@@ -1819,10 +1838,12 @@ module.exports = {
 	delay,
 	start,
 	update,
+	connectExchange,
 	removeConfigData,
 	getBots,
 	getDeals,
 	getDealsHistory,
+	getSymbolsAll,
 
 	init: function(obj) {
 

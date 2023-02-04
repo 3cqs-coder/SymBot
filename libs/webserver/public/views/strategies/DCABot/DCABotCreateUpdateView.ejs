@@ -15,7 +15,7 @@
 		$('#formSubmitStart').hide();
 		$('#ordersBox').hide();
 
-		$('input').not('[type=button]').prop('disabled', false);
+		$('input,select').not('[type=button]').prop('disabled', false);
 	}
 
 	$(document).ready(function () {
@@ -94,7 +94,7 @@
 			$('#ordersBox').hide();
 
 			// Enable form so data is retrievable
-			$('input').not('[type=button]').prop('disabled', false);
+			$('input,select').not('[type=button]').prop('disabled', false);
 
 			const formDataSubmit = $(form).serialize();
 			const formData = $(form).serializeArray().reduce((o, {name: n, value: v}) => Object.assign(o, { [n]: v }), {});
@@ -109,7 +109,7 @@
 			$('#spinner-overlay').fadeIn(100);
 
 			$('#formSubmitPreview').hide();
-			$('input').not('[type=button]').prop('disabled', true);
+			$('input,select').not('[type=button]').prop('disabled', true);
 
 			$.ajax({
 						type: 'POST',
@@ -123,7 +123,7 @@
 							$('#spinner-overlay').fadeOut(100);
 
 							$('#formSubmitPreview').show();
-							$('input').not('[type=button]').prop('disabled', false);
+							$('input,select').not('[type=button]').prop('disabled', false);
 
 							//alertBox(JSON.stringify(data));
 							alertBox(data.data);
@@ -149,7 +149,7 @@
 
 								$('#spinner-overlay').fadeOut(100);
 
-								$('input').not('[type=button]').prop('disabled', true);
+								$('input,select').not('[type=button]').prop('disabled', true);
 
 								$('#ordersBox').show();
 								$('#formSubmitReset').show();
@@ -202,6 +202,23 @@
 
 </script>
 
+		<%
+			let symbolString = '';
+
+			for (let i = 0; i < symbols.length; i++) {
+
+				let selected = '';
+
+				let pair = symbols[i].toUpperCase();
+				
+				if (pair == botData.pair.toUpperCase()) {
+
+					selected = ' selected';
+				}
+				
+				symbolString += '<option' + selected + '>' + pair;
+			}
+		%>
 
 <center>
 <main>
@@ -219,7 +236,7 @@
 
 		<tr id="botIdRow" style="display: none;"><td>Bot ID:</td> <td><%- botData.botId %></td></tr>
 		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" value="<%- botData.botName %>" class="form-field" style="width: 200px;"></td></tr>
-		<tr><td>Pair:</td> <td><input id="pair" name="pair" class="form-field" value="<%- botData.pair %>" style="width: 100px; text-transform: uppercase;"></td></tr>
+		<tr><td>Pair:</td> <td><select id="pair" name="pair" class="form-field" style="width: 200px;"><%- symbolString %></select></td></tr>
 		<tr><td>Base Order Size:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Safety Order Size:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" class="form-field"></td></tr>
