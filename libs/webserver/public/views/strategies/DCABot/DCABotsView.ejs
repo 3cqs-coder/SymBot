@@ -2,7 +2,47 @@
 
 <script>
 
+	let timerId;
+
+	function toggleBot(api, status) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'POST',
+					url: '/api/bots/' + api,
+					data: {},
+					dataType: 'json',
+					success: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						if (!data.success) {
+
+							alertBox('Unable to change bot status');
+						}
+						else {
+
+							alertBox('Bot is now ' + status);
+						}
+						
+						setReloadTimeout();
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+						
+						setReloadTimeout();
+					}
+		});
+	}
+
 	$(document).ready(function() {
+
+		$('[id*="toggle"]').simpleSwitch();
 
 		$('#botsDeals tbody tr td').click(function() {
 
@@ -12,7 +52,25 @@
 
 			let botId = $(row).data('botid');
 
-			if (botId) {
+			if (col == 11) {
+
+				// Set timeout to avoid double event firing in some cases
+				clearTimeout(timerId);
+
+				timerId = setTimeout( function(){
+
+					if ($('#toggle' + botId).prop('checked')) {
+
+						toggleBot(botId + '/enable', 'enabled');
+					}
+					else {
+
+						toggleBot(botId + '/disable', 'disabled');
+					}
+
+				}, 150);
+			}
+			else if (botId) {
 
 				window.location.href = '/bots/' + botId;
 			}
@@ -47,11 +105,11 @@
 
 			if (active) {
 				
-				active = 'Yes';
+				active = 'checked';
 			}
 			else {
 
-				active = 'No';
+				active = '';
 			}
 
 			if (sandBox) {
@@ -81,7 +139,7 @@
 		<td><%- bot['config']['dcaTakeProfitPercent'] %></td>
 		<td><%- dealMax %></td>
 		<td><%- sandBox %></td>
-		<td><%- active %></td>
+		<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>
 	</tr>
 
 	<% 	} %>

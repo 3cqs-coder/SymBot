@@ -1821,6 +1821,7 @@ module.exports = {
 	update,
 	removeConfigData,
 	getBots,
+	getDeals,
 	getDealsHistory,
 
 	init: function(obj) {

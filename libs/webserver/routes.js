@@ -148,24 +148,24 @@ function initRoutes(router) {
 	});
 
 
-	router.post('/api/bots/stop', (req, res) => {
+	router.post([ '/api/bots/create', '/api/bots/update' ], (req, res) => {
 
 		if (req.session.loggedIn) {
 
-			shareData.DCABotManager.apiStopBot(req, res);
+			shareData.DCABotManager.apiCreateUpdateBot(req, res);
 		}
 		else {
 
 			res.redirect('/login');
 		}
 	});
-	
 
-	router.post([ '/api/bots/create', '/api/bots/update' ], (req, res) => {
+
+	router.post([ '/api/bots/:botId/enable', '/api/bots/:botId/disable' ], (req, res) => {
 
 		if (req.session.loggedIn) {
 
-			shareData.DCABotManager.apiCreateUpdateBot(req, res);
+			shareData.DCABotManager.apiEnableDisableBot(req, res);
 		}
 		else {
 

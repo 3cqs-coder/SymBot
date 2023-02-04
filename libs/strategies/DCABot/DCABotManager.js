@@ -241,17 +241,30 @@ async function apiCreateUpdateBot(req, res) {
 }
 
 
-async function apiStopBot(req, res) {
+async function apiEnableDisableBot(req, res) {
 
+	let active;
+	let status;
 	let success = true;
 
 	const body = req.body;
 
-	const botId = body.bot_id;
+	if (req.path.indexOf('enable') > -1) {
+
+		active = true;
+		status = 'enabled';
+	}
+	else {
+	
+		active = false;
+		status = 'disabled';
+	}
+
+	const botId = req.params.botId;
 
 	const bots = await shareData.DCABot.getBots({ 'botId': botId });
 
-	const data = await shareData.DCABot.update(botId, { 'active': false });
+	const data = await shareData.DCABot.update(botId, { 'active': active });
 
 	if (!data.success) {
 
@@ -261,23 +274,42 @@ async function apiStopBot(req, res) {
 	const bot = bots[0];
 	const botName = bot.botName;
 
-	shareData.Common.logger('Bot Stop ID ' + botId + ' / Success: ' + success);
+	shareData.Common.logger('Bot Status Changed: ID: ' + botId + ' / Status: ' + status + ' / Success: ' + success);
 
 	if (success) {
 
-		shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' Stop command received.');
+		shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' is now ' + status);
+	}
+
+	if (active) {
+
+		const bot = await shareData.DCABot.getBots({ 'botId': botId });
+		const dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
+
+		// Start bot if active and no deals currently running
+		if (bot && bot.length > 0 && dealsActive.length == 0) {
+
+			let config = bot[0]['config'];
+
+			// Pass bot id in config so existing bot is used
+			config['botId'] = botId;
+			config['botName'] = botName;
+			config['dealCount'] = 0;
+
+			// Start bot
+			shareData.DCABot.start(config, true, true);
+		}
 	}
 
 	res.send( { 'date': new Date(), 'success': success } );
 }
 
 
-
 module.exports = {
 
 	apiGetActiveDeals,
 	apiCreateUpdateBot,
-	apiStopBot,
+	apiEnableDisableBot,
 	viewBots,
 	viewCreateUpdateBot,
 	viewActiveDeals,

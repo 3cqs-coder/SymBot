@@ -47,7 +47,7 @@
 
 		$.ajax({
 					type: 'POST',
-					url: '/api/bots/stop',
+					url: '/api/bots/' + data.bot_id + '/disable',
 					data: data,
 					dataType: 'json',
 					success: function(data) {
