@@ -30,12 +30,14 @@
 
 			botText = 'Update Bot';
 			headerText = 'Update DCA Bot';
+			
+			$('#botIdRow').show();
 		}
 
 		$('#headerText').text(headerText);
 		$('#formSubmitStart').text(botText);
 
-		const form = '#formDealsCreate';
+		const form = '#formBotsCreate';
 		const submitUrl = $(form).attr('action');
 
 		const createStep = $('#createStep').val();
@@ -173,7 +175,7 @@
 	});
 
 
-	$(document).on('keypress', '#dealsCreate input', function(e) {
+	$(document).on('keypress', '#botsCreate input', function(e) {
 
 		const id = $(this).attr('id');
 		const val = $('#' + id).val();
@@ -208,13 +210,14 @@
 
 	<h2 id="headerText"></h2>
 
-	<table id="dealsCreate" cellpadding=0 cellspacing=0>
+	<table id="botsCreate" cellpadding=0 cellspacing=0>
 
-	<form id="formDealsCreate" autocomplete="off" action="<%- formAction %>">
+	<form id="formBotsCreate" autocomplete="off" action="<%- formAction %>">
 
 		<input type=hidden id="createStep" name="createStep" value="getorders">
 		<input type=hidden id="botId" name="botId" value="<%- botData.botId %>">
 
+		<tr id="botIdRow" style="display: none;"><td>Bot ID:</td> <td><%- botData.botId %></td></tr>
 		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" value="<%- botData.botName %>" class="form-field" style="width: 200px;"></td></tr>
 		<tr><td>Pair:</td> <td><input id="pair" name="pair" class="form-field" value="<%- botData.pair %>" style="width: 100px; text-transform: uppercase;"></td></tr>
 		<tr><td>Base Order Size:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>

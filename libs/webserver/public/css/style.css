@@ -286,17 +286,17 @@ table#login {
 }
 
 
-table#dealsCreate {
+table#botsCreate {
 
 	font-size: 1.2rem;
 	color: #000000;
 	border: 0;
-	width: 425px;
+	width: 500px;
 	text-align: left;
 }
 
 
-table#dealsCreate td {
+table#botsCreate td {
 
 	padding-bottom: 5px;
 }

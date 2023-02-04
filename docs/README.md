@@ -1,6 +1,6 @@
 ## SymBot
 
-SymBot is a simple, self-hosted DCA (Dollar Cost Averaging) bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+SymBot is a simple, self-hosted DCA (Dollar Cost Averaging) automated crypto bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ These files are located in the "config" directory
 
 	- "web_server" contains settings for the SymBot web server. The default port is 3000.
 
-	- "telegram" contains an optional Telegram token id and user id to send SymBot notifications to. You must first create a Telegram bot with @BotFather to use.
+	- "telegram" contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with @BotFather to use.
 
 	- "mongo_db_url" is the URL to your MongoDB instance.
 
