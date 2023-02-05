@@ -1,7 +1,7 @@
 'use strict';
 
 
-let symbolList = { 'updated': 0, 'symbols': {} };
+let symbolList = { 'updated': 0, 'symbols': [] };
 
 
 let shareData;

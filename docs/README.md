@@ -1,6 +1,6 @@
 ## SymBot
 
-SymBot is a simple, self-hosted DCA (Dollar Cost Averaging) automated cryptocurrency bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+SymBot is a user friendly, self-hosted DCA (Dollar Cost Averaging) automated cryptocurrency bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
 
 ## Requirements
 

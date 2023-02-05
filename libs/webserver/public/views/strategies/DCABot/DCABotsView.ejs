@@ -3,6 +3,7 @@
 <script>
 
 	let timerId;
+	let confirmWaiting = false;
 
 	function toggleBot(api, status) {
 
@@ -40,9 +41,67 @@
 		});
 	}
 
+
+	function confirmBot(api, data, botId) {
+
+		let botText;
+
+		if (api.match(/enable/i)) {
+				
+			botText = 'Enable Bot';
+		}
+		else {
+				
+			botText = 'Disable Bot';
+		}
+
+		if (!confirmWaiting) {
+
+			confirmWaiting = true;
+
+			$.confirm({
+						title: false,
+						boxWidth: '50%',
+						useBootstrap: false,
+						content: '<div style="font-size: 1.2rem; text-align: left;">' + botText + '?</div>',
+						buttons: {
+
+									ok: {
+											btnClass: 'btn-default',
+											text: '<div style="color: #4aa602;">' + botText + '</div>',
+											action: function () {
+
+												$('#toggle' + botId).prop('disabled', false);
+												$('#toggle' + botId).click();
+											
+												setTimeout( function() {
+																			confirmWaiting = false;
+																			$('#toggle' + botId).prop('disabled', true);
+
+																	   }, 500);
+
+												toggleBot(api, data);
+											}
+										},
+										cancel: {
+
+									 		btnClass: 'btn-default',
+									 		text: '<div style="color: #000000;">Cancel</div>',	
+									 		action: function () {
+
+											 	confirmWaiting = false;
+											}
+										}
+								 }
+			});
+		}
+	}
+	
+
 	$(document).ready(function() {
 
 		$('[id*="toggle"]').simpleSwitch();
+		$('[id*="toggle"]').prop('disabled', true);
 
 		$('#botsDeals tbody tr td').click(function() {
 
@@ -61,11 +120,11 @@
 
 					if ($('#toggle' + botId).prop('checked')) {
 
-						toggleBot(botId + '/enable', 'enabled');
+						confirmBot(botId + '/disable', 'disabled', botId);
 					}
 					else {
 
-						toggleBot(botId + '/disable', 'disabled');
+						confirmBot(botId + '/enable', 'enabled', botId);
 					}
 
 				}, 150);
