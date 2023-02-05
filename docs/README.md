@@ -1,22 +1,48 @@
 ## SymBot
 
-SymBot is a simple, self-hosted DCA (Dollar Cost Averaging) automated crypto bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+SymBot is a simple, self-hosted DCA (Dollar Cost Averaging) automated cryptocurrency bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
 
 ## Requirements
 
 - Node.js must be installed on your system
 - MongoDB or a host provider
+- Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable internet connection
 
 ## Installation
 
 1. Open a command line terminal
 2. Change directory to where SymBot files are located
-3. Type: npm install
+3. Type: `npm install`
 4. Wait until all packages are downloaded and installed
 5. Modify the app and bot configuration files as necessary (see below)
-6. Type: npm start
+6. Type: `npm start`
 7. Open a web browser and type: http://127.0.0.1:3000
+
+To have SymBot run in the background it is recommend to use the Node.js process manager called **pm2**. Here's how to use it:
+
+1. Install **pm2** by typing: `npm install pm2 -g`
+2. Create a file called `ecosystem.config.js` and place the below configuration into it:
+```
+module.exports = {
+
+	apps: [
+			{
+				name: 'symbot',
+				namespace: 'symbot',
+				script: '/home/symbot/symbot.js',
+				kill_timeout: 8000,
+				max_memory_restart: '1000M'
+			}
+		  ]
+}
+```
+3. Replace `/home/symbot/symbot.js` with the actual location where SymBot resides on your server and save the file
+4. Tell **pm2** to start SymBot with a one time only command by typing: `pm2 start ecosystem.config.js`
+5. Type: `pm2 save` to save the configuration
+6. If you don't already have **pm2** starting at system boot time, type this with root privileges: `pm2 startup`. Then type: `pm2 save`
+
+Now SymBot will automatically start even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly one gigabyte, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely itself shutdown. You can change those settings to suit your own server requirements and needs.
 
 ## Configuration
 
@@ -52,7 +78,7 @@ These files are located in the "config" directory
 If you want to reset the SymBot database for any reason, you can do so only from the command line. It will first ask to confirm, then display a reset code you must enter, and confirm again.
 
 1. Stop any running instances of SymBot
-2. Type: npm start reset (or node ./symbot.js reset)
+2. Type: `npm start reset` (or `node ./symbot.js reset`)
 
 ## Disclaimer
 
