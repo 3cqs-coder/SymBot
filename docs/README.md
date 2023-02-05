@@ -1,6 +1,6 @@
 ## SymBot
 
-SymBot is a user friendly, self-hosted DCA (Dollar Cost Averaging) automated cryptocurrency bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
 
 ## Requirements
 
@@ -42,32 +42,32 @@ module.exports = {
 5. Type: `pm2 save` to save the configuration
 6. If you don't already have **pm2** starting at system boot time, type this with root privileges: `pm2 startup`. Then type: `pm2 save`
 
-Now SymBot will automatically start even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly one gigabyte, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. **pm2** will then start SymBot again. You can change those settings to suit your own server requirements and needs.
+SymBot will now start automatically even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly one gigabyte, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. **pm2** will then start SymBot again. You can change those settings to suit your own server requirements and needs.
 
 ## Configuration
 
-These files are located in the "config" directory
+These files are located in the `config` directory
 
 - **app.json**
 
-	- "password" is the password used to login to the SymBot web portal. The default password is "admin".
+	- `password` is the password used to login to the SymBot web portal. The default password is "admin".
 
-	- "web_server" contains settings for the SymBot web server. The default port is 3000.
+	- `web_server` contains settings for the SymBot web server. The default port is 3000.
 
-	- "telegram" contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with @BotFather to use.
+	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with @BotFather to use.
 
-	- "mongo_db_url" is the URL to your MongoDB instance.
+	- `mongo_db_url` is the URL to your MongoDB instance.
 
 		- WARNING: If you run multiple instances of SymBot using the same database you will mess up your bots!
 		- For quick set up, create a free account at https://cloud.mongodb.com and copy the URL given into the app config. It begins with something like: mongodb+srv://
 		- For better security running your own local database is recommended
 
-	- "signals" contains a section to use signals with SymBot. There is a 3CQS signals section by default. If you have an API key just copy it there or create an account at https://www.3CQS.com to get one.
+	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. If you have an API key just copy it there or create an account at https://www.3CQS.com to get one.
 	
 
 - **bot.json**
 
-	- This contains all default settings for your bot and exchange information. For test purposes, always leave "sandBox" set to true.
+	- This contains all default settings for your bot and exchange information. For test purposes, always leave `sandBox: true`.
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the ccxt library so if the exchange is supported, you should be able to connect to it
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web view
 

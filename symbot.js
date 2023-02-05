@@ -135,7 +135,7 @@ async function reset() {
 	let confirm;
 	let resetCode = Math.floor(Math.random() * 1000000000);
 
-	console.log('\n*** CAUTION *** Your are about to reset ' + appDataConfig.name + ' database!\n');
+	console.log('\n*** CAUTION *** You are about to reset ' + appDataConfig.name + ' database!\n');
 
 	confirm = prompt('Do you want to continue? (Y/n): ');
 
