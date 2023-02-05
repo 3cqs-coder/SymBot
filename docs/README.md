@@ -42,7 +42,7 @@ module.exports = {
 5. Type: `pm2 save` to save the configuration
 6. If you don't already have **pm2** starting at system boot time, type this with root privileges: `pm2 startup`. Then type: `pm2 save`
 
-Now SymBot will automatically start even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly one gigabyte, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely itself shutdown. You can change those settings to suit your own server requirements and needs.
+Now SymBot will automatically start even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly one gigabyte, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. **pm2** will then start SymBot again. You can change those settings to suit your own server requirements and needs.
 
 ## Configuration
 
