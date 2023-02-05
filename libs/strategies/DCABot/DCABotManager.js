@@ -24,7 +24,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 			botUpdate = true;
 			botData = bot[0]['config'];
-			
+
 			botData.botId = botId;
 
 			formAction = '/api/bots/update';
@@ -166,8 +166,11 @@ async function calculateOrders(body) {
 
 	let botData = botConfig.data;
 
+	botData.startConditions = [];
+
 	botData.pair = body.pair;
 	botData.dealMax = body.dealMax;
+	botData.startConditions.push(body.startCondition);
 	botData.firstOrderAmount = body.firstOrderAmount;
 	botData.dcaOrderAmount = body.dcaOrderAmount;
 	botData.dcaMaxOrder = body.dcaMaxOrder;
@@ -224,6 +227,7 @@ async function apiCreateUpdateBot(req, res) {
 
 	let orders = data['orders'];
 	let botData = data['botData'];
+	let startCondition = botData.startConditions[0].toLowerCase();
 
 	if (!orders.success) {
 
@@ -237,21 +241,40 @@ async function apiCreateUpdateBot(req, res) {
 
 				shareData.Telegram.sendMessage(shareData.appData.telegram_id, botData.botName + ' (' + botData.pair.toUpperCase() + ') Start command received.');
 
-				// Start bot
-				shareData.DCABot.start(botData, true, true);
+				if (startCondition == 'asap') {
+
+					// Start bot
+					shareData.DCABot.start(botData, true, true);
+				}
 			}
 			else {
+
+				const botId = botData.botId;
+				const botName = botData.botName;
 
 				// Update config data
 				const configData = await shareData.DCABot.removeConfigData(botData);
 
 				let dataObj = {
-								'botName': botData.botName,
+								'botName': botName,
 								'pair': botData.pair,
 								'config': configData
 							  };
 
-				const data = await shareData.DCABot.update(botData.botId, dataObj);
+				const data = await shareData.DCABot.update(botId, dataObj);
+
+				const bot = await shareData.DCABot.getBots({ 'botId': botId });
+				const dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
+
+				let config = bot[0]['config'];
+				config = await applyConfigData(botId, botName, config);
+
+				// Start bot if active, no deals are currently running and start condition is now asap
+				if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && startCondition == 'asap') {
+
+					// Start bot
+					shareData.DCABot.start(config, true, true);
+				}
 			}
 		}
 	}
@@ -308,19 +331,37 @@ async function apiEnableDisableBot(req, res) {
 		// Start bot if active and no deals currently running
 		if (bot && bot.length > 0 && dealsActive.length == 0) {
 
+			let startCondition;
+
 			let config = bot[0]['config'];
+			config = await applyConfigData(botId, botName, config);
 
-			// Pass bot id in config so existing bot is used
-			config['botId'] = botId;
-			config['botName'] = botName;
-			config['dealCount'] = 0;
+			if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
 
-			// Start bot
-			shareData.DCABot.start(config, true, true);
+				startCondition = config['startConditions'][0].toLowerCase();
+			}
+
+			// Only start bot if first condition is asap
+			if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
+
+				// Start bot
+				shareData.DCABot.start(config, true, true);
+			}
 		}
 	}
 
 	res.send( { 'date': new Date(), 'success': success } );
+}
+
+
+async function applyConfigData(botId, botName, config) {
+
+	// Pass bot id in config so existing bot is used
+	config['botId'] = botId;
+	config['botName'] = botName;
+	config['dealCount'] = 0;
+
+	return config;
 }
 
 

@@ -8,6 +8,16 @@
 					"token_id": "",
 					"notify_user_id": ""
 				},
+	"bots": {
+				"start_conditions": {
+										"asap": {
+													"description": "Open new trade asap"
+										},
+										"api": {
+													"description": "Manually / API"
+										}
+									}
+			},
 	"signals": {
 				 	"3CQS": {
 					 			"api_key": ""

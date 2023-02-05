@@ -20,7 +20,7 @@
 
 	$(document).ready(function () {
 
-		let botText = 'Start Bot';
+		let botText = 'Create Bot';
 		let headerText = 'Create DCA Bot';
 
 		// Set names depending on create or update bot
@@ -138,7 +138,7 @@
 
 								if (!isUpdate) {
 
-									alertBox('Bot Started');
+									alertBox('Bot Created');
 								}
 								else {
 
@@ -204,6 +204,7 @@
 
 		<%
 			let symbolString = '';
+			let startConditionString = '';
 
 			for (let i = 0; i < symbols.length; i++) {
 
@@ -217,6 +218,23 @@
 				}
 				
 				symbolString += '<option' + selected + '>' + pair;
+			}
+
+			for (let key in appData.bots['start_conditions']) {
+
+				let selected = '';
+
+				let description = appData.bots['start_conditions'][key]['description'];
+
+				if (botData.startConditions != undefined && botData.startConditions != null && botData.startConditions != '') {
+
+					if (key == botData.startConditions[0]) {
+
+						selected = ' selected';
+					}
+				}
+
+				startConditionString += '<option value="' + key + '" ' + selected + '>' + description;
 			}
 		%>
 
@@ -245,6 +263,7 @@
 		<tr><td>Safety Order Step Scale:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" class="form-field"></td></tr>
 		<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
 		<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="<%- botData.dealMax %>" class="form-field"></td></tr>
+		<tr><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
 
 		<tr>
 			<td style="padding-top: 25px; text-align: center;" colspan=2>

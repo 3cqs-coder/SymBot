@@ -54,6 +54,8 @@ These files are located in the `config` directory
 
 	- `web_server` contains settings for the SymBot web server. The default port is 3000.
 
+	-	`bots` contains start condition keys and descriptions such as `asap` and `api`. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
+
 	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with @BotFather to use.
 
 	- `mongo_db_url` is the URL to your MongoDB instance.

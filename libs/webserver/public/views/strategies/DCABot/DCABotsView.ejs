@@ -89,7 +89,10 @@
 									 		text: '<div style="color: #000000;">Cancel</div>',	
 									 		action: function () {
 
-											 	confirmWaiting = false;
+									 			setTimeout( function() {
+																			confirmWaiting = false;
+
+																	   }, 500);
 											}
 										}
 								 }
