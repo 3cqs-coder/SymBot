@@ -115,7 +115,7 @@
 			let botId = $(row).data('botid');
 			let botName = $(row).data('botname');
 
-			if (col == 11) {
+			if (col == 12) {
 
 				// Set timeout to avoid double event firing in some cases
 				clearTimeout(timerId);
@@ -154,17 +154,26 @@
 	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0><tbody>
 
 	<tr style="font-weight: bold; text-align: left;">
-		<th>Bot Name</th> <th>Pair</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP %</th> <th>Max Deals</th> <th>Sandbox</th> <th>Active</th>
+		<th>Bot Name</th> <th>Pair</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP %</th> <th>Max Deals</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
 	</tr>
 
 	<%
 		for (let i = 0; i < bots.length; i++) {
+
+			let startCondition = 'asap';
 
 			let bot = bots[i];
 
 			let active = bot['active'];
 			let dealMax = bot['config']['dealMax'];
 			let sandBox = bot['config']['sandBox'];
+
+			if (bot['config']['startConditions'] != undefined && bot['config']['startConditions'] != null && bot['config']['startConditions'] != '') {
+
+				startCondition = bot['config']['startConditions'][0];
+			}
+
+			startCondition = startCondition.toUpperCase();
 
 			if (active) {
 				
@@ -201,6 +210,7 @@
 		<td><%- bot['config']['dcaOrderStepPercentMultiplier'] %></td>
 		<td><%- bot['config']['dcaTakeProfitPercent'] %></td>
 		<td><%- dealMax %></td>
+		<td><%- startCondition %></td>
 		<td><%- sandBox %></td>
 		<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>
 	</tr>
