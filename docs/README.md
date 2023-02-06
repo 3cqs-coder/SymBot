@@ -19,7 +19,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 6. Type: `npm start`
 7. Open a web browser and type: http://127.0.0.1:3000
 
-To have SymBot run in the background it is recommend to use the Node.js process manager called **pm2**. Here's how to use it:
+To have SymBot run in the background it is recommended to use the Node.js process manager called **pm2**. Here's how to use it:
 
 1. Install **pm2** by typing: `npm install pm2 -g`
 2. Create a file called `ecosystem.config.js` and place the below configuration into it:

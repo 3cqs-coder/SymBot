@@ -106,6 +106,13 @@
 				return;
 			}
 
+			if (formData.startCondition == undefined || formData.startCondition == null || formData.startCondition == '') {
+
+				alertBox('Invalid Start Condition');
+
+				return;
+			}
+
 			$('#spinner-overlay').fadeIn(100);
 
 			$('#formSubmitPreview').hide();
@@ -203,8 +210,8 @@
 </script>
 
 		<%
-			let symbolString = '';
-			let startConditionString = '';
+			let symbolString = '<option value="">';
+			let startConditionString = '<option value="">';
 
 			for (let i = 0; i < symbols.length; i++) {
 
@@ -217,7 +224,7 @@
 					selected = ' selected';
 				}
 				
-				symbolString += '<option' + selected + '>' + pair;
+				symbolString += '<option value="' + pair + '" ' + selected + '>' + pair;
 			}
 
 			for (let key in appData.bots['start_conditions']) {

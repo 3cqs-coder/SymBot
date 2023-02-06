@@ -943,15 +943,15 @@ const dcaFollow = async (configData, exchange, dealId) => {
 					
 						Common.logger(
 							colors.green.bold.italic(
-							'Pair:' +
+							'Pair: ' +
 							pair +
-							'\tQty:' +
+							'\tQty: ' +
 							baseOrder.qty +
-							'\tPrice:' +
+							'\tPrice: ' +
 							baseOrder.price +
-							'\tAmount:' +
+							'\tAmount: ' +
 							baseOrder.amount +
-							'\tStatus:Filled'
+							'\tStatus: Filled'
 							)
 						);
 					}
@@ -1004,15 +1004,15 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						
 							Common.logger(
 								colors.green.bold.italic(
-								'Pair:' +
+								'Pair: ' +
 								pair +
-								'\tQty:' +
+								'\tQty: ' +
 								baseOrder.qty +
-								'\tPrice:' +
+								'\tPrice: ' +
 								baseOrder.price +
-								'\tAmount:' +
+								'\tAmount: ' +
 								baseOrder.amount +
-								'\tStatus:Filled'
+								'\tStatus: Filled'
 								)
 							);
 						}
@@ -1141,7 +1141,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 									currentOrder.average +
 									'\tSell Price: $' +
 									currentOrder.target +
-									'\tStatus:' +
+									'\tStatus: ' +
 									colors.green('BUY') +
 									'' +
 									'\tProfit: ' +
