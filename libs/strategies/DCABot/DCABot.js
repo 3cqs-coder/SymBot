@@ -43,6 +43,7 @@ async function start(data, startBot, reload) {
 
 	let botActive = true;
 	let botFoundDb = false;
+	let pairFoundDb = false;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
@@ -824,7 +825,18 @@ async function start(data, startBot, reload) {
 
 			botFoundDb = true;
 
-			if (!bot['active']) {
+			let botPairsDb = bot['config']['pair'];
+
+			// Make sure pair was not removed from bot configuration
+			for (let pairDb of botPairsDb) {
+
+				if (pair.toUpperCase() == pairDb.toUpperCase()) {
+
+					pairFoundDb = true;
+				}
+ 			}
+ 
+			if (!bot['active'] || !pairFoundDb) {
 
 				botActive = false;
 			}
