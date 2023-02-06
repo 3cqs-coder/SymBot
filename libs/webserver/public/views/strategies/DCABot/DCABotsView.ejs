@@ -26,8 +26,6 @@
 
 							alertBox('Bot is now ' + status);
 						}
-						
-						setReloadTimeout();
 					},
 					error: function(data) {
 
@@ -35,8 +33,6 @@
 						$('#spinner-overlay').fadeOut(100);
 
 						alertBox('Error: ' + JSON.stringify(data));
-						
-						setReloadTimeout();
 					}
 		});
 	}
@@ -160,6 +156,7 @@
 	<%
 		for (let i = 0; i < bots.length; i++) {
 
+			let pair;
 			let startCondition = 'asap';
 
 			let bot = bots[i];
@@ -197,11 +194,20 @@
 
 				dealMax = '&#8734;';
 			}
+			
+			if (typeof bot['config']['pair'] !== 'string') {
+
+				pair = bot['config']['pair'].join(', ');
+			}
+			else {
+
+				pair = bot['config']['pair'];
+			}
 	%>
 
 	<tr data-botid="<%- bot['botId'] %>" data-botname="<%- bot['botName'] %>">
 		<td><%- bot['botName'] %></td>
-		<td><%- bot['config']['pair'].toUpperCase() %></td>
+		<td><%- pair.toUpperCase() %></td>
 		<td><%- bot['config']['firstOrderAmount'] %></td>
 		<td><%- bot['config']['dcaOrderAmount'] %></td>
 		<td><%- bot['config']['dcaMaxOrder'] %></td>

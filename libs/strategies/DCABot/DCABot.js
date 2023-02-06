@@ -859,11 +859,12 @@ async function start(data, startBot, reload) {
 		configObj['dealCount']++;
 
 		botConfigDb['botId'] = botIdMain;
+		botConfigDb['pair'] = pair; // Set single pair
 		botConfigDb['dealCount'] = configObj['dealCount'];
 
 		if (shareData.appData.verboseLog) {
 
-			Common.logger(colors.bgGreen('Starting new bot deal for ' + botConfigDb.pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
+			Common.logger(colors.bgGreen('Starting new bot deal for ' + pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
 		}
 
 		start(botConfigDb, true, true);
@@ -1840,6 +1841,7 @@ module.exports = {
 	update,
 	connectExchange,
 	removeConfigData,
+	initBot,
 	getBots,
 	getDeals,
 	getDealsHistory,

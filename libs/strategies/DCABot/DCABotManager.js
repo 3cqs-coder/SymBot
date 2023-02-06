@@ -162,13 +162,28 @@ async function apiGetActiveDeals(req, res) {
 
 async function calculateOrders(body) {
 
+	let pair;
+
+	let pairs = body.pair;
 	const botConfig = await shareData.Common.getConfig('bot.json');
 
 	let botData = botConfig.data;
 
 	botData.startConditions = [];
 
-	botData.pair = body.pair;
+	if (typeof pairs !== 'string') {
+
+		pair = pairs[0];
+	}
+	else {
+
+		pair = pairs;
+
+		pairs = [];
+		pairs.push(pair);
+	}
+
+	botData.pair = pair;
 	botData.dealMax = body.dealMax;
 	botData.startConditions.push(body.startCondition);
 	botData.firstOrderAmount = body.firstOrderAmount;
@@ -184,7 +199,7 @@ async function calculateOrders(body) {
 
 		botData.dealMax = 0;
 	}
-	
+
 	// Check for bot id passed in from body for update
 	if (body.botId != undefined && body.botId != null && body.botId != '') {
 
@@ -204,7 +219,7 @@ async function calculateOrders(body) {
 	// Only get orders, don't start bot
 	let orders = await shareData.DCABot.start(botData, false);
 
-	return ({ 'orders': orders, 'botData': botData });
+	return ({ 'pairs': pairs, 'orders': orders, 'botData': botData });
 }
 
 
@@ -225,9 +240,13 @@ async function apiCreateUpdateBot(req, res) {
 
 	let data = await calculateOrders(body);
 
+	let pairs = data['pairs'];
 	let orders = data['orders'];
 	let botData = data['botData'];
 	let startCondition = botData.startConditions[0].toLowerCase();
+
+	// Set pair to array
+	botData['pair'] = pairs;
 
 	if (!orders.success) {
 
@@ -239,12 +258,24 @@ async function apiCreateUpdateBot(req, res) {
 
 			if (!isUpdate) {
 
-				shareData.Telegram.sendMessage(shareData.appData.telegram_id, botData.botName + ' (' + botData.pair.toUpperCase() + ') Start command received.');
+				// Save initial bot configuration
+				const configObj = await shareData.DCABot.initBot(true, botData);
 
 				if (startCondition == 'asap') {
 
 					// Start bot
-					shareData.DCABot.start(botData, true, true);
+					for (let i = 0; i < pairs.length; i++) {
+
+						let pair = pairs[i];
+
+						let config = JSON.parse(JSON.stringify(configObj));
+						config['pair'] = pair;
+
+						shareData.Telegram.sendMessage(shareData.appData.telegram_id, config.botName + ' (' + pair.toUpperCase() + ') Start command received.');
+						shareData.DCABot.start(config, true, true);
+
+						await shareData.DCABot.delay(1000);
+					}
 				}
 			}
 			else {
@@ -257,23 +288,33 @@ async function apiCreateUpdateBot(req, res) {
 
 				let dataObj = {
 								'botName': botName,
-								'pair': botData.pair,
+								'pair': pairs,
 								'config': configData
 							  };
 
 				const data = await shareData.DCABot.update(botId, dataObj);
 
 				const bot = await shareData.DCABot.getBots({ 'botId': botId });
-				const dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
 
-				let config = bot[0]['config'];
-				config = await applyConfigData(botId, botName, config);
+				for (let i = 0; i < pairs.length; i++) {
 
-				// Start bot if active, no deals are currently running and start condition is now asap
-				if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && startCondition == 'asap') {
+					let pair = pairs[i];
 
-					// Start bot
-					shareData.DCABot.start(config, true, true);
+					let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+
+					let config = bot[0]['config'];
+				
+					config['pair'] = pair;
+					config = await applyConfigData(botId, botName, config);
+
+					// Start bot if active, no deals are currently running and start condition is now asap
+					if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && startCondition == 'asap') {
+
+						// Start bot
+						shareData.DCABot.start(config, true, true);
+
+						await shareData.DCABot.delay(1000);
+					}
 				}
 			}
 		}
@@ -326,26 +367,40 @@ async function apiEnableDisableBot(req, res) {
 	if (active) {
 
 		const bot = await shareData.DCABot.getBots({ 'botId': botId });
-		const dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
 
-		// Start bot if active and no deals currently running
-		if (bot && bot.length > 0 && dealsActive.length == 0) {
+		if (bot && bot.length > 0) {
 
-			let startCondition;
+			let pairs = bot[0]['config']['pair'];
 
-			let config = bot[0]['config'];
-			config = await applyConfigData(botId, botName, config);
+			for (let i = 0; i < pairs.length; i++) {
 
-			if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
+				let pair = pairs[i];
+				let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
-				startCondition = config['startConditions'][0].toLowerCase();
-			}
+				// Start bot if active and no deals currently running
+				if (dealsActive.length == 0) {
 
-			// Only start bot if first condition is asap
-			if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
+					let startCondition;
 
-				// Start bot
-				shareData.DCABot.start(config, true, true);
+					let config = bot[0]['config'];
+
+					config['pair'] = pair;
+					config = await applyConfigData(botId, botName, config);
+
+					if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
+
+						startCondition = config['startConditions'][0].toLowerCase();
+					}
+
+					// Only start bot if first condition is asap
+					if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
+
+						// Start bot
+						shareData.DCABot.start(config, true, true);
+
+						await shareData.DCABot.delay(1000);
+					}
+				}
 			}
 		}
 	}

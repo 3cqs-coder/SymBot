@@ -43,11 +43,13 @@
 
 	function stopBot(selector, data) {
 
+		let botId = data.bot_id;
+
 		$('#spinner-overlay').fadeIn(100);
 
 		$.ajax({
 					type: 'POST',
-					url: '/api/bots/' + data.bot_id + '/disable',
+					url: '/api/bots/' + botId + '/disable',
 					data: data,
 					dataType: 'json',
 					success: function(data) {
@@ -60,7 +62,9 @@
 						}
 						else {
 
-							selector.text('');
+							$('[id*="stop' + botId + '"]').text('');
+							//selector.text('');
+
 							alertBox('Bot Stopped');
 						}
 						
@@ -125,6 +129,8 @@
 
 	<%
 
+		let count = 0;
+
 		for (let dealId in deals) {
 
 			let stopButton = '&#9726;';
@@ -153,6 +159,8 @@
 			}
 
 			let dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
+			
+			count++;
 	%>
 
 	<tr>
@@ -164,7 +172,7 @@
 		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
 		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
 		<td><%- dealCount %></td>
-		<td data-botid="<%- deal['info']['bot_id'] %>" data-botname="<%- deal['info']['bot_name'] %>" style="text-align: center;"><%- stopButton %></td>
+		<td data-botid="<%- deal['info']['bot_id'] %>" data-botname="<%- deal['info']['bot_name'] %>" style="text-align: center;"><div id="stop<%- deal['info']['bot_id'] %><%- count %>"><%- stopButton %></div></td>
 	</tr>
 
 	<% 	} %>
