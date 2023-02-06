@@ -274,7 +274,7 @@ async function apiCreateUpdateBot(req, res) {
 						shareData.Telegram.sendMessage(shareData.appData.telegram_id, config.botName + ' (' + pair.toUpperCase() + ') Start command received.');
 						shareData.DCABot.start(config, true, true);
 
-						await shareData.DCABot.delay(1000);
+						await shareData.Common.delay(1000);
 					}
 				}
 			}
@@ -313,7 +313,7 @@ async function apiCreateUpdateBot(req, res) {
 						// Start bot
 						shareData.DCABot.start(config, true, true);
 
-						await shareData.DCABot.delay(1000);
+						await shareData.Common.delay(1000);
 					}
 				}
 			}
@@ -398,7 +398,7 @@ async function apiEnableDisableBot(req, res) {
 						// Start bot
 						shareData.DCABot.start(config, true, true);
 
-						await shareData.DCABot.delay(1000);
+						await shareData.Common.delay(1000);
 					}
 				}
 			}

@@ -8,7 +8,6 @@ pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 
 
 const colors = require('colors');
-const delay = require('delay');
 const ccxt = require('ccxt');
 const { v4: uuidv4 } = require('uuid');
 const Table = require('easy-table');
@@ -119,7 +118,7 @@ async function start(data, startBot, reload) {
 			askPrice = symbol.ask;
 		}
 
-		//await delay(1000);
+		//await Common.delay(1000);
 
 		var t = new Table();
 		const orders = [];
@@ -152,7 +151,7 @@ async function start(data, startBot, reload) {
 			else {
 
 				// Config reloaded from db so bot and continue
-				//await delay(1000);
+				//await Common.delay(1000);
 
 				let followSuccess = false;
 				let followFinished = false;
@@ -166,7 +165,7 @@ async function start(data, startBot, reload) {
 
 					if (!followSuccess) {
 
-						await delay(1000);
+						await Common.delay(1000);
 					}
 				}
 
@@ -189,7 +188,7 @@ async function start(data, startBot, reload) {
 				//first order market
 				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + '...')); }
 
-				await delay(1000);
+				await Common.delay(1000);
 
 				let firstOrderSize = config.firstOrderAmount / askPrice;
 				firstOrderSize = await filterAmount(exchange, pair, firstOrderSize);
@@ -485,7 +484,7 @@ async function start(data, startBot, reload) {
 
 						if (!followSuccess) {
 
-							await delay(1000);
+							await Common.delay(1000);
 						}
 					}
 				}
@@ -505,7 +504,7 @@ async function start(data, startBot, reload) {
 
 				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders...')); }
 
-				//await delay(1000);
+				//await Common.delay(1000);
 
 				//askPrice = config.firstOrderLimitPrice;
 
@@ -788,7 +787,7 @@ async function start(data, startBot, reload) {
 
 						if (!followSuccess) {
 
-							await delay(1000);
+							await Common.delay(1000);
 						}
 					}
 				}
@@ -1070,7 +1069,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							);
 						}
 
-						await delay(1000);
+						await Common.delay(1000);
 						
 						let followSuccess = false;
 						let followFinished = false;
@@ -1084,7 +1083,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 							if (!followSuccess) {
 
-								await delay(1000);
+								await Common.delay(1000);
 							}
 						}
 					}
@@ -1273,7 +1272,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							}
 						}
 
-						await delay(2000);
+						await Common.delay(2000);
 						count++;
 
 						break;
@@ -1285,7 +1284,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold(pair + ' Max safety orders used.') + '\tLast Price: $' + price + '\tTarget: $' + currentOrder.target + '\tProfit: ' + profit); }
 					
-					//await delay(2000);
+					//await Common.delay(2000);
 				}
 
 			}
@@ -1302,7 +1301,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 				if (!followSuccess) {
 
-					await delay(1000);
+					await Common.delay(1000);
 				}
 			}
 		}
@@ -1827,7 +1826,7 @@ async function resumeBots() {
 
 			start(config, true, true);
 
-			await delay(1000);
+			await Common.delay(1000);
 		}
 	}
 }
@@ -1848,7 +1847,6 @@ async function initApp() {
 module.exports = {
 
 	colors,
-	delay,
 	start,
 	update,
 	connectExchange,
