@@ -6,7 +6,7 @@
 
 		date = new Date(date);
 
-		let datePart = ('00' + (date.getMonth() + 1)).slice(-2) + '/' + ('00' + date.getDate()).slice(-2) + '/' + date.getFullYear() + ' ';
+		let datePart = date.getFullYear() + '-' + ('00' + (date.getMonth() + 1)).slice(-2) + '-' + ('00' + date.getDate()).slice(-2);
 		let timePart = ('00' + date.getHours()).slice(-2) + ':' + ('00' + date.getMinutes()).slice(-2) + ':' + ('00' + date.getSeconds()).slice(-2);
 
 		let hourTemp = parseInt(timePart.split(':')[0]) % 12;
