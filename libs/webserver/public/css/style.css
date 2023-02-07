@@ -139,6 +139,7 @@ main {
 	padding-bottom: 20px;
 }
 
+
 form label {
 
 	display: block;
@@ -150,6 +151,7 @@ form textarea {
 	width: 100%;
 }
 
+
 .form-field {
 
 	width: 60px;
@@ -159,6 +161,22 @@ form textarea {
 	-webkit-border-radius: 4px;
 	-moz-border-radius: 4px;
 	border-radius: 4px;
+}
+
+
+.form-select-pair + .select2.select2-container .select2-selection__choice {
+
+	font-size: 1.0rem;
+	color: #000000;
+	background-color: #dce9ef;
+	border: 1px outset #cccccc;
+	cursor: pointer;
+}
+
+
+.form-select-pair + .select2.select2-container .select2-selection__choice__remove {
+
+	color: #000000;
 }
 
 

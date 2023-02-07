@@ -212,7 +212,7 @@
 </script>
 
 		<%
-			let symbolString = '<option value="">';
+			let symbolString = '';
 			let startConditionString = '<option value="">';
 
 			let pairsObj = {};
@@ -281,7 +281,7 @@
 
 		<tr id="botIdRow" style="display: none;"><td>Bot ID:</td> <td><%- botData.botId %></td></tr>
 		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" value="<%- botData.botName %>" class="form-field" style="width: 200px;"></td></tr>
-		<tr><td>Pair:</td> <td><select id="pair" name="pair" class="form-field" style="width: 200px;" multiple="multiple"><%- symbolString %></select></td></tr>
+		<tr><td>Pair:</td> <td><select id="pair" name="pair" class="form-select-pair" style="width: 200px;" multiple="multiple"><%- symbolString %></select></td></tr>
 		<tr><td>Base Order Size:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Safety Order Size:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" class="form-field"></td></tr>
