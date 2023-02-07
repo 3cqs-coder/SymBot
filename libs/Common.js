@@ -29,9 +29,23 @@ async function getConfig(fileName) {
 }
 
 
+async function makeDir(dirName) {
+
+	let dir = pathRoot + '/' + dirName;
+
+	if (!fs.existsSync(dir)) {
+
+		fs.mkdirSync(dir);
+	}
+}
+
+
 async function logger(data) {
 
-	let fileName = pathRoot + '/logs/symbot-log.txt';
+	if (typeof data !== 'string') {
+
+		data = JSON.stringify(data);
+	}
 
 	let dateNow = new Date().toISOString();
 
@@ -39,17 +53,140 @@ async function logger(data) {
 
 	console.log(logData);
 
-	//fs.appendFileSync(fileName, logData + '\n', 'utf8');
+	const dateObj = getDateParts(dateNow);
+
+	const fileName = pathRoot + '/logs/' + dateObj.date + '.log';
+
+	logData = logData.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+
+	logData = logData.replace(/[\t\r\n]+/g, ' ');
+
+	fs.appendFileSync(fileName, logData + '\n', 'utf8');
 }
 
 
-function sortByKey(array, key) {
+function logMonitor() {
 
-	return array.sort(function(a, b) {
+	const maxDays = 10;
 
-		let x = a[key]; var y = b[key];
-		return ((x < y) ? -1 : ((x > y) ? 1 : 0));
-	});
+	// Monitor and remove old logs
+	setInterval(() => {
+
+		delFiles(pathRoot + '/logs', maxDays);
+
+	}, 43200);
+}
+
+
+function delFiles(path, days) {
+
+	let dateNow = new Date();
+
+	let files = fs.readdirSync(path);
+
+	for (let i in files) {
+
+		let file = path + '/' + files[i];
+
+		let stats = fs.statSync(file);
+
+		let created = stats.ctime;
+		let modified = stats.mtime;
+
+		let diffSec = (new Date(dateNow).getTime() - new Date(modified).getTime()) / 1000;
+
+		if (diffSec >= (86400 * days)) {
+
+			let diffDays = Math.round(diffSec / 86400);
+
+			fs.unlinkSync(file);
+		}
+	}
+}
+
+
+function getDateParts(date, utc) {
+
+	let year;
+	let month;
+	let day;
+	let hour;
+	let min;
+	let sec;
+
+	let dateObj = new Date(date);
+
+	if (utc == undefined || utc == null || utc == '' || utc == 0) {
+
+		year = dateObj.getFullYear();
+		month = dateObj.getMonth() + 1;
+		day = dateObj.getDate();
+
+		hour = dateObj.getHours();
+		min = dateObj.getMinutes();
+		sec = dateObj.getSeconds();
+	}
+	else {
+
+		year = dateObj.getUTCFullYear();
+		month = dateObj.getUTCMonth() + 1;
+		day = dateObj.getUTCDate();
+
+		hour = dateObj.getUTCHours();
+		min = dateObj.getUTCMinutes();
+		sec = dateObj.getUTCSeconds();
+	}
+
+	if (day < 10) {
+
+		day = '0' + day;
+	}
+
+	if (month < 10) {
+
+		month = '0' + month;
+	}
+
+	if (hour < 10) {
+
+		hour = '0' + hour;
+	}
+
+	if (min < 10) {
+
+		min = '0' + min;
+	}
+
+	if (sec < 10) {
+
+		sec = '0' + sec;
+	}
+
+	let datePart = year + '-' + month + '-' + day;
+	let timePart = hour + ':' + min + ':' + sec;
+
+	let hourTemp = parseInt(timePart.split(':')[0]) % 12;
+
+	if (hourTemp < 10) {
+
+		hourTemp = '0' + hourTemp;
+	}
+
+	let timePartAmPm = (hourTemp == 0 ? '12' : hourTemp) + ':' + timePart.split(':')[1] + ' ' + (parseInt(parseInt(timePart.split(':')[0]) / 12) < 1 ? 'AM' : 'PM');
+
+	let dateParts = {
+						'year': year,
+						'month': month,
+						'day': day,
+						'hour': hour,
+						'minute': min,
+						'second': sec,
+						'date': datePart,
+						'time': timePart,
+						'timeAmPm': timePartAmPm
+					};
+
+	return dateParts;
 }
 
 
@@ -97,13 +234,26 @@ function timeDiff(dateStart, dateEnd) {
 }
 
 
+function sortByKey(array, key) {
+
+	return array.sort(function(a, b) {
+
+		let x = a[key]; var y = b[key];
+		return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+	});
+}
+
+
 module.exports = {
 
 	delay,
+	makeDir,
 	sortByKey,
 	getConfig,
+	getDateParts,
 	timeDiff,
 	logger,
+	logMonitor,
 
 	init: function(obj) {
 

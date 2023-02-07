@@ -180,6 +180,8 @@ async function reset() {
 
 async function start() {
 
+	await Common.makeDir('logs');
+
 	let initData = await init();
 
 	if (initData.nostart) {
@@ -199,6 +201,8 @@ async function start() {
 			shutDown();
 			return;
 		}
+
+		Common.logMonitor();
 
 		// Get signals and start bots accordingly
 		const socket = await Signals3CQS.start(appConfig['data']['signals']['3CQS']['api_key']);

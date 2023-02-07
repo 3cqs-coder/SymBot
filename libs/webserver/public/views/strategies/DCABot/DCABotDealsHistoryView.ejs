@@ -1,5 +1,41 @@
 <%- include('../../partialsHeaderView'); %>
 
+<script>
+
+	function dateConvertLocal(date) {
+
+		date = new Date(date);
+
+		let datePart = ('00' + (date.getMonth() + 1)).slice(-2) + '/' + ('00' + date.getDate()).slice(-2) + '/' + date.getFullYear() + ' ';
+		let timePart = ('00' + date.getHours()).slice(-2) + ':' + ('00' + date.getMinutes()).slice(-2) + ':' + ('00' + date.getSeconds()).slice(-2);
+
+		let hourTemp = parseInt(timePart.split(':')[0]) % 12;
+
+		if (hourTemp < 10) {
+
+			hourTemp = '0' + hourTemp;
+		}
+
+		let timePartAmPm = (hourTemp == 0 ? '12' : hourTemp) + ':' + timePart.split(':')[1] + ' ' + (parseInt(parseInt(timePart.split(':')[0]) / 12) < 1 ? 'AM' : 'PM');
+
+		let dateFull = datePart + ' ' + timePartAmPm;
+
+		return dateFull;
+	}
+
+
+	$(document).ready(function () {
+
+		$('[id*="date"]').each(function(){
+
+			let date = dateConvertLocal($(this).data('date'));
+
+			$(this).text(date);
+		});
+
+	});
+
+</script>
 
 
 <center>
@@ -24,12 +60,9 @@
 			let deal = deals[i];
 			let profit = deal['profit'];
 			let profitPerc = deal['profit_percent'];
-			let dateEnd = new Date(deal['date_end']).toLocaleString();
+			let dateEnd = new Date(deal['date_end']).getTime();
 
 			let duration = timeDiff(new Date(deal['date_start']), new Date(deal['date_end']));
-
-			dateEnd = dateEnd.replaceAll(',', '');
-			dateEnd = dateEnd.replaceAll('/', '-');
 
 			if (profitPerc <= 0) {
 
@@ -38,7 +71,7 @@
 	%>
 
 	<tr>
-		<td><%- dateEnd %></td>
+		<td id="date<%- i %>" data-date="<%- dateEnd %>"></td>
 		<td><%- duration %></td>
 		<td><%- deal['deal_id'] %></td>
 		<td><%- deal['pair'] %></td>
