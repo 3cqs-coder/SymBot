@@ -40,7 +40,7 @@ async function makeDir(dirName) {
 }
 
 
-async function logger(data) {
+async function logger(data, consoleLog) {
 
 	if (typeof data !== 'string') {
 
@@ -51,7 +51,10 @@ async function logger(data) {
 
 	let logData = dateNow + ' ' + data;
 
-	console.log(logData);
+	if (consoleLog || shareData.appData.console_log) {
+
+		console.log(logData);
+	}
 
 	const dateObj = getDateParts(dateNow);
 

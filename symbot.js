@@ -44,7 +44,7 @@ process.on('uncaughtException', function(err) {
 
 	let logData = 'Uncaught Exception: ' + JSON.stringify(err.message) + ' Stack: ' + JSON.stringify(err.stack);
 
-	Common.logger(logData);
+	Common.logger(logData, true);
 });
 
 
@@ -53,7 +53,14 @@ process.on('uncaughtException', function(err) {
 
 async function init() {
 
-	Common.logger(DCABot.colors.bgBrightGreen.bold('Starting ' + packageJson.description + ' v' + packageJson.version));
+	let consoleLog = false;
+
+	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
+
+		consoleLog = true;
+	}
+
+	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
 	const appConfig = await Common.getConfig('app.json');
 
@@ -61,6 +68,7 @@ async function init() {
 						'appData': {
 										'name': packageJson.description,
 										'version': packageJson.version,
+										'console_log': consoleLog,
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
@@ -89,7 +97,7 @@ async function init() {
 
 	if (!appConfig.success) {
 
-		Common.logger('App configuration file error: ' + appConfig.data);
+		Common.logger('App configuration file error: ' + appConfig.data, true);
 
 		success = false;
 	}
@@ -196,7 +204,7 @@ async function start() {
 
 		if (!botConfig.success) {
 
-			Common.logger('Bot configuration file error: ' + botConfig.data);
+			Common.logger('Bot configuration file error: ' + botConfig.data, true);
 
 			shutDown();
 			return;
@@ -222,7 +230,7 @@ function shutDown() {
 
 		gotSigInt = true;
 
-		Common.logger('Received kill signal. Shutting down gracefully.');
+		Common.logger('Received kill signal. Shutting down gracefully.', true);
 
 		if (appDataConfig != undefined && appDataConfig != null && appDataConfig != '') {
 

@@ -107,7 +107,7 @@ function start(port) {
 
 	initApp();
 
-	app.listen(port, () => shareData.Common.logger(`${shareData.appData.name} v${shareData.appData.version} listening on port ${port}`));
+	app.listen(port, () => shareData.Common.logger(`${shareData.appData.name} v${shareData.appData.version} listening on port ${port}`, true));
 }
 
 

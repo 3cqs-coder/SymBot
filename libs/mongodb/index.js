@@ -11,7 +11,7 @@ async function start(url) {
 
 	mongoose.connection.on('connected', () => {
 
-		shareData.Common.logger('DB Connected');
+		shareData.Common.logger('DB Connected', true);
 	});
 
 	mongoose.connection.on('reconnected', () => {
@@ -64,7 +64,7 @@ async function start(url) {
 
 async function log(msg) {
 
-	shareData.Common.logger(msg);
+	shareData.Common.logger(msg, true);
 
 	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 }
