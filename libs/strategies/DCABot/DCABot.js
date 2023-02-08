@@ -9,7 +9,6 @@ pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 
 const colors = require('colors');
 const ccxt = require('ccxt');
-const { v4: uuidv4 } = require('uuid');
 const Table = require('easy-table');
 const Percentage = require('percentagejs');
 const Common = require(pathRoot + '/Common.js');
@@ -1628,12 +1627,21 @@ async function initBot(startBot, config) {
 
 			if (!bot) {
 
+				let active = true;
+				
+				if (typeof configObj.active == 'boolean') {
+
+					active = configObj.active;
+				}
+
+				delete configSave['active'];
+
 				const bot = new Bots({
-										botId: configObj.botId,
-										botName: configObj.botName,
-										config: configSave,
-										active: true,
-										date: Date.now(),
+										'botId': configObj.botId,
+										'botName': configObj.botName,
+										'config': configSave,
+										'active': active,
+										'date': Date.now(),
 									});
 
 				await bot.save();
@@ -1666,7 +1674,7 @@ async function setConfigData(config) {
 	// Set bot id
 	if (configObj['botId'] == undefined || configObj['botId'] == null || configObj['botId'] == '') {
 
-		configObj['botId'] = uuidv4();
+		configObj['botId'] = Common.uuidv4();
 	}
 
 	// Set initial deal count

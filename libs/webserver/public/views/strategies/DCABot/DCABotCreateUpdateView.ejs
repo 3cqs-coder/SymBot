@@ -38,6 +38,7 @@
 		$('#formSubmitStart').text(botText);
 
 		$('#pair').select2();
+		$('[id*="botActive"]').simpleSwitch();
 
 		const form = '#formBotsCreate';
 		const submitUrl = $(form).attr('action');
@@ -98,8 +99,11 @@
 			// Enable form so data is retrievable
 			$('input,select').not('[type=button]').prop('disabled', false);
 
+			$('#active').val($('#botActive').prop('checked'));
+
 			const formDataSubmit = $(form).serialize();
 			const formData = $(form).serializeArray().reduce((o, {name: n, value: v}) => Object.assign(o, { [n]: v }), {});
+
 
 			if (formData.pair == undefined || formData.pair == null || formData.pair == '' || !formData.pair.match(/\//)) {
 
@@ -213,10 +217,17 @@
 
 		<%
 			let symbolString = '';
+			let activeChecked = '';
+
 			let startConditionString = '<option value="">';
 
 			let pairsObj = {};
 			let botPairs = [];
+
+			if (botData.active) {
+
+				activeChecked = 'checked';
+			}
 
 			if (typeof botData.pair !== 'string') {
 
@@ -278,6 +289,7 @@
 
 		<input type=hidden id="createStep" name="createStep" value="getorders">
 		<input type=hidden id="botId" name="botId" value="<%- botData.botId %>">
+		<input type=hidden id="active" name="active">
 
 		<tr id="botIdRow" style="display: none;"><td>Bot ID:</td> <td><%- botData.botId %></td></tr>
 		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" value="<%- botData.botName %>" class="form-field" style="width: 200px;"></td></tr>
@@ -291,6 +303,7 @@
 		<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
 		<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="<%- botData.dealMax %>" class="form-field"></td></tr>
 		<tr><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
+		<tr><td>Enabled:</td> <td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>
 
 		<tr>
 			<td style="padding-top: 25px; text-align: center;" colspan=2>

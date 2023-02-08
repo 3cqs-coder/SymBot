@@ -5,6 +5,8 @@ const path = require('path');
 const pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
 
 const delay = require('delay');
+const { v4: uuidv4 } = require('uuid');
+
 
 let shareData;
 
@@ -250,6 +252,7 @@ function sortByKey(array, key) {
 module.exports = {
 
 	delay,
+	uuidv4,
 	makeDir,
 	sortByKey,
 	getConfig,

@@ -25,6 +25,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 			botUpdate = true;
 			botData = bot[0]['config'];
 
+			botData.active = bot[0].active;
 			botData.botId = botId;
 
 			formAction = '/api/bots/update';
@@ -177,6 +178,7 @@ async function apiCreateUpdateBot(req, res) {
 
 	let data = await calculateOrders(body);
 
+	let active = data['active'];
 	let pairs = data['pairs'];
 	let orders = data['orders'];
 	let botData = data['botData'];
@@ -195,10 +197,12 @@ async function apiCreateUpdateBot(req, res) {
 
 			if (!isUpdate) {
 
-				// Save initial bot configuration
+				// Save initial bot configuration				
+				botData['active'] = active;
+
 				const configObj = await shareData.DCABot.initBot(true, botData);
 
-				if (startCondition == 'asap') {
+				if (active && startCondition == 'asap') {
 
 					// Start bot
 					for (let i = 0; i < pairs.length; i++) {
@@ -222,6 +226,7 @@ async function apiCreateUpdateBot(req, res) {
 
 				let dataObj = {
 								'botName': botName,
+								'active': active,
 								'pair': pairs,
 								'config': configData
 							  };
@@ -340,6 +345,7 @@ async function apiEnableDisableBot(req, res) {
 async function calculateOrders(body) {
 
 	let pair;
+	let active;
 
 	let pairs = body.pair;
 	const botConfig = await shareData.Common.getConfig('bot.json');
@@ -358,6 +364,15 @@ async function calculateOrders(body) {
 
 		pairs = [];
 		pairs.push(pair);
+	}
+
+	if (body.active == undefined || body.active == null || body.active == '' || body.active == 'false' || !body.active) {
+
+		active = false;
+	}
+	else {
+
+		active = true;
 	}
 
 	botData.pair = pair;
@@ -396,7 +411,7 @@ async function calculateOrders(body) {
 	// Only get orders, don't start bot
 	let orders = await shareData.DCABot.start(botData, false);
 
-	return ({ 'pairs': pairs, 'orders': orders, 'botData': botData });
+	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
 }
 
 

@@ -11,33 +11,33 @@ async function start(url) {
 
 	mongoose.connection.on('connected', () => {
 
-		shareData.Common.logger('DB Connected', true);
+		shareData.Common.logger('Database Connected', true);
 	});
 
 	mongoose.connection.on('reconnected', () => {
 
-		let msg = 'DB Reconnected';
+		let msg = 'Database Reconnected';
 
 		log(msg);
 	});
 
 	mongoose.connection.on('disconnected', () => {
 
-		let msg = 'DB Disconnected';
+		let msg = 'Database Disconnected';
 
 		log(msg);
 	});
 
 	mongoose.connection.on('close', () => {
 
-		let msg = 'DB Closed';
+		let msg = 'Database Closed';
 
 		log(msg);
 	});
 
 	mongoose.connection.on('error', error => {
 
-		let msg = 'DB Error: ' + JSON.stringify(error);
+		let msg = 'Database Error: ' + JSON.stringify(error);
 
 		log(msg);
 	});
@@ -56,7 +56,7 @@ async function start(url) {
 		return true;
 	};
 
-	let started = await run().catch(error => log('DB Run Error: ' + JSON.stringify(error)));
+	let started = await run().catch(error => log('Database Run Error: ' + JSON.stringify(error)));
 
 	return started;
 }
