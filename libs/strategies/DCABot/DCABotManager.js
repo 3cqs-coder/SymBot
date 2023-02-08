@@ -218,8 +218,12 @@ async function apiCreateUpdateBot(req, res) {
 			}
 			else {
 
+				let success = true;
+
 				const botId = botData.botId;
 				const botName = botData.botName;
+
+				const botOrig = await shareData.DCABot.getBots({ 'botId': botId });
 
 				// Update config data
 				const configData = await shareData.DCABot.removeConfigData(botData);
@@ -233,7 +237,17 @@ async function apiCreateUpdateBot(req, res) {
 
 				const data = await shareData.DCABot.update(botId, dataObj);
 
+				if (!data.success) {
+
+					success = false;
+				}
+
 				const bot = await shareData.DCABot.getBots({ 'botId': botId });
+
+				if (active != botOrig[0]['active']) {
+
+					sendUpdateStatus(botId, botName, active, success);
+				}
 
 				for (let i = 0; i < pairs.length; i++) {
 
@@ -263,7 +277,6 @@ async function apiCreateUpdateBot(req, res) {
 async function apiEnableDisableBot(req, res) {
 
 	let active;
-	let status;
 	let success = true;
 
 	const body = req.body;
@@ -271,12 +284,10 @@ async function apiEnableDisableBot(req, res) {
 	if (req.path.indexOf('enable') > -1) {
 
 		active = true;
-		status = 'enabled';
 	}
 	else {
 	
 		active = false;
-		status = 'disabled';
 	}
 
 	const botId = req.params.botId;
@@ -293,12 +304,7 @@ async function apiEnableDisableBot(req, res) {
 	const bot = bots[0];
 	const botName = bot.botName;
 
-	shareData.Common.logger('Bot Status Changed: ID: ' + botId + ' / Status: ' + status + ' / Success: ' + success);
-
-	if (success) {
-
-		shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' is now ' + status);
-	}
+	sendUpdateStatus(botId, botName, active, success);
 
 	if (active) {
 
@@ -339,6 +345,28 @@ async function apiEnableDisableBot(req, res) {
 	}
 
 	res.send( { 'date': new Date(), 'success': success } );
+}
+
+
+async function sendUpdateStatus(botId, botName, active, success) {
+
+	let status;
+
+	if (active) {
+
+		status = 'enabled';
+	}
+	else {
+	
+		status = 'disabled';
+	}
+
+	shareData.Common.logger('Bot Status Changed: ID: ' + botId + ' / Status: ' + status + ' / Success: ' + success);
+
+	if (success) {
+
+		shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' is now ' + status);
+	}
 }
 
 
