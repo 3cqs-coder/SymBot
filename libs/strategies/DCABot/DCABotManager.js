@@ -160,69 +160,6 @@ async function apiGetActiveDeals(req, res) {
 }
 
 
-async function calculateOrders(body) {
-
-	let pair;
-
-	let pairs = body.pair;
-	const botConfig = await shareData.Common.getConfig('bot.json');
-
-	let botData = botConfig.data;
-
-	botData.startConditions = [];
-
-	if (typeof pairs !== 'string') {
-
-		pair = pairs[0];
-	}
-	else {
-
-		pair = pairs;
-
-		pairs = [];
-		pairs.push(pair);
-	}
-
-	botData.pair = pair;
-	botData.dealMax = body.dealMax;
-	botData.startConditions.push(body.startCondition);
-	botData.firstOrderAmount = body.firstOrderAmount;
-	botData.dcaOrderAmount = body.dcaOrderAmount;
-	botData.dcaMaxOrder = body.dcaMaxOrder;
-	botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
-	botData.dcaOrderStartDistance = body.dcaOrderStepPercent;
-	botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
-	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
-	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
-
-	if (botData.dealMax == undefined || botData.dealMax == null || botData.dealMax == '') {
-
-		botData.dealMax = 0;
-	}
-
-	// Check for bot id passed in from body for update
-	if (body.botId != undefined && body.botId != null && body.botId != '') {
-
-		botData.botId = body.botId;
-	}
-
-	// Set bot name
-	let botName = body.botName;
-
-	if (botName == undefined || botName == null || botName == '') {
-
-		botName = 'DCA Bot ' + botData.pair.toUpperCase();
-	}
-
-	botData.botName = botName;
-
-	// Only get orders, don't start bot
-	let orders = await shareData.DCABot.start(botData, false);
-
-	return ({ 'pairs': pairs, 'orders': orders, 'botData': botData });
-}
-
-
 async function apiCreateUpdateBot(req, res) {
 
 	let reqPath = req.path;
@@ -271,10 +208,7 @@ async function apiCreateUpdateBot(req, res) {
 						let config = JSON.parse(JSON.stringify(configObj));
 						config['pair'] = pair;
 
-						shareData.Telegram.sendMessage(shareData.appData.telegram_id, config.botName + ' (' + pair.toUpperCase() + ') Start command received.');
-						shareData.DCABot.start(config, true, true);
-
-						await shareData.Common.delay(1000);
+						startDelay({ 'config': config, 'delay': i + 1, 'telegram': true });
 					}
 				}
 			}
@@ -310,10 +244,7 @@ async function apiCreateUpdateBot(req, res) {
 					// Start bot if active, no deals are currently running and start condition is now asap
 					if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && startCondition == 'asap') {
 
-						// Start bot
-						shareData.DCABot.start(config, true, true);
-
-						await shareData.Common.delay(1000);
+						startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
 					}
 				}
 			}
@@ -395,10 +326,7 @@ async function apiEnableDisableBot(req, res) {
 					// Only start bot if first condition is asap
 					if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
 
-						// Start bot
-						shareData.DCABot.start(config, true, true);
-
-						await shareData.Common.delay(1000);
+						startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
 					}
 				}
 			}
@@ -406,6 +334,69 @@ async function apiEnableDisableBot(req, res) {
 	}
 
 	res.send( { 'date': new Date(), 'success': success } );
+}
+
+
+async function calculateOrders(body) {
+
+	let pair;
+
+	let pairs = body.pair;
+	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	let botData = botConfig.data;
+
+	botData.startConditions = [];
+
+	if (typeof pairs !== 'string') {
+
+		pair = pairs[0];
+	}
+	else {
+
+		pair = pairs;
+
+		pairs = [];
+		pairs.push(pair);
+	}
+
+	botData.pair = pair;
+	botData.dealMax = body.dealMax;
+	botData.startConditions.push(body.startCondition);
+	botData.firstOrderAmount = body.firstOrderAmount;
+	botData.dcaOrderAmount = body.dcaOrderAmount;
+	botData.dcaMaxOrder = body.dcaMaxOrder;
+	botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
+	botData.dcaOrderStartDistance = body.dcaOrderStepPercent;
+	botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
+	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
+	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
+
+	if (botData.dealMax == undefined || botData.dealMax == null || botData.dealMax == '') {
+
+		botData.dealMax = 0;
+	}
+
+	// Check for bot id passed in from body for update
+	if (body.botId != undefined && body.botId != null && body.botId != '') {
+
+		botData.botId = body.botId;
+	}
+
+	// Set bot name
+	let botName = body.botName;
+
+	if (botName == undefined || botName == null || botName == '') {
+
+		botName = 'DCA Bot ' + botData.pair.toUpperCase();
+	}
+
+	botData.botName = botName;
+
+	// Only get orders, don't start bot
+	let orders = await shareData.DCABot.start(botData, false);
+
+	return ({ 'pairs': pairs, 'orders': orders, 'botData': botData });
 }
 
 
@@ -418,6 +409,27 @@ async function applyConfigData(botId, botName, config) {
 
 	return config;
 }
+
+
+async function startDelay(obj) {
+
+	const configObj = JSON.parse(JSON.stringify(obj));
+
+	const config = configObj['config'];
+	const telegram = configObj['telegram'];
+
+	// Start bot
+	setTimeout(() => {
+						if (telegram) {
+
+							shareData.Telegram.sendMessage(shareData.appData.telegram_id, config.botName + ' (' + config.pair.toUpperCase() + ') Start command received.');
+						}
+
+						shareData.DCABot.start(config, true, true);
+
+					 }, (1000 * (configObj['delay'])));
+}
+
 
 
 module.exports = {

@@ -1796,7 +1796,7 @@ async function resumeBots() {
 
 	if (dealsActive.length > 0) {
 
-		Common.logger( colors.bgBrightYellow.bold('Resuming ' + dealsActive.length + ' active DCA bot deals...') );
+		Common.logger( colors.bgGreen.bold('Resuming ' + dealsActive.length + ' active DCA bot deals...') );
 
 		for (let i = 0; i < dealsActive.length; i++) {
 
