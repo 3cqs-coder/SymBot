@@ -19,6 +19,9 @@ const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const packageJson = require(__dirname + '/package.json');
 
+const ServerDB = require(__dirname + '/libs/mongodb/ServerSchema');
+
+
 const prompt = require('prompt-sync')({
 	sigint: true
 });
@@ -63,11 +66,14 @@ async function init() {
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
 	const appConfig = await Common.getConfig('app.json');
+	const serverConfig = await Common.getConfig('server.json');
 
 	let shareData = {
 						'appData': {
 										'name': packageJson.description,
 										'version': packageJson.version,
+										'server_id': '',
+										'app_filename': __filename,
 										'console_log': consoleLog,
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
@@ -110,6 +116,10 @@ async function init() {
 
 			success = false;
 		}
+		else {
+
+			success = await verifyServerId(serverConfig);
+		}
 	}
 
 	if (success && process.argv[2] && process.argv[2].toLowerCase() == 'reset') {
@@ -120,6 +130,8 @@ async function init() {
 	}
 
 	if (success) {
+
+		const processInfo = await Common.getProcessInfo();
 
 		Telegram.start(appConfig['data']['telegram']['token_id']);
 		WebServer.start(appConfig['data']['web_server']['port']);
@@ -132,6 +144,51 @@ async function init() {
 	}
 
 	return({ 'success': success, 'app_config': appConfig });
+}
+
+
+async function verifyServerId(serverConfig) {
+
+	let success = true;
+
+	const serverData = await ServerDB.ServerSchema.findOne({ 'serverId': { $exists: true } });
+
+	if (!serverData) {
+
+		const serverId = Common.uuidv4();
+
+		shareData.appData.server_id = serverId;
+
+		try {
+
+				const data = new ServerDB.ServerSchema({
+
+										'serverId': serverId,
+										'created': Date.now(),
+									});
+
+				await data.save();
+
+				await Common.saveConfig('server.json', { 'server_id': serverId });
+			}
+			catch(e) {
+
+				success = false;
+
+				Common.logger('Failed to create server database', true);
+			}
+	}
+	else {
+
+		if (serverConfig.data.server_id != serverData.serverId) {
+
+			success = false;
+
+			Common.logger('Server ID mismatch', true);
+		}
+	}
+
+	return success;
 }
 
 

@@ -73,6 +73,11 @@ These files are located in the `config` directory
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the ccxt library so if the exchange is supported, you should be able to connect to it
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web view
 
+- **server.json**
+
+	- This file is created the very first time SymBot is started. It contains an automatically generated UUID v4 `server_id`. The primary purpose is to ensure if there are ever multiple instances of SymBot running, they do not accidentally conflict with the database used. When SymBot starts it will compare the `server_id` value in this file to the database entry. If they do not match, SymBot will shut down. 
+	- This file should never be copied to another folder or server if you plan to run additional instances of SymBot, or manually edited unless you have a good reason to do so.
+
 ## Resetting SymBot
 
 ##### *** CAUTION *** This will purge all data from the SymBot database!

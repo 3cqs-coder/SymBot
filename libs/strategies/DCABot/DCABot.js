@@ -1736,6 +1736,8 @@ async function getDealsHistory() {
 				const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
 
 				const dataObj = {
+									'bot_id': deal.botId,
+									'bot_name': deal.botName,
 									'deal_id': deal.dealId,
 									'pair': deal.pair.toUpperCase(),
 									'date_start': new Date(deal.date),

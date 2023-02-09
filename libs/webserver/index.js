@@ -107,7 +107,19 @@ function start(port) {
 
 	initApp();
 
-	app.listen(port, () => shareData.Common.logger(`${shareData.appData.name} v${shareData.appData.version} listening on port ${port}`, true));
+	app.listen(port, () => {
+	
+		shareData.Common.logger(`${shareData.appData.name} v${shareData.appData.version} listening on port ${port}`, true);
+
+	}).on('error', function(err) {
+
+		if (err.code === 'EADDRINUSE') {
+
+			shareData.Common.logger(`Port ${port} already in use`, true);
+
+			process.exit(1);
+		}
+	});
 }
 
 

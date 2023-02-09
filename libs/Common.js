@@ -31,6 +31,28 @@ async function getConfig(fileName) {
 }
 
 
+async function saveConfig(fileName, data) {
+
+	let err;
+	let success = false;
+
+	try {
+
+		data.updated = new Date().toISOString();
+
+		fs.writeFileSync(pathRoot + '/config/' + fileName, JSON.stringify(data));
+
+		success = true;
+	}
+	catch(e) {
+
+		err = e;
+	}
+
+	return ({ 'success': success, 'data': err });
+}
+
+
 async function makeDir(dirName) {
 
 	let dir = pathRoot + '/' + dirName;
@@ -107,6 +129,17 @@ function delFiles(path, days) {
 			fs.unlinkSync(file);
 		}
 	}
+}
+
+
+async function getProcessInfo() {
+
+	const obj = {
+					'pid': process.pid,
+					'file_name': path.basename(shareData.appData.app_filename)
+				};
+
+	return obj;
 }
 
 
@@ -256,10 +289,12 @@ module.exports = {
 	makeDir,
 	sortByKey,
 	getConfig,
+	saveConfig,
 	getDateParts,
 	timeDiff,
 	logger,
 	logMonitor,
+	getProcessInfo,
 
 	init: function(obj) {
 
