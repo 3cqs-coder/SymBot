@@ -14,9 +14,10 @@ const Schema = require(pathRoot + '/mongodb/Signals3CQSSchema');
 const Signals = Schema.Signals3CQSSchema;
 
 
+let initVerify = false;
 let fatalError = false;
 
-
+let API_KEY;
 let shareData;
 
 
@@ -26,6 +27,8 @@ async function start(apiKey) {
 
 		return;
 	}
+
+	API_KEY = apiKey;
 
 	const socket = require('socket.io-client')('https://stream.3cqs.com', {
 
@@ -57,6 +60,19 @@ async function start(apiKey) {
 			});
 
 		}, 500);
+
+
+		// Check if connected every n minutes
+		if (!initVerify) {
+
+			initVerify = true;
+
+			setInterval(() => {
+
+				checkSocket(socket);
+
+			}, (60000 * 1));
+		}
 	});
 
 
@@ -89,6 +105,17 @@ async function start(apiKey) {
 		if (data['code'] == 403) {
 
 			fatalError = true;
+		}
+
+		// Too many tries
+		if (data['code'] == 429) {
+
+			// Disconnect after 30 seconds to let auto-reconnect again
+			setTimeout(() => {
+
+				socket.disconnect();
+
+			}, 30000);
 		}
 
 		showLog('3CQS SIGNAL ERROR', data);
@@ -127,6 +154,17 @@ async function start(apiKey) {
 
 
 	return socket;
+}
+
+
+async function checkSocket(socket) {
+
+	const socketId = socket.id;
+
+	if (!socket.connected) {
+
+		start(API_KEY);
+	}
 }
 
 

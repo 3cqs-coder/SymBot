@@ -16,7 +16,7 @@ const Routes = require(pathRoot + '/webserver/routes.js');
 
 
 const sessionExpireMins = 60 * 24;
-const sessionSecret = 'sessionsecret' + Math.floor(Math.random() * 1000000);
+const sessionSecret = genString(30);
 
 
 let shareData;
@@ -100,6 +100,21 @@ function initApp() {
 	app.use('/', router);
 
 	Routes.start(router);
+}
+
+
+function genString(len) {
+
+	const chars ='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+	let res = '';
+
+	for (let i = 0; i < len; i++) {
+
+		res += chars.charAt(Math.floor(Math.random() * chars.length));
+	}
+
+	return res;
 }
 
 
