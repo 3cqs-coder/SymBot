@@ -108,10 +108,12 @@
 			let row = $(this).closest('tr');
 			let content = $(this).text();
 
+			let colCount = $(row).find('td').length;
+
 			let botId = $(row).data('botid');
 			let botName = $(row).data('botname');
 
-			if (col == 12) {
+			if (col == (colCount - 1)) {
 
 				// Set timeout to avoid double event firing in some cases
 				clearTimeout(timerId);

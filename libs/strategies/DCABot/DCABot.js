@@ -1147,10 +1147,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								}
 							}
 
-							updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+							updateTracker(config.botName, config.botId, dealId, currentOrder.sum, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							if (shareData.appData.verboseLog) {
-							
+		
 								Common.logger(
 									colors.blue.bold.italic(
 									'Pair: ' +
@@ -1203,7 +1203,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 								if (sellSuccess) {
 
-									updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+									updateTracker(config.botName, config.botId, dealId, currentOrder.sum, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 									if (shareData.appData.verboseLog) {
 
@@ -1260,7 +1260,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						}
 						else {
 
-							updateTracker(config.botName, config.botId, dealId, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
+							updateTracker(config.botName, config.botId, dealId, currentOrder.sum, price, currentOrder.average, currentOrder.target, profitPerc, ordersFilledTotal, orders.length, config.dealCount, config.dealMax);
 
 							if (shareData.appData.verboseLog) {
 							
@@ -1600,7 +1600,7 @@ async function checkTracker() {
 }
 
 
-async function updateTracker(botName, botId, dealId, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax, dealCount, dealMax) {
+async function updateTracker(botName, botId, dealId, orderSum, priceLast, priceAverage, priceTarget, takeProfitPerc, ordersUsed, ordersMax, dealCount, dealMax) {
 
 	const dealObj = {
 						'updated': new Date(),
@@ -1611,6 +1611,7 @@ async function updateTracker(botName, botId, dealId, priceLast, priceAverage, pr
 						'price_last': priceLast,
 						'price_average': priceAverage,
 						'price_target': priceTarget,
+						'take_profit': Number((Number(orderSum) * (Number(takeProfitPerc) / 100)).toFixed(2)),
 						'take_profit_percentage': takeProfitPerc,
 						'deal_count': dealCount,
 						'deal_max': dealMax

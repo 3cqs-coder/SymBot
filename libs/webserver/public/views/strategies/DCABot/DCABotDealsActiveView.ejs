@@ -93,7 +93,9 @@
 			let row = $(this).closest('tr');
 			let content = $(this).text();
 
-			if (col == 8 && content != '') {
+			let colCount = $(row).find('td').length;
+
+			if (col == (colCount - 1) && content != '') {
 
 				let data = { 'bot_id': '' };
 
@@ -124,7 +126,7 @@
 	<tbody>
 
 	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th>
+		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th>
 	</tr>
 
 	<%
@@ -137,9 +139,12 @@
 			let stopButton = '<span class="disableButton">&#9726;</span>';
 			let profitPercColor = '#1a9f00';
 
+			let dealCount;
+
 			let deal = deals[dealId];
 
 			let botActive = deal['info']['bot_active'];
+			let profit = deal['info']['take_profit'];
 			let profitPerc = deal['info']['take_profit_percentage'];
 
 			let duration = timeDiff(new Date(), new Date(deal['deal']['date']));
@@ -159,9 +164,16 @@
 				deal['info']['deal_max'] = '&#8734;';
 			}
 
-			let dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
+			if (isNaN(deal['info']['deal_count'])) {
+
+				continue;
+			}
+			else {
+
+				dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
 			
-			count++;
+				count++;
+			}
 	%>
 
 	<tr>
@@ -170,6 +182,7 @@
 		<td><%- deal['deal']['pair'] %></td>
 		<td><%- duration %></td>
 		<td>$<%- deal['info']['price_last'] %></td>
+		<td style="color: <%- profitPercColor %>;">$<%- profit %></td>
 		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
 		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
 		<td><%- dealCount %></td>
