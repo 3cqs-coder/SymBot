@@ -144,8 +144,31 @@
 						}
 						else {
 
-							$('#ordersBox').html('<pre>' + data.data + '</pre><br>');
-							
+						/*
+							let rows = data.data.split('\n');
+
+							let table = $('<table/>');
+
+							for (let i = 0; i < rows.length; i++) {
+		
+								let cols = rows[i].split(/[\s\t]+/);
+
+								let row = $('<tr/>');
+
+								for (let x = 0; x < cols.length; x++) {
+
+									let col = cols[x];
+									row.append($('<td>' + col.trim() + '</td>'));
+								}
+
+								table.append(row);
+							}
+
+							$('#ordersBox').html(table);
+						*/
+
+							$('#ordersBox').html(data.data);
+
 							if (data.step.toLowerCase() != 'getorders') {
 
 								resetForm(form);

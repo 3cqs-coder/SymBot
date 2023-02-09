@@ -180,6 +180,14 @@ form textarea {
 }
 
 
+.disableButton {
+
+	color: transparent;
+	text-shadow: 0 0 0 rgb(0, 0, 0);
+	font-size: 1.1rem;
+}
+
+
 #headerBox {
 
 	z-index: 9999;
@@ -239,6 +247,7 @@ form textarea {
 	z-index: 1000;
 	position: relative;
 	display: none;
+	font-size: 1.1rem;
 	width: 90%;
 	margin: 0 auto;
 	padding: 20px;
@@ -249,6 +258,28 @@ form textarea {
 	-webkit-border-radius: 7px;
 	-moz-border-radius: 7px;
 	border-radius: 7px;
+}
+
+
+#ordersTable {
+
+	font-size: 1.0rem;
+	width: 95%;
+	cursor: pointer;
+}
+
+
+table#ordersTable th, table#ordersTable td {
+
+	text-align: left;
+	border-bottom: 1px solid #cccccc;
+}
+
+
+table#ordersTable tr:not(:first-child):hover {
+
+    background-color: #dfdfdf;
+    cursor: pointer;
 }
 
 

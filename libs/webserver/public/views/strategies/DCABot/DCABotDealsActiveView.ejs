@@ -19,12 +19,12 @@
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">Stop ' + botName + '? Current deals will continue running until they complete.</div>',
+					content: '<div style="font-size: 1.2rem; text-align: left;">Disable ' + botName + '? Current deals will continue running until they complete.</div>',
 					buttons: {
 
 								ok: {
 										btnClass: 'btn-default',
-										text: '<div style="color: #d80f08;">Stop Bot</div>',
+										text: '<div style="color: #d80f08;">Disable Bot</div>',
 										action: function () {
 
 											stopBot(selector, data);
@@ -58,14 +58,14 @@
 
 						if (!data.success) {
 
-							alertBox('Unable to stop bot');
+							alertBox('Unable to disable bot');
 						}
 						else {
 
 							$('[id*="stop' + botId + '"]').text('');
 							//selector.text('');
 
-							alertBox('Bot Stopped');
+							alertBox('Bot Disabled');
 						}
 						
 						setReloadTimeout();
@@ -124,7 +124,7 @@
 	<tbody>
 
 	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th> <th>Stop</th>
+		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th>
 	</tr>
 
 	<%
@@ -133,7 +133,8 @@
 
 		for (let dealId in deals) {
 
-			let stopButton = '&#9726;';
+			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
+			let stopButton = '<span class="disableButton">&#9726;</span>';
 			let profitPercColor = '#1a9f00';
 
 			let deal = deals[dealId];

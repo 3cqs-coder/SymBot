@@ -397,11 +397,11 @@ async function start(data, startBot, reload) {
 					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
 				}
 
-				let contentAdd = '\n\n';
+				let contentAdd = '<br><br>\n';
 
 				if (wallet < lastDcaOrderSum) {
 
-					contentAdd += '<b>' + insufficientFundsMsg + '</b>\n\n';
+					contentAdd += '<b>' + insufficientFundsMsg + '</b><br><br>\n';
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.red.bold.italic(insufficientFundsMsg)); }
 				}
@@ -411,11 +411,11 @@ async function start(data, startBot, reload) {
 
 				if (startBot == undefined || startBot == null || startBot == false) {
 
-					contentAdd += 'Current Balance: $' + wallet + '\n';
-					contentAdd += 'Max. Funds: $' + lastDcaOrderSum + '\n';
-					contentAdd += 'Max. Deviation: ' + maxDeviation.toFixed(2) + '%\n';
+					contentAdd += await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
 
-					return ( { 'success': true, 'data': t.toString() + contentAdd } );
+					let ordersTable = await ordersToHtml(t.toString());
+
+					return ( { 'success': true, 'data': ordersTable + contentAdd } );
 /*
 					sendOrders = prompt(
 						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
@@ -681,6 +681,8 @@ async function start(data, startBot, reload) {
 					t.newRow();
 				});
 
+				const maxDeviation = await getDeviation(Number(orders[0].price), Number(orders[orders.length - 1].price));
+
 				//console.log(t.toString());
 				//Common.logger(t.toString());
 
@@ -711,7 +713,11 @@ async function start(data, startBot, reload) {
 					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
 				}
 
+				let contentAdd = '<br><br>\n';
+
 				if (wallet < lastDcaOrderSum) {
+
+					contentAdd += '<b>' + insufficientFundsMsg + '</b><br><br>\n';
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.red.bold.italic(insufficientFundsMsg) ); }
 				}
@@ -720,7 +726,12 @@ async function start(data, startBot, reload) {
 
 				if (startBot == undefined || startBot == null || startBot == false) {
 
-					return ( { 'success': true, 'data': t.toString() } );
+					contentAdd += await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
+
+					let ordersTable = await ordersToHtml(t.toString());
+
+					return ( { 'success': true, 'data': ordersTable + contentAdd } );
+
 /*
 					sendOrders = prompt(
 						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
@@ -1755,6 +1766,57 @@ async function getDealsHistory() {
 	dealsArr = Common.sortByKey(dealsArr, 'date_end');
 
 	return dealsArr.reverse();
+}
+
+
+async function ordersToHtml(data) {
+
+	let rows = data.split(/[\r\n]+/);
+
+	let table = '<table id="ordersTable" cellspacing=0 cellpadding=0>';
+
+	for (let i = 0; i < rows.length; i++) {
+		
+		let cols = rows[i].split(/[\s\t]+/);
+
+		let row = '<tr>';
+
+		for (let x = 0; x < cols.length; x++) {
+
+			let tag = 'td';
+			
+			if (i == 0) {
+
+				tag = 'th';
+			}
+
+			let col = cols[x];
+			row += '<' + tag + '>' + col.trim() + '</' + tag + '>';
+		}
+
+		row += '</tr>';
+		
+		if (i != 1) {
+
+			table += row;
+		}
+	}
+	
+	table += '</table>';
+	
+	return table;
+}
+
+
+async function ordersAddContent(wallet, lastDcaOrderSum, maxDeviation) {
+
+	let content = '';
+
+	content += '<b>Current Balance</b>: $' + wallet + '<br>\n';
+	content += '<b>Max. Funds</b>: $' + lastDcaOrderSum + '<br>\n';
+	content += '<b>Max. Deviation</b>: ' + maxDeviation.toFixed(2) + '%<br>\n';
+
+	return content;
 }
 
 
