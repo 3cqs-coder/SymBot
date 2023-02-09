@@ -149,7 +149,7 @@
 
 	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0><tbody>
 
-	<tr style="font-weight: bold; text-align: left;">
+	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
 		<th>Bot Name</th> <th>Pair</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP %</th> <th>Max Deals</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
 	</tr>
 
@@ -207,7 +207,7 @@
 
 	<tr data-botid="<%- bot['botId'] %>" data-botname="<%- bot['botName'] %>" style="vertical-align: top;">
 		<td><%- bot['botName'] %></td>
-		<td><%- pair.toUpperCase() %></td>
+		<td style="max-width: 150px;"><%- pair.toUpperCase() %></td>
 		<td><%- bot['config']['firstOrderAmount'] %></td>
 		<td><%- bot['config']['dcaOrderAmount'] %></td>
 		<td><%- bot['config']['dcaMaxOrder'] %></td>

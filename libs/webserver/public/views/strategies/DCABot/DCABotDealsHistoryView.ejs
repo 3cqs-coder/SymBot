@@ -47,8 +47,8 @@
 
 	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 
-	<tr style="font-weight: bold; text-align: left;">
-		<th>Date</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Profit</th> <th>Safety Orders</th>
+	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
+		<th>Date</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th>
 	</tr>
 
 	<%
@@ -76,7 +76,8 @@
 		<td><%- deal['deal_id'] %></td>
 		<td><%- deal['pair'] %></td>
 		<td><%- duration %></td>
-		<td style="color: <%- profitPercColor %>;">$<%- profit %> <span style="float: right;"><%- profitPerc %>%</span></td>
+		<td style="color: <%- profitPercColor %>;">$<%- profit %></td>
+		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
 		<td><%- deal['safety_orders'] %></td>
 	</tr>
 	

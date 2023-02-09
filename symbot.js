@@ -13,13 +13,12 @@
 const DB = require(__dirname + '/libs/mongodb');
 const DCABot = require(__dirname + '/libs/strategies/DCABot/DCABot.js');
 const DCABotManager = require(__dirname + '/libs/strategies/DCABot/DCABotManager.js');
+const ServerDB = require(__dirname + '/libs/mongodb/ServerSchema');
 const Signals3CQS = require(__dirname + '/libs/signals/3CQS/3cqs-signals-client.js');
 const Common = require(__dirname + '/libs/Common.js');
 const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const packageJson = require(__dirname + '/package.json');
-
-const ServerDB = require(__dirname + '/libs/mongodb/ServerSchema');
 
 
 const prompt = require('prompt-sync')({
