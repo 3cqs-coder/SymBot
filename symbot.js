@@ -118,7 +118,16 @@ async function init() {
 		}
 		else {
 
-			success = await verifyServerId(serverConfig);
+			let res = await verifyServerId(serverConfig);
+			
+			if (!res.success) {
+
+				success = false;
+			}
+			else {
+
+				shareData.appData.server_id = res.server_id;
+			}
 		}
 	}
 
@@ -150,14 +159,13 @@ async function init() {
 async function verifyServerId(serverConfig) {
 
 	let success = true;
+	let serverId;
 
 	const serverData = await ServerDB.ServerSchema.findOne({ 'serverId': { $exists: true } });
 
 	if (!serverData) {
 
-		const serverId = Common.uuidv4();
-
-		shareData.appData.server_id = serverId;
+		serverId = Common.uuidv4();
 
 		try {
 
@@ -186,9 +194,13 @@ async function verifyServerId(serverConfig) {
 
 			Common.logger('Server ID mismatch', true);
 		}
+		else {
+
+			serverId = serverData.serverId;
+		}
 	}
 
-	return success;
+	return ({ 'success': success, 'server_id': serverId });
 }
 
 
