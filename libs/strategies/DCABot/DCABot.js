@@ -86,6 +86,8 @@ async function start(data, startBot, reload) {
 
 		pair = pair.toUpperCase();
 
+		const pairSafe = pair.replace(/\//g, '_');
+
 		if (!reload) {
 
 			if (shareData.appData.verboseLog) { Common.logger(colors.green('Getting pair information for ' + pair + '...')); }
@@ -439,7 +441,7 @@ async function start(data, startBot, reload) {
 
 					const configSave = await removeConfigData(config);
 
-					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
+					const dealId = pairSafe + '-' + Math.floor(Date.now() / 1000);
 
 					dealIdMain = dealId;
 
@@ -755,7 +757,7 @@ async function start(data, startBot, reload) {
 
 					const configSave = await removeConfigData(config);
 
-					const dealId = pair + '-' + Math.floor(Date.now() / 1000);
+					const dealId = pairSafe + '-' + Math.floor(Date.now() / 1000);
 
 					dealIdMain = dealId;
 
