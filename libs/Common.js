@@ -40,7 +40,7 @@ async function saveConfig(fileName, data) {
 
 		data.updated = new Date().toISOString();
 
-		fs.writeFileSync(pathRoot + '/config/' + fileName, JSON.stringify(data));
+		fs.writeFileSync(pathRoot + '/config/' + fileName, JSON.stringify(data, null, 4));
 
 		success = true;
 	}

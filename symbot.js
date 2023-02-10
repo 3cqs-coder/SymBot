@@ -55,6 +55,7 @@ process.on('uncaughtException', function(err) {
 
 async function init() {
 
+	let apiKey;
 	let consoleLog = false;
 
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
@@ -67,6 +68,20 @@ async function init() {
 	const appConfig = await Common.getConfig('app.json');
 	const serverConfig = await Common.getConfig('server.json');
 
+	if (appConfig['data']['api_key'] == undefined || appConfig['data']['api_key'] == null || appConfig['data']['api_key'] == '') {
+
+		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
+
+		apiKey = Common.uuidv4();
+		appConfigObj['data']['api_key'] = apiKey;
+
+		await Common.saveConfig('app.json', appConfigObj.data);
+	}
+	else {
+
+		apiKey = appConfig['data']['api_key'];
+	}
+
 	let shareData = {
 						'appData': {
 										'name': packageJson.description,
@@ -74,6 +89,7 @@ async function init() {
 										'server_id': '',
 										'app_filename': __filename,
 										'console_log': consoleLog,
+										'api_key': apiKey,
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],

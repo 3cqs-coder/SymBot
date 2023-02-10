@@ -134,7 +134,7 @@ function initRoutes(router) {
 
 		const dealId = req.params.dealId;
 
-		if (req.session.loggedIn) {
+		if (req.session.loggedIn || validApiKey(req)) {
 
 			if (dealId == undefined || dealId == null || dealId == '' || dealId == 'active') {
 
@@ -150,7 +150,7 @@ function initRoutes(router) {
 
 	router.post([ '/api/bots/create', '/api/bots/update' ], (req, res) => {
 
-		if (req.session.loggedIn) {
+		if (req.session.loggedIn || validApiKey(req)) {
 
 			shareData.DCABotManager.apiCreateUpdateBot(req, res);
 		}
@@ -163,7 +163,7 @@ function initRoutes(router) {
 
 	router.post([ '/api/bots/:botId/enable', '/api/bots/:botId/disable' ], (req, res) => {
 
-		if (req.session.loggedIn) {
+		if (req.session.loggedIn || validApiKey(req)) {
 
 			shareData.DCABotManager.apiEnableDisableBot(req, res);
 		}
@@ -183,6 +183,23 @@ function initRoutes(router) {
 
 		res.status(404).send(obj);
 	});
+}
+
+
+function validApiKey(req) {
+
+	let success = false;
+
+	const headers = req.headers;
+
+	const apiKey = headers['api-key'];
+
+	if (apiKey != undefined && apiKey != null && apiKey != '' && apiKey == shareData.appData.api_key) {
+
+		success = true;
+	}
+
+	return success;
 }
 
 

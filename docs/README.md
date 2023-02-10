@@ -52,6 +52,8 @@ These files are located in the `config` directory
 
 	- `password` is the password used to login to the SymBot web portal. The default password is "admin".
 
+	- `api_key` is a UUID v4 value that is randomly generated the first time SymBot starts. It is used to make API calls to SymBot. This can be set to most any string value you choose.
+
 	- `web_server` contains settings for the SymBot web server. The default port is 3000.
 
 	-	`bots` contains start condition keys and descriptions such as `asap` and `api`. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
@@ -77,6 +79,36 @@ These files are located in the `config` directory
 
 	- This file is created the very first time SymBot is started. It contains an automatically generated UUID v4 `server_id`. The primary purpose is to ensure if there are ever multiple instances of SymBot running, they do not accidentally conflict with the database used. When SymBot starts it will compare the `server_id` value in this file to the database entry. If they do not match, SymBot will shut down. 
 	- This file should never be copied to another folder or server if you plan to run additional instances of SymBot, or manually edited unless you have a good reason to do so.
+
+## API Information
+
+### Enable bot
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| botId    | string   | YES           |                      |                 |
+
+```
+POST /api/bots/{botId}/enable
+```
+
+### Disable bot
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| botId    | string   | YES           |                      |                 |
+
+```
+POST /api/bots/{botId}/disable
+```
+
+### Sample  usage:
+```
+curl -i -X POST \
+-H "Accept: application/json" \
+-H "api-key: {API-KEY}" \
+http://127.0.0.1:3000/api/bots/{botId}/enable
+```
 
 ## Resetting SymBot
 

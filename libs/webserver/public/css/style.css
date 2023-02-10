@@ -84,18 +84,6 @@ a:visited {
 }
 
 
-.headerName {
-
-	font-size: 2.5rem;
-}
-
-
-.headerVersion {
-
-	font-size: 0.95rem;
-}
-
-
 #spinner-overlay {	
 
 	position: fixed;
@@ -197,6 +185,18 @@ form textarea {
 	color: transparent;
 	text-shadow: 0 0 0 rgb(0, 0, 0);
 	font-size: 1.1rem;
+}
+
+
+.headerName {
+
+	font-size: 2.5rem;
+}
+
+
+.headerVersion {
+
+	font-size: 0.95rem;
 }
 
 

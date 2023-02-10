@@ -246,7 +246,7 @@ async function apiCreateUpdateBot(req, res) {
 
 				if (active != botOrig[0]['active']) {
 
-					sendUpdateStatus(botId, botName, active, success);
+					const status = await sendUpdateStatus(botId, botName, active, success);
 				}
 
 				for (let i = 0; i < pairs.length; i++) {
@@ -276,6 +276,7 @@ async function apiCreateUpdateBot(req, res) {
 
 async function apiEnableDisableBot(req, res) {
 
+	let msg;
 	let active;
 	let success = true;
 
@@ -302,49 +303,59 @@ async function apiEnableDisableBot(req, res) {
 	}
 
 	const bot = bots[0];
-	const botName = bot.botName;
 
-	sendUpdateStatus(botId, botName, active, success);
+	if (bot) {
 
-	if (active) {
+		const botName = bot.botName;
 
-		const bot = await shareData.DCABot.getBots({ 'botId': botId });
+		const status = await sendUpdateStatus(botId, botName, active, success);
 
-		if (bot && bot.length > 0) {
+		msg = 'Bot is now ' + status;
 
-			let pairs = bot[0]['config']['pair'];
+		if (active) {
 
-			for (let i = 0; i < pairs.length; i++) {
+			const bot = await shareData.DCABot.getBots({ 'botId': botId });
 
-				let pair = pairs[i];
-				let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+			if (bot && bot.length > 0) {
 
-				// Start bot if active and no deals currently running
-				if (dealsActive.length == 0) {
+				let pairs = bot[0]['config']['pair'];
 
-					let startCondition;
+				for (let i = 0; i < pairs.length; i++) {
 
-					let config = bot[0]['config'];
+					let pair = pairs[i];
+					let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
-					config['pair'] = pair;
-					config = await applyConfigData(botId, botName, config);
+					// Start bot if active and no deals currently running
+					if (dealsActive.length == 0) {
 
-					if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
+						let startCondition;
 
-						startCondition = config['startConditions'][0].toLowerCase();
-					}
+						let config = bot[0]['config'];
 
-					// Only start bot if first condition is asap
-					if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
+						config['pair'] = pair;
+						config = await applyConfigData(botId, botName, config);
 
-						startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
+						if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
+
+							startCondition = config['startConditions'][0].toLowerCase();
+						}
+
+						// Only start bot if first condition is asap
+						if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
+
+							startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
+						}
 					}
 				}
 			}
 		}
 	}
+	else {
 
-	res.send( { 'date': new Date(), 'success': success } );
+		msg = 'Invalid Bot ID';
+	}
+
+	res.send( { 'date': new Date(), 'success': success, 'data': msg } );
 }
 
 
@@ -367,6 +378,8 @@ async function sendUpdateStatus(botId, botName, active, success) {
 
 		shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' is now ' + status);
 	}
+	
+	return status;
 }
 
 
