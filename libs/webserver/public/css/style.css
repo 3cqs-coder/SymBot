@@ -84,6 +84,18 @@ a:visited {
 }
 
 
+.headerName {
+
+	font-size: 2.5rem;
+}
+
+
+.headerVersion {
+
+	font-size: 0.95rem;
+}
+
+
 #spinner-overlay {	
 
 	position: fixed;
@@ -203,7 +215,6 @@ form textarea {
 	color: #ffffff;
 	border-bottom: 2px solid #3e3e3e;
 
-
 	/* Permalink - use to edit and share this gradient: https://colorzilla.com/gradient-editor/#090909+0,4e4e4e+100 */
 	background: rgb(9,9,9); /* Old browsers */
 	background: -moz-linear-gradient(top,  rgba(9,9,9,1) 0%, rgba(78,78,78,1) 100%); /* FF3.6-15 */
@@ -226,19 +237,30 @@ form textarea {
 }
 
 
+#contentBox, #ordersBox {
+
+	/* Permalink - use to edit and share this gradient: https://colorzilla.com/gradient-editor/#fafafa+0,f0f0f0+100 */
+	background: rgb(250,250,250); /* Old browsers */
+	background: -moz-linear-gradient(top,  rgba(250,250,250,1) 0%, rgba(240,240,240,1) 100%); /* FF3.6-15 */
+	background: -webkit-linear-gradient(top,  rgba(250,250,250,1) 0%,rgba(240,240,240,1) 100%); /* Chrome10-25,Safari5.1-6 */
+	background: linear-gradient(to bottom,  rgba(250,250,250,1) 0%,rgba(240,240,240,1) 100%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
+	filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#fafafa', endColorstr='#f0f0f0',GradientType=0 ); /* IE6-9 */
+}
+
+
 #contentBox {
 
 	z-index: 1000;
 	position: relative;
 	font-size: 1.2rem;
-	width: 50%;
+	width: 98%;
 	margin: 0 auto;
 	padding: 20px;
 	overflow: auto;
 	background-color: #ffffff;
-	-webkit-border-radius: 7px;
-	-moz-border-radius: 7px;
-	border-radius: 7px;
+	-webkit-border-radius: 5px;
+	-moz-border-radius: 5px;
+	border-radius: 5px;
 }
 
 
@@ -302,6 +324,7 @@ table#ordersTable tr:not(:first-child):hover {
 	width: 100%;
 	height: 50px;
 	padding-left: 10px;
+	border-bottom: 1px solid #dbdbdb;
 }
 
 
@@ -324,7 +347,7 @@ table#ordersTable tr:not(:first-child):hover {
 .btn {
 
 	font-weight: 400;
-	font-size: 1.2rem;
+	font-size: 1.1rem;
 	color: #424141;
 	background: linear-gradient(0deg, #b8b8b8 0%, #f5f0f0 100%);
 	padding: 5px 20px;
@@ -382,7 +405,7 @@ table#botsDeals {
 	position: relative;
 	font-size: 1.0rem;
 	color: #e7e7e7;
-	width: 90%;
+	width: 98%;
 	border-collapse: collapse;
 }
 
@@ -391,19 +414,31 @@ table#botsDeals th {
  
 	padding: 3px;
 	font-size: 1.1rem;
-	background: #000000;
+	background: #313131;
 }
 
 
-table#botsDeals th:first-child{
+table#botsDeals th:first-child {
 
 	border-radius: 5px 0 0 0;
 }
 
 
-table#botsDeals th:last-child{
+table#botsDeals th:last-child {
 
 	border-radius: 0 5px 0 0;
+}
+
+
+table#botsDeals td:first-child {
+
+	border-left: 0;
+}
+
+
+table#botsDeals td:last-child {
+
+	border-right: 0;
 }
 
 
@@ -412,19 +447,19 @@ table#botsDeals td {
  	padding: 4px;
  	color: #000000;
  	font-weight: bold;
-    border: 1px solid #b2b2b2;
+    border: 1px solid #b9b9b9;
 }
 
 
 table#botsDeals tr:nth-child(even) {
 
-	background: #dddddd;
+	background: #e2e2e2;
 }
 
 
 table#botsDeals tr:nth-child(odd) {
 
-	background: #dddddd;
+	background: #e2e2e2;
 }
 
 
@@ -439,4 +474,3 @@ table#botsDeals tr:not(:first-child):hover {
     background-color: #c5c5c5;
     cursor: pointer;
 }
-

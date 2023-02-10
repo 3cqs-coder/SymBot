@@ -14,7 +14,7 @@ const Schema = require(pathRoot + '/mongodb/Signals3CQSSchema');
 const Signals = Schema.Signals3CQSSchema;
 
 
-let initCheck = false;
+
 let fatalError = false;
 
 let API_KEY;
@@ -60,19 +60,6 @@ async function start(apiKey) {
 			});
 
 		}, 500);
-
-
-		// Check if connected every n minutes
-		if (!initCheck) {
-
-			initCheck = true;
-
-			setInterval(() => {
-
-				checkSocket(socket);
-
-			}, (60000 * 1));
-		}
 	});
 
 
@@ -154,17 +141,6 @@ async function start(apiKey) {
 
 
 	return socket;
-}
-
-
-async function checkSocket(socket) {
-
-	const socketId = socket.id;
-
-	if (!socket.connected) {
-
-		start(API_KEY);
-	}
 }
 
 
