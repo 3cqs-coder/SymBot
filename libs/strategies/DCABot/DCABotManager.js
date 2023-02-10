@@ -359,6 +359,95 @@ async function apiEnableDisableBot(req, res) {
 }
 
 
+async function apiStartDeal(req, res) {
+
+	let msg;
+	let success = true;
+
+	const body = req.body;
+
+	let pair = body.pair;
+
+	const botId = req.params.botId;
+
+	const bots = await shareData.DCABot.getBots({ 'botId': botId });
+
+	const bot = bots[0];
+
+	if (bot) {
+
+		let pairFound = false;
+		let pairPassed = false;
+
+		const active = bot.active;
+		const pairs = bot.config.pair;
+		const botName = bot.botName;
+
+		if (!active) {
+
+			success = false;
+			msg = 'Bot is disabled';
+		}
+		else {
+
+			if (pair != undefined && pair != null && pair != '') {
+
+				pairPassed = true;
+
+				for (let i = 0; i < pairs.length; i++) {
+
+					if (pair.toUpperCase() == pairs[i].toUpperCase()) {
+
+						pairFound = true;
+						break;
+					}				
+				}
+			}
+
+			if (!pairPassed && pairs.length == 1) {
+
+				pairFound = true;
+				pair = bot.config.pair[0];
+			}
+
+			if (!pairFound) {
+
+				success = false;
+				msg = 'Pair is not in bot configuration';
+			}
+
+			if (success) {
+
+				let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+
+				// Start bot if active and no deals currently running
+				if (dealsActive.length == 0) {
+
+					let config = bot['config'];
+
+					config['pair'] = pair;
+					config = await applyConfigData(botId, botName, config);
+
+					startDelay({ 'config': config, 'delay': 1, 'telegram': false });
+				}
+				else {
+
+					success = false;
+					msg = pair + ' deal is already running'
+				}
+			}
+		}
+	}
+	else {
+
+		success = false;
+		msg = 'Invalid Bot ID';
+	}
+
+	res.send( { 'date': new Date(), 'success': success, 'data': msg } );
+}
+
+
 async function sendUpdateStatus(botId, botName, active, success) {
 
 	let status;
@@ -490,6 +579,7 @@ async function startDelay(obj) {
 
 module.exports = {
 
+	apiStartDeal,
 	apiGetActiveDeals,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,

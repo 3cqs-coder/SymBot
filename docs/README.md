@@ -82,6 +82,8 @@ These files are located in the `config` directory
 
 ## API Information
 
+Take more control of your bots and deals using SymBot APIs. You can easily enable or disable bots and start deals using triggers or signals from 3CQS, TradingView, your own custom scripts and strategies, or from any of your other favorite providers.
+
 ### Enable bot
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -102,12 +104,36 @@ POST /api/bots/{botId}/enable
 POST /api/bots/{botId}/disable
 ```
 
-### Sample  usage:
+### Start deal
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| botId    | string   | YES           |                      |                 |
+| pair     | string   | NO            |                      | Only required for multi-pair bots |
+
+
+```
+POST /api/bots/{botId}/start_deal
+```
+
+### Sample  Usage:
+
+#### Enable bot
 ```
 curl -i -X POST \
--H "Accept: application/json" \
--H "api-key: {API-KEY}" \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
 http://127.0.0.1:3000/api/bots/{botId}/enable
+```
+
+#### Start deal
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{ "pair": "BTC/USD" }' \
+http://127.0.0.1:3000/api/bots/{botId}/start_deal
 ```
 
 ## Resetting SymBot

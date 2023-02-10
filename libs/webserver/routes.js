@@ -174,6 +174,19 @@ function initRoutes(router) {
 	});
 
 
+	router.post([ '/api/bots/:botId/start_deal' ], (req, res) => {
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiStartDeal(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.all('*', (req, res) => {
 
 		let obj = {
