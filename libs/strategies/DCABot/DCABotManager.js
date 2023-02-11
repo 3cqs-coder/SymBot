@@ -165,7 +165,10 @@ async function apiCreateUpdateBot(req, res) {
 
 	let reqPath = req.path;
 
+	let botOrig;
 	let botIdMain;
+	let botNameMain;
+
 	let success = true;
 	let isUpdate = false;
 
@@ -177,6 +180,8 @@ async function apiCreateUpdateBot(req, res) {
 	}
 
 	const body = req.body;
+
+	const botNamePassed = body.botName;
 	const createStep = body.createStep;
 
 	if (body.pair == undefined || body.pair == null || body.pair == '') {
@@ -185,6 +190,16 @@ async function apiCreateUpdateBot(req, res) {
 		res.send( { 'date': new Date(), 'success': success, 'data': 'Invalid Pair' } );
 
 		return;
+	}
+
+	if (isUpdate) {
+
+		botOrig = await shareData.DCABot.getBots({ 'botId': body.botId });
+
+		if (botOrig && botOrig.length > 0) {
+
+			botNameMain = botOrig[0]['config']['botName'];
+		}
 	}
 
 	let data = await calculateOrders(body);
@@ -215,9 +230,12 @@ async function apiCreateUpdateBot(req, res) {
 
 			if (!isUpdate) {
 
-				// Save initial bot configuration				
+				// Remove any bot id passed in
+				delete botData['botId'];
+
 				botData['active'] = active;
 
+				// Save initial bot configuration
 				const configObj = await shareData.DCABot.initBot(true, botData);
 
 				botIdMain = configObj['botId'];
@@ -239,11 +257,17 @@ async function apiCreateUpdateBot(req, res) {
 			else {
 
 				const botId = botData.botId;
-				const botName = botData.botName;
+				let botName = botData.botName;
 
 				botIdMain = botId;
 
-				const botOrig = await shareData.DCABot.getBots({ 'botId': botId });
+				// If bot name was not passed then use original
+				if (botNamePassed == undefined || botNamePassed == null || botNamePassed == '') {
+
+					botName = botNameMain;
+				}
+
+				botData['botName'] = botName;
 
 				if (botOrig && botOrig.length > 0) {
 
