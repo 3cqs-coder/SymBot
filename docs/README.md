@@ -129,6 +129,16 @@ POST /api/bots/create
 POST /api/bots/update
 ```
 
+### Get bots
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| active   | boolean  | NO            |                      | Enabled = true / Disabled = false |
+
+```
+GET /api/bots
+```
+
 ### Enable bot
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -210,6 +220,14 @@ curl -i -X POST \
 		"startCondition": "asap"
 	}' \
 http://127.0.0.1:3000/api/bots/update
+```
+
+#### Get bots
+```
+curl -i -X GET \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+'http://127.0.0.1:3000/api/bots?active=true'
 ```
 
 #### Enable bot

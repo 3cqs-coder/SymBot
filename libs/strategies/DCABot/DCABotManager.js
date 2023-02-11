@@ -113,13 +113,7 @@ async function viewBots(req, res) {
 			const botId = bot.botId;
 			const botName = bot.botName;
 
-			for (let key in bot) {
-
-				if (key.substr(0, 1) == '$' || key.substr(0, 1) == '_') {
-
-					delete bot[key];
-				}
-			}
+			bot = await removeDbKeys(bot);
 		}
 
 		botsSort = shareData.Common.sortByKey(bots, 'date');
@@ -135,6 +129,48 @@ async function viewHistoryDeals(req, res) {
 	const deals = await shareData.DCABot.getDealsHistory();
 
 	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals)) } );
+}
+
+
+async function apiGetBots(req, res) {
+
+	let query = {};
+	let botsSort = [];
+
+	let active = shareData.Common.convertBoolean(req.query.active);
+
+	if (active != undefined && active != null) {
+
+		query.active = active;
+	}
+
+	const botsDb = await shareData.DCABot.getBots(query);
+
+	if (botsDb.length > 0) {
+
+		const bots = JSON.parse(JSON.stringify(botsDb));
+
+		for (let i = 0; i < bots.length; i++) {
+
+			let bot = bots[i];
+
+			bot = await removeDbKeys(bot);
+
+			const config = JSON.parse(JSON.stringify(bot.config));
+
+			delete bot.date;
+			delete bot.config;
+
+			const botData = Object.assign({}, bot, config);
+
+			bots[i] = botData;
+		}
+
+		botsSort = shareData.Common.sortByKey(bots, 'createdAt');
+		botsSort = botsSort.reverse();
+	}
+
+	res.send( { 'date': new Date(), 'data': botsSort } );
 }
 
 
@@ -514,6 +550,20 @@ async function apiStartDeal(req, res) {
 }
 
 
+async function removeDbKeys(bot) {
+
+	for (let key in bot) {
+
+		if (key.substr(0, 1) == '$' || key.substr(0, 1) == '_') {
+
+			delete bot[key];
+		}
+	}
+	
+	return bot;
+}
+
+
 async function sendUpdateStatus(botId, botName, active, success) {
 
 	let status;
@@ -646,6 +696,7 @@ async function startDelay(obj) {
 module.exports = {
 
 	apiStartDeal,
+	apiGetBots,
 	apiGetActiveDeals,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,

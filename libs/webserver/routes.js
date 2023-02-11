@@ -128,6 +128,21 @@ function initRoutes(router) {
 	});
 
 
+	router.get('/api/bots', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiGetBots(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get([ '/api/deals', '/api/deals/:dealId' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');

@@ -272,6 +272,19 @@ function timeDiff(dateStart, dateEnd) {
 }
 
 
+function convertBoolean(param) {
+
+	let paramBool;
+
+	if (param != undefined && param != null && param != '') {
+
+		paramBool = (param.toLowerCase() === 'false' ? false : true);
+	}
+
+	return paramBool;
+}
+
+
 function sortByKey(array, key) {
 
 	return array.sort(function(a, b) {
@@ -287,6 +300,7 @@ module.exports = {
 	delay,
 	uuidv4,
 	makeDir,
+	convertBoolean,
 	sortByKey,
 	getConfig,
 	saveConfig,
