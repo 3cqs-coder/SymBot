@@ -64,7 +64,7 @@ async function viewActiveDeals(req, res) {
 
 	let deals = JSON.parse(JSON.stringify(shareData.dealTracker));
 
-	if (bots.length > 0) {
+	if (bots && bots.length > 0) {
 
 		for (let i = 0; i < bots.length; i++) {
 

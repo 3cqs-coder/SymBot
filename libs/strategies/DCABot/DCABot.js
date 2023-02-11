@@ -897,6 +897,13 @@ async function start(data, startBot, reload) {
 
 const dcaFollow = async (configData, exchange, dealId) => {
 
+	if (shareData.appData.sig_int) {
+
+		Common.logger(colors.red.bold(shareData.appData.name + ' is terminating. Not processing deal ' + dealId));
+
+		return ( { 'success': false, 'finished': false } );
+	}
+
 	const config = Object.freeze(JSON.parse(JSON.stringify(configData)));
 
 	let success = true;

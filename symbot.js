@@ -28,6 +28,7 @@ const prompt = require('prompt-sync')({
 let appDataConfig;
 let gotSigInt = false;
 
+
 process.on('SIGINT', shutDown);
 process.on('SIGTERM', shutDown);
 
@@ -48,7 +49,6 @@ process.on('uncaughtException', function(err) {
 
 	Common.logger(logData, true);
 });
-
 
 
 
@@ -94,6 +94,7 @@ async function init() {
 										'bots': appConfig['data']['bots'],
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
 										'verboseLog': appConfig.data.verbose_log,
+										'sig_int': false,
 										'started': new Date()
 								   },
 						'DB': DB,
@@ -313,6 +314,7 @@ function shutDown() {
 	if (!gotSigInt) {
 
 		gotSigInt = true;
+		appDataConfig['sig_int'] = true;
 
 		Common.logger('Received kill signal. Shutting down gracefully.', true);
 
