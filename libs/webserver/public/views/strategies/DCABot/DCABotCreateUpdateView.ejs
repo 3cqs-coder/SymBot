@@ -167,7 +167,10 @@
 							$('#ordersBox').html(table);
 						*/
 
-							$('#ordersBox').html(data.data);
+							const orders = data.data.orders;
+							const content = data.data.content;
+
+							$('#ordersBox').html(orders + content);
 
 							if (data.step.toLowerCase() != 'getorders') {
 

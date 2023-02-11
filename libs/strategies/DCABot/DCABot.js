@@ -417,7 +417,14 @@ async function start(data, startBot, reload) {
 
 					let ordersTable = await ordersToHtml(t.toString());
 
-					return ( { 'success': true, 'data': ordersTable + contentAdd } );
+					return ({
+								'success': true,
+								'data': {
+											'orders': ordersTable,
+											'content': contentAdd
+										}
+							});
+
 /*
 					sendOrders = prompt(
 						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
@@ -732,7 +739,13 @@ async function start(data, startBot, reload) {
 
 					let ordersTable = await ordersToHtml(t.toString());
 
-					return ( { 'success': true, 'data': ordersTable + contentAdd } );
+					return ({
+								'success': true,
+								'data': {
+											'orders': ordersTable,
+											'content': contentAdd
+										}
+							});
 
 /*
 					sendOrders = prompt(
