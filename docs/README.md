@@ -85,42 +85,45 @@ These files are located in the `config` directory
 Take more control of your bots and deals using SymBot APIs. You can easily enable or disable bots and start deals using triggers or signals from 3CQS, TradingView, your own custom scripts and strategies, or from any of your other favorite providers.
 
 ### Create bot
-| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
-|----------|----------|---------------|----------------------|-----------------|
-| botName  | string   | NO            |                      | Bot name will be generated if omitted |
-| pair     | array          | YES     |                      | List of pairs used for the bot |
-| active   | boolean        | NO      | false                | Enabled: true / Disabled: false |
-| createStep | string       | NO      |                      | Set to "getOrders" for a preview of DCA orders and not create the bot |
-| firstOrderAmount | number | YES     |                      | Initial or base order amount for each deal |
-| dcaOrderAmount | number   | YES     |                      | Amount for every additional DCA / safety order |
-| dcaOrderStepPercent | number  | YES |                      | Price deviation percentage to open safety orders |
-| dcaOrderSizeMultiplier | number  | YES |                   | Multiplies the amount of funds used by the last safety order |
-| dcaOrderStepPercentMultiplier | number  | YES |            | Multiplies the price deviation percentage used by the last safety order |
-| dcaTakeProfitPercent | number  | YES |                     | Take profit percentage the bot will use to close successful deals |
-| dcaMaxOrder | integer     | YES     |                      | Maximum DCA / safety orders allowed per deal |
-| dealMax  | integer  | YES |         |                      | Maximum deals allowed per pair. Set to 0 for unlimited |
-| startCondition | string | NO        | asap                 | Start deals using "asap" or by "api" |
+| **Name**                      | **Type** | **Mandatory** | **Values (default)** | **Description**                                                         |   |
+|-------------------------------|----------|---------------|----------------------|-------------------------------------------------------------------------|---|
+| botName                       | string   | NO            |                      | Bot name will be generated if omitted                                   |   |
+| pair                          | array    | YES           |                      | List of pairs used for the bot                                          |   |
+| active                        | boolean  | NO            | false                | Enabled: true / Disabled: false                                         |   |
+| createStep                    | string   | NO            |                      | Set to "getOrders" for a preview of DCA orders and not create the bot   |   |
+| firstOrderAmount              | number   | YES           |                      | Initial or base order amount for each deal                              |   |
+| dcaOrderAmount                | number   | YES           |                      | Amount for every additional DCA / safety order                          |   |
+| dcaOrderStepPercent           | number   | YES           |                      | Price deviation percentage to open safety orders                        |   |
+| dcaOrderSizeMultiplier        | number   | YES           |                      | Multiplies the amount of funds used by the last safety order            |   |
+| dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |   |
+| dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |   |
+| dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |   |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited                  |   |
+| startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |   |
+
 
 ```
 POST /api/bots/create
 ```
 
 ### Update bot
-| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
-|----------|----------|---------------|----------------------|-----------------|
-| botId    | string   | YES           |                      | Bot ID to be updated |
-| botName  | string   | NO            |                      | Bot name will be generated if omitted |
-| pair     | array          | YES     |                      | List of pairs used for the bot |
-| active   | boolean        | NO      | false                | Enabled: true / Disabled: false |
-| firstOrderAmount | number | YES     |                      | Initial or base order amount for each deal |
-| dcaOrderAmount | number   | YES     |                      | Amount for every additional DCA / safety order |
-| dcaOrderStepPercent | number  | YES |                      | Price deviation percentage to open safety orders |
-| dcaOrderSizeMultiplier | number  | YES |                   | Multiplies the amount of funds used by the last safety order |
-| dcaOrderStepPercentMultiplier | number  | YES |            | Multiplies the price deviation percentage used by the last safety order |
-| dcaTakeProfitPercent | number  | YES |                     | Take profit percentage the bot will use to close successful deals |
-| dcaMaxOrder | integer     | YES     |                      | Maximum DCA / safety orders allowed per deal |
-| dealMax  | integer  | YES |         |                      | Maximum deals allowed per pair. Set to 0 for unlimited |
-| startCondition | string | NO        | asap                 | Start deals using "asap" or by "api" |
+| **Name**                      | **Type** | **Mandatory** | **Values (default)** | **Description**                                                         |   |
+|-------------------------------|----------|---------------|----------------------|-------------------------------------------------------------------------|---|
+| botId                         | string   | YES           |                      | Bot ID to be updated                                                    |   |
+| botName                       | string   | NO            |                      | Bot name will be generated if omitted                                   |   |
+| pair                          | array    | YES           |                      | List of pairs used for the bot                                          |   |
+| active                        | boolean  | NO            | false                | Enabled: true / Disabled: false                                         |   |
+| firstOrderAmount              | number   | YES           |                      | Initial or base order amount for each deal                              |   |
+| dcaOrderAmount                | number   | YES           |                      | Amount for every additional DCA / safety order                          |   |
+| dcaOrderStepPercent           | number   | YES           |                      | Price deviation percentage to open safety orders                        |   |
+| dcaOrderSizeMultiplier        | number   | YES           |                      | Multiplies the amount of funds used by the last safety order            |   |
+| dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |   |
+| dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |   |
+| dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |   |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited                  |   |
+| startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |   |
+
+
 
 ```
 POST /api/bots/update
