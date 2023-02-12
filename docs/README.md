@@ -5,7 +5,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 ## Requirements
 
 - Node.js must be installed on your system
-- MongoDB or a host provider
+- MongoDB installed or a cloud host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection
 
@@ -18,6 +18,8 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 5. Modify the app and bot configuration files as necessary (see below)
 6. Type: `npm start`. You can also use `npm start consolelog` to display all logging to the console for testing purposes. The same information is also logged to files in the `logs` directory
 7. Open a web browser and type: http://127.0.0.1:3000
+
+#### Recommended additional steps (optional)
 
 To have SymBot run in the background it is recommended to use the Node.js process manager called **pm2**. Here's how to use it:
 
