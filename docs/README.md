@@ -1,6 +1,6 @@
 ## SymBot
 
-SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from a web interface. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
 
 ## Requirements
 
@@ -19,7 +19,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 6. Type: `npm start`. You can also use `npm start consolelog` to display all logging to the console for testing purposes. The same information is also logged to files in the `logs` directory
 7. Open a web browser and type: http://127.0.0.1:3000
 
-#### Recommended additional steps (optional)
+### Recommended additional steps (optional)
 
 To have SymBot run in the background it is recommended to use the Node.js process manager called **pm2**. Here's how to use it:
 
@@ -221,6 +221,30 @@ curl -i -X POST \
 		"startCondition": "api"
 	}' \
 http://127.0.0.1:3000/api/bots/update
+```
+
+#### Get DCA orders without creating bot
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{
+		"pair": [ "BTC/USD" ],
+		"botName": "",
+		"active": false,
+		"createStep": "getOrders",
+		"firstOrderAmount": 20,
+		"dcaOrderAmount": 45,
+		"dcaOrderStepPercent": 1.3,
+		"dcaOrderSizeMultiplier": 1.08,
+		"dcaOrderStepPercentMultiplier": 1.0,
+		"dcaTakeProfitPercent": 1.5,
+		"dcaMaxOrder": 46,
+		"dealMax": 0,
+		"startCondition": "asap"
+	}' \
+http://127.0.0.1:3000/api/bots/create
 ```
 
 #### Get bots

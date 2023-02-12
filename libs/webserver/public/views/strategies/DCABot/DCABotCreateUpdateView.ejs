@@ -176,8 +176,19 @@
 								table.append(row);
 							}
 
+							let contentAdd = '<br>';
+
+							if (content.balance < content.max_funds) {
+
+								contentAdd += '<b style="color: red;">Your current balance does not have enough funds for all DCA orders</b><br><br>';
+							}
+
+							contentAdd += '<b>Current Balance</b>: $' + content.balance + '<br>\n';
+							contentAdd += '<b>Max. Funds</b>: $' + content.max_funds + '<br>\n';
+							contentAdd += '<b>Max. Deviation</b>: ' + content.max_deviation_percent + '%<br>\n';
+
 							$('#ordersBox').html(table);
-							$('#ordersBox').append(content);
+							$('#ordersBox').append(contentAdd);
 
 							if (data.step.toLowerCase() != 'getorders') {
 

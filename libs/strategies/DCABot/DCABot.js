@@ -399,21 +399,16 @@ async function start(data, startBot, reload) {
 					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
 				}
 
-				let contentAdd = '<br><br>\n';
-
 				if (wallet < lastDcaOrderSum) {
-
-					contentAdd += '<b>' + insufficientFundsMsg + '</b><br><br>\n';
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.red.bold.italic(insufficientFundsMsg)); }
 				}
 
-				//console.log('\n');
 				let sendOrders;
 
 				if (startBot == undefined || startBot == null || startBot == false) {
 
-					contentAdd += await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
+					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
 
 					let ordersTable = await ordersToData(t.toString());
 
@@ -722,11 +717,7 @@ async function start(data, startBot, reload) {
 					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
 				}
 
-				let contentAdd = '<br><br>\n';
-
 				if (wallet < lastDcaOrderSum) {
-
-					contentAdd += '<b>' + insufficientFundsMsg + '</b><br><br>\n';
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.red.bold.italic(insufficientFundsMsg) ); }
 				}
@@ -735,7 +726,7 @@ async function start(data, startBot, reload) {
 
 				if (startBot == undefined || startBot == null || startBot == false) {
 
-					contentAdd += await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
+					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
 
 					let ordersTable = await ordersToData(t.toString());
 
@@ -1886,13 +1877,13 @@ async function ordersToData(data) {
 
 async function ordersAddContent(wallet, lastDcaOrderSum, maxDeviation) {
 
-	let content = '';
+	let obj = {
+				'balance': Number(wallet),
+				'max_funds': Number(lastDcaOrderSum),
+				'max_deviation_percent': Number(maxDeviation.toFixed(2))
+			  };
 
-	content += '<b>Current Balance</b>: $' + wallet + '<br>\n';
-	content += '<b>Max. Funds</b>: $' + lastDcaOrderSum + '<br>\n';
-	content += '<b>Max. Deviation</b>: ' + maxDeviation.toFixed(2) + '%<br>\n';
-
-	return content;
+	return obj;
 }
 
 
