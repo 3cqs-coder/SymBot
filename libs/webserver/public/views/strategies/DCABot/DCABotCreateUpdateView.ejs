@@ -144,33 +144,40 @@
 						}
 						else {
 
-						/*
-							let rows = data.data.split('\n');
+							const orders = data.data.orders;
+							const content = data.data.content;
 
-							let table = $('<table/>');
+							let table = $('<table id="ordersTable" cellspacing=0 cellpadding=0>');
 
-							for (let i = 0; i < rows.length; i++) {
-		
-								let cols = rows[i].split(/[\s\t]+/);
+							let tableData = orders.steps;
+
+							tableData.unshift(orders.headers);
+
+							for (let i = 0; i < tableData.length; i++) {
+
+								let cols = tableData[i];
 
 								let row = $('<tr/>');
+
+								let tag = 'td';
+								
+								if (i == 0) {
+									
+									tag = 'th';
+								}
 
 								for (let x = 0; x < cols.length; x++) {
 
 									let col = cols[x];
-									row.append($('<td>' + col.trim() + '</td>'));
+
+									row.append($('<' + tag + '>' + col + '</' + tag + '>'));
 								}
 
 								table.append(row);
 							}
 
 							$('#ordersBox').html(table);
-						*/
-
-							const orders = data.data.orders;
-							const content = data.data.content;
-
-							$('#ordersBox').html(orders + content);
+							$('#ordersBox').append(content);
 
 							if (data.step.toLowerCase() != 'getorders') {
 

@@ -415,7 +415,7 @@ async function start(data, startBot, reload) {
 
 					contentAdd += await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
 
-					let ordersTable = await ordersToHtml(t.toString());
+					let ordersTable = await ordersToData(t.toString());
 
 					return ({
 								'success': true,
@@ -737,7 +737,7 @@ async function start(data, startBot, reload) {
 
 					contentAdd += await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
 
-					let ordersTable = await ordersToHtml(t.toString());
+					let ordersTable = await ordersToData(t.toString());
 
 					return ({
 								'success': true,
@@ -1799,26 +1799,25 @@ async function ordersToHtml(data) {
 	let table = '<table id="ordersTable" cellspacing=0 cellpadding=0>';
 
 	for (let i = 0; i < rows.length; i++) {
-		
+
 		let cols = rows[i].split(/[\s\t]+/);
 
+		let tag = 'td';
 		let row = '<tr>';
+			
+		if (i == 0) {
+
+			tag = 'th';
+		}
 
 		for (let x = 0; x < cols.length; x++) {
-
-			let tag = 'td';
-			
-			if (i == 0) {
-
-				tag = 'th';
-			}
 
 			let col = cols[x];
 			row += '<' + tag + '>' + col.trim() + '</' + tag + '>';
 		}
 
 		row += '</tr>';
-		
+
 		if (i != 1) {
 
 			table += row;
@@ -1828,6 +1827,60 @@ async function ordersToHtml(data) {
 	table += '</table>';
 	
 	return table;
+}
+
+
+async function ordersToData(data) {
+
+	let rows = data.split(/[\r\n]+/);
+
+	let count = 0;
+
+	let headers = [];
+	let steps = [];
+
+	for (let i = 0; i < rows.length; i++) {
+
+		let stepsTemp = [];
+
+		let cols = rows[i].split(/[\s\t]+/);
+
+		if (i == 0) {
+
+			headers = cols.map(item => {
+
+				return item.trim();
+			});
+		}
+
+		if (i < 2) {
+
+			continue;
+		}
+
+		for (let x = 0; x < cols.length; x++) {
+
+			let col = cols[x].trim();
+
+			stepsTemp.push(col);
+		}
+
+		stepsTemp = stepsTemp.filter((a) => a);
+
+		if (stepsTemp.length > 0) {
+
+			steps[count] = stepsTemp;
+
+			count++;
+		}
+	}
+
+	// Remove empty
+	headers = headers.filter((a) => a);
+
+	const orders = { 'headers': headers, 'steps': steps };
+
+	return orders;
 }
 
 

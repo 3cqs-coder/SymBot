@@ -185,7 +185,10 @@ function showLog(content, data) {
 
 	content = contentFormat.replace(/\{CONTENT\}/g, content);
 
-	content += ' ' + JSON.stringify(data);
+	if (data != undefined && data != null && data != '') {
+
+		content += ' ' + JSON.stringify(data);
+	}
 
 	shareData.Common.logger(content);
 }

@@ -7,7 +7,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - Node.js must be installed on your system
 - MongoDB or a host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
-- Reliable internet connection
+- Reliable high-speed internet connection
 
 ## Installation
 
@@ -208,7 +208,6 @@ curl -i -X POST \
 		"botId": "{botId}",
 		"botName": "",
 		"active": false,
-		"createStep": "",
 		"firstOrderAmount": 20,
 		"dcaOrderAmount": 45,
 		"dcaOrderStepPercent": 1.3,
@@ -217,7 +216,7 @@ curl -i -X POST \
 		"dcaTakeProfitPercent": 1.5,
 		"dcaMaxOrder": 46,
 		"dealMax": 0,
-		"startCondition": "asap"
+		"startCondition": "api"
 	}' \
 http://127.0.0.1:3000/api/bots/update
 ```
