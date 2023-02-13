@@ -60,7 +60,7 @@ These files are located in the `config` directory
 
 	-	`bots` contains start condition keys and descriptions such as `asap` and `api`. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
 
-	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with @BotFather to use.
+	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see below).
 
 	- `mongo_db_url` is the URL to your MongoDB instance.
 
@@ -81,6 +81,24 @@ These files are located in the `config` directory
 
 	- This file is created the very first time SymBot is started. It contains an automatically generated UUID v4 `server_id`. The primary purpose is to ensure if there are ever multiple instances of SymBot running, they do not accidentally conflict with the database used. When SymBot starts it will compare the `server_id` value in this file to the database entry. If they do not match, SymBot will shut down. 
 	- This file should never be copied to another folder or server if you plan to run additional instances of SymBot, or manually edited unless you have a good reason to do so.
+
+
+## Telegram Setup
+
+Using Telegram with SymBot is a great way to know when bot deals start and finish, but also getting notifications when issues are detected, such as being unable to connect to your exchange.
+
+You just need to create a Telegram bot with `@BotFather`. Here are some simple steps on how to do that:
+
+1. Open a Telegram chat with `@BotFather`
+2. Once there you may need to type or click on `/start`
+3. Type: `/newbot`
+4. Choose a username that will be displayed when you receive messages from Telegram. For simplicity, just use: **SymBot**. This does not need to be unique to Telegram.
+5. Now you need to choose a unique Telegram username. This can be anything you choose, but it must end in the word **bot**. For example: **MySymBotServer123_bot**
+6. If the username you chose was not already taken, then you should receive a token that looks something like: **12345:AbCdEfG_123Abc**
+7. Open a chat with your new bot **MySymBotServer123_bot** (use the actual name of your bot)
+8. Type or click on `/start`
+9. Copy your Telegram bot token into the SymBot **app.json** configuration file. You must also enter your own Telegram id or SymBot will not allow messages to be sent. If you don't know your Telegram id, open a chat with `@userinfobot`
+10. Restart SymBot 
 
 ## API Information
 
@@ -231,8 +249,6 @@ curl -i -X POST \
 -H 'api-key: {API-KEY}' \
 -d '{
 		"pair": [ "BTC/USD" ],
-		"botName": "",
-		"active": false,
 		"createStep": "getOrders",
 		"firstOrderAmount": 20,
 		"dcaOrderAmount": 45,
@@ -240,9 +256,7 @@ curl -i -X POST \
 		"dcaOrderSizeMultiplier": 1.08,
 		"dcaOrderStepPercentMultiplier": 1.0,
 		"dcaTakeProfitPercent": 1.5,
-		"dcaMaxOrder": 46,
-		"dealMax": 0,
-		"startCondition": "asap"
+		"dcaMaxOrder": 46
 	}' \
 http://127.0.0.1:3000/api/bots/create
 ```

@@ -415,6 +415,7 @@ async function start(data, startBot, reload) {
 					return ({
 								'success': true,
 								'data': {
+											'pair': pair,
 											'orders': ordersTable,
 											'content': contentAdd
 										}
@@ -733,6 +734,7 @@ async function start(data, startBot, reload) {
 					return ({
 								'success': true,
 								'data': {
+											'pair': pair,
 											'orders': ordersTable,
 											'content': contentAdd
 										}
