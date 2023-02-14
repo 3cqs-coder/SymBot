@@ -1,0 +1,45 @@
+version: '3'
+services:
+  database:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: symbotmongodb123
+      MONGO_INITDB_DATABASE: symbot
+    volumes:
+      - ./db-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    ports:
+      - '27017-27019:27017-27019'
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - 3010:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: symbotmongodb123
+      ME_CONFIG_MONGODB_SERVER: database
+    depends_on:
+      - database
+
+  web:
+    image: symbot
+    container_name: symbot
+    restart: always
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+    environment:
+      # Use the username and password found in the db-init.js file instead of the root username.
+      MONGODB_URI: mongodb://symbot:symbot123@database/symbot
+    depends_on:
+      - database
+    ports:
+      - 3000:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

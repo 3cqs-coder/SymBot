@@ -11,6 +11,9 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 ## Installation
 
+If you would rather run SymBot using Docker then skip this section and [see below](#installation-docker).
+
+
 1. Open a command line terminal
 2. Change directory to where SymBot files are located
 3. Type: `npm install`
@@ -45,6 +48,23 @@ module.exports = {
 6. If you don't already have **pm2** starting at system boot time, type this with root privileges: `pm2 startup`. Then type: `pm2 save`
 
 SymBot will now start automatically even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly one gigabyte, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. **pm2** will then start SymBot again. You can change those settings to suit your own server requirements and needs.
+
+## Installation (Docker)
+
+Docker can be a great way to get SymBot up and running fast with all the necessary dependencies such as MongoDB.
+
+The Docker build files can be modified as necessary, but should only be done if you're familiar with how they work. Running SymBot under Docker is considered experimental and performing any upgrades could cause unexpected issues.
+
+1. Open a command line terminal
+2. Change directory to where SymBot files are located
+3. Open the **app.json** configuration file and set `mongo_db_url` to `mongodb://symbot:symbot123@database/symbot`
+4. Make any additional changes to the app and bot configuration files as necessary (see below)
+5. Change directory to `docker` in the same location where SymBot files are located
+6. Type `docker-compose -p symbot up -d --build`
+7. Wait for Docker to build everything and all containers to start
+8. Open a web browser and type: http://127.0.0.1:3000
+
+Mongo Express is also installed which can be used to access MongoDB visually by opening a web browser to  http://127.0.0.1:3010
 
 ## Configuration
 
@@ -92,8 +112,8 @@ You just need to create a Telegram bot with `@BotFather`. Here are some simple s
 1. Open a Telegram chat with `@BotFather`
 2. Once there you may need to type or click on `/start`
 3. Type: `/newbot`
-4. Choose a username that will be displayed when you receive messages from Telegram. For simplicity, just use: **SymBot**. This does not need to be unique to Telegram.
-5. Now you need to choose a unique Telegram username. This can be anything you choose, but it must end in the word **bot**. For example: **MySymBotServer123_bot**
+4. Choose a name that will be displayed when you receive messages from Telegram. For simplicity, just use: **SymBot**. This does not need to be unique to Telegram.
+5. Now you need to choose a unique Telegram username. This can be just about any string value, but it must end in the word **bot**. For example: **MySymBotServer123_bot**
 6. If the username you chose was not already taken, then you should receive a token that looks something like: **12345:AbCdEfG_123Abc**
 7. Open a chat with your new bot **MySymBotServer123_bot** (use the actual name of your bot)
 8. Type or click on `/start`

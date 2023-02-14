@@ -204,7 +204,7 @@ async function verifyServerId(serverConfig) {
 	}
 	else {
 
-		if (serverConfig.data.server_id != serverData.serverId) {
+		if (!process.env.DOCKER_RUNNING && serverConfig.data.server_id != serverData.serverId) {
 
 			success = false;
 
