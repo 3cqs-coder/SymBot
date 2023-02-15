@@ -1,6 +1,8 @@
 ## SymBot
 
-SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser or with simple built-in APIs. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+
+![SymBot](https://user-images.githubusercontent.com/111208586/219070191-abe2ef94-ca5a-43a9-867c-2c2ff9609699.jpg)
 
 ## Requirements
 
@@ -130,7 +132,7 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | botName                       | string   | NO            |                      | Bot name will be generated if omitted                                   |
 | pair                          | array    | YES           |                      | List of pairs used for the bot                                          |
 | active                        | boolean  | NO            | false                | Enabled: true / Disabled: false                                         |
-| createStep                    | string   | NO            |                      | Set to "getOrders" for a preview of DCA orders and not create the bot   |
+| createStep                    | string   | NO            |                      | Set to "getOrders" to preview all DCA orders without creating the bot   |
 | firstOrderAmount              | number   | YES           |                      | Initial or base order amount for each deal                              |
 | dcaOrderAmount                | number   | YES           |                      | Amount for every additional DCA / safety order                          |
 | dcaOrderStepPercent           | number   | YES           |                      | Price deviation percentage to open safety orders                        |
