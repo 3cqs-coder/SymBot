@@ -1351,7 +1351,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 const getSymbolsAll = async (exchange) => {
 
+	let errMsg;
+
 	let symbols = [];
+	let success = true;
 
 	try {
 
@@ -1360,10 +1363,13 @@ const getSymbolsAll = async (exchange) => {
 	}
 	catch(e) {
 
-		Common.logger(colors.bgRed.bold.italic('Unable to get symbols: ' + JSON.stringify(e)));
+		success = false;
+		errMsg = 'Unable to get symbols: ' + JSON.stringify(e);
+
+		Common.logger(colors.bgRed.bold.italic(errMsg));
 	}
 
-	return symbols;
+	return ( { 'date': new Date(), 'success': success, 'symbols': symbols, 'msg': errMsg } );
 }
 
 

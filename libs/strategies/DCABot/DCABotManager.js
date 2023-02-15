@@ -49,13 +49,13 @@ async function viewCreateUpdateBot(req, res, botId) {
 	if (diffSec > (60 * maxMins)) {
 
 		const exchange = await shareData.DCABot.connectExchange(botConfig.data);
-		const symbols = await shareData.DCABot.getSymbolsAll(exchange);
+		const symbolData = await shareData.DCABot.getSymbolsAll(exchange);
 
-		if (symbols != undefined && symbols != null && symbols.length > 0) {
+		if (symbolData.success) {
 
 			symbolList[exchangeName]['updated'] = new Date();
 			symbolList[exchangeName]['symbols'] = [];
-			symbolList[exchangeName]['symbols'] = symbols;
+			symbolList[exchangeName]['symbols'] = symbolData.symbols;
 		}
 	}
 

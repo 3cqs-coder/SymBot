@@ -11,7 +11,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 ## Installation
 
-If you would rather run SymBot using Docker then skip this section and [see below](#installation-docker).
+If you would rather run SymBot using Docker then skip this section and go to the [Docker Installation](#installation-docker) below.
 
 
 1. Open a command line terminal
@@ -60,7 +60,7 @@ The Docker build files can be modified as necessary, but should only be done if 
 3. Open the **app.json** configuration file and set `mongo_db_url` to `mongodb://symbot:symbot123@database/symbot`
 4. Make any additional changes to the app and bot configuration files as necessary (see below)
 5. Change directory to `docker` in the same location where SymBot files are located
-6. Type `docker-compose -p symbot up -d --build`
+6. Type: `docker-compose -p symbot up -d --build`
 7. Wait for Docker to build everything and all containers to start
 8. Open a web browser and type: http://127.0.0.1:3000
 
