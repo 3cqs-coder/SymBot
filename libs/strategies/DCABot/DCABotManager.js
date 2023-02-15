@@ -1,7 +1,7 @@
 'use strict';
 
 
-let symbolList = { 'updated': 0, 'symbols': [] };
+let symbolList = {};
 
 
 let shareData;
@@ -34,7 +34,16 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 	const botConfig = await shareData.Common.getConfig('bot.json');
 
-	const diffSec = (new Date().getTime() - new Date(symbolList['updated']).getTime()) / 1000;
+	const exchangeName = botConfig.data.exchange;
+
+	if (symbolList[exchangeName] == undefined || symbolList[exchangeName] == null) {
+
+		symbolList[exchangeName] = {};
+		symbolList[exchangeName]['symbols'] = [];
+		symbolList[exchangeName]['updated'] = 0;
+	}
+	
+	const diffSec = (new Date().getTime() - new Date(symbolList[exchangeName]['updated']).getTime()) / 1000;
 
 	// Get new list of symbols only after n minutes have passed
 	if (diffSec > (60 * maxMins)) {
@@ -42,9 +51,12 @@ async function viewCreateUpdateBot(req, res, botId) {
 		const exchange = await shareData.DCABot.connectExchange(botConfig.data);
 		const symbols = await shareData.DCABot.getSymbolsAll(exchange);
 
-		symbolList['updated'] = new Date();
-		symbolList['symbols'] = [];
-		symbolList['symbols'] = symbols;
+		if (symbols != undefined && symbols != null && symbols.length > 0) {
+
+			symbolList[exchangeName]['updated'] = new Date();
+			symbolList[exchangeName]['symbols'] = [];
+			symbolList[exchangeName]['symbols'] = symbols;
+		}
 	}
 
 	if (!botUpdate) {
@@ -52,7 +64,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 		botData = botConfig.data;
 	}
 
-	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'symbols': symbolList['symbols'], 'botData': botData } );
+	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'symbols': symbolList[exchangeName]['symbols'], 'botData': botData } );
 }
 
 

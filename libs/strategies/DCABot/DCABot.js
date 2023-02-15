@@ -1351,8 +1351,17 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 const getSymbolsAll = async (exchange) => {
 
-	const markets = await exchange.loadMarkets();
-	const symbols = exchange.symbols;
+	let symbols = [];
+
+	try {
+
+		const markets = await exchange.loadMarkets();
+		symbols = exchange.symbols;
+	}
+	catch(e) {
+
+		Common.logger(colors.bgRed.bold.italic('Unable to get symbols: ' + JSON.stringify(e)));
+	}
 
 	return symbols;
 }
