@@ -5,6 +5,7 @@ const path = require('path');
 const pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
 
 const delay = require('delay');
+const fetch = require('node-fetch-commonjs');
 const { v4: uuidv4 } = require('uuid');
 
 
@@ -50,6 +51,21 @@ async function saveConfig(fileName, data) {
 	}
 
 	return ({ 'success': success, 'data': err });
+}
+
+
+async function fetchURL(url, method, headers, body) {
+
+	const response = await fetch(url, {
+
+		'method': method,
+		'headers': headers,
+		'body': JSON.stringify(body)
+	});
+
+	const data = await response.json();
+
+	return data;
 }
 
 
@@ -102,6 +118,46 @@ function logMonitor() {
 		delFiles(pathRoot + '/logs', maxDays);
 
 	}, 43200);
+}
+
+
+async function getSignalConfigs() {
+
+	let configs = {};
+
+	let dir = fs.realpathSync(__dirname).split(path.sep).join(path.posix.sep) + '/signals';
+
+	let files = fs.readdirSync(dir);
+
+	for (let i in files) {
+
+		let file = dir + '/' + files[i];
+
+		let stats = fs.statSync(file);
+
+		let created = stats.ctime;
+		let modified = stats.mtime;
+
+		if (stats.isDirectory()) {
+
+			let signalFile = file + '/signals.json';
+
+			if (fs.existsSync(signalFile)) {
+
+				try {
+
+					let data = JSON.parse(await fs.readFileSync(signalFile, { encoding: 'utf8', flag: 'r' }));
+
+					configs = Object.assign({}, configs, data);
+				}
+				catch(e) {
+
+				}
+			}
+		}
+	}
+
+	return configs;
 }
 
 
@@ -303,11 +359,13 @@ module.exports = {
 	convertBoolean,
 	sortByKey,
 	getConfig,
+	getSignalConfigs,
 	saveConfig,
 	getDateParts,
 	timeDiff,
 	logger,
 	logMonitor,
+	fetchURL,
 	getProcessInfo,
 
 	init: function(obj) {

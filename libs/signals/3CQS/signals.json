@@ -1,0 +1,86 @@
+{
+  "3CQS": {
+    "start_conditions": [
+      {
+        "id": 12,
+        "description": "SymRank Top 10"
+      },
+      {
+        "id": 2,
+        "description": "SymRank Top 30"
+      },
+      {
+        "id": 11,
+        "description": "SymRank Top 50"
+      },
+      {
+        "id": 1,
+        "description": "SymRank Top 100 Triple Tracker"
+      },
+      {
+        "id": 6,
+        "description": "SymRank Top 100 Quadruple Tracker"
+      },
+      {
+        "id": 7,
+        "description": "SymRank Top 250 Quadruple Tracker"
+      },
+      {
+        "id": 13,
+        "description": "SymScore Super Bullish"
+      },
+      {
+        "id": 14,
+        "description": "SymScore Hyper Bullish"
+      },
+      {
+        "id": 15,
+        "description": "SymScore Ultra Bullish"
+      },
+      {
+        "id": 16,
+        "description": "SymScore X-Treme Bullish"
+      },
+      {
+        "id": 17,
+        "description": "SymScore Super Bearish"
+      },
+      {
+        "id": 18,
+        "description": "SymScore Hyper Bearish"
+      },
+      {
+        "id": 19,
+        "description": "SymScore Ultra Bearish"
+      },
+      {
+        "id": 20,
+        "description": "SymScore X-Treme Bearish"
+      },
+      {
+        "id": 9,
+        "description": "Super Volatility"
+      },
+      {
+        "id": 10,
+        "description": "Super Volatility Double Tracker"
+      },
+      {
+        "id": 3,
+        "description": "Hyper Volatility"
+      },
+      {
+        "id": 8,
+        "description": "Hyper Volatility Double Tracker"
+      },
+      {
+        "id": 4,
+        "description": "Ultra Volatility"
+      },
+      {
+        "id": 5,
+        "description": "X-Treme Volatility"
+      }
+    ]
+  }
+}

@@ -65,8 +65,35 @@ async function init() {
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
-	const appConfig = await Common.getConfig('app.json');
+	let appConfig = await Common.getConfig('app.json');
+	let signalConfigs = await Common.getSignalConfigs();
+
 	const serverConfig = await Common.getConfig('server.json');
+
+	if (Object.keys(signalConfigs).length > 0) {
+
+		for (let key in signalConfigs) {
+
+			let signalObj = {};
+
+			let startConditions = signalConfigs[key]['start_conditions'];
+
+			for (let num in startConditions) {
+
+				let id = startConditions[num]['id'];
+				let description = startConditions[num]['description'];
+
+				let signalId = 'signal|' + key + '|' + id;
+
+				description = 'Signal ' + key + ': ' + description;
+
+				signalObj[signalId] = {};
+				signalObj[signalId]['description'] = description;
+			}
+
+			appConfig['data']['bots']['start_conditions'] = Object.assign({}, appConfig['data']['bots']['start_conditions'], signalObj);
+		}
+	}
 
 	if (appConfig['data']['api_key'] == undefined || appConfig['data']['api_key'] == null || appConfig['data']['api_key'] == '') {
 
@@ -89,6 +116,7 @@ async function init() {
 										'server_id': '',
 										'app_filename': __filename,
 										'console_log': consoleLog,
+										'web_server_port': appConfig['data']['web_server']['port'],
 										'api_key': apiKey,
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],

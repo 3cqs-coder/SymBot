@@ -1,6 +1,6 @@
 {
   "name": "SymBot",
-  "version": "0.9.136-beta.0",
+  "version": "0.9.150-beta.0",
   "description": "SymBot",
   "main": "index.js",
   "scripts": {
@@ -21,6 +21,7 @@
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "mongoose": "^6.8.3",
+    "node-fetch-commonjs": "^3.2.4",
     "percentagejs": "^1.0.2",
     "prompt-sync": "^4.2.0",
     "socket.io-client": "^4.5.4",

@@ -74,6 +74,8 @@ async function start(apiKey) {
 
 		updateDb(data);
 
+		processSignal(data);
+
 		if (shareData.appData.verboseLog) {
 		
 			showLog(content, data);
@@ -156,6 +158,113 @@ function randomString(len) {
 	}
 
 	return str;
+}
+
+
+async function processSignal(data) {
+
+	const symbol = data['symbol'];
+	const signal = data['signal'];
+	const signalNameId = data['signal_name_id'];
+
+	const startCondition = 'signal|3CQS|' + signalNameId;
+
+	let port = shareData.appData.web_server_port;
+	let apiKey = shareData.appData.api_key;
+
+	let headers = {
+						'Accept': 'application/json',
+						'Content-Type': 'application/json',
+						'api-key': apiKey
+				  };
+
+
+	if (signal == 'BOT_START') {
+
+		let query = {
+						'active': true,
+						'config.pair': {
+											'$regex': '^' + symbol + '/',
+											'$options': 'i'
+									   },
+						'config.startConditions': { '$eq': startCondition }
+					};
+
+		const bots = await shareData.DCABot.getBots(query);
+
+		if (bots && bots.length > 0) {
+
+			for (let i = 0; i < bots.length; i++) {
+
+				let pairUse;
+
+				const bot = bots[i];
+				const botId = bot.botId;
+				const config = bot.config;
+				const pairs = config.pair;
+
+				for (let x = 0; x < pairs.length; x++) {
+
+					let pair = pairs[x];
+
+					if (new RegExp(`^${symbol + '/'}`, 'i').test(pair)) {
+
+						pairUse = pair;
+						break;
+					}
+				}
+
+				let body = { 'pair': pairUse };
+
+				// Start deal
+				let res = await shareData.Common.fetchURL('http://127.0.0.1:' + port + '/api/bots/' + botId + '/start_deal', 'post', headers, body);
+
+				if (!res.success) {
+
+					let data = res.data;
+
+					let msg = '3CQS Signal Start Failed. Bot ID: ' + botId + ' / Info: ' + data;
+
+					shareData.Common.logger(msg);
+					shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+				}
+			}
+		}
+	}
+
+
+	if (signal == 'BOT_STOP') {
+
+		let botsDisable = {};
+
+		let query = {
+						'status': 0,
+						'config.pair': {
+											'$regex': '^' + symbol + '/',
+											'$options': 'i'
+									   },
+						'config.startConditions': { '$eq': startCondition }
+					};
+
+		const deals = await shareData.DCABot.getDeals(query);
+
+		if (deals && deals.length > 0) {
+
+			for (let i = 0; i < deals.length; i++) {
+
+				const deal = deals[i];
+				const botId = deal.botId;
+
+				botsDisable[botId] = 1;
+			}
+
+			// Disable bot
+			for (let botId in botsDisable) {
+
+				let res = await shareData.Common.fetchURL('http://127.0.0.1:' + port + '/api/bots/' + botId + '/disable', 'post', headers, {});
+			}
+		}
+	}
 }
 
 
