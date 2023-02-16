@@ -298,7 +298,7 @@ async function apiCreateUpdateBot(req, res) {
 						let config = JSON.parse(JSON.stringify(configObj));
 						config['pair'] = pair;
 
-						startDelay({ 'config': config, 'delay': i + 1, 'telegram': true });
+						shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': true });
 					}
 				}
 			}
@@ -352,12 +352,12 @@ async function apiCreateUpdateBot(req, res) {
 						let config = bot[0]['config'];
 				
 						config['pair'] = pair;
-						config = await applyConfigData(botId, botName, config);
+						config = await shareData.DCABot.applyConfigData(botId, botName, config);
 
 						// Start bot if active, no deals are currently running and start condition is now asap
 						if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && startCondition == 'asap') {
 
-							startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
+							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
 						}
 					}
 				}
@@ -447,7 +447,7 @@ async function apiEnableDisableBot(req, res) {
 						let config = bot[0]['config'];
 
 						config['pair'] = pair;
-						config = await applyConfigData(botId, botName, config);
+						config = await shareData.DCABot.applyConfigData(botId, botName, config);
 
 						if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
 
@@ -457,7 +457,7 @@ async function apiEnableDisableBot(req, res) {
 						// Only start bot if first condition is asap
 						if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
 
-							startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
+							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
 						}
 					}
 				}
@@ -540,9 +540,9 @@ async function apiStartDeal(req, res) {
 					let config = bot['config'];
 
 					config['pair'] = pair;
-					config = await applyConfigData(botId, botName, config);
+					config = await shareData.DCABot.applyConfigData(botId, botName, config);
 
-					startDelay({ 'config': config, 'delay': 1, 'telegram': false });
+					shareData.DCABot.startDelay({ 'config': config, 'delay': 1, 'telegram': false });
 				}
 				else {
 
@@ -673,36 +673,6 @@ async function calculateOrders(body) {
 	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
 }
 
-
-async function applyConfigData(botId, botName, config) {
-
-	// Pass bot id in config so existing bot is used
-	config['botId'] = botId;
-	config['botName'] = botName;
-	config['dealCount'] = 0;
-
-	return config;
-}
-
-
-async function startDelay(obj) {
-
-	const configObj = JSON.parse(JSON.stringify(obj));
-
-	const config = configObj['config'];
-	const telegram = configObj['telegram'];
-
-	// Start bot
-	setTimeout(() => {
-						if (telegram) {
-
-							shareData.Telegram.sendMessage(shareData.appData.telegram_id, config.botName + ' (' + config.pair.toUpperCase() + ') Start command received.');
-						}
-
-						shareData.DCABot.start(config, true, true);
-
-					 }, (1000 * (configObj['delay'])));
-}
 
 
 

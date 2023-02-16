@@ -2019,11 +2019,9 @@ async function startVerify(config) {
 async function resumeBots() {
 
 	// Check for active deals and resume bots
-	// New logic needed to find bots that have not reached max deals and are currently not running an active deal
-
 	const dealsActive = await getDeals({ 'status': 0 });
 
-	if (dealsActive.length > 0) {
+	if (dealsActive && dealsActive.length > 0) {
 
 		Common.logger( colors.bgGreen.bold('Resuming ' + dealsActive.length + ' active DCA bot deals...') );
 
@@ -2059,6 +2057,70 @@ async function resumeBots() {
 			await Common.delay(1000);
 		}
 	}
+
+	// Start any active asap bots that have no deals running
+	const botsActive = await getBots({ 'active': true, 'config.startConditions': { '$eq': 'asap' } });
+
+	if (botsActive && botsActive.length > 0) {
+
+		for (let i = 0; i < botsActive.length; i++) {
+
+			let bot = botsActive[i];
+
+			let config = bot['config'];
+
+			let botId = bot.botId;
+			let botName = bot.botName;
+			let pairs = config.pair;
+
+			for (let x = 0; x < pairs.length; x++) {
+
+				let pair = pairs[x];
+
+				let dealsActive = await getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+
+				config['pair'] = pair;
+				config = await applyConfigData(botId, botName, config);
+
+				// Start bot if active, no deals are currently running and start condition is now asap
+				if (dealsActive && dealsActive.length == 0) {
+
+					startDelay({ 'config': config, 'delay': x + 1, 'telegram': false });
+				}
+			}
+		}
+	}
+}
+
+
+async function applyConfigData(botId, botName, config) {
+
+	// Pass bot id in config so existing bot is used
+	config['botId'] = botId;
+	config['botName'] = botName;
+	config['dealCount'] = 0;
+
+	return config;
+}
+
+
+async function startDelay(obj) {
+
+	const configObj = JSON.parse(JSON.stringify(obj));
+
+	const config = configObj['config'];
+	const telegram = configObj['telegram'];
+
+	// Start bot
+	setTimeout(() => {
+						if (telegram) {
+
+							shareData.Telegram.sendMessage(shareData.appData.telegram_id, config.botName + ' (' + config.pair.toUpperCase() + ') Start command received.');
+						}
+
+						start(config, true, true);
+
+					 }, (1000 * (configObj['delay'])));
 }
 
 
@@ -2086,6 +2148,8 @@ module.exports = {
 	getDeals,
 	getDealsHistory,
 	getSymbolsAll,
+	applyConfigData,
+	startDelay,
 
 	init: function(obj) {
 

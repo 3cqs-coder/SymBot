@@ -317,6 +317,13 @@ table#ordersTable tr:not(:first-child):hover {
 }
 
 
+#startCondition {
+
+	background-color: #ffffff;
+	cursor: pointer;
+}
+
+
 .mainMenuItem {
 
 	display: flex;

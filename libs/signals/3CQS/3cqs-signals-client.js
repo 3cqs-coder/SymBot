@@ -21,6 +21,14 @@ let API_KEY;
 let shareData;
 
 
+setInterval(() => {
+
+	removeDataDb();
+
+}, (60000 * 60));
+
+
+
 async function start(apiKey) {
 
 	if (apiKey == undefined || apiKey == null || apiKey == '') {
@@ -55,7 +63,7 @@ async function start(apiKey) {
 		setTimeout(() => {
 
 			socket.emit('signal_history', {
-				'max': 10,
+				'max': 100,
 				'message_id_client': messageId
 			});
 
@@ -265,6 +273,34 @@ async function processSignal(data) {
 			}
 		}
 	}
+}
+
+
+async function removeDataDb() {
+
+	// Delete signals after n days
+	const days = 14;
+
+	let res;
+
+	const dateUse = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
+
+	const query = {
+					'createdAt': {
+									'$lt': new Date(dateUse)
+								 }
+				  };
+
+	try {
+
+		res = await Signals.deleteMany(query);
+	}
+	catch(e) {
+
+		res = JSON.stringify(e);
+	}
+
+	return res;
 }
 
 
