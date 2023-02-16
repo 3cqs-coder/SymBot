@@ -26,6 +26,8 @@ const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA
 
 
 let dealTracker = {};
+let timerTracker = {};
+
 let shareData;
 
 
@@ -33,6 +35,10 @@ let shareData;
 async function start(data, startBot, reload) {
 
 	data = await initBot(startBot, JSON.parse(JSON.stringify(data)));
+
+	const dealResume = data['dealResume'];
+
+	delete data['dealResume'];
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
@@ -119,8 +125,6 @@ async function start(data, startBot, reload) {
 			askPrice = symbol.ask;
 		}
 
-		//await Common.delay(1000);
-
 		var t = new Table();
 		const orders = [];
 
@@ -183,6 +187,11 @@ async function start(data, startBot, reload) {
 			let lastDcaOrderSum = 0;
 			let lastDcaOrderQtySum = 0;
 			let lastDcaOrderPrice = 0;
+
+			if (!await volumeValid(startBot, pair, symbol, config)) {
+
+				return;
+			}
 
 			if (config.firstOrderType.toUpperCase() == 'MARKET') {
 
@@ -1943,6 +1952,70 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 }
 
 
+async function volumeValid(startBot, pair, symbol, config) {
+
+	let success = true;
+
+	const volumeMin = Number(config.volumeMin);
+
+	const volume24h = Number(((symbol.price * symbol.volume) / 1000000).toFixed(2));
+
+	const timerKey = config.botId + pair;
+
+	if (startBot && volumeMin > 0 && volume24h < volumeMin) {
+
+		if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Delaying deal start. ' + pair + ' 24h volume: ' + volume24h + 'M. Minimum required: ' + volumeMin + 'M') ); }
+
+		const configObj = JSON.parse(JSON.stringify(config));
+
+		// Clear previous timeout if exists so additional starts don't occur
+		if (timerTracker[timerKey] != undefined && timerTracker[timerKey] != null) {
+
+			clearTimeout(timerTracker[timerKey]);
+		}
+
+		timerTracker[timerKey] = setTimeout(() => {
+														startVerify(configObj, true, true);
+
+												  }, (60000 * 3));
+
+		success = false;
+	}
+
+	return success;
+}
+
+
+async function startVerify(config) {
+
+	// Verify bot is still enabled / active
+
+	const pair = config.pair;		
+	const botId = config.botId;
+
+	if (botId != undefined && botId != null && botId != '') {
+
+		const bot = await shareData.DCABot.getBots({ 'botId': botId });
+
+		if (bot && bot.length > 0) {
+
+			if (bot[0].active) {
+
+				// Reload bot config from db in case any changes were made
+
+				let botConfigDb = bot[0].config;
+
+				botConfigDb['botId'] = botId;
+				botConfigDb['pair'] = pair;
+				botConfigDb['dealCount'] = config['dealCount'];
+
+				start(botConfigDb, true, true);
+			}
+		}
+	}
+}
+
+
 async function resumeBots() {
 
 	// Check for active deals and resume bots
@@ -1972,6 +2045,7 @@ async function resumeBots() {
 			config['botName'] = botName;
 			config['dealCount'] = dealCount;
 			config['dealMax'] = dealMax;
+			config['dealResume'] = true;
 
 			deal['config'] = config;
 

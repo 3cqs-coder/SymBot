@@ -141,8 +141,8 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited                  |
+| volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |
-
 
 ```
 POST /api/bots/create
@@ -163,9 +163,8 @@ POST /api/bots/create
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited                  |
+| volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |
-
-
 
 ```
 POST /api/bots/update

@@ -635,6 +635,7 @@ async function calculateOrders(body) {
 
 	botData.pair = pair;
 	botData.dealMax = body.dealMax;
+	botData.volumeMin = body.volumeMin;
 	botData.startConditions.push(body.startCondition);
 	botData.firstOrderAmount = body.firstOrderAmount;
 	botData.dcaOrderAmount = body.dcaOrderAmount;
