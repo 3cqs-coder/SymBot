@@ -362,8 +362,23 @@ async function start(data, startBot, reload) {
 					}
 				}
 
+				let ordersDeviation = [];
+
+				for (let x = 0; x < orders.length; x++) {
+
+					let order = orders[x];
+
+					let deviationPerc = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, x);
+
+					deviationPerc = Number(deviationPerc.toFixed(2));
+
+					ordersDeviation.push(deviationPerc);
+				}
+
 				orders.forEach(function (order) {
+
 					t.cell('No', order.orderNo);
+					t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
 					t.cell('Price', '$' + order.price);
 					t.cell('Average', '$' + order.average);
 					t.cell('Target', '$' + order.target);
@@ -376,7 +391,7 @@ async function start(data, startBot, reload) {
 					t.newRow();
 				});
 
-				const maxDeviation = await getDeviation(Number(orders[0].price), Number(orders[orders.length - 1].price));
+				const maxDeviation = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, orders.length - 1);
 
 				//console.log(t.toString());
 				//Common.logger(t.toString());
@@ -681,8 +696,22 @@ async function start(data, startBot, reload) {
 					}
 				}
 
+				let ordersDeviation = [];
+
+				for (let x = 0; x < orders.length; x++) {
+
+					let order = orders[x];
+
+					let deviationPerc = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, x);
+
+					deviationPerc = Number(deviationPerc.toFixed(2));
+
+					ordersDeviation.push(deviationPerc);
+				}
+				
 				orders.forEach(function (order) {
 					t.cell('No', order.orderNo);
+					t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
 					t.cell('Price', '$' + order.price);
 					t.cell('Average', '$' + order.average);
 					t.cell('Target', '$' + order.target);
@@ -695,7 +724,7 @@ async function start(data, startBot, reload) {
 					t.newRow();
 				});
 
-				const maxDeviation = await getDeviation(Number(orders[0].price), Number(orders[orders.length - 1].price));
+				const maxDeviation = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, orders.length - 1);
 
 				//console.log(t.toString());
 				//Common.logger(t.toString());
@@ -1554,6 +1583,23 @@ const sellOrder = async (exchange, pair, qty) => {
 const getDeviation = async (a, b) => {
 
 	return (Math.abs( (a - b) / ( (a + b) / 2 ) ) * 100);
+}
+
+
+const getDeviationDca = async (dcaOrderStepPercent, dcaOrderStepPercentMultiplier, dcaMaxOrder) => {
+
+	let maxDeviation;
+
+	if (Number(dcaOrderStepPercentMultiplier) == 1) {
+
+		maxDeviation = Number(dcaMaxOrder) * Number(dcaOrderStepPercent);
+	}
+	else {
+
+		maxDeviation = Number(dcaOrderStepPercent) * (1 - Number(dcaOrderStepPercentMultiplier) ** Number(dcaMaxOrder)) / (1 - Number(dcaOrderStepPercentMultiplier));
+	}
+
+	return maxDeviation;
 }
 
 

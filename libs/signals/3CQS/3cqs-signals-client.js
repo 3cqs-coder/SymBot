@@ -45,10 +45,11 @@ async function start(apiKey) {
 			'api-key': apiKey,
 			'user-agent': shareData.appData.name + '/' + shareData.appData.version
 		},
-		transports: ['websocket', 'polling'],
-		path: '/stream/v1/signals',
-		reconnection: true,
-		reconnectionDelay: 10000
+		'forceNew': true,
+		'transports': ['websocket', 'polling'],
+		'path': '/stream/v1/signals',
+		'reconnection': true,
+		'reconnectionDelay': 10000
 	});
 
 
@@ -67,7 +68,13 @@ async function start(apiKey) {
 				'message_id_client': messageId
 			});
 
-		}, 500);
+		}, 1000);
+	});
+
+
+	socket.io.on('ping', (data) => {
+
+		//showLog('3CQS SIGNAL PING', data);
 	});
 
 
