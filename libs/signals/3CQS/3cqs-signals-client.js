@@ -107,10 +107,13 @@ async function start(apiKey) {
 		// Too many tries
 		if (data['code'] == 429) {
 
-			// Disconnect after 30 seconds to let auto-reconnect again
+			// Disconnect and connect again after 30 seconds
+
+			socket.disconnect();
+
 			setTimeout(() => {
 
-				socket.disconnect();
+				socket.connect();				
 
 			}, 30000);
 		}

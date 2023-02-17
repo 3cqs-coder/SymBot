@@ -2063,6 +2063,8 @@ async function resumeBots() {
 
 	if (botsActive && botsActive.length > 0) {
 
+		let count = 0;
+
 		for (let i = 0; i < botsActive.length; i++) {
 
 			let bot = botsActive[i];
@@ -2085,7 +2087,9 @@ async function resumeBots() {
 				// Start bot if active, no deals are currently running and start condition is now asap
 				if (dealsActive && dealsActive.length == 0) {
 
-					startDelay({ 'config': config, 'delay': x + 1, 'telegram': false });
+					startDelay({ 'config': config, 'delay': count + 1, 'telegram': false });
+
+					count++;
 				}
 			}
 		}
