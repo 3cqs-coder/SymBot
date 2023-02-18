@@ -396,6 +396,7 @@ async function start(data, startBot, reload) {
 				//console.log(t.toString());
 				//Common.logger(t.toString());
 
+				let balanceObj;
 				let wallet = 0;
 
 				if (config.sandBox) {
@@ -404,7 +405,9 @@ async function start(data, startBot, reload) {
 				}
 				else {
 
-					const balance = await getBalance(exchange, 'USDT');
+					balanceObj = await getBalance(exchange, 'USDT');
+
+					const balance = balanceObj.balance;
 					wallet = balance;
 				}
 
@@ -432,7 +435,7 @@ async function start(data, startBot, reload) {
 
 				if (startBot == undefined || startBot == null || startBot == false) {
 
-					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
+					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation, balanceObj);
 
 					let ordersTable = await ordersToData(t.toString());
 
@@ -441,7 +444,7 @@ async function start(data, startBot, reload) {
 								'data': {
 											'pair': pair,
 											'orders': ordersTable,
-											'content': contentAdd
+											'content': contentAdd,
 										}
 							});
 
@@ -729,6 +732,7 @@ async function start(data, startBot, reload) {
 				//console.log(t.toString());
 				//Common.logger(t.toString());
 
+				let balanceObj;
 				let wallet = 0;
 
 				if (config.sandBox) {
@@ -737,7 +741,9 @@ async function start(data, startBot, reload) {
 				}
 				else {
 
-					const balance = await getBalance(exchange, 'USDT');
+					balanceObj = await getBalance(exchange, 'USDT');
+
+					const balance = balanceObj.balance;
 					wallet = balance;
 				}
 
@@ -765,7 +771,7 @@ async function start(data, startBot, reload) {
 
 				if (startBot == undefined || startBot == null || startBot == false) {
 
-					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation);
+					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation, balanceObj);
 
 					let ordersTable = await ordersToData(t.toString());
 
@@ -1532,19 +1538,32 @@ const getBots = async (query) => {
 		
 const getBalance = async (exchange, symbol) => {
 
+	let success = true;
+
+	let balance;
+	let balanceObj;
+	let errMsg;
+
 	try {
 
-		let balance = await exchange.fetchBalance();
-		balance = balance[symbol].free;
-
-		return parseFloat(balance);
+		balanceObj = await exchange.fetchBalance();
+		balance = balanceObj[symbol].free;
 	}
 	catch (e) {
 
-		Common.logger(JSON.stringify(e));
+		errMsg = e;
+		
+		if (typeof errMsg != 'string') {
 
-		return false;
+			errMsg = JSON.stringify(errMsg);
+		}
+
+		Common.logger(errMsg);
+
+		success = false;
 	}
+
+	return ( { 'success': success, 'balance': parseFloat(balance), 'error': errMsg } );
 };
 
 
@@ -1947,10 +1966,18 @@ async function ordersToData(data) {
 }
 
 
-async function ordersAddContent(wallet, lastDcaOrderSum, maxDeviation) {
+async function ordersAddContent(wallet, lastDcaOrderSum, maxDeviation, balanceObj) {
+
+	let balanceError;
+
+	if (balanceObj != undefined && balanceObj != null && balanceObj != '') {
+
+		balanceError = balanceObj.error;
+	}
 
 	let obj = {
 				'balance': Number(wallet),
+				'balance_error': balanceError,
 				'max_funds': Number(lastDcaOrderSum),
 				'max_deviation_percent': Number(maxDeviation.toFixed(2))
 			  };

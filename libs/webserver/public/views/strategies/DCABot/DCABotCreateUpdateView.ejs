@@ -31,7 +31,7 @@
 
 			botText = 'Update Bot';
 			headerText = 'Update DCA Bot';
-			
+
 			$('#botIdRow').show();
 		}
 
@@ -213,7 +213,16 @@
 								$('#formSubmitReset').show();
 								$('#formSubmitStart').show();
 
-								alertBox('Verify orders and confirm to ' + botText);
+								if (content.balance_error != undefined && content.balance_error != null && content.balance_error != '') {
+
+									$('#formSubmitStart').hide();
+
+									alertBox('<b>ERROR:</b> ' + content.balance_error);
+								}
+								else {
+
+									alertBox('Verify orders and confirm to ' + botText);
+								}
 							}
 						}
 					},
