@@ -19,6 +19,49 @@
 		$('input,select').not('[type=button]').prop('disabled', false);
 	}
 
+
+	function clearAll() {
+
+		$('#pair option').each(function(){
+
+			this.selected = false;
+		});
+
+		$('#pair').trigger('change');
+	}
+
+
+	function selectAll(quote) {
+
+		let allPairs = [];
+
+		clearAll();
+
+		//let selected = $('#pair :selected').map((_, e) => e.value).get();
+
+		let options = $("#pair option").map(function() {
+
+					return this.value;
+		}).get();
+
+		for (let i = 0; i < options.length; i++) {
+
+			let optionVal = options[i];
+
+			let pairs = optionVal.split('/');
+
+			if (pairs[1].toUpperCase() == quote.toUpperCase()) {
+
+				allPairs.push(optionVal);
+				//$('#pair option[value="' + optionVal + '"]').attr('selected', true);
+			}
+		}
+
+		$('#pair').val(allPairs);
+		$('#pair').trigger('change');
+	}
+
+
 	$(document).ready(function () {
 
 		let botText = 'Create Bot';
@@ -45,6 +88,29 @@
 		const submitUrl = $(form).attr('action');
 
 		const createStep = $('#createStep').val();
+
+
+		$('#clearAll').on('click', function(e) {
+
+			e.preventDefault();
+			
+			clearAll();
+		});
+
+
+		$('[id^="selectAll"]').on('click', function(e) {
+
+			e.preventDefault();
+
+			const id = $(this).attr('id');
+			
+			const data = id.split('-');
+
+			const quote = data[1]
+
+			selectAll(quote);
+		});
+
 
 		$('[id^="formSubmit"]').on('click', function(e) {
 
@@ -249,6 +315,11 @@
 
 		const charCode = (e.which) ? e.which : e.keyCode;
 
+		if (id == undefined || id == null) {
+
+			return;
+		}
+
 		if (id.toLowerCase() != 'pair' && id.toLowerCase() != 'botname') {
 
 			let regEx = /[^0-9\.]/g;
@@ -347,7 +418,26 @@
 
 		<tr id="botIdRow" style="display: none;"><td>Bot ID:</td> <td><%- botData.botId %></td></tr>
 		<tr><td>Bot Name:</td> <td><input id="botName" name="botName" value="<%- botData.botName %>" class="form-field" style="width: 200px;"></td></tr>
-		<tr><td style="vertical-align: top;">Pair:</td> <td><select id="pair" name="pair" class="form-select-pair" style="width: 200px;" multiple="multiple"><%- symbolString %></select></td></tr>
+		<tr><td style="vertical-align: top;">Pair:</td>
+		
+		<td>
+		
+		<div style="position: relative; display: inline-block; float: left;">
+			<select id="pair" name="pair" class="form-select-pair" style="width: 200px;" multiple="multiple"><%- symbolString %></select>
+		</div>
+
+		<div style="position: relative; display: inline-block; float: left; left: 5px;">
+			<button id="clearAll" class="btnAll">Clear</button>
+		</div>
+
+		<div style="position: relative; display: inline-block; margin-top: 10px; margin-bottom: 10px;">
+			<button id="selectAll-USD" class="btnAll">USD</button>
+			<button id="selectAll-USDT" class="btnAll">USDT</button>
+			<button id="selectAll-USDC" class="btnAll">USDC</button>
+			<button id="selectAll-BUSD" class="btnAll">BUSD</button>
+		</div>
+
+		</td></tr>
 		<tr><td>Base Order Size:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Safety Order Size:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
 		<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" class="form-field"></td></tr>

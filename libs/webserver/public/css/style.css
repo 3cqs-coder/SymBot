@@ -381,6 +381,25 @@ table#ordersTable tr:not(:first-child):hover {
 }
 
 
+.btnAll {
+
+	font-weight: 600;
+	font-size: 0.95rem;
+	color: #424141;
+	padding: 5px;
+	background: linear-gradient(0deg, #b8b8b8 0%, #f5f0f0 100%);
+	border: solid #bfbfbf 1px;
+	box-shadow: none;
+	border-radius: 5px;
+	transition : 535ms;
+	transform: translateY(0);
+	#display: flex;
+	#flex-direction: row;
+	align-items: center;
+	cursor: pointer;
+}
+
+
 table#login {
 
 	font-size: 1.2rem;
