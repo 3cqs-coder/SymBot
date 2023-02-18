@@ -16,7 +16,16 @@
 		$('#formSubmitStart').hide();
 		$('#ordersBox').hide();
 
-		$('input,select').not('[type=button]').prop('disabled', false);
+		disableAll(false);
+	}
+
+
+	function disableAll(disable) {
+
+		$('input,select').not('[type=button]').prop('disabled', disable);
+
+		$('[id^="selectAll"]').prop('disabled', disable);
+		$('[id^="clearAll"]').prop('disabled', disable);
 	}
 
 
@@ -106,7 +115,7 @@
 			
 			const data = id.split('-');
 
-			const quote = data[1]
+			const quote = data[1];
 
 			selectAll(quote);
 		});
@@ -164,7 +173,7 @@
 			$('#ordersBox').hide();
 
 			// Enable form so data is retrievable
-			$('input,select').not('[type=button]').prop('disabled', false);
+			disableAll(false);
 
 			$('#active').val($('#botActive').prop('checked'));
 
@@ -189,7 +198,8 @@
 			$('#spinner-overlay').fadeIn(100);
 
 			$('#formSubmitPreview').hide();
-			$('input,select').not('[type=button]').prop('disabled', true);
+
+			disableAll(true);
 
 			$.ajax({
 						type: 'POST',
@@ -203,8 +213,9 @@
 							$('#spinner-overlay').fadeOut(100);
 
 							$('#formSubmitPreview').show();
-							$('input,select').not('[type=button]').prop('disabled', false);
 
+							disableAll(false);
+			
 							//alertBox(JSON.stringify(data));
 							alertBox(data.data);
 						}
@@ -273,7 +284,7 @@
 
 								$('#spinner-overlay').fadeOut(100);
 
-								$('input,select').not('[type=button]').prop('disabled', true);
+								disableAll(true);
 
 								$('#ordersBox').show();
 								$('#formSubmitReset').show();
