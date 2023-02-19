@@ -2098,6 +2098,8 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 
 async function volumeValid(startBot, pair, symbol, config) {
 
+	const maxMins = 5;
+
 	let success = true;
 
 	const volumeMin = Number(config.volumeMin);
@@ -2108,20 +2110,36 @@ async function volumeValid(startBot, pair, symbol, config) {
 
 	if (startBot && volumeMin > 0 && volume24h < volumeMin) {
 
-		if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Delaying deal start. ' + pair + ' 24h volume: ' + volume24h + 'M. Minimum required: ' + volumeMin + 'M') ); }
-
 		const configObj = JSON.parse(JSON.stringify(config));
 
 		// Clear previous timeout if exists so additional starts don't occur
 		if (timerTracker[timerKey] != undefined && timerTracker[timerKey] != null) {
 
-			clearTimeout(timerTracker[timerKey]);
+			clearTimeout(timerTracker[timerKey]['id']);
+		}
+		else {
+
+			timerTracker[timerKey] = {};
+			timerTracker[timerKey]['started'] = new Date();
 		}
 
-		timerTracker[timerKey] = setTimeout(() => {
-														startVerify(configObj, true, true);
+		let diffSec = (new Date().getTime() - new Date(timerTracker[timerKey]['started']).getTime()) / 1000;
 
-												  }, (60000 * 3));
+		if (diffSec > (60 * maxMins)) {
+
+			delete timerTracker[timerKey];
+
+			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Timeout reached for delayed deal start: ' + pair) ); }
+		}
+		else {
+
+			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Delaying deal start. ' + pair + ' 24h volume: ' + volume24h + 'M. Minimum required: ' + volumeMin + 'M') ); }
+
+			timerTracker[timerKey]['id'] = setTimeout(() => {
+																startVerify(configObj, true, true);
+
+															}, (60000 * 1));
+		}
 
 		success = false;
 	}
