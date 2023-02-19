@@ -218,6 +218,7 @@ async function processSignal(data) {
 
 				const bot = bots[i];
 				const botId = bot.botId;
+				const botName = bot.botName;
 				const config = bot.config;
 				const pairs = config.pair;
 
@@ -251,6 +252,13 @@ async function processSignal(data) {
 					shareData.Common.logger(msg);
 					shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 				}
+				else {
+
+					let msg = '3CQS Signal Start: ' + botName + ' (' + pairUse + ')';
+
+					shareData.Common.logger(msg);
+					shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+				}
 			}
 		}
 	}
@@ -276,7 +284,23 @@ async function processSignal(data) {
 			for (let i = 0; i < deals.length; i++) {
 
 				const deal = deals[i];
+
 				const botId = deal.botId;
+				const botName = deal.botName;
+				const dealId = deal.dealId;
+				const pair = deal.pair;
+
+				let config = deal.config;
+
+				// Set last deal flag				
+				config.dealLast = true;
+
+				const data = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config });
+
+				let msg = '3CQS Signal Stop: ' + botName + ' (' + pair + ')';
+
+				shareData.Common.logger(msg);
+				shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 
 				botsDisable[botId] = 1;
 			}
@@ -284,7 +308,7 @@ async function processSignal(data) {
 			// Disable bot
 			for (let botId in botsDisable) {
 
-				let res = await shareData.Common.fetchURL('http://127.0.0.1:' + port + '/api/bots/' + botId + '/disable', 'post', headers, {});
+				//let res = await shareData.Common.fetchURL('http://127.0.0.1:' + port + '/api/bots/' + botId + '/disable', 'post', headers, {});
 			}
 		}
 	}

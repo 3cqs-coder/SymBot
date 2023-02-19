@@ -175,7 +175,19 @@
 				startCondition = bot['config']['startConditions'][0];
 			}
 
-			startCondition = startCondition.toUpperCase();
+			if (startCondition.indexOf('|') !== -1) {
+
+				const data = startCondition.split('|');
+
+				const signalSource = data[1];
+				const signalId = data[2];
+
+				startCondition = appData['bots']['start_conditions'][startCondition]['description'];
+			}
+			else {
+
+				startCondition = startCondition.toUpperCase();
+			}
 
 			if (active) {
 				

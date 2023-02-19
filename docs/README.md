@@ -140,7 +140,8 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
-| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited                  |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited (Can reset for multi-pair bots |
+| pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |
 
@@ -162,7 +163,8 @@ POST /api/bots/create
 | dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
-| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited                  |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited (Can reset for multi-pair bots |
+| pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |
 

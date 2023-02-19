@@ -48,6 +48,7 @@ async function start(data, startBot, reload) {
 	let botActive = true;
 	let botFoundDb = false;
 	let pairFoundDb = false;
+	let dealLast = false;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
@@ -81,6 +82,7 @@ async function start(data, startBot, reload) {
 		return ( { 'success': false, 'data': 'Invalid exchange: ' + config.exchange } );
 	}
 
+	
 	try {
 
 		//Load markets
@@ -923,7 +925,7 @@ async function start(data, startBot, reload) {
 	if (dealCount >= dealMax && dealMax > 0) {
 
 		// Deactivate bot
-		const data = await update(botIdMain, { 'active': false });
+		const data = await updateBot(botIdMain, { 'active': false });
 
 		if (shareData.appData.verboseLog) {
 			
@@ -936,8 +938,25 @@ async function start(data, startBot, reload) {
 
 	let pairCount = botDealsActive.length;
 
+	// Check if last deal flag is set
+	if (botDealsActive && botDealsActive.length > 0) {
+
+		for (let i = 0; i < botDealsActive.length; i++) {
+
+			let deal = botDealsActive[i];
+
+			let dealId = deal['dealId'];		
+			let config = deal['config'];
+
+			if (dealId == dealIdMain && config['dealLast']) {
+
+				dealLast = true;
+			}
+		}
+	}
+
 	// Start another bot deal if max deals and max pairs have not been reached
-	if (botFoundDb && botActive && (pairCount < pairMax || pairMax == 0)) {
+	if (botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
@@ -1674,7 +1693,7 @@ async function connectExchange(configObj) {
 }
 
 
-async function update(botId, data) {
+async function updateBot(botId, data) {
 
 	let botData;
 	let success = true;
@@ -1694,6 +1713,35 @@ async function update(botId, data) {
 
 
 	if (botData == undefined || botData == null || botData['matchedCount'] < 1) {
+
+		success = false;
+	}
+
+	return( { 'success': success } );
+}
+
+
+async function updateDeal(botId, dealId, data) {
+
+	let dealData;
+	let success = true;
+
+	try {
+
+		dealData = await Deals.updateOne({
+						botId: botId,
+						dealId: dealId
+					}, data);
+	}
+	catch (e) {
+
+		success = false;
+
+		Common.logger(JSON.stringify(e));
+	}
+
+
+	if (dealData == undefined || dealData == null || dealData['matchedCount'] < 1) {
 
 		success = false;
 	}
@@ -2276,7 +2324,8 @@ module.exports = {
 
 	colors,
 	start,
-	update,
+	updateBot,
+	updateDeal,
 	connectExchange,
 	removeConfigData,
 	initBot,

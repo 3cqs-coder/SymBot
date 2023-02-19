@@ -349,7 +349,7 @@ async function apiCreateUpdateBot(req, res) {
 									'config': configData
 								  };
 
-					const data = await shareData.DCABot.update(botId, dataObj);
+					const data = await shareData.DCABot.updateBot(botId, dataObj);
 
 					if (!data.success) {
 
@@ -443,7 +443,7 @@ async function apiEnableDisableBot(req, res) {
 
 	const bots = await shareData.DCABot.getBots({ 'botId': botId });
 
-	const data = await shareData.DCABot.update(botId, { 'active': active });
+	const data = await shareData.DCABot.updateBot(botId, { 'active': active });
 
 	if (!data.success) {
 
@@ -462,54 +462,79 @@ async function apiEnableDisableBot(req, res) {
 
 		if (active) {
 
-			const bot = await shareData.DCABot.getBots({ 'botId': botId });
+			let pairs = bot['config']['pair'];
 
-			if (bot && bot.length > 0) {
+			// Get total active pairs currently running on bot
+			let botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
 
-				let pairs = bot[0]['config']['pair'];
+			let pairCount = botDealsActive.length;
 
-				// Get total active pairs currently running on bot
-				let botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
+			for (let i = 0; i < pairs.length; i++) {
 
-				let pairCount = botDealsActive.length;
+				let pair = pairs[i];
+				let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
-				for (let i = 0; i < pairs.length; i++) {
+				let config = bot['config'];
 
-					let pair = pairs[i];
-					let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+				let pairMax = config.pairMax;
 
-					let config = bot[0]['config'];
+				if (pairMax == undefined || pairMax == null || pairMax == '') {
 
-					let pairMax = config.pairMax;
+					pairMax = 0;
+				}
 
-					if (pairMax == undefined || pairMax == null || pairMax == '') {
+				// Start bot if active and no deals currently running
+				if (dealsActive.length == 0) {
 
-						pairMax = 0;
+					let startCondition;
+
+					config['pair'] = pair;
+					config = await shareData.DCABot.applyConfigData(botId, botName, config);
+
+					if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
+
+						startCondition = config['startConditions'][0].toLowerCase();
 					}
 
-					// Start bot if active and no deals currently running
-					if (dealsActive.length == 0) {
+					// Only start bot if first condition is asap
+					if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
 
-						let startCondition;
+						if (pairMax == 0 || pairCount < pairMax) {
 
-						config['pair'] = pair;
-						config = await shareData.DCABot.applyConfigData(botId, botName, config);
+							pairCount++;
 
-						if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
-
-							startCondition = config['startConditions'][0].toLowerCase();
+							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
 						}
+					}
+				}
+			}
+		}
+		else {
 
-						// Only start bot if first condition is asap
-						if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
+			const botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
 
-							if (pairMax == 0 || pairCount < pairMax) {
+			if (botDealsActive && botDealsActive.length > 0) {
 
-								pairCount++;
+				for (let i = 0; i < botDealsActive.length; i++) {
 
-								shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
-							}
-						}
+					let startCondition;
+
+					const deal = botDealsActive[i];
+					const dealId = deal.dealId;
+
+					let config = deal.config;
+
+					if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
+
+						startCondition = config['startConditions'][0].toLowerCase();
+					}
+
+					if (startCondition != 'asap') {
+
+						// Set last deal flag if not asap	
+						config.dealLast = true;
+
+						const data = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config });
 					}
 				}
 			}
