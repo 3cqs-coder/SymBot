@@ -126,6 +126,7 @@ async function init() {
 										'started': new Date()
 								   },
 						'DB': DB,
+						'Signals3CQS': Signals3CQS,
 						'DCABot': DCABot,
 						'DCABotManager': DCABotManager,
 						'Common': Common,
@@ -136,11 +137,11 @@ async function init() {
 	appDataConfig = shareData.appData;
 
 	DB.init(shareData);
+	Signals3CQS.init(shareData);
 	DCABot.init(shareData);
 	DCABotManager.init(shareData);
 	Telegram.init(shareData);
 	WebServer.init(shareData);
-	Signals3CQS.init(shareData);
 	Common.init(shareData);
 
 	let success = true;
@@ -324,9 +325,6 @@ async function start() {
 		}
 
 		Common.logMonitor();
-
-		// Get signals and start bots accordingly
-		const socket = await Signals3CQS.start(appConfig['data']['signals']['3CQS']['api_key']);
 	}
 	else {
 

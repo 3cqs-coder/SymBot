@@ -939,16 +939,18 @@ async function start(data, startBot, reload) {
 	let pairCount = botDealsActive.length;
 
 	// Check if last deal flag is set
-	if (botDealsActive && botDealsActive.length > 0) {
+	let botDealCurrent = await getDeals({ 'botId': botIdMain, 'dealId': dealIdMain });
 
-		for (let i = 0; i < botDealsActive.length; i++) {
+	if (botDealCurrent && botDealCurrent.length > 0) {
 
-			let deal = botDealsActive[i];
+		for (let i = 0; i < botDealCurrent.length; i++) {
+
+			let deal = botDealCurrent[i];
 
 			let dealId = deal['dealId'];		
 			let config = deal['config'];
 
-			if (dealId == dealIdMain && config['dealLast']) {
+			if (config['dealLast']) {
 
 				dealLast = true;
 			}
@@ -1753,7 +1755,7 @@ async function updateDeal(botId, dealId, data) {
 async function checkTracker() {
 
 	// Monitor existing deals if they weren't updated after n minutes to take potential action
-	const maxMins = 3;
+	const maxMins = 2;
 
 	for (let dealId in dealTracker) {
 
@@ -2178,6 +2180,16 @@ async function startVerify(config) {
 }
 
 
+async function startSignals() {
+
+	// Start signals after everything else is finished loading
+
+	const appConfig = await Common.getConfig('app.json');
+
+	const socket = await shareData.Signals3CQS.start(appConfig['data']['signals']['3CQS']['api_key']);
+}
+
+
 async function startAsap(pairIgnore) {
 
 	// Start any active asap bots that have no deals running
@@ -2334,7 +2346,10 @@ async function initApp() {
 
 	}, (60000 * 1));
 
-	resumeBots();
+
+	await resumeBots();
+
+	startSignals();
 }
 
 
