@@ -241,6 +241,11 @@ async function processSignal(data) {
 
 					let data = res.data;
 
+					if (typeof data != 'string') {
+
+						data = JSON.stringify(data);
+					}
+
 					let msg = '3CQS Signal Start Failed. Bot ID: ' + botId + ' / Info: ' + data;
 
 					shareData.Common.logger(msg);

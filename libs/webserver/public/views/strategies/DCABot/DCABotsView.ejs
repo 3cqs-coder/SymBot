@@ -156,6 +156,9 @@
 	</tr>
 
 	<%
+
+		const maxPairs = 10;
+
 		for (let i = 0; i < bots.length; i++) {
 
 			let pair;
@@ -199,7 +202,14 @@
 			
 			if (typeof bot['config']['pair'] !== 'string') {
 
-				pair = bot['config']['pair'].join(', ');
+				let pairs = bot['config']['pair'].slice(0, maxPairs);
+
+				pair = pairs.join(', ');
+				
+				if (bot['config']['pair'].length > maxPairs) {
+
+					pair += ' ...';
+				}
 			}
 			else {
 

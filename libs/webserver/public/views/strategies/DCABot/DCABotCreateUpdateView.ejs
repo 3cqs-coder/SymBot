@@ -335,7 +335,7 @@
 
 			let regEx = /[^0-9\.]/g;
 
-			if (id.toLowerCase() == 'dealmax') {
+			if (id.toLowerCase() == 'dealmax' || id.toLowerCase() == 'pairmax') {
 
 				regEx = /[^0-9]/g;
 			}
@@ -463,6 +463,7 @@
 		<tr><td>Safety Order Step Scale:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" class="form-field"></td></tr>
 		<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
 		<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="<%- botData.dealMax %>" class="form-field"></td></tr>
+		<tr><td>Max Pairs:</td> <td><input id="pairMax" name="pairMax" value="<%- botData.pairMax %>" class="form-field"></td></tr>
 		<tr><td>Minimum 24h Volume:</td> <td><input id="volumeMin" name="volumeMin" value="<%- botData.volumeMin %>" class="form-field"> Million</td></tr>
 		<tr><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
 		<tr><td>Enabled:</td> <td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>

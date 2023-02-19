@@ -57,6 +57,7 @@ async function start(data, startBot, reload) {
 	let botIdMain = config.botId;
 	let dealCount = config.dealCount;
 	let dealMax = config.dealMax;
+	let pairMax = config.pairMax;
 
 	if (dealCount == undefined || dealCount == null) {
 
@@ -66,6 +67,11 @@ async function start(data, startBot, reload) {
 	if (dealMax == undefined || dealMax == null) {
 
 		dealMax = 0;
+	}
+
+	if (pairMax == undefined || pairMax == null) {
+
+		pairMax = 0;
 	}
 
 	let exchange = await connectExchange(config);
@@ -490,7 +496,8 @@ async function start(data, startBot, reload) {
 						isStart: 0,
 						active: true,
 						dealCount: dealCount,
-						dealMax: dealMax
+						dealMax: dealMax,
+						pairMax: pairMax
 					});
 
 					await deal.save();
@@ -826,7 +833,8 @@ async function start(data, startBot, reload) {
 						isStart: 0,
 						active: true,
 						dealCount: dealCount,
-						dealMax: dealMax
+						dealMax: dealMax,
+						pairMax: pairMax
 					});
 
 					await deal.save();
@@ -878,15 +886,13 @@ async function start(data, startBot, reload) {
 
 	try {
 
-		const bot = await Bots.findOne({
-			botId: botIdMain
-		});
+		const bot = await getBots({ 'botId': botIdMain });
 
-		if (bot) {
+		if (bot && bot.length > 0) {
 
 			botFoundDb = true;
 
-			let botPairsDb = bot['config']['pair'];
+			let botPairsDb = bot[0]['config']['pair'];
 
 			// Make sure pair was not removed from bot configuration
 			for (let pairDb of botPairsDb) {
@@ -897,14 +903,16 @@ async function start(data, startBot, reload) {
 				}
  			}
  
-			if (!bot['active'] || !pairFoundDb) {
+			if (!bot[0]['active']) {
 
 				botActive = false;
 			}
 			else {
 
-				botConfigDb = bot['config'];
+				botConfigDb = bot[0]['config'];
+
 				dealMax = botConfigDb['dealMax'];
+				pairMax = botConfigDb['pairMax'];
 			}
 		}
 	}
@@ -915,7 +923,7 @@ async function start(data, startBot, reload) {
 	if (dealCount >= dealMax && dealMax > 0) {
 
 		// Deactivate bot
-		const data = await shareData.DCABot.update(botIdMain, { 'active': false });
+		const data = await update(botIdMain, { 'active': false });
 
 		if (shareData.appData.verboseLog) {
 			
@@ -923,24 +931,39 @@ async function start(data, startBot, reload) {
 		}
 	}
 
-	// Start another bot deal if max deals have not been reached
-	if (botFoundDb && botActive && (dealCount < dealMax || dealMax == 0)) {
+	// Get total active pairs currently running on bot
+	let botDealsActive = await getDeals({ 'botId': botIdMain, 'status': 0 });
+
+	let pairCount = botDealsActive.length;
+
+	// Start another bot deal if max deals and max pairs have not been reached
+	if (botFoundDb && botActive && (pairCount < pairMax || pairMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
-		// Be sure bot id is set on config reload and increment deal count
-		configObj['dealCount']++;
+		if (pairFoundDb && (dealCount < dealMax || dealMax == 0)) {
 
-		botConfigDb['botId'] = botIdMain;
-		botConfigDb['pair'] = pair; // Set single pair
-		botConfigDb['dealCount'] = configObj['dealCount'];
+			// Be sure bot id is set on config reload and increment deal count
+			configObj['dealCount']++;
 
-		if (shareData.appData.verboseLog) {
+			botConfigDb['botId'] = botIdMain;
+			botConfigDb['pair'] = pair; // Set single pair
+			botConfigDb['dealCount'] = configObj['dealCount'];
 
-			Common.logger(colors.bgGreen('Starting new bot deal for ' + pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
+			if (shareData.appData.verboseLog) {
+
+				Common.logger(colors.bgGreen('Starting new bot deal for ' + pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
+			}
+
+			start(botConfigDb, true, true);
 		}
+		else {
 
-		start(botConfigDb, true, true);
+			// Check for another pair to start if deal max reached above on current pair
+			// Deal max will be reset so current pair could still begin again at some point
+
+			startAsap(pair);
+		}
 	}
 }
 
@@ -2068,7 +2091,7 @@ async function startVerify(config) {
 
 	if (botId != undefined && botId != null && botId != '') {
 
-		const bot = await shareData.DCABot.getBots({ 'botId': botId });
+		const bot = await getBots({ 'botId': botId });
 
 		if (bot && bot.length > 0) {
 
@@ -2083,6 +2106,75 @@ async function startVerify(config) {
 				botConfigDb['dealCount'] = config['dealCount'];
 
 				start(botConfigDb, true, true);
+			}
+		}
+	}
+}
+
+
+async function startAsap(pairIgnore) {
+
+	// Start any active asap bots that have no deals running
+	const botsActive = await getBots({ 'active': true, 'config.startConditions': { '$eq': 'asap' } });
+
+	if (botsActive && botsActive.length > 0) {
+
+		let count = 0;
+
+		for (let i = 0; i < botsActive.length; i++) {
+
+			let bot = botsActive[i];
+
+			let config = bot['config'];
+
+			let botId = bot.botId;
+			let botName = bot.botName;
+
+			let pairs = config.pair;
+			let pairMax = config.pairMax;
+
+			if (pairMax == undefined || pairMax == null || pairMax == '') {
+
+				pairMax = 0;
+			}
+
+			// Get total active pairs currently running on bot
+			let botDealsActive = await getDeals({ 'botId': botId, 'status': 0 });
+
+			let pairCount = botDealsActive.length;
+
+			for (let x = 0; x < pairs.length; x++) {
+
+				let pair = pairs[x];
+
+				if (pairIgnore != undefined && pairIgnore != null && pairIgnore != '') {
+
+					if (pair.toUpperCase() == pairIgnore.toUpperCase()) {
+
+						continue;
+					}
+				}
+
+				let dealsActive = await getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+
+				config['pair'] = pair;
+				config = await applyConfigData(botId, botName, config);
+
+				// Start bot if active, no deals are currently running and start condition is now asap
+				if (dealsActive && dealsActive.length == 0) {
+
+					if (pairMax == 0 || pairCount < pairMax) {
+
+						startDelay({ 'config': config, 'delay': count + 1, 'telegram': false });
+
+						count++;
+						pairCount++;
+					}
+					else {
+
+						//Common.logger('Bot max pairs of ' + pairMax + ' reached');
+					}
+				}
 			}
 		}
 	}
@@ -2131,42 +2223,9 @@ async function resumeBots() {
 		}
 	}
 
-	// Start any active asap bots that have no deals running
-	const botsActive = await getBots({ 'active': true, 'config.startConditions': { '$eq': 'asap' } });
+	await Common.delay(5000);
 
-	if (botsActive && botsActive.length > 0) {
-
-		let count = 0;
-
-		for (let i = 0; i < botsActive.length; i++) {
-
-			let bot = botsActive[i];
-
-			let config = bot['config'];
-
-			let botId = bot.botId;
-			let botName = bot.botName;
-			let pairs = config.pair;
-
-			for (let x = 0; x < pairs.length; x++) {
-
-				let pair = pairs[x];
-
-				let dealsActive = await getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
-
-				config['pair'] = pair;
-				config = await applyConfigData(botId, botName, config);
-
-				// Start bot if active, no deals are currently running and start condition is now asap
-				if (dealsActive && dealsActive.length == 0) {
-
-					startDelay({ 'config': config, 'delay': count + 1, 'telegram': false });
-
-					count++;
-				}
-			}
-		}
-	}
+	startAsap();
 }
 
 
