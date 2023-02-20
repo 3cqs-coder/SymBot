@@ -341,6 +341,19 @@ function convertBoolean(param) {
 }
 
 
+function hashCode(str) {
+
+	let h;
+
+	for (let i = 0; i < str.length; i++) {
+
+		h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+	}
+
+	return Math.abs(h);
+}
+
+
 function sortByKey(array, key) {
 
 	return array.sort(function(a, b) {
@@ -362,6 +375,7 @@ module.exports = {
 	getSignalConfigs,
 	saveConfig,
 	getDateParts,
+	hashCode,
 	timeDiff,
 	logger,
 	logMonitor,

@@ -479,7 +479,7 @@ async function start(data, startBot, reload) {
 
 					const configSave = await removeConfigData(config);
 
-					const dealId = pairSafe + '-' + Math.floor(Date.now() / 1000);
+					const dealId = await genDealId(config.botId, pairSafe);
 
 					dealIdMain = dealId;
 
@@ -821,7 +821,7 @@ async function start(data, startBot, reload) {
 
 					const configSave = await removeConfigData(config);
 
-					const dealId = pairSafe + '-' + Math.floor(Date.now() / 1000);
+					const dealId = await genDealId(config.botId, pairSafe);
 
 					dealIdMain = dealId;
 
@@ -1070,7 +1070,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 					orders[0].filled = 1;
 
 					if (shareData.appData.verboseLog) {
-					
+
 						Common.logger(
 							colors.green.bold.italic(
 							'Pair: ' +
@@ -1188,8 +1188,27 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						}
 
 						await Common.delay(1000);
-						
-						let followRes = await dcaFollow(config, exchange, dealId);
+
+						let followSuccess = false;
+						let followFinished = false;
+
+						while (!followFinished) {
+
+							let followRes = await dcaFollow(config, exchange, dealId);
+
+							followSuccess = followRes['success'];
+							followFinished = followRes['finished'];
+
+							if (!followSuccess) {
+
+								await Common.delay(1000);
+							}
+							
+							if (followFinished) {
+								
+								finished = true;
+							}
+						}
 					}
 				}
 			}
@@ -1396,7 +1415,26 @@ const dcaFollow = async (configData, exchange, dealId) => {
 			// Delay before following again
 			await Common.delay(1000);
 
-			await dcaFollow(config, exchange, dealId);
+			let followSuccess = false;
+			let followFinished = false;
+
+			while (!followFinished) {
+
+				let followRes = await dcaFollow(config, exchange, dealId);
+
+				followSuccess = followRes['success'];
+				followFinished = followRes['finished'];
+
+				if (!followSuccess) {
+
+					await Common.delay(1000);
+				}
+							
+				if (followFinished) {
+								
+					finished = true;
+				}
+			}
 		}
 		else {
 
@@ -2090,6 +2128,8 @@ async function volumeValid(startBot, pair, symbol, config) {
 
 	const timerKey = config.botId + pair;
 
+	let msg = 'Delaying deal start. ' + pair + ' 24h volume: ' + volume24h + 'M. Minimum required: ' + volumeMin + 'M';
+
 	if (startBot && volumeMin > 0 && volume24h < volumeMin) {
 
 		const configObj = JSON.parse(JSON.stringify(config));
@@ -2103,6 +2143,8 @@ async function volumeValid(startBot, pair, symbol, config) {
 
 			timerTracker[timerKey] = {};
 			timerTracker[timerKey]['started'] = new Date();
+
+			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 		}
 
 		let diffSec = (new Date().getTime() - new Date(timerTracker[timerKey]['started']).getTime()) / 1000;
@@ -2115,7 +2157,7 @@ async function volumeValid(startBot, pair, symbol, config) {
 		}
 		else {
 
-			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Delaying deal start. ' + pair + ' 24h volume: ' + volume24h + 'M. Minimum required: ' + volumeMin + 'M') ); }
+			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold(msg) ); }
 
 			timerTracker[timerKey]['id'] = setTimeout(() => {
 																startVerify(configObj, true, true);
@@ -2127,6 +2169,20 @@ async function volumeValid(startBot, pair, symbol, config) {
 	}
 
 	return success;
+}
+
+
+async function genDealId(botId, pair) {
+
+	let dateNow = Math.floor(Date.now() / 1000);
+
+	let str = botId + '-' + pair + '-' + dateNow;
+
+	let code = Common.hashCode(str);
+
+	let dealId = pair + '-' + code + '-' + dateNow;
+
+	return dealId;
 }
 
 
