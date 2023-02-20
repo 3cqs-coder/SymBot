@@ -166,26 +166,7 @@ async function start(data, startBot, reload) {
 				// Config reloaded from db so bot and continue
 				//await Common.delay(1000);
 
-				let followSuccess = false;
-				let followFinished = false;
-
-				while (!followSuccess && !followFinished) {
-
-					let followRes = await dcaFollow(config, exchange, isActive.dealId);
-
-					followSuccess = followRes['success'];
-					followFinished = followRes['finished'];
-
-					if (!followSuccess) {
-
-						await Common.delay(1000);
-					}
-				}
-
-				if (followFinished) {
-
-					//break;
-				}
+				let followRes = await dcaFollow(config, exchange, isActive.dealId);
 			}
 		}
 		else {
@@ -512,21 +493,7 @@ async function start(data, startBot, reload) {
 
 					sendTelegramStart(config.botName, dealId, pair);
 
-					let followSuccess = false;
-					let followFinished = false;
-
-					while (!followSuccess && !followFinished) {
-
-						let followRes = await dcaFollow(config, exchange, dealId);
-
-						followSuccess = followRes['success'];
-						followFinished = followRes['finished'];
-
-						if (!followSuccess) {
-
-							await Common.delay(1000);
-						}
-					}
+					let followRes = await dcaFollow(config, exchange, dealId);
 				}
 				else {
 /*
@@ -847,21 +814,7 @@ async function start(data, startBot, reload) {
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
-					let followSuccess = false;
-					let followFinished = false;
-
-					while (!followSuccess && !followFinished) {
-
-						let followRes = await dcaFollow(config, exchange, dealId);
-
-						followSuccess = followRes['success'];
-						followFinished = followRes['finished'];
-
-						if (!followSuccess) {
-
-							await Common.delay(1000);
-						}
-					}
+					let followRes = await dcaFollow(config, exchange, dealId);
 				}
 				else {
 
@@ -1184,21 +1137,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 						await Common.delay(1000);
 						
-						let followSuccess = false;
-						let followFinished = false;
-
-						while (!followSuccess && !followFinished) {
-
-							let followRes = await dcaFollow(config, exchange, dealId);
-
-							followSuccess = followRes['success'];
-							followFinished = followRes['finished'];
-
-							if (!followSuccess) {
-
-								await Common.delay(1000);
-							}
-						}
+						let followRes = await dcaFollow(config, exchange, dealId);
 					}
 				}
 			}
@@ -1405,21 +1344,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 			// Delay before following again
 			await Common.delay(1000);
 
-			let followSuccess = false;
-			let followFinished = false;
-
-			while (!followSuccess && !followFinished) {
-
-				let followRes = await dcaFollow(config, exchange, dealId);
-
-				followSuccess = followRes['success'];
-				followFinished = followRes['finished'];
-
-				if (!followSuccess) {
-
-					await Common.delay(1000);
-				}
-			}
+			await dcaFollow(config, exchange, dealId);
 		}
 		else {
 

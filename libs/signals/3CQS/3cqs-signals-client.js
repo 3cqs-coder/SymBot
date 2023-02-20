@@ -14,6 +14,7 @@ const Schema = require(pathRoot + '/mongodb/Signals3CQSSchema');
 const Signals = Schema.Signals3CQSSchema;
 
 
+let signalTracker = {};
 
 let fatalError = false;
 
@@ -26,6 +27,13 @@ setInterval(() => {
 	removeDataDb();
 
 }, (60000 * 60));
+
+
+setInterval(() => {
+
+	checkTracker();
+
+}, (60000 * 3));
 
 
 
@@ -186,6 +194,7 @@ async function processSignal(data) {
 	const symbol = data['symbol'];
 	const created = data['created'];
 	const signal = data['signal'];
+	const signalId = data['signal_id'];
 	const signalNameId = data['signal_name_id'];
 
 	const startCondition = 'signal|3CQS|' + signalNameId;
@@ -200,9 +209,11 @@ async function processSignal(data) {
 				  };
 
 
+	let isNew = await trackSignal(signalId);
+
 	let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
 
-	if (signal == 'BOT_START' && diffSec < (60 * maxMins)) {
+	if (isNew && signal == 'BOT_START' && diffSec < (60 * maxMins)) {
 
 		let query = {
 						'active': true,
@@ -269,7 +280,7 @@ async function processSignal(data) {
 	}
 
 
-	if (signal == 'BOT_STOP') {
+	if (isNew && signal == 'BOT_STOP') {
 
 		let botsDisable = {};
 
@@ -315,6 +326,41 @@ async function processSignal(data) {
 
 				//let res = await shareData.Common.fetchURL('http://127.0.0.1:' + port + '/api/bots/' + botId + '/disable', 'post', headers, {});
 			}
+		}
+	}
+}
+
+
+async function trackSignal(signalId) {
+
+	let isNew = false;
+
+	if (signalTracker[signalId] == undefined || signalTracker[signalId] == null) {
+
+		isNew = true;
+
+		signalTracker[signalId] = {};
+
+		signalTracker[signalId]['created'] = new Date();
+	}
+
+	return isNew;
+}
+
+
+async function checkTracker() {
+
+	const maxMins = 60;
+
+	for (let signalId in signalTracker) {
+
+		let created = signalTracker[signalId]['created'];
+
+		let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
+
+		if (diffSec > (60 * maxMins)) {
+
+			delete signalTracker[signalId];
 		}
 	}
 }
