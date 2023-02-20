@@ -166,7 +166,26 @@ async function start(data, startBot, reload) {
 				// Config reloaded from db so bot and continue
 				//await Common.delay(1000);
 
-				let followRes = await dcaFollow(config, exchange, isActive.dealId);
+				let followSuccess = false;
+				let followFinished = false;
+
+				while (!followFinished) {
+
+					let followRes = await dcaFollow(config, exchange, isActive.dealId);
+
+					followSuccess = followRes['success'];
+					followFinished = followRes['finished'];
+
+					if (!followSuccess) {
+
+						await Common.delay(1000);
+					}
+				}
+
+				if (followFinished) {
+
+					//break;
+				}
 			}
 		}
 		else {
@@ -493,7 +512,26 @@ async function start(data, startBot, reload) {
 
 					sendTelegramStart(config.botName, dealId, pair);
 
-					let followRes = await dcaFollow(config, exchange, dealId);
+					let followSuccess = false;
+					let followFinished = false;
+
+					while (!followFinished) {
+
+						let followRes = await dcaFollow(config, exchange, dealId);
+
+						followSuccess = followRes['success'];
+						followFinished = followRes['finished'];
+
+						if (!followSuccess) {
+
+							await Common.delay(1000);
+						}
+					}
+
+					if (followFinished) {
+
+						//break;
+					}
 				}
 				else {
 /*
@@ -814,7 +852,21 @@ async function start(data, startBot, reload) {
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
-					let followRes = await dcaFollow(config, exchange, dealId);
+					let followSuccess = false;
+					let followFinished = false;
+
+					while (!followFinished) {
+
+						let followRes = await dcaFollow(config, exchange, dealId);
+
+						followSuccess = followRes['success'];
+						followFinished = followRes['finished'];
+
+						if (!followSuccess) {
+
+							await Common.delay(1000);
+						}
+					}
 				}
 				else {
 
@@ -2240,7 +2292,12 @@ async function applyConfigData(botId, botName, config) {
 	// Pass bot id in config so existing bot is used
 	config['botId'] = botId;
 	config['botName'] = botName;
-	config['dealCount'] = 0;
+
+	// Don't reset deal count
+	if (config['dealCount'] == undefined || config['dealCount'] == null || config['dealCount'] == '') {
+
+		config['dealCount'] = 0;
+	}
 
 	return config;
 }
