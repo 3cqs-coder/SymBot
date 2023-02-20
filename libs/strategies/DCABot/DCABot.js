@@ -1402,6 +1402,9 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 			}
 
+			// Delay before following again
+			await Common.delay(1000);
+
 			let followSuccess = false;
 			let followFinished = false;
 

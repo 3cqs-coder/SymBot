@@ -181,7 +181,10 @@ function randomString(len) {
 
 async function processSignal(data) {
 
+	const maxMins = 5;
+
 	const symbol = data['symbol'];
+	const created = data['created'];
 	const signal = data['signal'];
 	const signalNameId = data['signal_name_id'];
 
@@ -197,7 +200,9 @@ async function processSignal(data) {
 				  };
 
 
-	if (signal == 'BOT_START') {
+	let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
+
+	if (signal == 'BOT_START' && diffSec < (60 * maxMins)) {
 
 		let query = {
 						'active': true,
