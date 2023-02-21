@@ -354,6 +354,16 @@ function hashCode(str) {
 }
 
 
+function numToBase26(num) {
+
+	num = parseInt(num, 10);
+
+	let str = num.toString(26).toUpperCase();
+
+	return str;
+}
+
+
 function sortByKey(array, key) {
 
 	return array.sort(function(a, b) {
@@ -375,6 +385,7 @@ module.exports = {
 	getSignalConfigs,
 	saveConfig,
 	getDateParts,
+	numToBase26,
 	hashCode,
 	timeDiff,
 	logger,

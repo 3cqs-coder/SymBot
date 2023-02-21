@@ -1775,45 +1775,14 @@ async function updateTracker(botName, botId, dealId, orderSum, priceLast, priceA
 async function initBot(startBot, config) {
 
 	let configObj = JSON.parse(JSON.stringify(config));
-	let configSave = await removeConfigData(JSON.parse(JSON.stringify(config)));
-
-	configObj = await setConfigData(configObj);
 
 	if (startBot) {
 
-		try {
+		configObj = await createBot(configObj);
+	}
+	else {
 
-			const bot = await Bots.findOne({
-		
-				botId: configObj.botId,
-			});
-
-			if (!bot) {
-
-				let active = true;
-				
-				if (typeof configObj.active == 'boolean') {
-
-					active = configObj.active;
-				}
-
-				delete configSave['active'];
-
-				const bot = new Bots({
-										'botId': configObj.botId,
-										'botName': configObj.botName,
-										'config': configSave,
-										'active': active,
-										'date': Date.now(),
-									});
-
-				await bot.save();
-			}
-		}
-		catch (e) {
-
-			//console.log(e);
-		}
+		configObj = await setConfigData(configObj);
 	}
 
 	return configObj;
@@ -2138,9 +2107,80 @@ async function genDealId(botId, pair) {
 
 	let code = Common.hashCode(str);
 
+	code = Common.numToBase26(code);
+
 	let dealId = pairSafe + '-' + code + '-' + dateNow;
 
 	return dealId;
+}
+
+
+async function createBot(config) {
+
+	let configObj;
+
+	let botOk = false;
+
+	let configPassed = JSON.parse(JSON.stringify(config));
+	let configSave = await removeConfigData(JSON.parse(JSON.stringify(config)));
+
+	while (!botOk) {
+
+		let isErr;
+
+		configObj = JSON.parse(JSON.stringify(configPassed));
+		configObj = await setConfigData(configObj);
+
+		let bot = await Bots.findOne({
+		
+				botId: configObj.botId,
+		});
+
+		if (!bot) {
+
+			let active = true;
+				
+			if (typeof configObj.active == 'boolean') {
+
+				active = configObj.active;
+			}
+
+			delete configSave['active'];
+
+			let bot = new Bots({
+									'botId': configObj.botId,
+									'botName': configObj.botName,
+									'config': configSave,
+									'active': active,
+									'date': Date.now(),
+								});
+
+			await bot.save()
+					.catch(err => {
+										isErr = err;
+
+										if (err.code === 11000) {
+
+											// Duplicate entry
+										}
+								  });
+
+			if (isErr == undefined || isErr == null) {
+
+				botOk = true;
+			}
+			else {
+
+				await Common.delay(1000);
+			}
+		}
+		else {
+
+			botOk = true;
+		}
+	}
+
+	return configObj;
 }
 
 
@@ -2189,6 +2229,10 @@ async function createDeal(pair, pairMax, dealCount, dealMax, config, orders) {
 		if (isErr == undefined || isErr == null) {
 
 			dealOk = true;
+		}
+		else {
+
+			await Common.delay(1000);
 		}
 	}
 
