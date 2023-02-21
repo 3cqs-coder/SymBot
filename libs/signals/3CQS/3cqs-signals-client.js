@@ -263,7 +263,7 @@ async function processSignal(data) {
 						data = JSON.stringify(data);
 					}
 
-					let msg = '3CQS Signal Start Failed. Bot ID: ' + botId + ' / Info: ' + data;
+					let msg = '3CQS Signal Start Failed: ' + botName + ' (' + pairUse + '). Reason: ' + data;
 
 					shareData.Common.logger(msg);
 					shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);

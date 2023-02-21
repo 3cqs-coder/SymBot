@@ -2253,24 +2253,39 @@ async function startVerify(config) {
 
 	const pair = config.pair;		
 	const botId = config.botId;
+	const dealCount = config.dealCount;
 
 	if (botId != undefined && botId != null && botId != '') {
 
+		// Reload bot config from db in case any changes were made
 		const bot = await getBots({ 'botId': botId });
 
 		if (bot && bot.length > 0) {
 
 			if (bot[0].active) {
 
-				// Reload bot config from db in case any changes were made
+				// Get total active pairs currently running on bot
+				let botDealsActive = await getDeals({ 'botId': botId, 'status': 0 });
+
+				let pairCount = botDealsActive.length;
 
 				let botConfigDb = bot[0].config;
 
-				botConfigDb['botId'] = botId;
-				botConfigDb['pair'] = pair;
-				botConfigDb['dealCount'] = config['dealCount'];
+				let pairMax = botConfigDb.pairMax;
 
-				start(botConfigDb, true, true);
+				if (pairMax == undefined || pairMax == null || pairMax == '') {
+
+					pairMax = 0;
+				}
+
+				if (pairMax == 0 || pairCount < pairMax) {
+
+					botConfigDb['pair'] = pair;
+					botConfigDb['botId'] = botId;
+					botConfigDb['dealCount'] = dealCount;
+
+					start(botConfigDb, true, true);
+				}
 			}
 		}
 	}
