@@ -3,7 +3,7 @@ const Schema = mongoose.Schema;
 
 const BotSchema = new Schema({
 	active: Boolean,
-	botId: String,
+	botId: { type: String, unique: true },
 	botName: String,
 	config: Object,
 	date: Date,
@@ -17,7 +17,7 @@ const DealSchema = new Schema({
 	active: Boolean,
 	botId: String,
 	botName: String,
-	dealId: String,
+	dealId: { type: String, unique: true },
 	exchange: String,
 	pair: String,
 	market: String,

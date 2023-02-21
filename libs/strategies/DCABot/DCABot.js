@@ -100,8 +100,6 @@ async function start(data, startBot, reload) {
 
 		pair = pair.toUpperCase();
 
-		const pairSafe = pair.replace(/\//g, '_');
-
 		if (!reload) {
 
 			if (shareData.appData.verboseLog) { Common.logger(colors.green('Getting pair information for ' + pair + '...')); }
@@ -477,40 +475,18 @@ async function start(data, startBot, reload) {
 
 				if (startBot) {
 
-					const configSave = await removeConfigData(config);
+					const dealObj = await createDeal(pair, pairMax, dealCount, dealMax, config, orders);
 
-					const dealId = await genDealId(config.botId, pairSafe);
+					const deal = dealObj['deal'];
+					const dealId = dealObj['deal_id'];
 
 					dealIdMain = dealId;
-
-					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
-
-					const deal = new Deals({
-						botId: config.botId,
-						botName: config.botName,
-						dealId: dealId,
-						exchange: config.exchange,
-						pair: pair,
-						date: Date.now(),
-						status: 0,
-						config: configSave,
-						orders: orders,
-						isStart: 0,
-						active: true,
-						dealCount: dealCount,
-						dealMax: dealMax,
-						pairMax: pairMax
-					});
-
-					await deal.save();
 
 					dealTracker[dealId] = {};
 					dealTracker[dealId]['deal'] = {};
 					dealTracker[dealId]['info'] = {};
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
-
-					sendTelegramStart(config.botName, dealId, pair);
 
 					let followSuccess = false;
 					let followFinished = false;
@@ -819,32 +795,12 @@ async function start(data, startBot, reload) {
 
 				if (startBot) {
 
-					const configSave = await removeConfigData(config);
+					const dealObj = await createDeal(pair, pairMax, dealCount, dealMax, config, orders);
 
-					const dealId = await genDealId(config.botId, pairSafe);
+					const deal = dealObj['deal'];
+					const dealId = dealObj['deal_id'];
 
 					dealIdMain = dealId;
-
-					if (shareData.appData.verboseLog) { Common.logger(colors.green.bold('Please wait, ' + dealId + ' is starting... ')); }
-
-					const deal = new Deals({
-						botId: config.botId,
-						botName: config.botName,
-						dealId: dealId,
-						exchange: config.exchange,
-						pair: pair,
-						date: Date.now(),
-						status: 0,
-						config: configSave,
-						orders: orders,
-						isStart: 0,
-						active: true,
-						dealCount: dealCount,
-						dealMax: dealMax,
-						pairMax: pairMax
-					});
-
-					await deal.save();
 
 					dealTracker[dealId] = {};
 					dealTracker[dealId]['deal'] = {};
@@ -1031,7 +987,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 					//process.exit(0);
 				}
 
-				return false;
+				return ( { 'success': success, 'finished': finished } );
 			}
 
 			let bidPrice = symbol.bidPrice;
@@ -2174,15 +2130,76 @@ async function volumeValid(startBot, pair, symbol, config) {
 
 async function genDealId(botId, pair) {
 
+	const pairSafe = pair.replace(/\//g, '_');
+
 	let dateNow = Math.floor(Date.now() / 1000);
 
-	let str = botId + '-' + pair + '-' + dateNow;
+	let str = botId + '-' + pairSafe + '-' + dateNow;
 
 	let code = Common.hashCode(str);
 
-	let dealId = pair + '-' + code + '-' + dateNow;
+	let dealId = pairSafe + '-' + code + '-' + dateNow;
 
 	return dealId;
+}
+
+
+async function createDeal(pair, pairMax, dealCount, dealMax, config, orders) {
+
+	let deal;
+	let dealId;
+
+	let dealOk = false;
+
+	const configSave = await removeConfigData(config);
+
+	while (!dealOk) {
+
+		let isErr;
+
+		dealId = await genDealId(config.botId, pair);
+
+		deal = new Deals({
+							'botId': config.botId,
+							'botName': config.botName,
+							'dealId': dealId,
+							'exchange': config.exchange,
+							'pair': pair,
+							'date': Date.now(),
+							'status': 0,
+							'config': configSave,
+							'orders': orders,
+							'isStart': 0,
+							'active': true,
+							'dealCount': dealCount,
+							'dealMax': dealMax,
+							'pairMax': pairMax
+						});
+
+		await deal.save()
+					.catch(err => {
+										isErr = err;
+
+										if (err.code === 11000) {
+
+											// Duplicate entry
+										}
+								  });
+
+		if (isErr == undefined || isErr == null) {
+
+			dealOk = true;
+		}
+	}
+
+	if (shareData.appData.verboseLog) {
+
+		Common.logger(colors.green.bold(config.botName + ': Starting new deal. Pair: ' + pair.toUpperCase() + ' / Deal ID: ' + dealId));
+	}
+
+	sendTelegramStart(config.botName, dealId, pair);
+
+	return ({ 'deal': deal, 'deal_id': dealId });
 }
 
 
