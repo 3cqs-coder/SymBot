@@ -63,7 +63,9 @@ async function start(apiKey) {
 
 	socket.on('connect', (data) => {
 
-		showLog('Connected to 3CQS Signals');
+		let msg = 'Connected to 3CQS Signals';
+
+		sendTelegram(msg, true);
 
 		let messageId = randomString(15);
 
@@ -155,12 +157,16 @@ async function start(apiKey) {
 
 	socket.on('disconnect', (reason) => {
 
-		showLog('3CQS SIGNAL Client Disconnected: ' + reason);
+		let msg = '3CQS SIGNAL Client Disconnected: ' + reason;
+
+		sendTelegram(msg, true);
 
 		//Either 'io server disconnect' or 'io client disconnect'
 		if (reason === 'io server disconnect') {
 
-			showLog('3CQS SIGNAL Server disconnected the client. Trying to reconnect.');
+			let msg = '3CQS SIGNAL Server disconnected the client. Trying to reconnect.';
+
+			sendTelegram(msg, true);
 
 			// Disconnected by server,so reconnect again
 			setTimeout(() => {
@@ -269,15 +275,13 @@ async function processSignal(data) {
 
 					let msg = '3CQS Signal Start Failed: ' + botName + ' (' + pairUse + '). Reason: ' + data;
 
-					shareData.Common.logger(msg);
-					shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+					sendTelegram(msg, true);
 				}
 				else {
 
 					let msg = '3CQS Signal Start: ' + botName + ' (' + pairUse + ')';
 
-					shareData.Common.logger(msg);
-					shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+					sendTelegram(msg, true);
 				}
 			}
 		}
@@ -319,8 +323,7 @@ async function processSignal(data) {
 
 				let msg = '3CQS Signal Stop: ' + botName + ' (' + pair + ')';
 
-				shareData.Common.logger(msg);
-				shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+				sendTelegram(msg, false);
 
 				botsDisable[botId] = 1;
 			}
@@ -415,6 +418,17 @@ async function updateDb(data) {
 								// Duplicate entry
 							}
 						  });
+}
+
+
+async function sendTelegram(msg, logMsg) {
+
+	if (logMsg) {
+
+		showLog(msg);
+	}
+
+	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 }
 
 
