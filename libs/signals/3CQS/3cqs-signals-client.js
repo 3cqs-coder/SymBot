@@ -48,7 +48,7 @@ async function start(apiKey) {
 
 	const socket = require('socket.io-client')('https://stream.3cqs.com', {
 
-		extraHeaders: {
+		'extraHeaders': {
 
 			'api-key': apiKey,
 			'user-agent': shareData.appData.name + '/' + shareData.appData.version
@@ -158,12 +158,16 @@ async function start(apiKey) {
 		showLog('3CQS SIGNAL Client Disconnected: ' + reason);
 
 		//Either 'io server disconnect' or 'io client disconnect'
-		if (!fatalError && reason === 'io server disconnect') {
+		if (reason === 'io server disconnect') {
 
 			showLog('3CQS SIGNAL Server disconnected the client. Trying to reconnect.');
 
 			// Disconnected by server,so reconnect again
-			socket.connect();
+			setTimeout(() => {
+
+				socket.connect();				
+
+			}, 10000);
 		}
 	});
 

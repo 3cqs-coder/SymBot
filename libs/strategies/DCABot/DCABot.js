@@ -1512,17 +1512,21 @@ const checkActiveDeal = async (botId, pair) => {
 };
 
 
-const getDeals = async (query) => {
+const getDeals = async (query, options) => {
 
 	if (query == undefined || query == null) {
 
 		query = {};
 	}
 
+	if (options == undefined || options == null) {
+
+		options = {};
+	}
 
 	try {
 
-		const deals = await Deals.find(query);
+		const deals = await Deals.find(query, {}, options);
 
 		return deals;
 	}
@@ -1837,9 +1841,22 @@ async function removeConfigData(config) {
 
 async function getDealsHistory() {
 
-	let dealsArr = [];
+	const days = 3;
+	const maxResults = 100;
 
-	const dealsHistory = await getDeals({ 'sellData': { $exists: true }, 'status': 1 });
+	const dateUse = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
+
+	let queryOptions = {
+							'sort': { 'sellData.date': -1 },
+							'limit': maxResults
+					   };
+
+	let query = { 'sellData': { '$exists': true }, 'status': 1 };
+	//let query = { 'sellData': { '$exists': true }, 'sellData.date': { '$gt': dateUse }, 'status': 1 };
+
+	const dealsHistory = await getDeals(query, queryOptions);
+
+	let dealsArr = [];
 
 	if (dealsHistory != undefined && dealsHistory != null && dealsHistory != '') {
 
