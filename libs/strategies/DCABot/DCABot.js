@@ -1437,11 +1437,15 @@ const getSymbolsAll = async (exchange) => {
 
 const getSymbol = async (exchange, pair) => {
 
+	const maxTries = 5;
+
 	let symbolInfo;
 	let symbolError;
 
 	let finished = false;
 	let symbolInvalid = false;
+
+	let count = 0;
 
 	while (!finished) {
 
@@ -1461,7 +1465,7 @@ const getSymbol = async (exchange, pair) => {
 
 			Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + JSON.stringify(e)));
 
-			if (e instanceof ccxt.RateLimitExceeded) {
+			if (e instanceof ccxt.RateLimitExceeded && count < maxTries) {
 
 				// Delay and try again
 				await Common.delay(1000 + (Math.random() * 100));
@@ -1476,6 +1480,8 @@ const getSymbol = async (exchange, pair) => {
 
 				finished = true;
 			}
+
+			count++;
 		}
 	}
 
