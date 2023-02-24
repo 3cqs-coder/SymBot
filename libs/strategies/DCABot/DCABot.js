@@ -1445,11 +1445,14 @@ const getSymbol = async (exchange, pair) => {
 
 	while (!finished) {
 
+		// Clear error
+		symbolError = undefined;
+
 		try {
 
 			const symbol = await exchange.fetchTicker(pair);
 			symbolInfo = symbol.info;
-			
+
 			finished = true;
 		}
 		catch (e) {
@@ -1458,19 +1461,20 @@ const getSymbol = async (exchange, pair) => {
 
 			Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + JSON.stringify(e)));
 
-			if (e instanceof ccxt.BadSymbol) {
-
-				symbolInvalid = true;
-				finished = true;
-			}
-
 			if (e instanceof ccxt.RateLimitExceeded) {
-
-				// Clear error
-				symbolError = undefined;
 
 				// Delay and try again
 				await Common.delay(1000 + (Math.random() * 100));
+			}
+			else if (e instanceof ccxt.BadSymbol) {
+
+				symbolInvalid = true;
+
+				finished = true;
+			}
+			else {
+
+				finished = true;
 			}
 		}
 	}
