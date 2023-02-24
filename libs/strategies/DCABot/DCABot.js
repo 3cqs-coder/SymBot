@@ -1466,6 +1466,9 @@ const getSymbol = async (exchange, pair) => {
 
 			if (e instanceof ccxt.RateLimitExceeded) {
 
+				// Clear error
+				symbolError = undefined;
+
 				// Delay and try again
 				await Common.delay(1000 + (Math.random() * 100));
 			}
