@@ -1440,23 +1440,36 @@ const getSymbol = async (exchange, pair) => {
 	let symbolInfo;
 	let symbolError;
 
+	let finished = false;
 	let symbolInvalid = false;
 
-	try {
+	while (!finished) {
 
-		const symbol = await exchange.fetchTicker(pair);
-		symbolInfo = symbol.info;
-	}
-	catch (e) {
+		try {
 
-		symbolError = e;
-
-		if (e instanceof ccxt.BadSymbol) {
-
-			symbolInvalid = true;
+			const symbol = await exchange.fetchTicker(pair);
+			symbolInfo = symbol.info;
+			
+			finished = true;
 		}
+		catch (e) {
 
-		Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + JSON.stringify(e)));
+			symbolError = e;
+
+			Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + JSON.stringify(e)));
+
+			if (e instanceof ccxt.BadSymbol) {
+
+				symbolInvalid = true;
+				finished = true;
+			}
+
+			if (e instanceof ccxt.RateLimitExceeded) {
+
+				// Delay and try again
+				await Common.delay(1000 + (Math.random() * 100));
+			}
+		}
 	}
 
 	return ( { 'info': symbolInfo, 'invalid': symbolInvalid, 'error': symbolError } );
