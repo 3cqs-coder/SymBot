@@ -52,7 +52,7 @@
 	</tr>
 
 	<%
-
+		let totalProfit = 0;
 		for (let i = 0; i < deals.length; i++) {
 
 			let profitPercColor = '#1a9f00';
@@ -60,6 +60,7 @@
 			let deal = deals[i];
 			let profit = deal['profit'];
 			let profitPerc = deal['profit_percent'];
+			totalProfit += profit;
 			let dateEnd = new Date(deal['date_end']).getTime();
 
 			let duration = timeDiff(new Date(deal['date_start']), new Date(deal['date_end']));
@@ -81,7 +82,18 @@
 		<td><%- deal['safety_orders'] %></td>
 	</tr>
 	
-	<% 	} %>
+	<% } %>
+
+	<tr>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td></td>
+		<td>$<%- totalProfit.toFixed(2) %></td>
+		<td></td>
+		<td></td>
+	</tr>
 
 	</table>
 	</div>
