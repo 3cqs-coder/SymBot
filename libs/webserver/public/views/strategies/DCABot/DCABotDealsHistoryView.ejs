@@ -45,6 +45,21 @@
 
 	<h3>DCA Bot Deals History</h3>
 
+	<% 
+	let totalProfit = 0;
+	for (let i = 0; i < deals.length; i++) {
+		let deal = deals[i];
+		totalProfit += deal['profit'];
+	}
+	%>
+
+	
+	<p>Total P/L: 
+		<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
+			<%- totalProfit.toFixed(2) %>
+		</span>
+	</p>
+
 	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 
 	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
@@ -52,7 +67,6 @@
 	</tr>
 
 	<%
-		let totalProfit = 0;
 		for (let i = 0; i < deals.length; i++) {
 
 			let profitPercColor = '#1a9f00';
@@ -83,17 +97,6 @@
 	</tr>
 	
 	<% } %>
-
-	<tr>
-		<td></td>
-		<td></td>
-		<td></td>
-		<td></td>
-		<td></td>
-		<td style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715'  %>;" >$<%- totalProfit.toFixed(2) %></td>
-		<td></td>
-		<td></td>
-	</tr>
 
 	</table>
 	</div>

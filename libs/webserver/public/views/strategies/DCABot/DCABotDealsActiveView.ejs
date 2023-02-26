@@ -122,6 +122,17 @@
 
 	<h3>Active DCA Bot Deals</h3>
 
+	<% 
+		let totalProfit = 0;
+		for(let dealId in deals) {
+			totalProfit += deals[dealId]['info']['take_profit'];
+		}
+	%>
+	<p>Active P/L: 
+		<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
+			<%- totalProfit.toFixed(2) %>
+		</span>
+	</p>
 	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 	<tbody>
 
