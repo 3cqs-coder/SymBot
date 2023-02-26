@@ -188,13 +188,25 @@ async function apiGetBots(req, res) {
 
 async function apiGetActiveDeals(req, res) {
 
+	let query = {};
+	let dealsArr = [];
+	let dealsSort = [];
+
 	let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
 
 	// Remove sensitive data
 	for (let dealId in dealsObj) {
 
+		let obj = {};
+
 		let deal = dealsObj[dealId];
+
 		let config = deal['deal']['config'];
+		let info = JSON.parse(JSON.stringify(deal['info']));
+
+		deal['deal'] = await removeDbKeys(deal['deal']);
+
+		delete deal['info'];
 
 		for (let key in config) {
 
@@ -203,9 +215,19 @@ async function apiGetActiveDeals(req, res) {
 				delete config[key];
 			}
 		}
+
+		let dealRoot = deal['deal'];
+
+		obj = Object.assign({}, obj, dealRoot);
+		obj['info'] = info;
+
+		dealsArr.push(obj);
 	}
 
-	res.send( { 'date': new Date(), 'data': dealsObj } );
+	dealsSort = shareData.Common.sortByKey(dealsArr, 'updatedAt');
+	dealsSort = dealsSort.reverse();
+
+	res.send( { 'date': new Date(), 'data': dealsSort } );
 }
 
 
