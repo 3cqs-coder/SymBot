@@ -48,8 +48,8 @@
 	<% 
 	let totalProfit = 0;
 	for (let i = 0; i < deals.length; i++) {
-		let deal = deals[i];
-		totalProfit += deal['profit'];
+		const { proit } = deals[i];
+		totalProfit += profit;
 	}
 	%>
 
