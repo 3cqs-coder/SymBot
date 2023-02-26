@@ -2076,9 +2076,9 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 	const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
 	const duration = shareData.Common.timeDiff(new Date(), new Date(deal['date']));
 
-	let msg = botName + ' (' + pair.toUpperCase() + '): ' + dealId + ': Deal completed.';
+	let msg = '💰 Deal Complete: ' + botName  + ` (${pair.toUpperCase()}) ` ;
 	msg += ' Profit: $' + profit + ' (' + profitPerc + '% from total volume)';
-	msg += ' #profit ' + duration;
+	msg += ' in ' + duration;
 
 	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 }
