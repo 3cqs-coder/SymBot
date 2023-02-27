@@ -2056,6 +2056,7 @@ async function sendTelegramStart(botName, dealId, pair) {
 async function sendTelegramFinish(botName, dealId, pair, sellData) {
 
 	let orderCount = 0;
+	let msg = '';
 
 	const dealData = await getDeals({ 'dealId': dealId });
 	const profitPerc = Number(sellData.profit);
@@ -2076,9 +2077,19 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 	const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
 	const duration = shareData.Common.timeDiff(new Date(), new Date(deal['date']));
 
-	let msg = '💰 Deal Complete: ' + botName  + ` (${pair.toUpperCase()}) ` ;
-	msg += ' Profit: $' + profit + ' (' + profitPerc + '% from total volume)';
-	msg += ' in ' + duration;
+	try {
+
+		msg = fs.readFileSync(pathRoot + '/strategies/DCABot/telegram/dealComplete.txt', { encoding: 'utf8', flag: 'r' });
+	}
+	catch(e) {
+
+	}
+
+	msg = msg.replace(/\{BOT_NAME\}/g, botName);
+	msg = msg.replace(/\{PAIR\}/g, pair.toUpperCase());
+	msg = msg.replace(/\{PROFIT\}/g, profit);
+	msg = msg.replace(/\{PROFIT_PERCENT\}/g, profitPerc);
+	msg = msg.replace(/\{DURATION\}/g, duration);
 
 	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 }
@@ -2505,7 +2516,6 @@ async function initApp() {
 		checkTracker();
 
 	}, (60000 * 1));
-
 
 	await resumeBots();
 
