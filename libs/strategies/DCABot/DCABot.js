@@ -381,8 +381,17 @@ async function start(data, startBot, reload) {
 					ordersDeviation.push(deviationPerc);
 				}
 
-				orders.forEach(function (order) {
+				if (orders.length > 1) {
 
+					let res = await ordersValid(pair, orders);
+
+					if (!res['success']) {
+
+						return ( { 'success': false, 'data': res['data'] } );
+					}
+				}
+
+				orders.forEach(function (order) {
 					t.cell('No', order.orderNo);
 					t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
 					t.cell('Price', '$' + order.price);
@@ -701,7 +710,17 @@ async function start(data, startBot, reload) {
 
 					ordersDeviation.push(deviationPerc);
 				}
-				
+
+				if (orders.length > 1) {
+
+					let res = await ordersValid(pair, orders);
+
+					if (!res['success']) {
+
+						return ( { 'success': false, 'data': res['data'] } );
+					}
+				}
+
 				orders.forEach(function (order) {
 					t.cell('No', order.orderNo);
 					t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
@@ -2092,6 +2111,27 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 	msg = msg.replace(/\{DURATION\}/g, duration);
 
 	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+}
+
+
+async function ordersValid(pair, orders) {
+
+	let msg;
+	let success = true;
+
+	let priceAverage1 = orders[0]['average'];
+	let priceAverage2 = orders[1]['average'];
+					
+	if (priceAverage1 == priceAverage2) {
+
+		success = false;
+
+		msg = pair + ' average price calculations are identical. Not allowing pair.';
+
+		if (shareData.appData.verboseLog) { Common.logger( colors.bgRed.bold(msg) ); }
+	}
+
+	return ( { 'success': success, 'data': msg } );
 }
 
 
