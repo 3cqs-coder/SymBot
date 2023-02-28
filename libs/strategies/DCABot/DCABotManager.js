@@ -70,41 +70,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	let botsActiveObj = {};
-
-	const bots = await shareData.DCABot.getBots({ 'active': true });
-
-	let deals = JSON.parse(JSON.stringify(shareData.dealTracker));
-
-	if (bots && bots.length > 0) {
-
-		for (let i = 0; i < bots.length; i++) {
-
-			let bot = bots[i];
-
-			const botId = bot.botId;
-			const botName = bot.botName;
-
-			botsActiveObj[botId] = botName;
-		}
-	}
-
-	for (let dealId in deals) {
-
-		let botActive = true;
-
-		let deal = deals[dealId];
-		let botId = deal['info']['bot_id'];
-
-		if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
-
-			botActive = false;
-		}
-
-		deal['info']['bot_active'] = botActive;
-	}
-
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'timeDiff': shareData.Common.timeDiff, 'deals': deals } );
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData } );
 }
 
 
@@ -192,19 +158,40 @@ async function apiGetActiveDeals(req, res) {
 	let dealsArr = [];
 	let dealsSort = [];
 
+	let botsActiveObj = {};
+
+	const bots = await shareData.DCABot.getBots({ 'active': true });
+
 	let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
+
+	if (bots && bots.length > 0) {
+
+		for (let i = 0; i < bots.length; i++) {
+
+			let bot = bots[i];
+
+			const botId = bot.botId;
+			const botName = bot.botName;
+
+			botsActiveObj[botId] = botName;
+		}
+	}
 
 	// Remove sensitive data
 	for (let dealId in dealsObj) {
+
+		let botActive = true;
 
 		let obj = {};
 
 		let deal = dealsObj[dealId];
 
+		let botId = deal['deal']['botId'];
 		let config = deal['deal']['config'];
 		let info = JSON.parse(JSON.stringify(deal['info']));
 
-		deal['deal'] = await removeDbKeys(deal['deal']);
+		let dealRoot = deal['deal'];
+		dealRoot = await removeDbKeys(dealRoot);
 
 		delete deal['info'];
 
@@ -216,15 +203,20 @@ async function apiGetActiveDeals(req, res) {
 			}
 		}
 
-		let dealRoot = deal['deal'];
+		if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
+
+			botActive = false;
+		}
 
 		obj = Object.assign({}, obj, dealRoot);
+
 		obj['info'] = info;
+		obj['info']['bot_active'] = botActive;
 
 		dealsArr.push(obj);
 	}
 
-	dealsSort = shareData.Common.sortByKey(dealsArr, 'updatedAt');
+	dealsSort = shareData.Common.sortByKey(dealsArr, 'date');
 	dealsSort = dealsSort.reverse();
 
 	res.send( { 'date': new Date(), 'data': dealsSort } );

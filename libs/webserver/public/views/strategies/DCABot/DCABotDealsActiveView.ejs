@@ -7,8 +7,53 @@
 
 	function setReloadTimeout() {
 
-		timeOutId = setTimeout(() => { window.location.reload(); }, 5000);
+		timeOutId = setTimeout(() => { getActiveDeals(); }, 5000);
 	}
+
+
+	function timeDiff(dateStart, dateEnd) {
+ 
+		let diff = Math.abs(dateEnd - dateStart) / 1000;
+
+		let diffString = '';
+
+		let days = Math.floor(diff / 86400);
+		diff -= days * 86400;
+
+		let hours = Math.floor(diff / 3600) % 24;
+		diff -= hours * 3600;
+
+		let minutes = Math.floor(diff / 60) % 60;
+		diff -= minutes * 60;
+
+		let seconds = Math.floor(diff / 1) % 60;
+		diff -= seconds * 60;
+
+		if (days > 0) {
+			
+			diffString += days === 1 ? `${days}d` : `${days}d`;
+		}
+
+		if (hours > 0) {
+
+			diffString += hours === 1 ? ` ${hours}h` : ` ${hours}h`;
+		}
+
+		if (minutes > 0) {
+
+			diffString += minutes === 1 ? ` ${minutes}m` : ` ${minutes}m`;
+		}
+
+		if (seconds > 0) {
+
+			diffString += seconds === 1 ? ` ${seconds}s` : ` ${seconds}s`;
+		}
+
+		diffString = diffString.trim();
+
+		return diffString;
+	}
+
 
 	function stopBotConfirm(botName, selector, data) {
 
@@ -37,6 +82,38 @@
 										 	action: function () { setReloadTimeout(); }
 									 	}
 							 }
+		});
+	}
+
+
+	function getActiveDeals() {
+
+		//$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'GET',
+					url: '/api/deals',
+					data: {},
+					dataType: 'json',
+					success: function(data) {
+
+						//$('#spinner-overlay').fadeOut(100);
+
+						let deals = data.data;
+
+						populateDeals(deals);
+						
+						setReloadTimeout();
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						//$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+						
+						setReloadTimeout();
+					}
 		});
 	}
 
@@ -85,9 +162,7 @@
 
 	$(document).ready(function() {
 
-		setReloadTimeout();
-
-		$('#botsDeals tbody tr td').click(function() {
+		$(document).on('click', '#botsDeals tbody tr td', function() {
 
 			let col = $(this).index();
 			let row = $(this).closest('tr');
@@ -111,54 +186,34 @@
 			}
 		});
 
+		getActiveDeals();
+
 	});
 
-</script>
 
-<center>
-<main>
+	function populateDeals(deals) {
 
-	<div id="contentBox">
-
-	<h3>Active DCA Bot Deals</h3>
-
-	<% 
 		let totalProfit = 0;
-		for(let dealId in deals) {
-			totalProfit += deals[dealId]['info']['take_profit'];
-		}
-	%>
-	<p>Active P/L: 
-		<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
-			<%- totalProfit.toFixed(2) %>
-		</span>
-	</p>
-	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
-	<tbody>
+		let profitTotalColor = '#1a9f00';
 
-	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th>
-	</tr>
+		let contentArr = [];
 
-	<%
-
-		let count = 0;
-
-		for (let dealId in deals) {
+		for (let i = 0; i < deals.length; i++) {
 
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
+
 			let profitPercColor = '#1a9f00';
 
 			let dealCount;
 
-			let deal = deals[dealId];
+			let deal = deals[i];
 
 			let botActive = deal['info']['bot_active'];
 			let profit = deal['info']['take_profit'];
 			let profitPerc = deal['info']['take_profit_percentage'];
 
-			let duration = timeDiff(new Date(), new Date(deal['deal']['date']));
+			let duration = timeDiff(new Date(), new Date(deal['date']));
 
 			if (!botActive) {
 
@@ -182,25 +237,54 @@
 			else {
 
 				dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
-			
-				count++;
 			}
-	%>
 
-	<tr>
-		<td><%- deal['info']['bot_name'] %></td>
-		<td><%- dealId %></td>
-		<td><%- deal['deal']['pair'] %></td>
-		<td><%- duration %></td>
-		<td>$<%- deal['info']['price_last'] %></td>
-		<td style="color: <%- profitPercColor %>;">$<%- profit %></td>
-		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
-		<td><%- deal['info']['safety_orders_used'] %> / <%- deal['info']['safety_orders_max'] %></td>
-		<td><%- dealCount %></td>
-		<td data-botid="<%- deal['info']['bot_id'] %>" data-botname="<%- deal['info']['bot_name'] %>" style="text-align: center;"><div id="stop<%- deal['info']['bot_id'] %><%- count %>"><%- stopButton %></div></td>
+			totalProfit += profit;
+
+			contentArr.push('<tr>');
+			contentArr.push('<td>' + deal['info']['bot_name'] + '</td>');
+			contentArr.push('<td>' + deal['dealId'] + '</td>');
+			contentArr.push('<td>' + deal['pair'] + '</td>');
+			contentArr.push('<td>' + duration + '</td>');		
+			contentArr.push('<td>' + deal['info']['price_last'] + '</td>');
+			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profit + '</td>');
+			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '</td>');
+			contentArr.push('<td>' + deal['info']['safety_orders_max'] + '</td>');
+			contentArr.push('<td>' + dealCount + '</td>');
+			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
+			contentArr.push('</tr>');
+		}
+
+		if (totalProfit <= 0) {
+
+			profitTotalColor = '#d82715';
+		}
+
+		$('#botsDeals tbody').find('tr:gt(0)').remove();
+		$('#botsDeals tbody').append(contentArr.join(''));
+
+		$('#totalProfit').css('color', profitTotalColor);
+		$('#totalProfit').html(totalProfit.toFixed(2));
+	}
+
+</script>
+
+<center>
+<main>
+
+	<div id="contentBox">
+
+	<h3>Active DCA Bot Deals</h3>
+
+	<p>Active P/L: 
+		<span id="totalProfit"></span>
+	</p>
+	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
+	<tbody>
+
+	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
+		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th>
 	</tr>
-
-	<% 	} %>
 
 	</tbody>
 	</table>
