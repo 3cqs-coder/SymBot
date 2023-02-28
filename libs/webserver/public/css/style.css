@@ -506,11 +506,11 @@ table#botsDeals tr:nth-child(odd) {
 
 table#botsDeals tr:nth-child(1) {
 
-	background: none;
+	#background: none;
 }
 
 
-table#botsDeals tr:not(:first-child):hover {
+table#botsDeals tr:hover {
 
     background-color: #c5c5c5;
     cursor: pointer;
