@@ -160,37 +160,6 @@
 	}
 
 
-	$(document).ready(function() {
-
-		$(document).on('click', '#botsDeals tbody tr td', function() {
-
-			let col = $(this).index();
-			let row = $(this).closest('tr');
-			let content = $(this).text();
-
-			let colCount = $(row).find('td').length;
-
-			if (col == (colCount - 1) && content != '') {
-
-				let data = { 'bot_id': '' };
-
-				let botId = $(this).data('botid');
-				let botName = $(this).data('botname');
-
-				if (botId) {
-
-					data.bot_id = botId;
-
-					stopBotConfirm(botName, $(this), data);
-				}
-			}
-		});
-
-		getActiveDeals();
-
-	});
-
-
 	function populateDeals(deals) {
 
 		let totalProfit = 0;
@@ -246,9 +215,9 @@
 			contentArr.push('<td>' + deal['dealId'] + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');		
-			contentArr.push('<td>' + deal['info']['price_last'] + '</td>');
-			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profit + '</td>');
-			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '</td>');
+			contentArr.push('<td>$' + deal['info']['price_last'] + '</td>');
+			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit + '</td>');
+			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_max'] + '</td>');
 			contentArr.push('<td>' + dealCount + '</td>');
 			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
@@ -264,8 +233,39 @@
 		$('#botsDeals tbody').append(contentArr.join(''));
 
 		$('#totalProfit').css('color', profitTotalColor);
-		$('#totalProfit').html(totalProfit.toFixed(2));
+		$('#totalProfit').html('$' + totalProfit.toFixed(2));
 	}
+
+
+	$(document).ready(function() {
+
+		$(document).on('click', '#botsDeals tbody tr td', function() {
+
+			let col = $(this).index();
+			let row = $(this).closest('tr');
+			let content = $(this).text();
+
+			let colCount = $(row).find('td').length;
+
+			if (col == (colCount - 1) && content != '') {
+
+				let data = { 'bot_id': '' };
+
+				let botId = $(this).data('botid');
+				let botName = $(this).data('botname');
+
+				if (botId) {
+
+					data.bot_id = botId;
+
+					stopBotConfirm(botName, $(this), data);
+				}
+			}
+		});
+
+		getActiveDeals();
+
+	});
 
 </script>
 
@@ -276,9 +276,8 @@
 
 	<h3>Active DCA Bot Deals</h3>
 
-	<p>Active P/L: 
-		<span id="totalProfit"></span>
-	</p>
+	<p>Active P/L: <span id="totalProfit"></span></p>
+
 	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 	<tbody>
 
