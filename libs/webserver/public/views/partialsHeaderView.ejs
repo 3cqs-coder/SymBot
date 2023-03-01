@@ -40,13 +40,26 @@
 		});
 	});
 
-	function alertBox(msg) {
+	function alertBox(msg, func) {
 
 		$.alert({
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>'
+					content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>',
+					buttons: {
+								ok: {
+										btnClass: 'btn-default',
+										text: 'Ok',
+										action: function() {
+
+											if (func != undefined && func != null) {
+
+												func();
+											}
+										}
+									}
+							 }
 		});
 	}
 

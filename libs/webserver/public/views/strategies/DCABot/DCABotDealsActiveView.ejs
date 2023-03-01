@@ -120,9 +120,7 @@
 						// Some error in ajax call
 						//$('#spinner-overlay').fadeOut(100);
 
-						alertBox('Error: ' + JSON.stringify(data));
-						
-						setReloadTimeout();
+						alertBox('Error: ' + JSON.stringify(data), function() { setReloadTimeout(); });
 					}
 		});
 	}
@@ -145,26 +143,22 @@
 
 						if (!data.success) {
 
-							alertBox('Unable to disable bot');
+							alertBox('Unable to disable bot', function() { setReloadTimeout(); });
 						}
 						else {
 
 							$('[id*="stop' + botId + '"]').text('');
 							//selector.text('');
 
-							alertBox('Bot Disabled');
+							alertBox('Bot Disabled', function() { setReloadTimeout(); });
 						}
-						
-						setReloadTimeout();
 					},
 					error: function(data) {
 
 						// Some error in ajax call
 						$('#spinner-overlay').fadeOut(100);
 
-						alertBox('Error: ' + JSON.stringify(data));
-						
-						setReloadTimeout();
+						alertBox('Error: ' + JSON.stringify(data), function() { setReloadTimeout(); });
 					}
 		});
 	}
