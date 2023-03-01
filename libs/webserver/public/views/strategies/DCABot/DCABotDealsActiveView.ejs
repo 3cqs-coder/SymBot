@@ -105,11 +105,11 @@
 					url: '/api/deals',
 					data: {},
 					dataType: 'json',
-					success: function(data) {
+					success: function({ data }) {
 
 						//$('#spinner-overlay').fadeOut(100);
 
-						let deals = data.data;
+						let deals = data;
 
 						populateDeals(deals);
 						
@@ -173,6 +173,7 @@
 	function populateDeals(deals) {
 
 		let totalProfit = 0;
+		let inDeals = 0;
 		let profitTotalColor = '#1a9f00';
 
 		let contentArr = [];
@@ -181,6 +182,8 @@
 
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
+			let dealVolume = deals[i].orders.filter(order => order.filled === 1).reduce((acc, order) => acc + Number(order.amount), 0);
+			inDeals += dealVolume;
 
 			let profitPercColor = '#1a9f00';
 
@@ -226,6 +229,7 @@
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');		
 			contentArr.push('<td>$' + deal['info']['price_last'] + '</td>');
+			contentArr.push('<td>$ ' + dealVolume.toFixed(2) + '</td>')
 			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit + '</td>');
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + deal['info']['safety_orders_max'] + '</td>');
@@ -244,6 +248,8 @@
 
 		$('#totalProfit').css('color', profitTotalColor);
 		$('#totalProfit').html('$' + totalProfit.toFixed(2));
+
+		$('#inDeals').html('$' + inDeals.toFixed(2));
 		
 		$('#botsDeals').tablesorter().trigger('update');
 	}
@@ -331,13 +337,16 @@
 
 	<h3>Active DCA Bot Deals</h3>
 
-	<p>Active P/L: <span id="totalProfit"></span></p>
+	<div style="display: flex; justify-content: center; gap: 20px">
+		<p>Active P/L: <span id="totalProfit"></span></p>
+		<p>In Deals: <span id="inDeals"></span></p>
+	</div>
 
 	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 
 	<thead>
 	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th>
+		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th> 
 	</tr>
 	</thead>
 
