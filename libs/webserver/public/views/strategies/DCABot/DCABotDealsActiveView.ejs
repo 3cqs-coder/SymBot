@@ -269,7 +269,7 @@
 			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
 			textExtraction: {
 
-				6: function(node) {
+				7: function(node) {
 
 					if (node.innerHTML.indexOf('%') != -1) {
 
@@ -283,9 +283,6 @@
 			headers: {
 
 				// Set "sorter : false" (no quotes) to disable the column
-				0: {
-					sorter: true
-				},
 				3: {
 					sorter: "duration"
 				},
@@ -293,6 +290,9 @@
 					sorter: "currency"
 				},
 				5: {
+					sorter: "currency"
+				},
+				6: {
 					sorter: "currency"
 				}
 			}
