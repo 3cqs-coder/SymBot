@@ -11,6 +11,12 @@
 	}
 
 
+	function resizeBotsDeals() {
+
+		$('.botsDealsBox').height(($(window).height() - 275));
+	}
+
+
 	function stripHtml(str) {
 
 		str = str.toString();
@@ -246,10 +252,18 @@
 		$('#inDeals').html('$' + inDeals.toFixed(2));
 		
 		$('#botsDeals').tablesorter().trigger('update');
+
+		resizeBotsDeals();
 	}
 
 
 	$(document).ready(function() {
+
+		$(window).resize(function() {
+
+			resizeBotsDeals();
+		});
+
 
 		$('#botsDeals').tablesorter({
 
@@ -329,24 +343,30 @@
 
 	<div id="contentBox">
 
-	<h3>Active DCA Bot Deals</h3>
+		<div style="position: relative;">
 
-	<div style="display: flex; justify-content: center; gap: 20px">
-		<p>Active P/L: <span id="totalProfit"></span></p>
-		<p>In Deals: <span id="inDeals"></span></p>
-	</div>
+			<h3>Active DCA Bot Deals</h3>
 
-	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
+			<div style="display: flex; justify-content: center; gap: 20px;">
+				<p>Active P/L: <span id="totalProfit"></span></p>
+				<p>In Deals: <span id="inDeals"></span></p>
+			</div>
 
-	<thead>
-	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-		<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th> 
-	</tr>
-	</thead>
+			<div class="botsDealsBox">
 
-	<tbody></tbody>
+				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 
-	</table>
+				<thead style="position: sticky; top: 0;">
+					<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th> 
+					</tr>
+				</thead>
+
+				<tbody></tbody>
+
+				</table>
+			</div>
+		</div>
 	</div>
 
 </main>

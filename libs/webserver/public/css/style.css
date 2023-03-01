@@ -420,7 +420,7 @@ table#login {
 	font-size: 1.2rem;
 	color: #000000;
 	border: 0;
-	width: 350px;
+	width: auto;
 	text-align: left;
 }
 
@@ -515,3 +515,43 @@ table#botsDeals tr:hover {
     background-color: #c5c5c5;
     cursor: pointer;
 }
+
+
+.botsDealsBox {
+
+	position: relative;
+	min-height: 400px;
+	overflow: auto;
+	scrollbar-width: none;
+}
+
+
+.botsDealsBox::-webkit-scrollbar {
+
+	width: 0;
+	height: 10px;
+	-webkit-box-shadow: inset 0 0 4px rgba(0,0,0,0.1);
+}
+
+
+.botsDealsBox::-webkit-scrollbar-track {
+
+	background-color: #595959;
+	-webkit-box-shadow: inset 0 0 4px rgba(0,0,0,0.1); 
+	border-radius: 10px;
+}
+
+
+.botsDealsBox::-webkit-scrollbar-thumb {
+
+	background-color: #3f3f3f;
+	border-radius: 10px;
+	-webkit-box-shadow: inset 0 0 4px rgba(0,0,0,0.95);
+}
+
+
+.botsDealsBox::-webkit-scrollbar-corner {
+
+	display: none;
+}
+
