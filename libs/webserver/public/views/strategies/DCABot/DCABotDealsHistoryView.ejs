@@ -41,10 +41,6 @@
 <center>
 <main>
 
-	<div id="contentBox">
-
-	<h3>DCA Bot Deals History</h3>
-
 	<% 
 	let totalProfit = 0;
 	for (let i = 0; i < deals.length; i++) {
@@ -53,18 +49,29 @@
 	}
 	%>
 
-	
-	<p>Total P/L: 
-		<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
-			$<%- totalProfit.toFixed(2) %>
-		</span>
-	</p>
+	<div id="contentBox">
 
-	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
+		<div style="position: relative;">
 
-	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-		<th>Date</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th>
-	</tr>
+			<div class="contentHeaderBox">
+
+				<b style="font-size: 1.5rem;">DCA Bot Deals History</b>
+
+				<p style="margin-top: 10px; margin-bottom: 0;">Total P/L: 
+					<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
+						$<%- totalProfit.toFixed(2) %>
+					</span>
+				</p>
+
+			</div>
+
+			<div class="botsDealsBox">
+
+				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
+
+					<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
+						<th>Date</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th>
+					</tr>
 	
 	<%
 		for (let i = 0; i < deals.length; i++) {
@@ -84,21 +91,23 @@
 			}
 	%>
 
-	<tr>
-		<td id="date<%- i %>" data-date="<%- dateEnd %>"></td>
-		<td><%- deal['bot_name'] %></td>
-		<td><%- deal['deal_id'] %></td>
-		<td><%- deal['pair'] %></td>
-		<td><%- duration %></td>
-		<td style="color: <%- profitPercColor %>;">$<%- profit %></td>
-		<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
-		<td><%- deal['safety_orders'] %></td>
-	</tr>
+				<tr>
+					<td id="date<%- i %>" data-date="<%- dateEnd %>"></td>
+					<td><%- deal['bot_name'] %></td>
+					<td><%- deal['deal_id'] %></td>
+					<td><%- deal['pair'] %></td>
+					<td><%- duration %></td>
+					<td style="color: <%- profitPercColor %>;">$<%- profit %></td>
+					<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
+					<td><%- deal['safety_orders'] %></td>
+				</tr>
 	
 	<% } %>
 
-	</table>
+			</table>
+		</div>
 	</div>
+</div>
 
 </main>
 </center>

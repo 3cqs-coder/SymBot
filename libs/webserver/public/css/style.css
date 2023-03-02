@@ -270,7 +270,7 @@ form textarea {
 	font-size: 1.2rem;
 	width: 98%;
 	margin: 0 auto;
-	padding: 20px;
+	padding: 15px;
 	overflow: auto;
 	background-color: #ffffff;
 	-webkit-border-radius: 5px;
@@ -446,16 +446,19 @@ table#botsDeals {
 	position: relative;
 	font-size: 1.0rem;
 	color: #e7e7e7;
-	width: 98%;
+	width: 99%;
 	border-collapse: collapse;
 }
 
 
 table#botsDeals th {
  
-	padding: 3px;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	padding-left: 5px;
+	padding-right: 5px;
 	font-size: 1.1rem;
-	background: #313131;
+	background: #3d3d3d;
 }
 
 
@@ -485,10 +488,10 @@ table#botsDeals td:last-child {
 
 table#botsDeals td {
  
- 	padding: 4px;
- 	color: #000000;
- 	font-weight: bold;
-    border: 1px solid #b9b9b9;
+	padding: 5px;
+	color: #3e3e3e;
+	font-weight: bold;
+	border-bottom: 1px solid #b9b9b9;
 }
 
 
@@ -514,6 +517,20 @@ table#botsDeals tr:hover {
 
     background-color: #c5c5c5;
     cursor: pointer;
+}
+
+
+.contentHeaderBox {
+
+	position: relative;
+	width: 99%;
+	background-color: #e2e2e2;
+	padding: 10px;
+	margin-bottom: 25px;
+	border: 1px solid #cdcdcd;
+	-webkit-border-radius: 5px;
+	-moz-border-radius: 5px;
+	border-radius: 5px;
 }
 
 
