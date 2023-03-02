@@ -40,6 +40,23 @@
 		});
 	});
 
+
+	function resizeBotsDeals() {
+
+		$('.botsDealsBox').height(($(window).height() - 275));
+	}
+
+
+	function stripHtml(str) {
+
+		str = str.toString();
+
+		str = str.replace(/(<([^>]+)>)/gi, '');
+
+		return str;
+	}
+
+
 	function alertBox(msg, func) {
 
 		$.alert({

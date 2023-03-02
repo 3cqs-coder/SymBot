@@ -26,6 +26,12 @@
 
 	$(document).ready(function () {
 
+		$(window).resize(function() {
+
+			resizeBotsDeals();
+		});
+
+
 		$('[id*="date"]').each(function(){
 
 			let date = dateConvertLocal($(this).data('date'));
@@ -33,6 +39,44 @@
 			$(this).text(date);
 		});
 
+
+		$('#botsDeals').tablesorter({
+
+			widgets: [ 'saveSort', 'stickyHeaders', 'uitheme' ],
+			widgetOptions: {
+				saveSort: true,
+				stickyHeaders_attachTo: '',
+				columnSelector_mediaqueryHidden: true
+			},
+			durationLength : 4,
+			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
+			textExtraction: {
+
+				6: function(node) {
+
+					if (node.innerHTML.indexOf('%') != -1) {
+
+						let val = stripHtml(node.innerHTML);
+						return val.replace('%','');
+					}
+
+					return node.innerHTML;
+				}
+			},
+			headers: {
+
+				// Set "sorter : false" (no quotes) to disable the column
+				4: {
+					sorter: "duration"
+				},
+				5: {
+					sorter: "currency"
+				}
+			}
+		});
+
+
+		resizeBotsDeals();
 	});
 
 </script>
@@ -55,7 +99,7 @@
 
 			<div class="contentHeaderBox">
 
-				<b style="font-size: 1.5rem;">DCA Bot Deals History</b>
+				<b class="contentHeader">DCA Bot Deals History</b>
 
 				<p style="margin-top: 10px; margin-bottom: 0;">Total P/L: 
 					<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
@@ -69,9 +113,13 @@
 
 				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 
-					<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-						<th>Date</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th>
-					</tr>
+					<thead style="position: sticky; top: 0; z-index: 1000;">
+						<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
+							<th>Date</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th>
+						</tr>
+					</thead>
+					
+					<tbody>
 	
 	<%
 		for (let i = 0; i < deals.length; i++) {
@@ -104,6 +152,7 @@
 	
 	<% } %>
 
+				</tbody>
 			</table>
 		</div>
 	</div>

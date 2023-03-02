@@ -520,6 +520,13 @@ table#botsDeals tr:hover {
 }
 
 
+.contentHeader {
+
+	position: relative;
+	font-size: 1.65rem;
+}
+
+
 .contentHeaderBox {
 
 	position: relative;

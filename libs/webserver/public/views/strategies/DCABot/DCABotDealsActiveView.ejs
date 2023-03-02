@@ -11,22 +11,6 @@
 	}
 
 
-	function resizeBotsDeals() {
-
-		$('.botsDealsBox').height(($(window).height() - 275));
-	}
-
-
-	function stripHtml(str) {
-
-		str = str.toString();
-
-		str = str.replace(/(<([^>]+)>)/gi, '');
-
-		return str;
-	}
-
-
 	function timeDiff(dateStart, dateEnd) {
  
 		let diff = Math.abs(dateEnd - dateStart) / 1000;
@@ -347,7 +331,7 @@
 
 			<div class="contentHeaderBox">
 
-				<b style="font-size: 1.5rem;">Active DCA Bot Deals</b>
+				<b class="contentHeader">Active DCA Bot Deals</b>
 
 				<span style="display: flex; justify-content: center; gap: 20px; margin-top: 10px;">
 					<p style="margin-top: 0; margin-bottom: 0;">Active P/L: <span id="totalProfit"></span></p>
@@ -359,7 +343,7 @@
 
 				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
 
-				<thead style="position: sticky; top: 0;">
+				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
 						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th> 
 					</tr>

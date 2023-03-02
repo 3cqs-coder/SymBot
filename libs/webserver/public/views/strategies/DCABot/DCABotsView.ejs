@@ -99,6 +99,11 @@
 
 	$(document).ready(function() {
 
+		$(window).resize(function() {
+
+			resizeBotsDeals();
+		});
+
 		$('[id*="toggle"]').simpleSwitch();
 		$('[id*="toggle"]').prop('disabled', true);
 
@@ -137,6 +142,20 @@
 			}
 		});
 
+
+		$('#botsDeals').tablesorter({
+
+			widgets: [ 'saveSort', 'stickyHeaders', 'uitheme' ],
+			widgetOptions: {
+				saveSort: true,
+				stickyHeaders_attachTo: '',
+				columnSelector_mediaqueryHidden: true
+			},
+			durationLength : 4,
+			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)'
+		});
+
+		resizeBotsDeals();
 	});
 
 </script>
@@ -147,14 +166,21 @@
 
 	<div id="contentBox">
 
-	<h3>DCA Bots</h3>
+		<div style="position: relative;">
 
-	<table id="botsDeals" border=0 cellspacing=0 cellpadding=0><tbody>
+			<b class="contentHeader">DCA Bots</b>
 
-	<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-		<th>Bot Name</th> <th>Pair</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP %</th> <th>Max Deals</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
-	</tr>
+			<div class="botsDealsBox" style="margin-top: 20px;">
 
+				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
+
+					<thead style="position: sticky; top: 0; z-index: 1000;">
+						<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
+							<th>Bot Name</th> <th>Pair</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP %</th> <th>Max Deals</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
+						</tr>
+					</thead>
+
+					<tbody>
 	<%
 
 		const maxPairs = 10;
@@ -229,25 +255,28 @@
 			}
 	%>
 
-	<tr data-botid="<%- bot['botId'] %>" data-botname="<%- bot['botName'] %>" style="vertical-align: top;">
-		<td><%- bot['botName'] %></td>
-		<td style="max-width: 150px;"><%- pair.toUpperCase() %></td>
-		<td><%- bot['config']['firstOrderAmount'] %></td>
-		<td><%- bot['config']['dcaOrderAmount'] %></td>
-		<td><%- bot['config']['dcaMaxOrder'] %></td>
-		<td><%- bot['config']['dcaOrderStepPercent'] %></td>
-		<td><%- bot['config']['dcaOrderSizeMultiplier'] %></td>
-		<td><%- bot['config']['dcaOrderStepPercentMultiplier'] %></td>
-		<td><%- bot['config']['dcaTakeProfitPercent'] %></td>
-		<td><%- dealMax %></td>
-		<td><%- startCondition %></td>
-		<td><%- sandBox %></td>
-		<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>
-	</tr>
+					<tr data-botid="<%- bot['botId'] %>" data-botname="<%- bot['botName'] %>" style="vertical-align: top;">
+						<td><%- bot['botName'] %></td>
+						<td style="max-width: 150px;"><%- pair.toUpperCase() %></td>
+						<td><%- bot['config']['firstOrderAmount'] %></td>
+						<td><%- bot['config']['dcaOrderAmount'] %></td>
+						<td><%- bot['config']['dcaMaxOrder'] %></td>
+						<td><%- bot['config']['dcaOrderStepPercent'] %></td>
+						<td><%- bot['config']['dcaOrderSizeMultiplier'] %></td>
+						<td><%- bot['config']['dcaOrderStepPercentMultiplier'] %></td>
+						<td><%- bot['config']['dcaTakeProfitPercent'] %></td>
+						<td><%- dealMax %></td>
+						<td><%- startCondition %></td>
+						<td><%- sandBox %></td>
+						<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>
+					</tr>
 
 	<% 	} %>
 
-	</tbody></table>
+					</tbody>
+				</table>
+			</div>
+		</div>
 	</div>
 
 </main>
