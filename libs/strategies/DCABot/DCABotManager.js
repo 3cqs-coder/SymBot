@@ -104,7 +104,7 @@ async function viewBots(req, res) {
 
 async function viewHistoryDeals(req, res) {
 
-	const deals = await shareData.DCABot.getDealsHistory();
+	const deals = await shareData.DCABot.getDealsHistory(req, res);
 
 	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals)) } );
 }
@@ -160,7 +160,16 @@ async function apiGetActiveDeals(req, res) {
 
 	let botsActiveObj = {};
 
-	const bots = await shareData.DCABot.getBots({ 'active': true });
+	const body = req.body;
+
+	let active = body.active;
+
+	if (active == undefined || active == null || active == '') {
+
+		active = true;
+	}
+
+	const bots = await shareData.DCABot.getBots({ 'active': active });
 
 	let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
 

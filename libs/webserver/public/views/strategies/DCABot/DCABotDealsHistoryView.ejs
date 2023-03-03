@@ -31,6 +31,22 @@
 			resizeBotsDeals();
 		});
 
+		$(document).on('click', '#submit', function() {
+
+			window.location.href = '/deals/history?from=' + $('#fromDate').val();
+		});
+
+
+		$('#fromDate').datepicker({
+
+			dateFormat: 'yy-mm-dd',
+			changeMonth: true,
+			changeYear: true,
+			showWeek: false,
+			yearSuffix: '',
+			showAnim: 'slide'
+		});
+
 
 		$('[id*="date"]').each(function(){
 
@@ -105,6 +121,8 @@
 					<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
 						$<%- totalProfit.toFixed(2) %>
 					</span>
+					
+					<p>Date: <input id="fromDate" class="form-field" style="width: 100px;"> <button id="submit" class="btnAll">Search</button></p>
 				</p>
 
 			</div>
