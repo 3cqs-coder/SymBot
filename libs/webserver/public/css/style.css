@@ -209,12 +209,6 @@ form textarea {
 }
 
 
-.headerVersion {
-
-	font-size: 0.95rem;
-}
-
-
 #headerBox {
 
 	z-index: 9999;
@@ -246,9 +240,10 @@ form textarea {
 	cursor: pointer;
 	left: 0;
 	bottom: 0;
+	padding-bottom: 2px;
 	width: 100%;
 	height: auto;
-	background-color: #002c39;
+	background-color: #000000;
 }
 
 

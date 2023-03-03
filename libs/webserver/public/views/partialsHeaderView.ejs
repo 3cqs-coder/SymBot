@@ -41,9 +41,25 @@
 	});
 
 
-	function resizeBotsDeals() {
+	function resizeBotsDeals(px) {
 
-		$('.botsDealsBox').height(($(window).height() - 275));
+		let offSetBottom = -200;
+
+		let p = $('.botsDealsBox').first();
+		let positionTop = p.position().top;
+
+		let contentHeaderHeight = $('.contentHeaderBox').height();
+
+		contentHeaderHeight = contentHeaderHeight || 0;
+
+		let pixels = offSetBottom - contentHeaderHeight;
+
+		if (px != undefined && px != null) {
+
+			pixels = px;
+		}
+
+		$('.botsDealsBox').height(($(window).height() + pixels));
 	}
 
 
@@ -88,9 +104,8 @@
 
 <div id="headerBox"> 
 
-	<div style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); font-size: 1.2rem; display: flex; justify-content:center; align-items: center;">
-		<img src="/images/SymBot-Logo.png" style="width: auto; height: 55px; margin-right: 1rem; vertical-align: middle;" />
-		<span class="headerVersion" style="margin-top: 20px"><%- appData.version %></span>
+	<div style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);">
+		<img src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
 
 </div>
