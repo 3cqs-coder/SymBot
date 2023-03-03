@@ -1907,44 +1907,45 @@ async function getDealsHistory(req, res) {
 	const days = 1;
 	const maxResults = 100;
 
-	let dateFrom;
 	let dateTo;
+	let dateFrom;
+	let dealsArr = [];
+
+	let from = req.query.from;
 
 	const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 	const timeZoneOffset = Intl.DateTimeFormat('ia', {
 
-								timeZoneName: 'longOffset',
-								timeZone: tz
+								timeZone: tz,
+								timeZoneName: 'longOffset'
 							})
 							.formatToParts()
 							.find((i) => i.type === 'timeZoneName').value
 							.slice(3);
 
-	let from = req.query.from;
+	let	query = { 'sellData': { '$exists': true }, 'status': 1 };
+
+	let queryOptions = {
+							'sort': { 'sellData.date': -1 }
+					   };
 
 	if (from == undefined || from == null || from == '') {
 
-		dateFrom = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
-		dateTo = new Date(new Date(dateFrom).getTime() + (days * 24 * 60 * 60 * 1000));
+		queryOptions['limit'] = maxResults;
+		
+		//dateFrom = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
+		//dateTo = new Date(new Date(dateFrom).getTime() + (days * 24 * 60 * 60 * 1000));
 	}
 	else {
 
 		dateFrom = new Date(from + 'T00:00:00' + timeZoneOffset);
 		dateTo = new Date(from + 'T23:59:59' + timeZoneOffset);
+
+		query['sellData.date'] = { '$gte': dateFrom, '$lte': dateTo };
 	}
 
-	let queryOptions = {
-							'sort': { 'sellData.date': -1 },
-							//'limit': maxResults
-					   };
-
-	//let query = { 'sellData': { '$exists': true }, 'status': 1 };
-	let query = { 'sellData': { '$exists': true }, 'sellData.date': { '$gte': dateFrom, '$lte': dateTo }, 'status': 1 };
-
 	const dealsHistory = await getDeals(query, queryOptions);
-
-	let dealsArr = [];
 
 	if (dealsHistory != undefined && dealsHistory != null && dealsHistory != '') {
 

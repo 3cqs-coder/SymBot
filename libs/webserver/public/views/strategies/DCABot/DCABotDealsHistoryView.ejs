@@ -91,6 +91,12 @@
 			}
 		});
 
+		// Populate date from query string
+		let fromDate = new URL(window.location.href).searchParams.get('from');
+
+		fromDate = fromDate || '';
+
+		$('#fromDate').val(fromDate);
 
 		resizeBotsDeals();
 	});
