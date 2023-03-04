@@ -121,6 +121,27 @@ async function start(data, startBot, reload) {
 		}
 		else if (symbolData.error != undefined && symbolData.error != null) {
 
+			// Try again if resuming existing bot deal
+			if (dealResume) {
+
+				const retryDelay = Number((1000 + (Math.random() * 5000)).toFixed(4));
+
+				let configObj = JSON.parse(JSON.stringify(config));
+
+				// Reset dealResume flag
+				configObj['dealResume'] = true;
+
+				const msg = 'Unable to resume ' + configObj.botName + ' / Pair: ' + pair + ' / Error: ' + symbolData.error + ' Trying again in ' + retryDelay + ' seconds';
+
+				if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold(msg) ); }
+
+				setTimeout(() => {
+
+					start(configObj, startBot, reload);
+
+				}, retryDelay);
+			}
+
 			return ( { 'success': false, 'data': JSON.stringify(symbolData.error) } );
 		}
 
@@ -1485,12 +1506,28 @@ const getSymbol = async (exchange, pair) => {
 
 			symbolError = e;
 
-			Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + JSON.stringify(e)));
+			if (typeof symbolError != 'string') {
+
+				let msg = '';
+
+				if (symbolError.message != undefined && symbolError.message != null) {
+
+					msg = ' ' + symbolError.message;
+				}
+
+				symbolError = JSON.stringify(symbolError) + msg;
+			}
+
+			Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + symbolError));
 
 			if (e instanceof ccxt.RateLimitExceeded && count < maxTries) {
 
 				// Delay and try again
 				await Common.delay(1000 + (Math.random() * 100));
+			}
+			else if (e instanceof ccxt.ExchangeNotAvailable) {
+
+				finished = true;
 			}
 			else if (e instanceof ccxt.BadSymbol) {
 
@@ -1702,6 +1739,7 @@ async function connectExchange(configObj) {
 
 		exchange = new ccxt.pro[config.exchange]({
 
+			'enableRateLimit': false,
 			'apiKey': config.apiKey,
 			'secret': config.apiSecret,
 			'passphrase': config.apiPassphrase,
