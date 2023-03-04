@@ -104,9 +104,9 @@ async function viewBots(req, res) {
 
 async function viewHistoryDeals(req, res) {
 
-	const deals = await shareData.DCABot.getDealsHistory(req, res);
+	const deals = await apiGetDealsHistory(req, res);
 
-	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals)) } );
+	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals.data)) } );
 }
 
 
@@ -149,6 +149,109 @@ async function apiGetBots(req, res) {
 	}
 
 	res.send( { 'date': new Date(), 'data': botsSort } );
+}
+
+
+async function apiGetDealsHistory(req, res, sendResponse) {
+
+	const days = 1;
+	const maxResults = 100;
+
+	let dateTo;
+	let dateFrom;
+	let dealsArr = [];
+
+	let from = req.query.from;
+
+	const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+	const timeZoneOffset = Intl.DateTimeFormat('ia', {
+
+								timeZone: tz,
+								timeZoneName: 'longOffset'
+							})
+							.formatToParts()
+							.find((i) => i.type === 'timeZoneName').value
+							.slice(3);
+
+	let	query = { 'sellData': { '$exists': true }, 'status': 1 };
+
+	let queryOptions = {
+							'sort': { 'sellData.date': -1 }
+					   };
+
+	if (from == undefined || from == null || from == '') {
+
+		queryOptions['limit'] = maxResults;
+		
+		//dateFrom = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
+		//dateTo = new Date(new Date(dateFrom).getTime() + (days * 24 * 60 * 60 * 1000));
+	}
+	else {
+
+		dateFrom = new Date(from + 'T00:00:00' + timeZoneOffset);
+		dateTo = new Date(from + 'T23:59:59' + timeZoneOffset);
+
+		query['sellData.date'] = { '$gte': dateFrom, '$lte': dateTo };
+	}
+
+	const dealsHistory = await shareData.DCABot.getDeals(query, queryOptions);
+
+	if (dealsHistory != undefined && dealsHistory != null && dealsHistory != '') {
+
+		for (let i = 0; i < dealsHistory.length; i++) {
+
+			const deal = dealsHistory[i];
+			const sellData = deal.sellData;
+			const orders = deal.orders;
+
+			let orderCount = 0;
+
+			for (let x = 0; x < orders.length; x++) {
+
+				const order = orders[x];
+
+				if (order['filled']) {
+
+					orderCount++;
+				}
+			}
+
+			if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
+
+				const profitPerc = Number(sellData.profit);
+
+				const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
+
+				const dataObj = {
+									'bot_id': deal.botId,
+									'bot_name': deal.botName,
+									'deal_id': deal.dealId,
+									'pair': deal.pair.toUpperCase(),
+									'date_start': new Date(deal.date),
+									'date_end': new Date(sellData.date),
+									'profit': profit,
+									'profit_percent': profitPerc,
+									'safety_orders': orderCount - 1
+								};
+
+				dealsArr.push(dataObj);
+			}
+		}
+	}
+
+	dealsArr = shareData.Common.sortByKey(dealsArr, 'date_end');
+
+	let obj = { 'date': new Date(), 'data': dealsArr.reverse() };
+
+	if (sendResponse) {
+
+		res.send(obj);
+	}
+	else {
+
+		return obj;
+	}
 }
 
 
@@ -806,6 +909,7 @@ module.exports = {
 	apiStartDeal,
 	apiGetBots,
 	apiGetActiveDeals,
+	apiGetDealsHistory,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
 	viewBots,

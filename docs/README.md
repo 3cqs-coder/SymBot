@@ -202,6 +202,26 @@ POST /api/bots/{botId}/enable
 POST /api/bots/{botId}/disable
 ```
 
+### Get active deals
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| -        |          |               |                      | Returns all current active deals |
+
+```
+GET /api/deals
+```
+
+### Get completed deals
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| from     | string   | NO            |                      | Returns last 100 deals if from date is not specified |
+
+```
+GET /api/deals/completed
+```
+
 ### Start deal
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -298,6 +318,22 @@ curl -i -X POST \
 -H 'Accept: application/json' \
 -H 'api-key: {API-KEY}' \
 http://127.0.0.1:3000/api/bots/{botId}/enable
+```
+
+#### Get active deals
+```
+curl -i -X GET \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+'http://127.0.0.1:3000/api/deals'
+```
+
+#### Get completed deals
+```
+curl -i -X GET \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+'http://127.0.0.1:3000/api/deals/completed?from=2023-03-01'
 ```
 
 #### Start deal

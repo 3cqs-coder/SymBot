@@ -143,15 +143,20 @@ function initRoutes(router) {
 	});
 
 
-	router.get([ '/api/deals', '/api/deals/:dealId' ], (req, res) => {
+	router.get([ '/api/deals', '/api/deals/completed', '/api/deals/:dealId' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
+		const reqPath = req.path;
 		const dealId = req.params.dealId;
 
 		if (req.session.loggedIn || validApiKey(req)) {
 
-			if (dealId == undefined || dealId == null || dealId == '' || dealId == 'active') {
+			if (reqPath.indexOf('completed') > -1) {
+
+				shareData.DCABotManager.apiGetDealsHistory(req, res, true);
+			}
+			else if (dealId == undefined || dealId == null || dealId == '' || dealId == 'active') {
 
 				shareData.DCABotManager.apiGetActiveDeals(req, res);
 			}
