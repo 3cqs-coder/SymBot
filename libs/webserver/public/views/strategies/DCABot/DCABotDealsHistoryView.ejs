@@ -24,6 +24,93 @@
 	}
 
 
+	function getDeals(filters) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		if (filters == undefined || filters == null || filters == '') {
+
+			filters = {};
+		}
+
+		$.ajax({
+					type: 'GET',
+					url: '/api/deals/completed',
+					data: filters,
+					dataType: 'json',
+					success: function({ data }) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						let deals = data;
+
+						populateDeals(deals);
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+					}
+		});
+	}
+
+
+	function populateDeals(deals) {
+
+		let totalProfit = 0;
+		let profitTotalColor = '#1a9f00';
+
+		let contentArr = [];
+
+		for (let i = 0; i < deals.length; i++) {
+
+			let profitPercColor = '#1a9f00';
+
+			let deal = deals[i];
+			let profit = deal['profit'];
+			let profitPerc = deal['profit_percent'];
+			let dateEnd = new Date(deal['date_end']).getTime();
+		
+			let duration = timeDiff(new Date(deal['date_start']), new Date(deal['date_end']));
+
+			if (profitPerc <= 0) {
+
+				profitPercColor = '#d82715';
+			}
+
+			contentArr.push('<tr>');
+			contentArr.push('<td id="date' + i + '" data-date="' + dateEnd + '">' + dateConvertLocal(dateEnd) + '</td>');
+			contentArr.push('<td>' + deal['bot_name'] + '</td>');
+			contentArr.push('<td>' + deal['deal_id'] + '</td>');
+			contentArr.push('<td>' + deal['pair'] + '</td>');
+			contentArr.push('<td>' + duration + '</td>');
+			contentArr.push('<td style="color: ' + profitPercColor + '">$' + profit + '</td>');
+			contentArr.push('<td style="color: ' + profitPercColor + '">' + profitPerc + '%</td>');
+			contentArr.push('<td>' + deal['safety_orders'] + '</td>');
+			contentArr.push('</tr>');
+
+			totalProfit += profit;
+		}
+
+		if (totalProfit <= 0) {
+
+			profitTotalColor = '#d82715';
+		}
+
+		$('#botsDeals tbody').empty();
+		$('#botsDeals tbody').append(contentArr.join(''));
+
+		$('#totalProfit').css('color', profitTotalColor);
+		$('#totalProfit').html('$' + totalProfit.toFixed(2));
+		
+		$('#botsDeals').tablesorter().trigger('update');
+
+		resizeBotsDeals();
+	}
+
+
 	$(document).ready(function () {
 
 		$(window).resize(function() {
@@ -31,9 +118,10 @@
 			resizeBotsDeals();
 		});
 
+
 		$(document).on('click', '#submit', function() {
 
-			window.location.href = '/deals/history?from=' + $('#fromDate').val();
+			getDeals({ 'from': $('#fromDate').val() });
 		});
 
 
@@ -45,14 +133,6 @@
 			showWeek: false,
 			yearSuffix: '',
 			showAnim: 'slide'
-		});
-
-
-		$('[id*="date"]').each(function(){
-
-			let date = dateConvertLocal($(this).data('date'));
-
-			$(this).text(date);
 		});
 
 
@@ -98,7 +178,7 @@
 
 		$('#fromDate').val(fromDate);
 
-		resizeBotsDeals();
+		getDeals();
 	});
 
 </script>
@@ -106,14 +186,6 @@
 
 <center>
 <main>
-
-	<% 
-	let totalProfit = 0;
-	for (let i = 0; i < deals.length; i++) {
-		const { profit } = deals[i];
-		totalProfit += profit;
-	}
-	%>
 
 	<div id="contentBox">
 
@@ -124,9 +196,7 @@
 				<b class="contentHeader">DCA Bot Deals History</b>
 
 				<p style="font-size: 1.2rem; margin-top: 10px; margin-bottom: 0;">Total P/L: 
-					<span style="color: <%- totalProfit > 0 ? '#1a9f00' : '#d82715' %>">
-						$<%- totalProfit.toFixed(2) %>
-					</span>
+					<span id="totalProfit"></span>
 					
 					<p>Date: <input id="fromDate" class="form-field" style="width: 100px;"> <button id="submit" class="btnAll">Search</button></p>
 				</p>
@@ -143,40 +213,7 @@
 						</tr>
 					</thead>
 					
-					<tbody>
-	
-	<%
-		for (let i = 0; i < deals.length; i++) {
-
-			let profitPercColor = '#1a9f00';
-
-			let deal = deals[i];
-			let profit = deal['profit'];
-			let profitPerc = deal['profit_percent'];
-			let dateEnd = new Date(deal['date_end']).getTime();
-
-			let duration = timeDiff(new Date(deal['date_start']), new Date(deal['date_end']));
-
-			if (profitPerc <= 0) {
-
-				profitPercColor = '#d82715';
-			}
-	%>
-
-				<tr>
-					<td id="date<%- i %>" data-date="<%- dateEnd %>"></td>
-					<td><%- deal['bot_name'] %></td>
-					<td><%- deal['deal_id'] %></td>
-					<td><%- deal['pair'] %></td>
-					<td><%- duration %></td>
-					<td style="color: <%- profitPercColor %>;">$<%- profit %></td>
-					<td style="color: <%- profitPercColor %>;"><%- profitPerc %>%</td>
-					<td><%- deal['safety_orders'] %></td>
-				</tr>
-	
-	<% } %>
-
-				</tbody>
+					<tbody></tbody>
 			</table>
 		</div>
 	</div>

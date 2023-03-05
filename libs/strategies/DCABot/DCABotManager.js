@@ -104,9 +104,7 @@ async function viewBots(req, res) {
 
 async function viewHistoryDeals(req, res) {
 
-	const deals = await apiGetDealsHistory(req, res);
-
-	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'deals': JSON.parse(JSON.stringify(deals.data)) } );
+	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData } );
 }
 
 
