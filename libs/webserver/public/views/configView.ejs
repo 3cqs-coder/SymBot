@@ -1,0 +1,128 @@
+<%- include('./partialsHeaderView'); %>
+
+<script>
+
+	const telegram = '<%= appData['telegram_enabled'] %>';
+
+
+	function convertBoolean(param) {
+
+		let paramBool;
+
+		if (param) {
+
+			paramBool = param.toLowerCase() === 'false' ? false : true;
+		}
+
+		return paramBool;
+	}
+
+
+	function submitForm() {
+
+		let form = '#formConfig';
+		let submitUrl = $(form).attr('action');
+
+		if ($('#passwordnew').val() != $('#passwordnew2').val()) {
+
+			alertBox('Passwords do not match');
+
+			return;
+		}
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'POST',
+					url: submitUrl,
+					data: $(form).serialize(),
+					dataType: 'json',
+					success: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						if (!data.success) {
+
+							alertBox(data.data);
+						}
+						else {
+
+							alertBox(data.data);
+						}
+
+						$('#password').val('');
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+					}
+		});
+	}
+
+
+	$(document).ready(function() {
+
+		$('[id*="toggle"]').simpleSwitch();
+
+		if (convertBoolean(telegram)) {
+
+			$('#toggleTelegram').click();
+		}
+
+		$('#submitButton').on('click', function(e) {
+
+			e.preventDefault();
+
+			submitForm();
+		});
+
+	});
+
+</script>
+
+
+<main>
+
+	<div id="contentBox" style="max-width: 800px;">
+
+		<div class="contentHeaderBox" style="text-align: center;">
+			<b id="headerText" class="contentHeader">Configuration</b>
+		</div>
+
+		<form autocomplete="off" action="/config" method="POST" id="formConfig">
+
+			<div style="padding-bottom: 5px;">
+				<label for="password">Current Password</label>
+				<input type="password" name="password" id="password" class="form-field" style="width: 250px;" required>
+			</div>
+
+			<div style="padding-bottom: 5px;">
+				<label for="passwordnew">New Password</label>
+				<input type="password" name="passwordnew" id="passwordnew" class="form-field" style="width: 250px;">
+			</div>
+
+			<div style="padding-bottom: 5px;">
+				<label for="passwordnew2">New Password Again</label>
+				<input type="password" name="passwordnew2" id="passwordnew2" class="form-field" style="width: 250px;">
+			</div>
+
+			<div style="padding-top: 10px; padding-bottom: 5px;">
+				<input id="toggleTelegram" name="telegram" type=checkbox> Telegram Notifications
+			</div>
+
+			<div style="text-align: center; padding-top: 25px;">
+				<button type="submit" id="submitButton" class="btn" style="cursor: pointer;">
+					Update
+				</button>
+			</div>
+
+		</form>
+	</div>
+
+</main>
+
+
+<%- include('./partialsFooterView'); %>

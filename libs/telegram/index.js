@@ -100,7 +100,7 @@ async function sendMessage(id, msg) {
 			msg = 'You are not authorized to access ' + shareData.appData.name;
 		}
 
-		if (bot) {
+		if (bot && shareData.appData.telegram_enabled) {
 
 			bot.telegram.sendMessage(id, msg).catch(err => logError(err, id));
 		}

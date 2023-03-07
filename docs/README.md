@@ -6,10 +6,14 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 ## Requirements
 
+- Linux, MacOS, or Windows based system
 - Node.js must be installed on your system
 - MongoDB installed or a cloud host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection
+
+**NOTE:** Trading requires your system and internet connection to be running 24/7. Any interruption could result in missed trades, signals, etc.
+
 
 ## Installation
 
@@ -216,7 +220,8 @@ GET /api/deals
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
 |----------|----------|---------------|----------------------|-----------------|
-| from     | string   | NO            |                      | Returns last 100 deals if from date is not specified |
+| from     | string   | NO            |                      | Returns most recent completed deals if start from date is not specified |
+| to       | string   | NO            |                      | Returns all completed deals up to end of date specified |
 
 ```
 GET /api/deals/completed

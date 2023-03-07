@@ -21,6 +21,36 @@ function initRoutes(router) {
 	});
 
 
+	router.get('/config', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			res.render( 'configView', { 'appData': shareData.appData } );
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/config', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.Common.updateConfig(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get('/login', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');

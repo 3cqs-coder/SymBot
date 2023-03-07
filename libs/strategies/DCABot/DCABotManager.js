@@ -159,7 +159,13 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 	let dateFrom;
 	let dealsArr = [];
 
-	let from = req.query.from;
+	let fromDate = req.query.from;
+	let toDate = req.query.to;
+
+	if (toDate == undefined || toDate == null || toDate == '') {
+		
+		toDate = fromDate;
+	}
 
 	const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -178,7 +184,7 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 							'sort': { 'sellData.date': -1 }
 					   };
 
-	if (from == undefined || from == null || from == '') {
+	if (fromDate == undefined || fromDate == null || fromDate == '') {
 
 		queryOptions['limit'] = maxResults;
 		
@@ -187,8 +193,8 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 	}
 	else {
 
-		dateFrom = new Date(from + 'T00:00:00' + timeZoneOffset);
-		dateTo = new Date(from + 'T23:59:59' + timeZoneOffset);
+		dateFrom = new Date(fromDate + 'T00:00:00' + timeZoneOffset);
+		dateTo = new Date(toDate + 'T23:59:59' + timeZoneOffset);
 
 		query['sellData.date'] = { '$gte': dateFrom, '$lte': dateTo };
 	}

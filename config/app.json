@@ -5,6 +5,7 @@
 					"port": 3000
 				},
 	"telegram": {
+					"enabled": true,
 					"token_id": "",
 					"notify_user_id": ""
 				},
@@ -20,6 +21,7 @@
 			},
 	"signals": {
 				 	"3CQS": {
+					 			"enabled": true,
 					 			"api_key": ""
 				 			}
 			   },

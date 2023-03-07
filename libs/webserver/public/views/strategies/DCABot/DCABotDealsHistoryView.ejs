@@ -121,18 +121,30 @@
 
 		$(document).on('click', '#submit', function() {
 
-			getDeals({ 'from': $('#fromDate').val() });
+			getDeals({ 'from': $('#fromDate').val(), 'to': $('#toDate').val() });
 		});
 
 
-		$('#fromDate').datepicker({
+		$('#fromDate, #toDate').datepicker({
 
 			dateFormat: 'yy-mm-dd',
+			maxDate: '+3m',
 			changeMonth: true,
 			changeYear: true,
 			showWeek: false,
 			yearSuffix: '',
-			showAnim: 'slide'
+			showAnim: 'slide',
+			onSelect: function (selectedDate, input) {
+						
+						if (input.id === 'fromDate') {
+
+							$('#toDate').datepicker('option', 'minDate', selectedDate);
+						}
+						else {
+
+							$('#fromDate').datepicker('option', 'maxDate', selectedDate);
+						}
+			}
 		});
 
 
@@ -198,7 +210,7 @@
 				<p style="font-size: 1.2rem; margin-top: 10px; margin-bottom: 0;">Total P/L: 
 					<span id="totalProfit"></span>
 					
-					<p>Date: <input id="fromDate" class="form-field" style="width: 100px;"> <button id="submit" class="btnAll">Search</button></p>
+					<p>From: <input id="fromDate" class="form-field" style="width: 100px;"> &nbsp; To: <input id="toDate" class="form-field" style="width: 100px;"> <button id="submit" class="btnAll">Search</button></p>
 				</p>
 
 			</div>
