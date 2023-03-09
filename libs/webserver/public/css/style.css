@@ -327,7 +327,7 @@ table#ordersTable tr:not(:first-child):hover {
 }
 
 
-#startCondition {
+select[id^='startCondition'] {
 
 	background-color: #ffffff;
 	cursor: pointer;

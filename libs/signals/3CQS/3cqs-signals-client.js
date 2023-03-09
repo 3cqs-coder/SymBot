@@ -207,6 +207,13 @@ async function processSignal(data) {
 	const signalId = data['signal_id'];
 	const signalNameId = data['signal_name_id'];
 
+	const symRank = data['sym_rank'];
+	const symScore = data['sym_score'];
+	const volatilityScore = data['volatility_score'];
+	const priceActionScore = data['price_action_score'];
+	const marketCapRank = data['market_cap_rank'];
+	const rsi1415m = data['rsi14_15m'];
+
 	const startCondition = 'signal|3CQS|' + signalNameId;
 
 	let port = shareData.appData.web_server_port;
@@ -248,6 +255,39 @@ async function processSignal(data) {
 				const config = bot.config;
 				const pairs = config.pair;
 
+				if (config.startConditions != undefined && config.startConditions != null) {
+
+					if (typeof config.startConditions !== 'string' && config.startConditions.length > 1) {
+
+						let condition = '';
+
+						for (let x = 1; x < config.startConditions.length; x++) {
+
+							let startCondition = config.startConditions[x];
+
+							let conditionData = startCondition.split('|');
+
+							let id = conditionData[2];
+							let operator = conditionData[3];
+							let content = conditionData[4];
+
+							if (x > 1) {
+
+								condition += ' && ';
+							}
+
+							condition += '("' + data[id] + '" ' + operator + ' "' + content + '")';
+						}
+
+						let signalValid = eval(condition);
+
+						if (!signalValid) {
+
+							return;
+						}
+					}
+				}
+	
 				for (let x = 0; x < pairs.length; x++) {
 
 					let pair = pairs[x];

@@ -72,11 +72,14 @@ async function init() {
 
 	if (Object.keys(signalConfigs).length > 0) {
 
+		let startSubsObj = {};
+
 		for (let key in signalConfigs) {
 
 			let signalObj = {};
 
 			let startConditions = signalConfigs[key]['start_conditions'];
+			let startConditionsSub = signalConfigs[key]['start_conditions_sub'];
 
 			for (let num in startConditions) {
 
@@ -89,6 +92,24 @@ async function init() {
 
 				signalObj[signalId] = {};
 				signalObj[signalId]['description'] = description;
+			}
+
+			if (startSubsObj[key] == undefined || startSubsObj[key] == null) {
+
+				startSubsObj[key] = {};
+
+				for (let num in startConditionsSub) {
+
+					let id = startConditionsSub[num]['id'];
+					let description = startConditionsSub[num]['description'];
+
+					let signalId = 'signalsub|' + key + '|' + id;
+
+					startSubsObj[key][signalId] = {};
+					startSubsObj[key][signalId]['description'] = description;
+				}
+
+				appConfig['data']['bots']['start_conditions_sub'] = Object.assign({}, appConfig['data']['bots']['start_conditions_sub'], startSubsObj[key]);
 			}
 
 			appConfig['data']['bots']['start_conditions'] = Object.assign({}, appConfig['data']['bots']['start_conditions'], signalObj);

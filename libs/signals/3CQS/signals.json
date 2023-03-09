@@ -81,6 +81,32 @@
         "id": 5,
         "description": "X-Treme Volatility"
       }
+    ],
+    "start_conditions_sub": [
+      {
+        "id": "sym_rank",
+        "description": "SymRank"
+      },
+      {
+        "id": "sym_score",
+        "description": "SymScore"
+      },
+      {
+        "id": "market_cap_rank",
+        "description": "Market Cap Rank"
+      },
+      {
+        "id": "volatility_score",
+        "description": "Volatility Score"
+      },
+      {
+        "id": "price_action_score",
+        "description": "Price Action Score"
+      },
+      {
+        "id": "rsi14_15m",
+        "description": "RSI-14 15m"
+      }
     ]
   }
 }

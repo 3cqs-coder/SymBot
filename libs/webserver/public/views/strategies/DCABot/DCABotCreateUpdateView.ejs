@@ -7,6 +7,32 @@
 
 	let formAction = '<%- formAction %>';
 
+
+	function formToJson(form) {
+
+		let obj = {};
+
+		$(form).serializeArray().map(function(item) {
+
+			if (obj[item.name]) {
+
+				if (typeof(obj[item.name]) === 'string') {
+
+					obj[item.name] = [obj[item.name]];
+				}
+
+				obj[item.name].push(item.value);
+			}
+			else {
+
+				obj[item.name] = item.value;
+			}
+		});
+
+		return obj;
+	}
+
+
 	function resetForm(form) {
 
 		$('#spinner-overlay').fadeOut(100);
@@ -19,6 +45,23 @@
 		disableAll(false);
 	}
 
+
+	function showStartConditionsSub(val) {
+
+		const data = val.split('|');
+
+		if (data[0] == 'signal') {
+
+			const key = data[1];
+
+			$('[id^="startConditionSub-' + key + '"]').show();
+		}
+		else {
+
+			$('[id^="startConditionSub"]').hide();
+		}
+	}
+	
 
 	function disableAll(disable) {
 
@@ -90,6 +133,8 @@
 		$('#headerText').text(headerText);
 		$('#formSubmitStart').text(botText);
 
+		showStartConditionsSub($('#startCondition').val());
+
 		$('#pair').select2();
 		$('[id*="botActive"]').simpleSwitch();
 
@@ -97,6 +142,14 @@
 		const submitUrl = $(form).attr('action');
 
 		const createStep = $('#createStep').val();
+
+
+		$('#startCondition').on('change', function() { 
+
+			const val = this.value;
+
+			showStartConditionsSub(val);
+		});
 
 
 		$('#clearAll').on('click', function(e) {
@@ -124,6 +177,8 @@
 		$('[id^="formSubmit"]').on('click', function(e) {
 
 			e.preventDefault();
+
+			let invalidPair = false;
 
 			const id = $(this).attr('id');
 
@@ -177,23 +232,63 @@
 
 			$('#active').val($('#botActive').prop('checked'));
 
-			const formDataSubmit = $(form).serialize();
-			const formData = $(form).serializeArray().reduce((o, {name: n, value: v}) => Object.assign(o, { [n]: v }), {});
+			let formDataSubmit = $(form).serialize();
+			const formData = formToJson(form);
 
+			if (formData.pair != undefined && formData.pair != null && formData.pair != '') {
 
-			if (formData.pair == undefined || formData.pair == null || formData.pair == '' || !formData.pair.match(/\//)) {
+				if (typeof formData.pair == 'string' && !formData.pair.match(/\//)) {
+
+					invalidPair = true;
+				}
+
+				if (typeof formData.pair != 'string' && !formData.pair[0].match(/\//)) {
+
+					invalidPair = true;
+				}
+			}
+			else {
+
+				invalidPair = true;
+			}
+ 
+			if (invalidPair) {
 
 				alertBox('Invalid Pair');
 
 				return;
 			}
 
-			if (formData.startCondition == undefined || formData.startCondition == null || formData.startCondition == '') {
+			if (formData.startCondition[0] == undefined || formData.startCondition[0] == null || formData.startCondition[0] == '') {
 
 				alertBox('Invalid Start Condition');
 
 				return;
 			}
+
+			$('[id^="startConditionSub"]').each(function(){
+
+				const id = this.id;
+
+				const data = id.split('-');
+
+				const key = data[1];
+				const num = data[2];
+
+				const val = $('#startConditionVal-' + key + '-' + num).val();
+				const operator = $('#startConditionOp-' + key + '-' + num).val();
+
+				if (operator != undefined && operator != null && operator != '') {
+
+					let content = 'signalsub|' + key + '|';
+
+					content += $(this).data('id') + '|';
+					content += operator + '|';
+					content += val + '|';
+
+					formDataSubmit += '&startCondition=' + content;
+				}
+			});
 
 			$('#spinner-overlay').fadeIn(100);
 
@@ -352,12 +447,18 @@
 </script>
 
 		<%
+			const operatorsArr = [ '<', '>', '=', '!=', '>=', '<=' ];
+
 			let symbolString = '';
 			let activeChecked = '';
 
 			let startConditionString = '<option value="">';
+			let startConditionSubString = '';
+
+			let countSub = 1;
 
 			let pairsObj = {};
+			let startConditionSubObj = {};
 			let botPairs = [];
 
 			if (botData.active) {
@@ -409,6 +510,80 @@
 				}
 
 				startConditionString += '<option value="' + key + '" ' + selected + '>' + description;
+			}
+
+			// Get additional bot start conditions
+			if (botData.startConditions.length > 1) {
+
+				for (let i = 1; i < botData.startConditions.length; i++) {
+
+					const data = botData.startConditions[i].split('|');
+
+					const key =  data[1];
+					const id = data[2];
+					const operator = data[3];
+					const content = data[4];
+
+					if (startConditionSubObj[key] == undefined || startConditionSubObj[key] == null) {
+
+						startConditionSubObj[key] = {};
+					}
+				
+					startConditionSubObj[key][id] = { 'operator': operator, 'content': content };
+				}
+			}
+
+			for (let keySub in appData.bots['start_conditions_sub']) {
+
+				const data = keySub.split('|');
+
+				const key = data[1];
+				const id = data[2];
+
+				let content = '';
+				let operator = '';
+
+				if (startConditionSubObj[key] != undefined && startConditionSubObj[key] != null) {
+
+					if (startConditionSubObj[key][id] != undefined && startConditionSubObj[key][id] != null) {
+
+						content = startConditionSubObj[key][id]['content'];
+						operator = startConditionSubObj[key][id]['operator'];
+					}
+				}
+
+				const description = appData.bots['start_conditions_sub'][keySub]['description'];
+
+				let str = '<tr id="startConditionSub-' + key + '-' + countSub + '"';
+
+				str += ' data-id="' + id + '" ';
+				str += ' style="display: none;"><td style="padding-left: 15px;">' + description + ':</td> <td>';
+
+				str += '<select id="startConditionOp-' + key + '-' + countSub + '" name="startConditionOp" class="form-field">';
+				str += '<option value="">';
+
+				for (let i = 0; i < operatorsArr.length; i++) {
+
+					let selected = '';
+
+					let op = operatorsArr[i];
+
+					if (op == operator) {
+
+						selected = ' selected';
+					}
+
+					str += '<option value="' + op + '"' + selected + '>' + op;
+				}
+
+				str += '</select>';
+
+				str += ' <input id="startConditionVal-' + key + '-' + countSub + '" name="startCondition' + countSub + '" class="form-field" style="cursor: auto;" value="' + content + '">';
+				str += '</td></tr>';
+
+				startConditionSubString += str;
+
+				countSub++;
 			}
 		%>
 
@@ -469,7 +644,8 @@
 				<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="<%- botData.dealMax %>" class="form-field"></td></tr>
 				<tr><td>Max Pairs:</td> <td><input id="pairMax" name="pairMax" value="<%- botData.pairMax %>" class="form-field"></td></tr>
 				<tr><td>Minimum 24h Volume:</td> <td><input id="volumeMin" name="volumeMin" value="<%- botData.volumeMin %>" class="form-field"> Million</td></tr>
-				<tr><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
+				<tr id="startConditionFirst"><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
+				<%- startConditionSubString %>
 				<tr><td>Enabled:</td> <td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>
 
 				<tr>

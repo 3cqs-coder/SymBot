@@ -859,11 +859,22 @@ async function calculateOrders(body) {
 		active = true;
 	}
 
+	if (typeof body.startCondition == 'string') {
+
+		botData.startConditions.push(body.startCondition);
+	}
+	else {
+
+		botData.startConditions = body.startCondition;
+	}
+
+	// Remove empty conditions
+	botData.startConditions = botData.startConditions.filter((a) => a);
+
 	botData.pair = pair;
 	botData.dealMax = body.dealMax;
 	botData.pairMax = body.pairMax;
 	botData.volumeMin = body.volumeMin;
-	botData.startConditions.push(body.startCondition);
 	botData.firstOrderAmount = body.firstOrderAmount;
 	botData.dcaOrderAmount = body.dcaOrderAmount;
 	botData.dcaMaxOrder = body.dcaMaxOrder;
