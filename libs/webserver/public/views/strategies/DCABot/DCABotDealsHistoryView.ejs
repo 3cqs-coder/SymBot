@@ -104,7 +104,8 @@
 
 		$('#totalProfit').css('color', profitTotalColor);
 		$('#totalProfit').html('$' + totalProfit.toFixed(2));
-		
+		$('#totalDeals').html(deals.length);
+
 		$('#botsDeals').tablesorter().trigger('update');
 
 		resizeBotsDeals();
@@ -207,11 +208,12 @@
 
 				<b class="contentHeader">DCA Bot Deals History</b>
 
-				<p style="font-size: 1.2rem; margin-top: 10px; margin-bottom: 0;">Total P/L: 
-					<span id="totalProfit"></span>
-					
-					<p>From: <input id="fromDate" class="form-field" style="width: 100px;"> &nbsp; To: <input id="toDate" class="form-field" style="width: 100px;"> <button id="submit" class="btnAll">Search</button></p>
-				</p>
+				<span style="display: flex; justify-content: center; font-size: 1.2rem; gap: 20px; margin-top: 10px; margin-bottom: 0;">
+					<p style="margin-top: 0; margin-bottom: 0;">Total P/L: <span id="totalProfit"></span></p>
+					<p style="margin-top: 0; margin-bottom: 0;">Deals: <span id="totalDeals"></span></p>
+				</span>
+
+				<p style="margin-top: 10px; margin-bottom: 0;">From: <input id="fromDate" class="form-field" style="width: 100px;"> &nbsp; To: <input id="toDate" class="form-field" style="width: 100px;"> <button id="submit" class="btnAll">Search</button></p>
 
 			</div>
 

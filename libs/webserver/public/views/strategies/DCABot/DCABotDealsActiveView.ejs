@@ -190,6 +190,7 @@
 		$('#totalProfit').html('$' + totalProfit.toFixed(2));
 
 		$('#inDeals').html('$' + inDeals.toFixed(2));
+		$('#totalDeals').html(deals.length);
 		
 		$('#botsDeals').tablesorter().trigger('update');
 
@@ -292,6 +293,7 @@
 				<span style="display: flex; font-size: 1.2rem; justify-content: center; gap: 20px; margin-top: 10px;">
 					<p style="margin-top: 0; margin-bottom: 0;">Active P/L: <span id="totalProfit"></span></p>
 					<p style="margin-top: 0; margin-bottom: 0;">In Deals: <span id="inDeals"></span></p>
+					<p style="margin-top: 0; margin-bottom: 0;">Deals: <span id="totalDeals"></span></p>
 				</span>
 			</div>
 
