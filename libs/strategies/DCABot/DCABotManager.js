@@ -161,7 +161,7 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 
 	let fromDate = req.query.from;
 	let toDate = req.query.to;
-	const botName = req.query.botName;
+	const botId = req.query.botId;
 
 	if (toDate == undefined || toDate == null || toDate == '') {
 		
@@ -200,8 +200,9 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 		query['sellData.date'] = { '$gte': dateFrom, '$lte': dateTo };
 	}
 
-	if(botName && botName != 'Default') {
-		query['botName'] = botName;
+	if (botId && botId != 'Default') {
+
+		query['botId'] = botId;
 	}
 
 	const dealsHistory = await shareData.DCABot.getDeals(query, queryOptions);

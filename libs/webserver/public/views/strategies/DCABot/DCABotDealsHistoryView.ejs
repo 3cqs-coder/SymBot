@@ -24,6 +24,16 @@
 	}
 
 
+	function sortByKey(array, key) {
+
+		return array.sort(function(a, b) {
+			let x = a[key];
+			var y = b[key];
+			return x < y ? -1 : x > y ? 1 : 0;
+		});
+	}
+
+
 	function getDeals(filters) {
 
 		$('#spinner-overlay').fadeIn(100);
@@ -78,21 +88,25 @@
 
 	function botList(bots) {
 
-		let botArr = []
+		let botArr = [];
 
 		bots.forEach((bot) => {
 
-			botArr.push(bot.botName);
+			botArr.push({ 'id': bot.botId, 'name': bot.botName });
 		})
 
-		botArr = botArr.sort();
+		botArr = sortByKey(botArr, 'name');
 
 		const selector = ['<select id="botValue" class="form-field" style="width: 100px; ">','<option value="Default"></option>'];
 
 		for (let i = 0; i < botArr.length; i++) {
 
-			let botName = botArr[i];
-			selector.push(`<option value="${botName}">${botName}</option>`);
+			let bot = botArr[i];
+
+			let botId = bot.id;
+			let botName = bot.name;
+
+			selector.push(`<option value="${botId}">${botName}</option>`);
 		}
 
 		selector.push('</select>');
@@ -166,7 +180,7 @@
 
 		$(document).on('click', '#submit', function() {
 
-			getDeals({ 'from': $('#fromDate').val(), 'to': $('#toDate').val(), 'botName': $('#botValue').val() });
+			getDeals({ 'from': $('#fromDate').val(), 'to': $('#toDate').val(), 'botId': $('#botValue').val() });
 		});
 
 
