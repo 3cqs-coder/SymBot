@@ -63,13 +63,12 @@
 					type: 'GET',
 					url: '/api/bots',
 					success: function({ data }) {
-						$('#spinner-overlay').fadeOut(100);
+
 						botList(data);
 					},
 					error: function(data) {
 
 						// Some error in ajax call
-						$('#spinner-overlay').fadeOut(100);
 
 						alertBox('Error: ' + JSON.stringify(data));
 					}
