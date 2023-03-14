@@ -56,6 +56,33 @@
 		});
 	}
 
+	function getBots() {
+		$.ajax({
+					type: 'GET',
+					url: '/api/bots',
+					success: function({ data }) {
+						$('#spinner-overlay').fadeOut(100);
+						BotList(data);
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+					}
+		});
+	}
+
+	function BotList(bots) {
+		const selector = ['<select id="botValue" class="form-field" style="width: 100px; ">','<option value="Default"></option>'];
+		bots.forEach((bot) => {
+			selector.push(`<option value="${bot.botName}">${bot.botName}</option>`);
+		})
+		selector.push('</select>');
+		$('#botSelect').html(selector.join(''));	
+	}
+
 
 	function populateDeals(deals) {
 
@@ -122,7 +149,7 @@
 
 		$(document).on('click', '#submit', function() {
 
-			getDeals({ 'from': $('#fromDate').val(), 'to': $('#toDate').val() });
+			getDeals({ 'from': $('#fromDate').val(), 'to': $('#toDate').val(), 'botName': $('#botValue').val() });
 		});
 
 
@@ -190,7 +217,7 @@
 		fromDate = fromDate || '';
 
 		$('#fromDate').val(fromDate);
-
+		getBots();
 		getDeals();
 	});
 
@@ -213,7 +240,7 @@
 					<p style="margin-top: 0; margin-bottom: 0;">Deals: <span id="totalDeals"></span></p>
 				</span>
 
-				<p style="margin-top: 10px; margin-bottom: 0;">From: <input id="fromDate" class="form-field" style="width: 100px;"> &nbsp; To: <input id="toDate" class="form-field" style="width: 100px;"> <button id="submit" class="btnAll">Search</button></p>
+				<div style="margin-top: 10px; margin-bottom: 0;">From: <input id="fromDate" class="form-field" style="width: 100px;"> &nbsp; To: <input id="toDate" class="form-field" style="width: 100px;"> &nbsp; Bot: <div id="botSelect" style="display: inline-block"></div> <button id="submit" class="btnAll">Search</button></div>
 
 			</div>
 
