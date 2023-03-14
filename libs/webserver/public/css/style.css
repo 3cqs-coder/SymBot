@@ -327,7 +327,7 @@ table#ordersTable tr:not(:first-child):hover {
 }
 
 
-select[id^='startCondition'] {
+select[id^='startCondition'], [id^='botValue'] {
 
 	background-color: #ffffff;
 	cursor: pointer;

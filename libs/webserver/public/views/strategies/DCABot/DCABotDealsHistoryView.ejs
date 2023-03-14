@@ -56,13 +56,15 @@
 		});
 	}
 
+
 	function getBots() {
+
 		$.ajax({
 					type: 'GET',
 					url: '/api/bots',
 					success: function({ data }) {
 						$('#spinner-overlay').fadeOut(100);
-						BotList(data);
+						botList(data);
 					},
 					error: function(data) {
 
@@ -74,12 +76,28 @@
 		});
 	}
 
-	function BotList(bots) {
-		const selector = ['<select id="botValue" class="form-field" style="width: 100px; ">','<option value="Default"></option>'];
+
+	function botList(bots) {
+
+		let botArr = []
+
 		bots.forEach((bot) => {
-			selector.push(`<option value="${bot.botName}">${bot.botName}</option>`);
+
+			botArr.push(bot.botName);
 		})
+
+		botArr = botArr.sort();
+
+		const selector = ['<select id="botValue" class="form-field" style="width: 100px; ">','<option value="Default"></option>'];
+
+		for (let i = 0; i < botArr.length; i++) {
+
+			let botName = botArr[i];
+			selector.push(`<option value="${botName}">${botName}</option>`);
+		}
+
 		selector.push('</select>');
+
 		$('#botSelect').html(selector.join(''));	
 	}
 
@@ -217,6 +235,7 @@
 		fromDate = fromDate || '';
 
 		$('#fromDate').val(fromDate);
+
 		getBots();
 		getDeals();
 	});
