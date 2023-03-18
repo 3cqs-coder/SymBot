@@ -222,6 +222,7 @@ GET /api/deals
 |----------|----------|---------------|----------------------|-----------------|
 | from     | string   | NO            |                      | Returns most recent completed deals if start from date is not specified |
 | to       | string   | NO            |                      | Returns all completed deals up to end of date specified |
+| botId    | string   | NO            |                      | Returns completed deals for specified bot id |
 
 ```
 GET /api/deals/completed

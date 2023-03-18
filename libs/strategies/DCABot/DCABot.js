@@ -1060,10 +1060,13 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						if (!buy) {
 
 							Commong.logger(buy);
+
+							return ( { 'success': false, 'finished': false } );
 						}
 					}
 
 					orders[0].filled = 1;
+					orders[0].dateFilled = new Date();
 
 					if (shareData.appData.verboseLog) {
 
@@ -1123,10 +1126,13 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							if (!buy) {
 
 								Common.logger(buy);
+
+								return ( { 'success': false, 'finished': false } );
 							}
 						}
 
 						orders[0].filled = 1;
+						orders[0].dateFilled = new Date();
 
 						if (shareData.appData.verboseLog) {
 						
@@ -1242,7 +1248,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 					const order = orders[i];
 
-					// Check if max safety orders used, othersie sell order condition will not be checked
+					// Check if max safety orders used, otherwise sell order condition will not be checked
 					if (order.filled == 0 || maxSafetyOrdersUsed) {
 					//if (order.filled == 0) {
 
@@ -1256,6 +1262,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								if (!buy) {
 
 									Common.logger(buy);
+
+									return ( { 'success': false, 'finished': false } );
 								}
 							}
 
@@ -1284,6 +1292,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							}
 
 							orders[i].filled = 1;
+							orders[i].dateFilled = new Date();
 
 							updateTracker(dealId, price, config, orders);
 
