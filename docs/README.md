@@ -84,7 +84,9 @@ These files are located in the `config` directory
 
 	- `web_server` contains settings for the SymBot web server. The default port is 3000.
 
-	-	`bots` contains start condition keys and descriptions such as `asap` and `api`. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
+	-	`bots`
+		-	`start_conditions` contains keys and descriptions such as `asap` and `api` for various start conditions that can be used to start bots and deals. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
+		-	`pair_autofill_blacklist` is an array of trading pairs that you don't want automatically filled in the pair selection box when creating or updating bots and clicking one of the stablecoin buttons such as USD or USDT. You can use full pairs such as BTC/USD or wildcards such as BTC/*. This can be useful to prevent bots from starting deals using stablecoin pairs such as USDT/USD as those will generally have little volatility in typical market conditions.
 
 	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see below).
 

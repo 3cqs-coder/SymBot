@@ -17,7 +17,8 @@
 										"api": {
 													"description": "Manually / API"
 										}
-									}
+									},
+				"pair_autofill_blacklist": [ "BTC/*", "WBTC/*", "ETH/*", "CBETH/*", "UST/*", "USD/*", "USDC/*", "USDD/*", "USDT/*", "BUSD/*", "GUSD/*", "TUSD/*", "DAI/*", "EUROC/*", "PAX/*" ]
 			},
 	"signals": {
 				 	"3CQS": {
