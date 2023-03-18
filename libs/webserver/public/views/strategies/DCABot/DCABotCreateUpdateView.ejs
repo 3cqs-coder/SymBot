@@ -348,19 +348,21 @@
 								table.append(row);
 							}
 
-							let contentAdd = '<br>';
+							let contentAdd = '<div id="ordersContent" style="position: relative; margin: 0 auto;">';
 
 							if (content.balance < content.max_funds) {
 
 								contentAdd += '<b style="color: red;">Your current balance does not have enough funds for all DCA orders</b><br><br>';
 							}
 
+							contentAdd += '<div style="position: relative; display: inline-block; text-align: left;">';
 							contentAdd += '<b>Current Balance</b>: $' + content.balance + '<br>\n';
 							contentAdd += '<b>Max. Funds</b>: $' + content.max_funds + '<br>\n';
 							contentAdd += '<b>Max. Deviation</b>: ' + content.max_deviation_percent + '%<br>\n';
+							contentAdd += '</div></div><br>\n';
 
 							$('#ordersBox').html(table);
-							$('#ordersBox').append(contentAdd);
+							$('#ordersBox').prepend(contentAdd);
 
 							if (data.step.toLowerCase() != 'getorders') {
 
@@ -384,6 +386,10 @@
 								$('#ordersBox').show();
 								$('#formSubmitReset').show();
 								$('#formSubmitStart').show();
+
+								$('html, body').animate({
+										scrollTop: $('#ordersBox').position().top - 75
+								}, 100);
 
 								if (content.balance_error != undefined && content.balance_error != null && content.balance_error != '') {
 
