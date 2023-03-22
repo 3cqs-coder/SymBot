@@ -168,16 +168,9 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 		toDate = fromDate;
 	}
 
-	const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	const tzData = shareData.Common.getTimeZone();
 
-	const timeZoneOffset = Intl.DateTimeFormat('ia', {
-
-								timeZone: tz,
-								timeZoneName: 'longOffset'
-							})
-							.formatToParts()
-							.find((i) => i.type === 'timeZoneName').value
-							.slice(3);
+	const timeZoneOffset = tzData['offset'];
 
 	let	query = { 'sellData': { '$exists': true }, 'status': 1 };
 

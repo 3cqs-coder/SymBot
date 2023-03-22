@@ -250,6 +250,48 @@ async function getProcessInfo() {
 }
 
 
+function getTimeZone(date) {
+
+	let timeZoneOffset;
+
+	if (date == undefined || date == null) {
+
+		date = new Date();
+	}
+
+	const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+	try {
+
+		timeZoneOffset = Intl.DateTimeFormat('ia', {
+
+								timeZone: tz,
+								timeZoneName: 'longOffset'
+							})
+							.formatToParts()
+							.find((i) => i.type === 'timeZoneName').value
+							.slice(3);
+	}
+	catch(e) {
+
+	}
+
+	if (timeZoneOffset == undefined || timeZoneOffset == null) {
+
+		timeZoneOffset = date.getTimezoneOffset();
+
+		let sign = (timeZoneOffset < 0) ? '+' : '-';
+		let mins = Math.abs(timeZoneOffset);
+		let hours = Math.floor(mins / 60);
+		mins = mins - 60 * hours;
+
+		timeZoneOffset = sign + ('0' + hours).slice(-2) + ':' + ('0' + mins).slice(-2);
+	}
+ 
+	return ({ 'timezone': tz, 'offset': timeZoneOffset });
+}
+
+
 function getDateParts(date, utc) {
 
 	let year;
@@ -428,6 +470,7 @@ module.exports = {
 	saveConfig,
 	updateConfig,
 	getDateParts,
+	getTimeZone,
 	numToBase26,
 	hashCode,
 	timeDiff,
