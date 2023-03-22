@@ -482,7 +482,14 @@
 </script>
 
 		<%
-			const operatorsArr = [ '<', '>', '=', '!=', '>=', '<=' ];
+			const operatorsArr = [ 
+									{ 'operator': '<', 'display': '<' },
+									{ 'operator': '>', 'display': '>' },
+									{ 'operator': '==', 'display': '=' },
+									{ 'operator': '!=', 'display': '!=' },
+									{ 'operator': '>=', 'display': '>=' },
+									{ 'operator': '<=', 'display': '<=' }
+								 ];
 
 			let symbolString = '';
 			let activeChecked = '';
@@ -601,14 +608,15 @@
 
 					let selected = '';
 
-					let op = operatorsArr[i];
+					let op = operatorsArr[i]['operator'];
+					let opDisplay = operatorsArr[i]['display'];
 
 					if (op == operator) {
 
 						selected = ' selected';
 					}
 
-					str += '<option value="' + op + '"' + selected + '>' + op;
+					str += '<option value="' + op + '"' + selected + '>' + opDisplay;
 				}
 
 				str += '</select>';
