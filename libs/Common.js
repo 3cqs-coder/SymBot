@@ -68,6 +68,7 @@ async function saveConfig(fileName, data) {
 async function updateConfig(req, res) {
 
 	const body = req.body;
+	const sessionId = req.session.id;
 	const password = body.password;
 	const passwordNew = body.passwordnew;
 	const telegram = body.telegram;
@@ -84,6 +85,12 @@ async function updateConfig(req, res) {
 
 			appConfig['password'] = passwordNew;
 			shareData['appData']['password'] = passwordNew;
+
+			// Remove all other existing sessions to require login again
+			const collection = await shareData.DB.mongoose.connection.db.collection('sessions');
+			const query = { '_id': { '$ne': sessionId } };
+
+			const sessionData = await collection.deleteMany(query).catch(e => {});
 		}
 
 		if (telegram != undefined && telegram != null && telegram != '') {

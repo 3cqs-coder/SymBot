@@ -10,27 +10,14 @@ const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const express = require('express');
 const session = require('express-session');
+const MongoDBStore = require('connect-mongodb-session')(session);
 const app = express();
 const router = express.Router();
 const Routes = require(pathRoot + '/webserver/routes.js');
 
 
-const sessionExpireMins = 60 * 24;
-const sessionSecret = genString(30);
-
-
 let shareData;
 
-
-const sessionMiddleware = session({
-
-	secret: sessionSecret,
-	resave: false,
-	saveUninitialized: false,
-	cookie: {
-		expires: (sessionExpireMins * 60) * 1000
-	}
-});
 
 
 const shouldCompress = (req, res) => {
@@ -46,6 +33,33 @@ const shouldCompress = (req, res) => {
 
 
 function initApp() {
+
+	const sessionExpireMins = 60 * 24;
+	const sessionSecret = shareData.appData.server_id;
+
+	const store = new MongoDBStore({
+
+		'uri': shareData.appData.mongo_db_url,
+		'collection': 'sessions'
+	},
+	function(err) {
+
+		if (err) {
+
+			shareData.Common.logger(JSON.stringify(err));
+		}
+	});
+
+	const sessionMiddleware = session({
+
+		'secret': sessionSecret,
+		'resave': false,
+		'saveUninitialized': false,
+		'store': store,
+		'cookie': {
+			'expires': (sessionExpireMins * 60) * 1000
+		}
+	});
 
 	// Compress all HTTP responses
 	app.use(compression({
@@ -100,21 +114,6 @@ function initApp() {
 	app.use('/', router);
 
 	Routes.start(router);
-}
-
-
-function genString(len) {
-
-	const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-	let res = '';
-
-	for (let i = 0; i < len; i++) {
-
-		res += chars.charAt(Math.floor(Math.random() * chars.length));
-	}
-
-	return res;
 }
 
 

@@ -12,7 +12,7 @@ function initRoutes(router) {
 
 		if (req.session.loggedIn) {
 
-			res.render( 'homeView', { 'appData': shareData.appData } );
+			goHome(req, res);
 		}
 		else {
 
@@ -75,8 +75,8 @@ function initRoutes(router) {
 
 			shareData.Common.logger(msg);
 			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
-     
-			res.redirect('/');
+
+			goHome(req, res);
 		}
 		else {
 
@@ -257,6 +257,12 @@ function initRoutes(router) {
 
 		res.status(404).send(obj);
 	});
+}
+
+
+async function goHome(req, res) {
+
+	res.render( 'homeView', { 'appData': shareData.appData } );
 }
 
 
