@@ -2072,7 +2072,10 @@ async function sendTelegramStart(botName, dealId, pair) {
 async function sendTelegramFinish(botName, dealId, pair, sellData) {
 
 	let orderCount = 0;
-	let msg = '';
+
+	let msg;
+	let msgLoss;
+	let msgProfit;
 
 	const dealData = await getDeals({ 'dealId': dealId });
 	const profitPerc = Number(sellData.profit);
@@ -2095,10 +2098,22 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 
 	try {
 
-		msg = fs.readFileSync(pathRoot + '/strategies/DCABot/telegram/dealComplete.txt', { encoding: 'utf8', flag: 'r' });
+		let msgObj = JSON.parse(fs.readFileSync(pathRoot + '/strategies/DCABot/telegram/dealComplete.json', { encoding: 'utf8', flag: 'r' }));
+
+		msgLoss = msgObj['loss'];
+		msgProfit = msgObj['profit'];
 	}
 	catch(e) {
 
+	}
+
+	if (profit <= 0) {
+
+		msg = msgLoss;
+	}
+	else {
+
+		msg = msgProfit;
 	}
 
 	msg = msg.replace(/\{BOT_NAME\}/g, botName);

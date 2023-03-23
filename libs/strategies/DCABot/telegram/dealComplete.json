@@ -1,0 +1,4 @@
+{
+	"profit": "{BOT_NAME} ({PAIR}): Deal Complete. Profit: ${PROFIT} ({PROFIT_PERCENT}% from total volume 💰) #profit {DURATION}",
+	"loss": "{BOT_NAME} ({PAIR}): Deal Complete. Profit: ${PROFIT} ({PROFIT_PERCENT}% from total volume 😱) #profit #loss {DURATION}"
+}

@@ -65,14 +65,25 @@ function initRoutes(router) {
 
 		const body = req.body;
 		const password = body.password;
+		const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
 
 		if (password == shareData.appData.password) {
 
 			req.session.loggedIn = true;
-			
+
+			let msg = 'Login success from: ' + ip;
+
+			shareData.Common.logger(msg);
+			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+     
 			res.redirect('/');
 		}
 		else {
+
+			let msg = 'Login failed from: ' + ip;
+
+			shareData.Common.logger(msg);
+			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 
 			res.redirect('/login');
 		}

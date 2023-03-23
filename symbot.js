@@ -324,9 +324,21 @@ async function reset() {
 
 async function start() {
 
+	let initData;
+
 	await Common.makeDir('logs');
 
-	let initData = await init();
+	try {
+
+		initData = await init();
+	}
+	catch(e) {
+
+		Common.logger('Initialization error: ' + e, true);
+
+		shutDown();
+		return;
+	}
 
 	if (initData.nostart) {
 
@@ -362,11 +374,12 @@ function shutDown() {
 	if (!gotSigInt) {
 
 		gotSigInt = true;
-		appDataConfig['sig_int'] = true;
 
 		Common.logger('Received kill signal. Shutting down gracefully.', true);
 
 		if (appDataConfig != undefined && appDataConfig != null && appDataConfig != '') {
+
+			appDataConfig['sig_int'] = true;
 
 			Telegram.sendMessage(appDataConfig.telegram_id, appDataConfig.name + ' v' + appDataConfig.version + ' shutting down at ' + new Date().toISOString());
 		}

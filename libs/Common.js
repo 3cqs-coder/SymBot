@@ -268,7 +268,7 @@ function getTimeZone(date) {
 								timeZone: tz,
 								timeZoneName: 'longOffset'
 							})
-							.formatToParts()
+							.formatToParts(date)
 							.find((i) => i.type === 'timeZoneName').value
 							.slice(3);
 	}
