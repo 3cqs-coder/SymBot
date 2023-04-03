@@ -30,12 +30,36 @@
         "description": "SymScore Super Bullish"
       },
       {
+        "id": 22,
+        "description": "SymScore Super Bullish Range"
+      },
+      {
+        "id": 29,
+        "description": "SymScore Super-Hyper Bullish Range"
+      },
+      {
         "id": 14,
         "description": "SymScore Hyper Bullish"
       },
       {
+        "id": 23,
+        "description": "SymScore Hyper Bullish Range"
+      },
+      {
+        "id": 27,
+        "description": "SymScore Hyper-Ultra Bullish Range"
+      },
+      {
         "id": 15,
         "description": "SymScore Ultra Bullish"
+      },
+      {
+        "id": 25,
+        "description": "SymScore Ultra Bullish Range"
+      },
+      {
+        "id": 31,
+        "description": "SymScore Ultra-X-Treme Bullish Range"
       },
       {
         "id": 16,
@@ -46,12 +70,36 @@
         "description": "SymScore Super Bearish"
       },
       {
+        "id": 21,
+        "description": "SymScore Super Bearish Range"
+      },
+      {
+        "id": 30,
+        "description": "SymScore Super-Hyper Bearish Range"
+      },
+      {
         "id": 18,
         "description": "SymScore Hyper Bearish"
       },
       {
+        "id": 24,
+        "description": "SymScore Hyper Bearish Range"
+      },
+      {
+        "id": 28,
+        "description": "SymScore Hyper-Ultra Bearish Range"
+      },
+      {
         "id": 19,
         "description": "SymScore Ultra Bearish"
+      },
+      {
+        "id": 26,
+        "description": "SymScore Ultra Bearish Range"
+      },
+      {
+        "id": 32,
+        "description": "SymScore Ultra-X-Treme Bearish Range"
       },
       {
         "id": 20,

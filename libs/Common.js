@@ -182,6 +182,8 @@ function logMonitor() {
 
 async function getSignalConfigs() {
 
+	let isError;
+	let success = true;
 	let configs = {};
 
 	let dir =
@@ -191,6 +193,7 @@ async function getSignalConfigs() {
 	let files = fs.readdirSync(dir);
 
 	for (let i in files) {
+
 		let file = dir + '/' + files[i];
 
 		let stats = fs.statSync(file);
@@ -199,9 +202,11 @@ async function getSignalConfigs() {
 		let modified = stats.mtime;
 
 		if (stats.isDirectory()) {
+
 			let signalFile = file + '/signals.json';
 
 			if (fs.existsSync(signalFile)) {
+
 				try {
 					let data = JSON.parse(
 						fs.readFileSync(signalFile, {
@@ -211,12 +216,16 @@ async function getSignalConfigs() {
 					);
 
 					configs = Object.assign({}, configs, data);
-				} catch (e) {}
+				}
+				catch (e) {
+							isError = 'File: ' + signalFile + ' ' + e;
+							success = false;
+						  }
 			}
 		}
 	}
 
-	return configs;
+	return { 'success': success, 'data': configs, 'error': isError };
 }
 
 

@@ -68,18 +68,20 @@ async function init() {
 	let appConfig = await Common.getConfig('app.json');
 	let signalConfigs = await Common.getSignalConfigs();
 
+	let signalConfigsData = signalConfigs.data;
+
 	const serverConfig = await Common.getConfig('server.json');
 
-	if (Object.keys(signalConfigs).length > 0) {
+	if (signalConfigs.success && Object.keys(signalConfigsData).length > 0) {
 
 		let startSubsObj = {};
 
-		for (let key in signalConfigs) {
+		for (let key in signalConfigsData) {
 
 			let signalObj = {};
 
-			let startConditions = signalConfigs[key]['start_conditions'];
-			let startConditionsSub = signalConfigs[key]['start_conditions_sub'];
+			let startConditions = signalConfigsData[key]['start_conditions'];
+			let startConditionsSub = signalConfigsData[key]['start_conditions_sub'];
 
 			for (let num in startConditions) {
 
@@ -174,6 +176,16 @@ async function init() {
 		Common.logger('App configuration file error: ' + appConfig.data, true);
 
 		success = false;
+	}
+
+	if (success) {
+
+		if (!signalConfigs.success) {
+
+			Common.logger('Signals configuration file error: ' + signalConfigs.error, true);
+
+			success = false;
+		}
 	}
 
 	if (success) {
