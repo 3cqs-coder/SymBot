@@ -21,6 +21,14 @@
 
 				$('.ui-dialog').css('border-radius', '5px');
 			},
+			show: {
+					effect: 'scale',
+					duration: 250
+			},
+			hide: {
+					effect: 'scale',
+					duration: 250
+			},
 			title: title,
 			autoOpen: false,
 			draggable: false,
@@ -138,9 +146,14 @@
 
 	function showOrderHistory(dealId) {
 
+		if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
+
+			return;
+		}
+
 		let count = 1;
 
-		let orders = dealTracker[dealId]['orders'].reverse();
+		let orders = JSON.parse(JSON.stringify(dealTracker[dealId]['orders'])).reverse();
 
 		let table = $('<table id="ordersTable" style="width: 100%;" cellspacing=0 cellpadding=0>');
 
@@ -183,7 +196,6 @@
 		let contentArr = [];
 
 		dealTracker = {};
-		dealTracker = deals;
 
 		for (let i = 0; i < deals.length; i++) {
 
