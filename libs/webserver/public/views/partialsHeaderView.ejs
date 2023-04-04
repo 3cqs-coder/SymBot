@@ -11,12 +11,12 @@
 
 	<title><%- appData.name %> <%- appData.version %></title>
 
-	<link rel="stylesheet" href="/css/style.css" />
 	<link rel="stylesheet" href="/css/vendor/jquery-ui/jquery-ui.min.css" />
 	<link rel="stylesheet" href="/css/vendor/jquery-confirm/jquery-confirm-3.3.2.min.css" />
 	<link rel="stylesheet" href="/css/vendor/select2/select2.min.css" />
 	<link rel="stylesheet" href="/css/vendor/simple-switch/simple-switch.css" />
 	<link rel="stylesheet" href="/css/vendor/tablesorter/filter.formatter.min.css" />
+	<link rel="stylesheet" href="/css/style.css" />
 
 	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 
@@ -41,6 +41,29 @@
 			window.location.href = '/';
 		});
 	});
+
+
+	function dateConvertLocal(date) {
+
+		date = new Date(date);
+
+		let datePart = date.getFullYear() + '-' + ('00' + (date.getMonth() + 1)).slice(-2) + '-' + ('00' + date.getDate()).slice(-2);
+		let timePart = ('00' + date.getHours()).slice(-2) + ':' + ('00' + date.getMinutes()).slice(-2) + ':' + ('00' + date.getSeconds()).slice(-2);
+
+		let hourTemp = parseInt(timePart.split(':')[0]) % 12;
+
+		if (hourTemp < 10) {
+
+			hourTemp = '0' + hourTemp;
+		}
+
+		let timePartAmPm = (hourTemp == 0 ? '12' : hourTemp) + ':' + timePart.split(':')[1] + ' ' + (parseInt(parseInt(timePart.split(':')[0]) / 12) < 1 ? 'AM' : 'PM');
+
+		let dateFull = datePart + ' ' + timePartAmPm;
+
+		return dateFull;
+	}
+
 
 	function timeDiff(dateStart, dateEnd) {
  
@@ -83,6 +106,16 @@
 		diffString = diffString.trim();
 
 		return diffString;
+	}
+
+
+	function sortByKey(array, key) {
+
+		return array.sort(function(a, b) {
+			let x = a[key];
+			var y = b[key];
+			return x < y ? -1 : x > y ? 1 : 0;
+		});
 	}
 
 

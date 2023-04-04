@@ -4,10 +4,36 @@
 <script>
 
 	let timeOutId;
+	let dealTracker = {};
 
 	function setReloadTimeout() {
 
 		timeOutId = setTimeout(() => { getActiveDeals(); }, 5000);
+	}
+
+
+	function openModal(title, content) {
+
+		$('#modal').dialog({
+
+			dialogClass: 'fixed-dialog',
+			create: function (event, ui) {
+
+				$('.ui-dialog').css('border-radius', '5px');
+			},
+			title: title,
+			autoOpen: false,
+			draggable: false,
+			width: '90%',
+			height: ($(window).height() - 200),
+			modal: true,
+			open: function (event, ui) {
+
+				$('#modal').html(content);
+			}
+		});
+
+		$('#modal').dialog('open');
 	}
 
 
@@ -58,7 +84,7 @@
 						let deals = data;
 
 						populateDeals(deals);
-						
+
 						setReloadTimeout();
 					},
 					error: function(data) {
@@ -110,6 +136,44 @@
 	}
 
 
+	function showOrderHistory(dealId) {
+
+		let count = 1;
+
+		let orders = dealTracker[dealId]['orders'].reverse();
+
+		let table = $('<table id="ordersTable" style="width: 100%;" cellspacing=0 cellpadding=0>');
+
+		let row = $('<tr />');
+		row.append($('<th></th> <th>Date</th> <th>Price</th> <th>Qty</th> <th>Amount</th> <th>Sum(Qty)</th> <th>Sum($)</th>'));
+		table.append(row);
+
+		for (let i = 0; i < orders.length; i++) {
+
+			let data = orders[i];
+
+			if (data['filled'] != 0) {
+
+				let row = $('<tr />');
+
+				row.append($('<td style="padding: 3px;">' + count + '.</td>'));
+				row.append($('<td>' + dateConvertLocal(data['dateFilled']) + '</td>'));
+				row.append($('<td>$' + data['price'] + '</td>'));
+				row.append($('<td>' + data['qty'] + '</td>'));
+				row.append($('<td>$' + data['amount'] + '</td>'));
+				row.append($('<td>' + data['qtySum'] + '</td>'));
+				row.append($('<td>$' + data['sum'] + '</td>'));
+
+				table.append(row);
+
+				count++;
+			}
+		}
+
+		openModal('Order History ' + dealId, table);
+	}
+
+
 	function populateDeals(deals) {
 
 		let totalProfit = 0;
@@ -117,6 +181,9 @@
 		let profitTotalColor = '#1a9f00';
 
 		let contentArr = [];
+
+		dealTracker = {};
+		dealTracker = deals;
 
 		for (let i = 0; i < deals.length; i++) {
 
@@ -131,6 +198,7 @@
 
 			let deal = deals[i];
 
+			let dealId = deal['dealId'];
 			let botActive = deal['info']['bot_active'];
 			let profit = deal['info']['take_profit'];
 			let profitPerc = deal['info']['take_profit_percentage'];
@@ -163,9 +231,12 @@
 
 			totalProfit += profit;
 
-			contentArr.push('<tr>');
+			dealTracker[dealId] = {};
+			dealTracker[dealId]['orders'] = deal['orders'];
+
+			contentArr.push('<tr data-dealid="' + dealId + '">');
 			contentArr.push('<td>' + deal['info']['bot_name'] + '</td>');
-			contentArr.push('<td>' + deal['dealId'] + '</td>');
+			contentArr.push('<td>' + dealId + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');		
 			contentArr.push('<td>$' + deal['info']['price_last'] + '</td>');
@@ -199,7 +270,7 @@
 
 
 	$(document).ready(function() {
-
+ 
 		$(window).resize(function() {
 
 			resizeBotsDeals();
@@ -270,6 +341,12 @@
 					stopBotConfirm(botName, $(this), data);
 				}
 			}
+			else {
+
+				let dealId = row.data('dealid');
+
+				showOrderHistory(dealId);
+			}
 		});
 
 		getActiveDeals();
@@ -281,6 +358,8 @@
 
 <center>
 <main>
+
+	<div id="modal"></div>
 
 	<div id="contentBox">
 

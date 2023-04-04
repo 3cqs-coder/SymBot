@@ -84,6 +84,26 @@ a:visited {
 }
 
 
+.ui-dialog {
+
+	z-index: 7000;
+}
+
+
+.ui-dialog-titlebar > .ui-button {
+
+	outline: none;
+}
+
+
+#modal {
+
+	#display: inline-block !important;
+	max-height: 90%;
+	overflow: auto;
+}
+
+
 #spinner-overlay {	
 
 	position: fixed;

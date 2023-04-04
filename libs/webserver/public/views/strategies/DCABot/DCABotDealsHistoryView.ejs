@@ -2,38 +2,6 @@
 
 <script>
 
-	function dateConvertLocal(date) {
-
-		date = new Date(date);
-
-		let datePart = date.getFullYear() + '-' + ('00' + (date.getMonth() + 1)).slice(-2) + '-' + ('00' + date.getDate()).slice(-2);
-		let timePart = ('00' + date.getHours()).slice(-2) + ':' + ('00' + date.getMinutes()).slice(-2) + ':' + ('00' + date.getSeconds()).slice(-2);
-
-		let hourTemp = parseInt(timePart.split(':')[0]) % 12;
-
-		if (hourTemp < 10) {
-
-			hourTemp = '0' + hourTemp;
-		}
-
-		let timePartAmPm = (hourTemp == 0 ? '12' : hourTemp) + ':' + timePart.split(':')[1] + ' ' + (parseInt(parseInt(timePart.split(':')[0]) / 12) < 1 ? 'AM' : 'PM');
-
-		let dateFull = datePart + ' ' + timePartAmPm;
-
-		return dateFull;
-	}
-
-
-	function sortByKey(array, key) {
-
-		return array.sort(function(a, b) {
-			let x = a[key];
-			var y = b[key];
-			return x < y ? -1 : x > y ? 1 : 0;
-		});
-	}
-
-
 	function getDeals(filters) {
 
 		$('#spinner-overlay').fadeIn(100);
