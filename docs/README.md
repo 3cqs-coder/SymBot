@@ -7,8 +7,8 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 ## Requirements
 
 - Linux, MacOS, or Windows based system
-- Node.js must be installed on your system
-- MongoDB installed or a cloud host provider
+- [Node.js](https://nodejs.org) must be installed on your system
+- [MongoDB](https://www.mongodb.com) installed or a cloud host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection
 
@@ -94,10 +94,15 @@ These files are located in the `config` directory
 
 		- WARNING: If you run multiple instances of SymBot using the same database you will mess up your bots!
 		- For quick set up, create a free account at https://cloud.mongodb.com and copy the URL given into the app config. It begins with something like: mongodb+srv://
+		- If running a local MongoDB instance, specifying `
+mongodb://127.0.0.1:27017/SymBot
+` or `
+mongodb://localhost:27017/SymBot
+` should work fine, but setting up a username and password is also recommended
 		- For better security running your own local database is recommended
 
 	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. If you have an API key just copy it there or create an account at https://www.3CQS.com to get one.
-	
+
 
 - **bot.json**
 
