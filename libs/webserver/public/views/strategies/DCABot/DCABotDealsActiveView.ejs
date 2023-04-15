@@ -201,6 +201,7 @@
 
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
+
 			let dealVolume = deals[i].orders.filter(order => order.filled === 1).reduce((acc, order) => acc + Number(order.amount), 0);
 			inDeals += dealVolume;
 
@@ -208,14 +209,15 @@
 
 			let dealCount;
 
-			let deal = deals[i];
+			const deal = deals[i];
 
-			let dealId = deal['dealId'];
-			let botActive = deal['info']['bot_active'];
-			let profit = deal['info']['profit'];
-			let profitPerc = deal['info']['profit_percentage'];
+			const config = deal['config'];
+			const dealId = deal['dealId'];
+			const botActive = deal['info']['bot_active'];
+			const profit = deal['info']['profit'];
+			const profitPerc = deal['info']['profit_percentage'];
 
-			let duration = timeDiff(new Date(), new Date(deal['date']));
+			const duration = timeDiff(new Date(), new Date(deal['date']));
 
 			if (!botActive) {
 
@@ -252,9 +254,11 @@
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');		
 			contentArr.push('<td>$' + deal['info']['price_last'] + '</td>');
+			contentArr.push('<td>$' + deal['info']['price_target'] + '</td>');
 			contentArr.push('<td>$' + dealVolume.toFixed(2) + '</td>')
 			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit + '</td>');
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '%</td>');
+			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + deal['info']['safety_orders_max'] + '</td>');
 			contentArr.push('<td>' + dealCount + '</td>');
 			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
@@ -301,12 +305,22 @@
 			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
 			textExtraction: {
 
-				7: function(node) {
+				8: function(node) {
 
 					if (node.innerHTML.indexOf('%') != -1) {
 
 						let val = stripHtml(node.innerHTML);
-						return val.replace('%','');
+						return val.replace('%', '');
+					}
+
+					return node.innerHTML;
+				},
+				9: function(node) {
+
+					if (node.innerHTML.indexOf('%') != -1) {
+
+						let val = stripHtml(node.innerHTML);
+						return val.replace('%', '');
 					}
 
 					return node.innerHTML;
@@ -325,6 +339,9 @@
 					sorter: "currency"
 				},
 				6: {
+					sorter: "currency"
+				},
+				7: {
 					sorter: "currency"
 				}
 			}
@@ -394,7 +411,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th>Disable</th> 
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false">Disable</th> 
 					</tr>
 				</thead>
 
