@@ -338,6 +338,40 @@ async function apiGetActiveDeals(req, res) {
 }
 
 
+async function apiUpdateDeal(req, res) {
+
+	let success = true;
+
+	let content;
+	let dealData;
+
+	const dealId = req.params.dealId;
+
+	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (data && data.length > 0) {
+
+		dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		
+		const status = dealData['status'];
+		
+		if (status != 0) {
+
+			dealData = undefined;
+			success = false;
+			content = 'Deal ID ' + dealId + ' is not active';
+		}
+	}
+	else {
+
+		success = false;
+		content = 'Invalid Deal ID';
+	}
+
+	res.send({ 'date': new Date(), 'success': success, 'deal': dealData, 'content': content });
+}
+
+
 async function apiCreateUpdateBot(req, res) {
 
 	let reqPath = req.path;
@@ -924,6 +958,7 @@ module.exports = {
 	apiGetBots,
 	apiGetActiveDeals,
 	apiGetDealsHistory,
+	apiUpdateDeal,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
 	viewBots,
