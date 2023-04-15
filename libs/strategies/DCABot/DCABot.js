@@ -1863,7 +1863,10 @@ async function updateTracker(dealId, price, configObj, ordersObj) {
 							currentOrder.average
 						);
 
+	let takeProfit = Number(currentOrder.sum) * (Number(config.dcaTakeProfitPercent) / 100);
+
 	profitPerc = Number(profitPerc).toFixed(2);
+	takeProfit = Number(takeProfit).toFixed(2);
 
 	const dealObj = {
 						'updated': new Date(),
@@ -1874,8 +1877,9 @@ async function updateTracker(dealId, price, configObj, ordersObj) {
 						'price_last': price,
 						'price_average': currentOrder.average,
 						'price_target': currentOrder.target,
-						'take_profit': Number((Number(currentOrder.sum) * (Number(profitPerc) / 100)).toFixed(2)),
-						'take_profit_percentage': profitPerc,
+						'profit': Number((Number(currentOrder.sum) * (Number(profitPerc) / 100)).toFixed(2)),
+						'profit_percentage': profitPerc,
+						'take_profit': takeProfit,
 						'deal_count': config.dealCount,
 						'deal_max': config.dealMax
 					};
