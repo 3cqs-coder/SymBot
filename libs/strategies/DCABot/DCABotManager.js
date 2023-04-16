@@ -439,92 +439,72 @@ async function apiUpdateDeal(req, res) {
 
 					if (isUpdate) {
 
-						let finished = false;
-						let count = 0;
+						let stopData = await shareData.DCABot.stopDeal(dealId);
 
-						while (!finished) {
+						// Verify deal is stopped
+						if (stopData['success']) {
 
-							// Set deal_stop flag
-							shareData.dealTracker[dealId]['info']['deal_stop'] = true;
+							// Apply new order calculations to deal, update db, then resume
+							for (let i = 0; i < orderSteps.length; i++) {
 
-							await shareData.Common.delay(1000);
+								let orderNew;
 
-							// Verify deal is stopped
-							if (shareData.dealTracker[dealId] == undefined || shareData.dealTracker[dealId] == null) {
+								let priceTargetNew = orderSteps[i][4].replace(/[^0-9.]/g, '');
 
-								// Apply new order calculations to deal, update db, then resume
-								for (let i = 0; i < orderSteps.length; i++) {
+								// Use exiting order data if available
+								if (ordersOrig[i] != undefined && ordersOrig[i] != null) {
 
-									let orderNew;
+									let priceTargetOrig = ordersOrig[i]['target'];
 
-									let priceTargetNew = orderSteps[i][4];
+									orderNew = ordersOrig[i];
 
-									priceTargetNew = priceTargetNew.replace(/[^0-9.]/g, '');
+									orderNew['target'] = priceTargetNew;
+								}
+								else {
 
-									// Use exiting order data if available
-									if (ordersOrig[i] != undefined && ordersOrig[i] != null) {
+									let orderObj = {
+														orderNo: orderSteps[i][0],
+														price: orderSteps[i][2].replace(/[^0-9.]/g, ''),
+														average: orderSteps[i][3].replace(/[^0-9.]/g, ''),
+														target: priceTargetNew,
+														qty: orderSteps[i][5].replace(/[^0-9.]/g, ''),
+														amount: orderSteps[i][6].replace(/[^0-9.]/g, ''),
+														qtySum: orderSteps[i][7].replace(/[^0-9.]/g, ''),
+														sum: orderSteps[i][8].replace(/[^0-9.]/g, ''),
+														type: orderSteps[i][9],
+														filled: 0
+													};
 
-										let priceTargetOrig = ordersOrig[i]['target'];
-
-										orderNew = ordersOrig[i];
-
-										orderNew['target'] = priceTargetNew;
-									}
-									else {
-
-										let orderObj = {
-															orderNo: orderSteps[i][0],
-															price: orderSteps[i][2].replace(/[^0-9.]/g, ''),
-															average: orderSteps[i][3].replace(/[^0-9.]/g, ''),
-															target: priceTargetNew,
-															qty: orderSteps[i][5].replace(/[^0-9.]/g, ''),
-															amount: orderSteps[i][6].replace(/[^0-9.]/g, ''),
-															qtySum: orderSteps[i][7].replace(/[^0-9.]/g, ''),
-															sum: orderSteps[i][8].replace(/[^0-9.]/g, ''),
-															type: orderSteps[i][9],
-															filled: 0
-														};
-
-										orderNew = orderObj;
-									}
-
-									ordersNew.push(orderNew);
+									orderNew = orderObj;
 								}
 
-								// Update deal in database
-								let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
+								ordersNew.push(orderNew);
+							}
 
-								// Check for active deal and resume
-								let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
+							// Update deal in database
+							let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
 
-								if (dealActive && dealActive.length > 0) {
+							// Check for active deal and resume
+							let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
 
-									let deal = dealActive[0];
+							if (dealActive && dealActive.length > 0) {
 
-									await shareData.DCABot.resumeDeal(deal);
+								let deal = dealActive[0];
 
-									// DB update failed
-									if (!dataUpdate['success']) {
+								await shareData.DCABot.resumeDeal(deal);
 
-										success = false;
-										content = 'Error updating deal in database';
-									}
+								// DB update failed
+								if (!dataUpdate['success']) {
 
-									finished = true;
+									success = false;
+									content = 'Error updating deal in database';
 								}
 							}
+						}
+						else {
 
-							if (count >= 5) {
-
-								// Timeout
-							
-								success = false;
-								content = 'Unable to update';
-
-								finished = true;
-							}
-
-							count++;
+							success = false;
+							content = stopData['data'];
 						}
 					}
 				}
@@ -542,7 +522,7 @@ async function apiUpdateDeal(req, res) {
 		content = 'Invalid Deal ID';
 	}
 
-	res.send({ 'date': new Date(), 'success': success, 'content': content });
+	res.send({ 'date': new Date(), 'success': success, 'data': content });
 }
 
 

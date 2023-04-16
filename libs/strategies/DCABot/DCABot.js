@@ -2568,6 +2568,50 @@ async function resumeDeal(deal) {
 }
 
 
+async function stopDeal(dealId) {
+
+	let finished = false;
+	let success = true;
+
+	let count = 0;
+	let msg = 'Success';
+
+	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+
+		while (!finished) {
+
+			// Set deal_stop flag
+			dealTracker[dealId]['info']['deal_stop'] = true;
+
+			await Common.delay(1000);
+		
+			// Verify deal is stopped
+			if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
+
+				finished = true;
+			}
+			else if (count >= 5) {
+
+				// Timeout
+				success = false;
+				msg = 'Deal stop timeout';
+
+				finished = true;
+			}
+
+			count++;
+		}
+	}
+	else {
+
+		success = false;
+		msg = 'Deal ID not found';
+	}
+
+	return ( { 'success': success, 'data': msg } );
+}
+
+
 async function applyConfigData(botId, botName, config) {
 
 	// Pass bot id in config so existing bot is used
@@ -2623,6 +2667,7 @@ module.exports = {
 	colors,
 	start,
 	updateBot,
+	stopDeal,
 	updateDeal,
 	connectExchange,
 	removeConfigData,
