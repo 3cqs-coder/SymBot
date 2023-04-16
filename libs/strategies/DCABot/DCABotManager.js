@@ -345,6 +345,87 @@ async function apiUpdateDeal(req, res) {
 	let content;
 	let dealData;
 
+	const body = req.body;
+	const dealId = req.params.dealId;
+
+	const dcaMaxOrder = body.dcaMaxOrder;
+	const dcaTakeProfitPercent = body.dcaTakeProfitPercent;
+
+	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (data && data.length > 0) {
+
+		dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		
+		const status = dealData['status'];
+		
+		if (status != 0) {
+
+			dealData = undefined;
+			success = false;
+			content = 'Deal ID ' + dealId + ' is not active';
+		}
+		else {
+
+			let config = dealData['config'];
+
+			config['createStep'] = 'getOrders';
+			config['pair'] = dealData['pair'];
+
+			delete config['botId'];
+			delete config['botName'];
+
+			const ordersOrig = dealData['orders'];
+			const price = ordersOrig[0]['price'];
+
+			// Set first start condition
+			config['startCondition'] = config['startConditions'][0];
+
+			// Override price to recalculate from original starting price
+			config['firstOrderPrice'] = price;
+
+			// Override max safety orders if set
+			if (dcaMaxOrder != undefined && dcaMaxOrder != null) {
+
+				// Need to check if the value set is less than what was already filled first
+				config['dcaMaxOrder'] = dcaMaxOrder;
+			}
+
+			// Override take profit if set
+			if (dcaTakeProfitPercent != undefined && dcaTakeProfitPercent != null) {
+
+				config['dcaTakeProfitPercent'] = dcaTakeProfitPercent;
+			}
+
+			// Get newly calculated order steps
+			let data = await calculateOrders(config);
+
+			let orderHeaders = data['orders']['data']['orders']['headers'];
+			let orderSteps = data['orders']['data']['orders']['steps'];
+			let orderContent = data['orders']['data']['content'];
+
+			let maxDeviationPercent = orderContent['max_deviation_percent'];
+
+			// To be implemented: Stop DCA deal to avoid any potential conflicts, Apply new order calculations to deal, update db, and start deal again
+		}
+	}
+	else {
+
+		success = false;
+		content = 'Invalid Deal ID';
+	}
+
+	res.send({ 'date': new Date(), 'success': success, 'deal': dealData, 'content': content });
+}
+
+
+async function apiPanicSellDeal(req, res) {
+
+	let success = true;
+
+	let content;
+	let dealData;
+
 	const dealId = req.params.dealId;
 
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
@@ -908,6 +989,7 @@ async function calculateOrders(body) {
 	botData.dealMax = body.dealMax;
 	botData.pairMax = body.pairMax;
 	botData.volumeMin = body.volumeMin;
+	botData.firstOrderPrice = body.firstOrderPrice;
 	botData.firstOrderAmount = body.firstOrderAmount;
 	botData.dcaOrderAmount = body.dcaOrderAmount;
 	botData.dcaMaxOrder = body.dcaMaxOrder;
@@ -959,6 +1041,7 @@ module.exports = {
 	apiGetActiveDeals,
 	apiGetDealsHistory,
 	apiUpdateDeal,
+	apiPanicSellDeal,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
 	viewBots,

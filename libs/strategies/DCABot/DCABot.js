@@ -37,8 +37,10 @@ async function start(data, startBot, reload) {
 	data = await initBot(startBot, JSON.parse(JSON.stringify(data)));
 
 	const dealResume = data['dealResume'];
+	const firstOrderPrice = data['firstOrderPrice'];
 
 	delete data['dealResume'];
+	delete data['firstOrderPrice'];
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
@@ -150,6 +152,12 @@ async function start(data, startBot, reload) {
 		if (symbol.askPrice == undefined || symbol.askPrice == null) {
 
 			askPrice = symbol.ask;
+		}
+
+		// Override price if passed in
+		if (firstOrderPrice != undefined && firstOrderPrice != null && firstOrderPrice != 0) {
+
+			askPrice = firstOrderPrice;
 		}
 
 		var t = new Table();
