@@ -213,6 +213,27 @@ POST /api/bots/{botId}/enable
 POST /api/bots/{botId}/disable
 ```
 
+### Update Deal (Not fully implemented)
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| dcaTakeProfitPercent| number        | NO                   |                      | Take profit percentage the bot will use to close successful deals       |
+| dcaMaxOrder         | integer       | NO                   |                      | Maximum DCA / safety orders allowed per deal                            |
+
+```
+POST /api/deals/{dealId}/update_deal
+```
+
+### Panic Sell Deal (Not fully implemented)
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| -        |          |               |                      | Closes deal and sells at current market price |
+
+```
+POST /api/deals/{dealId}/panic_sell
+```
+
 ### Get active deals
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -332,6 +353,28 @@ curl -i -X POST \
 -H 'api-key: {API-KEY}' \
 http://127.0.0.1:3000/api/bots/{botId}/enable
 ```
+
+#### Update deal
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{
+		"dcaTakeProfitPercent": 1.5,
+		"dcaMaxOrder": 12
+	}' \
+http://127.0.0.1:3000/api/deals/{dealId}/update_deal
+```
+
+#### Panic sell deal
+```
+curl -i -X POST \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/deals/{dealId}/panic_sell
+```
+
 
 #### Get active deals
 ```
