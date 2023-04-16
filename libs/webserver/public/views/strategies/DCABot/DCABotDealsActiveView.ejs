@@ -45,6 +45,35 @@
 	}
 
 
+	function panicSellConfirm(dealId, selector, data) {
+
+		$.confirm({
+
+					title: false,
+					boxWidth: '50%',
+					useBootstrap: false,
+					content: '<div style="font-size: 1.2rem; text-align: left;">Close deal ' + dealId + ' at current market price?</div>',
+					buttons: {
+
+								ok: {
+										btnClass: 'btn-default',
+										text: '<div style="color: #d80f08;">Close Deal</div>',
+										action: function () {
+
+											panicSell(selector, data);
+										}
+									 },
+							 	cancel: {
+
+									 		btnClass: 'btn-default',
+									 		text: '<div style="color: #000000;">Cancel</div>',	
+										 	action: function () { }
+									 	}
+							 }
+		});
+	}
+
+
 	function stopBotConfirm(botName, selector, data) {
 
 		clearTimeout(timeOutId);
@@ -101,6 +130,41 @@
 						//$('#spinner-overlay').fadeOut(100);
 
 						alertBox('Error: ' + JSON.stringify(data), function() { setReloadTimeout(); });
+					}
+		});
+	}
+
+
+	function panicSell(selector, data) {
+
+		let dealId = data.deal_id;
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'POST',
+					url: '/api/deals/' + dealId + '/panic_sell',
+					data: data,
+					dataType: 'json',
+					success: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						if (!data.success) {
+
+							alertBox('Unable to close deal: ' + data['data'], function() { });
+						}
+						else {
+
+							alertBox('Deal ID ' + dealId + ' closed', function() { });
+						}
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data), function() { });
 					}
 		});
 	}
@@ -201,6 +265,7 @@
 
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
+			let panicButton = '<span class="disableButton">&#128176</span>';
 
 			let dealVolume = deals[i].orders.filter(order => order.filled === 1).reduce((acc, order) => acc + Number(order.amount), 0);
 			inDeals += dealVolume;
@@ -261,6 +326,7 @@
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + deal['info']['safety_orders_max'] + '</td>');
 			contentArr.push('<td>' + dealCount + '</td>');
+			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButton + '</div></td>');
 			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
 			contentArr.push('</tr>');
 		}
@@ -358,6 +424,7 @@
 
 			if (col == (colCount - 1) && content != '') {
 
+				// Stop bot
 				let data = { 'bot_id': '' };
 
 				let botId = $(this).data('botid');
@@ -368,6 +435,20 @@
 					data.bot_id = botId;
 
 					stopBotConfirm(botName, $(this), data);
+				}
+			}
+			else if (col == (colCount - 2)) {
+
+				// Panic sell
+				let data = { 'deal_id': '' };
+
+				let dealId = row.data('dealid');
+
+				if (dealId) {
+
+					data.deal_id = dealId;
+					
+					panicSellConfirm(dealId, $(this), data);
 				}
 			}
 			else {
@@ -411,7 +492,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false">Disable</th> 
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false"></th> <th data-sorter="false"></th> 
 					</tr>
 				</thead>
 
