@@ -530,8 +530,7 @@ async function apiPanicSellDeal(req, res) {
 
 	let success = true;
 
-	let content;
-	let dealData;
+	let content = 'Success';
 
 	const dealId = req.params.dealId;
 
@@ -539,15 +538,24 @@ async function apiPanicSellDeal(req, res) {
 
 	if (data && data.length > 0) {
 
-		dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
-		
+		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+
 		const status = dealData['status'];
 		
 		if (status != 0) {
 
-			dealData = undefined;
 			success = false;
 			content = 'Deal ID ' + dealId + ' is not active';
+		}
+		else {
+
+			const closeData = await shareData.DCABot.panicSellDeal(dealId);
+
+			if (!closeData['success']) {
+
+				success = false;
+				content = closeData['data'];
+			}
 		}
 	}
 	else {
@@ -556,7 +564,7 @@ async function apiPanicSellDeal(req, res) {
 		content = 'Invalid Deal ID';
 	}
 
-	res.send({ 'date': new Date(), 'success': success, 'deal': dealData, 'content': content });
+	res.send({ 'date': new Date(), 'success': success, 'data': content });
 }
 
 
