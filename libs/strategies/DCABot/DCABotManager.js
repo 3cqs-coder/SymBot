@@ -341,9 +341,9 @@ async function apiGetActiveDeals(req, res) {
 async function apiUpdateDeal(req, res) {
 
 	let success = true;
+	let isUpdate = false;
 
 	let content;
-	let dealData;
 
 	const body = req.body;
 	const dealId = req.params.dealId;
@@ -355,19 +355,25 @@ async function apiUpdateDeal(req, res) {
 
 	if (data && data.length > 0) {
 
-		dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
-		
+		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+
 		const status = dealData['status'];
-		
+		const filledOrders = dealData.orders.filter(item => item.filled == 1);
+
 		if (status != 0) {
 
-			dealData = undefined;
 			success = false;
 			content = 'Deal ID ' + dealId + ' is not active';
 		}
 		else {
 
+			content = 'Deal ID ' + dealId + ' updated';
+
 			let config = dealData['config'];
+
+			const configOrig = JSON.parse(JSON.stringify(config));
+
+			const botId = configOrig['botId'];
 
 			config['createStep'] = 'getOrders';
 			config['pair'] = dealData['pair'];
@@ -387,26 +393,147 @@ async function apiUpdateDeal(req, res) {
 			// Override max safety orders if set
 			if (dcaMaxOrder != undefined && dcaMaxOrder != null) {
 
-				// Need to check if the value set is less than what was already filled first
 				config['dcaMaxOrder'] = dcaMaxOrder;
+				
+				isUpdate = true;
+
+				// Verify max orders
+				if (dcaMaxOrder < (filledOrders.length - 1)) {
+
+					success = false;
+					content = 'Max DCA orders of ' + dcaMaxOrder + ' is less than currently filled orders of ' + (filledOrders.length - 1);
+				}
 			}
 
 			// Override take profit if set
 			if (dcaTakeProfitPercent != undefined && dcaTakeProfitPercent != null) {
 
 				config['dcaTakeProfitPercent'] = dcaTakeProfitPercent;
+				
+				isUpdate = true;
 			}
 
-			// Get newly calculated order steps
-			let data = await calculateOrders(config);
+			if (success) {
 
-			let orderHeaders = data['orders']['data']['orders']['headers'];
-			let orderSteps = data['orders']['data']['orders']['steps'];
-			let orderContent = data['orders']['data']['content'];
+				// Get newly calculated order steps
+				let data = await calculateOrders(config);
 
-			let maxDeviationPercent = orderContent['max_deviation_percent'];
+				// Replace config data
+				config['startCondition'] = configOrig['startCondition'];
+				config['botId'] = configOrig['botId'];
+				config['botName'] = configOrig['botName'];
 
-			// To be implemented: Stop DCA deal to avoid any potential conflicts, Apply new order calculations to deal, update db, and start deal again
+				delete config['firstOrderPrice'];
+
+				let orderSuccess = data['orders']['success'];
+
+				if (orderSuccess) {
+
+					let ordersNew = [];
+
+					let orderHeaders = data['orders']['data']['orders']['headers'];
+					let orderSteps = data['orders']['data']['orders']['steps'];
+					let orderContent = data['orders']['data']['content'];
+
+					let maxDeviationPercent = orderContent['max_deviation_percent'];
+
+					if (isUpdate) {
+
+						let finished = false;
+						let count = 0;
+
+						while (!finished) {
+
+							// Set deal_stop flag
+							shareData.dealTracker[dealId]['info']['deal_stop'] = true;
+
+							await shareData.Common.delay(1000);
+
+							// Verify deal is stopped
+							if (shareData.dealTracker[dealId] == undefined || shareData.dealTracker[dealId] == null) {
+
+								// Apply new order calculations to deal, update db, then resume
+								for (let i = 0; i < orderSteps.length; i++) {
+
+									let orderNew;
+
+									let priceTargetNew = orderSteps[i][4];
+
+									priceTargetNew = priceTargetNew.replace(/[^0-9.]/g, '');
+
+									// Use exiting order data if available
+									if (ordersOrig[i] != undefined && ordersOrig[i] != null) {
+
+										let priceTargetOrig = ordersOrig[i]['target'];
+
+										orderNew = ordersOrig[i];
+
+										orderNew['target'] = priceTargetNew;
+									}
+									else {
+
+										let orderObj = {
+															orderNo: orderSteps[i][0],
+															price: orderSteps[i][2].replace(/[^0-9.]/g, ''),
+															average: orderSteps[i][3].replace(/[^0-9.]/g, ''),
+															target: priceTargetNew,
+															qty: orderSteps[i][5].replace(/[^0-9.]/g, ''),
+															amount: orderSteps[i][6].replace(/[^0-9.]/g, ''),
+															qtySum: orderSteps[i][7].replace(/[^0-9.]/g, ''),
+															sum: orderSteps[i][8].replace(/[^0-9.]/g, ''),
+															type: orderSteps[i][9],
+															filled: 0
+														};
+
+										orderNew = orderObj;
+									}
+
+									ordersNew.push(orderNew);
+								}
+
+								// Update deal in database
+								let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
+
+								// Check for active deal and resume
+								let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
+
+								if (dealActive && dealActive.length > 0) {
+
+									let deal = dealActive[0];
+
+									await shareData.DCABot.resumeDeal(deal);
+
+									// DB update failed
+									if (!dataUpdate['success']) {
+
+										success = false;
+										content = 'Error updating deal in database';
+									}
+
+									finished = true;
+								}
+							}
+
+							if (count >= 5) {
+
+								// Timeout
+							
+								success = false;
+								content = 'Unable to update';
+
+								finished = true;
+							}
+
+							count++;
+						}
+					}
+				}
+				else {
+
+					success = false;
+					content = 'Unable to calculate orders';
+				}
+			}
 		}
 	}
 	else {
@@ -415,7 +542,7 @@ async function apiUpdateDeal(req, res) {
 		content = 'Invalid Deal ID';
 	}
 
-	res.send({ 'date': new Date(), 'success': success, 'deal': dealData, 'content': content });
+	res.send({ 'date': new Date(), 'success': success, 'content': content });
 }
 
 

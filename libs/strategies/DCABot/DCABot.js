@@ -51,6 +51,7 @@ async function start(data, startBot, reload) {
 	let botFoundDb = false;
 	let pairFoundDb = false;
 	let dealLast = false;
+	let dealStop = false;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
@@ -966,8 +967,23 @@ async function start(data, startBot, reload) {
 		}
 	}
 
+
+	// Check if deal stop was requested
+	try {
+
+		if (dealTracker[dealIdMain]['info']['deal_stop']) {
+
+			dealStop = true;
+			delete dealTracker[dealIdMain];
+		}
+	}
+	catch(e) {
+
+	}
+
+
 	// Start another bot deal if max deals and max pairs have not been reached
-	if (botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
+	if (!dealStop && botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
@@ -999,6 +1015,13 @@ async function start(data, startBot, reload) {
 
 
 const dcaFollow = async (configData, exchange, dealId) => {
+
+	if (dealTracker[dealId]['info']['deal_stop']) {
+
+		Common.logger(colors.red.bold('Deal ID ' + dealId + ' stop requested. Not processing'));
+
+		return ( { 'success': false, 'finished': true } );
+	}
 
 	if (shareData.appData.sig_int) {
 
@@ -2502,38 +2525,46 @@ async function resumeBots() {
 
 			let deal = dealsActive[i];
 
-			const botId = deal.botId;
-			const botName = deal.botName;
-			const dealId = deal.dealId;
-			const pair = deal.pair;
-			const dealCount = deal.dealCount;
-			const dealMax = deal.dealMax;
-
-			// Set previous deal counts
-			let config = deal.config;
-
-			config['botId'] = botId;
-			config['botName'] = botName;
-			config['dealCount'] = dealCount;
-			config['dealMax'] = dealMax;
-			config['dealResume'] = true;
-
-			deal['config'] = config;
-
-			dealTracker[dealId] = {};
-			dealTracker[dealId]['info'] = {};
-
-			dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
-
-			start(config, true, true);
-
-			await Common.delay(1000);
+			await resumeDeal(deal);
 		}
 	}
 
 	await Common.delay(5000);
 
 	startAsap();
+}
+
+
+async function resumeDeal(deal) {
+
+	const botId = deal.botId;
+	const botName = deal.botName;
+	const dealId = deal.dealId;
+	const pair = deal.pair;
+	const dealCount = deal.dealCount;
+	const dealMax = deal.dealMax;
+
+	// Set previous deal counts
+	let config = deal.config;
+
+	config['botId'] = botId;
+	config['botName'] = botName;
+	config['dealCount'] = dealCount;
+	config['dealMax'] = dealMax;
+	config['dealResume'] = true;
+
+	deal['config'] = config;
+
+	dealTracker[dealId] = {};
+	dealTracker[dealId]['info'] = {};
+
+	dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
+
+	Common.logger( colors.bgGreen.bold('Resuming Deal ID ' + dealId) );
+
+	start(config, true, true);
+
+	await Common.delay(1000);
 }
 
 
@@ -2601,6 +2632,7 @@ module.exports = {
 	getSymbolsAll,
 	applyConfigData,
 	startDelay,
+	resumeDeal,
 
 	init: function(obj) {
 

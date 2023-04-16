@@ -213,7 +213,7 @@ POST /api/bots/{botId}/enable
 POST /api/bots/{botId}/disable
 ```
 
-### Update Deal (Not fully implemented)
+### Update deal (Not fully implemented)
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
 |----------|----------|---------------|----------------------|-----------------|
@@ -224,7 +224,7 @@ POST /api/bots/{botId}/disable
 POST /api/deals/{dealId}/update_deal
 ```
 
-### Panic Sell Deal (Not fully implemented)
+### Panic sell deal (Not fully implemented)
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
 |----------|----------|---------------|----------------------|-----------------|
