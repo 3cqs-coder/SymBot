@@ -90,6 +90,13 @@ a:visited {
 }
 
 
+.ui-dialog-title {
+
+	float: left;
+	text-align: left;
+}
+
+
 .ui-dialog-titlebar > .ui-button {
 
 	outline: none;
@@ -99,6 +106,13 @@ a:visited {
 #modal {
 
 	#display: inline-block !important;
+	max-height: 90%;
+	overflow: auto;
+}
+
+
+#modalDealEdit {
+
 	max-height: 90%;
 	overflow: auto;
 }

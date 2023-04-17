@@ -3,6 +3,7 @@
 
 <script>
 
+	let modalId;
 	let timeOutId;
 	let dealTracker = {};
 
@@ -12,9 +13,9 @@
 	}
 
 
-	function openModal(title, content) {
+	function openModal(divModal, title, content, divAppend) {
 
-		$('#modal').dialog({
+		modalId = $(divModal).dialog({
 
 			dialogClass: 'fixed-dialog',
 			create: function (event, ui) {
@@ -35,14 +36,35 @@
 			width: '90%',
 			height: ($(window).height() - 200),
 			modal: true,
+			appendTo: divAppend,
 			open: function (event, ui) {
 
-				$('#modal').html(content);
+				if (content != undefined && content != null && content != '') {
+
+					$(divModal).html(content);
+				}
+			},
+			close: function (event, ui) {
 			}
 		});
 
-		$('#modal').dialog('open');
+		$(divModal).dialog('open');
 	}
+
+
+	function dealEdit(dealId) {
+
+		const deal = dealTracker[dealId];
+
+		const dcaMaxOrder = deal['info']['safety_orders_max']
+		const dcaTakeProfitPercent = deal['config']['dcaTakeProfitPercent'];
+
+		$('#dealEditId').val(dealId);
+		$('#dcaMaxOrder').val(dcaMaxOrder);
+		$('#dcaTakeProfitPercent').val(dcaTakeProfitPercent);
+
+		openModal('#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
+  	}
 
 
 	function panicSellConfirm(dealId, selector, data) {
@@ -170,6 +192,39 @@
 	}
 
 
+	function dealUpdate(dealId, data) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'POST',
+					url: '/api/deals/' + dealId + '/update_deal',
+					data: data,
+					dataType: 'json',
+					success: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						if (!data.success) {
+
+							alertBox('Unable to update deal: ' + data['data'], function() { });
+						}
+						else {
+
+							alertBox('Deal ID ' + dealId + ' updated', function() { });
+						}
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data), function() { });
+					}
+		});
+	}
+
+
 	function stopBot(selector, data) {
 
 		let botId = data.bot_id;
@@ -247,7 +302,7 @@
 			}
 		}
 
-		openModal('Order History ' + dealId, table);
+		openModal('#modal', 'Order History ' + dealId, table);
 	}
 
 
@@ -266,7 +321,7 @@
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
 			let editButton = '<span class="disableButton">&#9998;</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
-			let panicButton = '<span class="disableButton">&#128176</span>';
+			let panicButton = '<span class="disableButton" style="font-size: 1.0rem;">&#128176</span>';
 
 			let dealVolume = deals[i].orders.filter(order => order.filled === 1).reduce((acc, order) => acc + Number(order.amount), 0);
 			inDeals += dealVolume;
@@ -312,6 +367,9 @@
 			totalProfit += profit;
 
 			dealTracker[dealId] = {};
+
+			dealTracker[dealId]['info'] = deal['info'];
+			dealTracker[dealId]['config'] = config;
 			dealTracker[dealId]['orders'] = deal['orders'];
 
 			contentArr.push('<tr data-dealid="' + dealId + '">');
@@ -358,6 +416,53 @@
 		$(window).resize(function() {
 
 			resizeBotsDeals();
+		});
+
+
+		$('#formSubmitEdit').on('click', function(e) {
+
+			e.preventDefault();
+
+			const dealId = $('#dealEditId').val();
+			const dcaMaxOrder = $('#dcaMaxOrder').val();
+			const dcaTakeProfitPercent = $('#dcaTakeProfitPercent').val();
+
+			let dataObj = {
+							'dcaMaxOrder': dcaMaxOrder,
+							'dcaTakeProfitPercent': dcaTakeProfitPercent
+						  };
+
+			modalId.dialog('close');
+
+			dealUpdate(dealId, dataObj);
+		});
+
+
+		$(document).on('keypress', '#botsCreate input', function(e) {
+
+			const id = $(this).attr('id');
+			const val = $('#' + id).val();
+
+			const charCode = (e.which) ? e.which : e.keyCode;
+
+			if (id == undefined || id == null) {
+
+				return;
+			}
+
+			let regEx = /[^0-9\.]/g;
+
+			if (id.toLowerCase() == 'dcamaxorder') {
+
+				regEx = /[^0-9]/g;
+			}
+
+			if (charCode == 46 && (val.split('.').length - 1) > 0) {
+
+				return false;
+			}
+
+			if (String.fromCharCode(charCode).match(regEx)) { return false; }
 		});
 
 
@@ -464,7 +569,7 @@
 
 					data.deal_id = dealId;
 
-					alertBox('Deal editing coming soon');
+					dealEdit(dealId);
 				}
 			}
 			else {
@@ -486,6 +591,7 @@
 <main>
 
 	<div id="modal"></div>
+	<div id="modalDealEdit"></div>
 
 	<div id="contentBox">
 
@@ -517,6 +623,25 @@
 				</table>
 			</div>
 		</div>
+
+
+		<div id="boxDealEdit" style="display: none; margin: 0 auto;">
+
+			<table id="botsCreate" style="margin-top: 20px; max-width: 225px;" cellpadding=0 cellspacing=0>
+
+			<form id="formDealEdit" autocomplete="off" action="">
+
+				<input id="dealEditId" name="dealEditId" type=hidden>
+
+				<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" class="form-field"></td></tr>
+				<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" class="form-field"></td></tr>
+
+				<tr><td colspan=2 style="padding-top: 20px;"><button id="formSubmitEdit" class="btn">Update Deal</button></td></tr>
+			</form>
+
+			</table>
+		</div>
+
 	</div>
 
 </main>
