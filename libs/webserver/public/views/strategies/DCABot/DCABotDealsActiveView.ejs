@@ -67,31 +67,52 @@
   	}
 
 
-	function panicSellConfirm(dealId, selector, data) {
+	function panicSellConfirm(dealId) {
+
+		let randNum = Math.floor(1000 + Math.random() * 9000);
 
 		$.confirm({
 
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">Close deal ' + dealId + ' at current market price?</div>',
+					content: '<div style="font-size: 1.2rem; text-align: left;">Close deal ' + dealId + ' at current market price?<br><br>' +
+						'Type <b>' + randNum + '</b> in the box to confirm close deal: ' +
+						'<form action="" style="display: inline;"><input type="text" id="confirmNum" class="form-field" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;" required /></form></div>',
 					buttons: {
+								formSubmit: {
+												btnClass: 'btn-default',
+												text: '<div style="color: #d80f08;">Close Deal</div>',
+												action: function () {
 
-								ok: {
-										btnClass: 'btn-default',
-										text: '<div style="color: #d80f08;">Close Deal</div>',
-										action: function () {
+													let confirmNum = this.$content.find('#confirmNum').val();
+													
+													if (!confirmNum || confirmNum != randNum) {
 
-											panicSell(selector, data);
-										}
-									 },
+														alertBox('Confirmation number incorrect');
+														return false;
+													}
+													
+													panicSell(dealId);
+												}
+											},
 							 	cancel: {
 
 									 		btnClass: 'btn-default',
 									 		text: '<div style="color: #000000;">Cancel</div>',	
 										 	action: function () { }
 									 	}
-							 }
+							 },
+							 onContentReady: function () {
+
+							 	let jc = this;
+
+							 	this.$content.find('form').on('submit', function (e) {
+
+							 		e.preventDefault();
+							 		jc.$$formSubmit.trigger('click');
+								});
+							}
 		});
 	}
 
@@ -157,16 +178,14 @@
 	}
 
 
-	function panicSell(selector, data) {
-
-		let dealId = data.deal_id;
+	function panicSell(dealId) {
 
 		$('#spinner-overlay').fadeIn(100);
 
 		$.ajax({
 					type: 'POST',
 					url: '/api/deals/' + dealId + '/panic_sell',
-					data: data,
+					data: {},
 					dataType: 'json',
 					success: function(data) {
 
@@ -174,11 +193,11 @@
 
 						if (!data.success) {
 
-							alertBox('Unable to close deal: ' + data['data'], function() { });
+							alertBox('Unable to close deal: ' + data['data']);
 						}
 						else {
 
-							alertBox('Deal ID ' + dealId + ' closed', function() { });
+							alertBox('Deal ID ' + dealId + ' closed');
 						}
 					},
 					error: function(data) {
@@ -186,7 +205,7 @@
 						// Some error in ajax call
 						$('#spinner-overlay').fadeOut(100);
 
-						alertBox('Error: ' + JSON.stringify(data), function() { });
+						alertBox('Error: ' + JSON.stringify(data));
 					}
 		});
 	}
@@ -547,15 +566,11 @@
 			else if (col == (colCount - 2)) {
 
 				// Panic sell
-				let data = { 'deal_id': '' };
-
 				let dealId = row.data('dealid');
 
 				if (dealId) {
 
-					data.deal_id = dealId;
-
-					panicSellConfirm(dealId, $(this), data);
+					panicSellConfirm(dealId);
 				}
 			}
 			else if (col == (colCount - 3)) {
