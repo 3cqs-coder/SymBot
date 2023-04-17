@@ -264,6 +264,7 @@
 		for (let i = 0; i < deals.length; i++) {
 
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
+			let editButton = '<span class="disableButton">&#9998;</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
 			let panicButton = '<span class="disableButton">&#128176</span>';
 
@@ -326,6 +327,7 @@
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + deal['info']['safety_orders_max'] + '</td>');
 			contentArr.push('<td>' + dealCount + '</td>');
+			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButton + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButton + '</div></td>');
 			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
 			contentArr.push('</tr>');
@@ -447,8 +449,22 @@
 				if (dealId) {
 
 					data.deal_id = dealId;
-					
+
 					panicSellConfirm(dealId, $(this), data);
+				}
+			}
+			else if (col == (colCount - 3)) {
+
+				// Edit deal
+				let data = { 'deal_id': '' };
+
+				let dealId = row.data('dealid');
+
+				if (dealId) {
+
+					data.deal_id = dealId;
+
+					alertBox('Deal editing coming soon');
 				}
 			}
 			else {
@@ -492,7 +508,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr style="font-weight: bold; text-align: left; white-space: nowrap;">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false"></th> <th data-sorter="false"></th> 
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th colspan=3 data-sorter="false"></th> 
 					</tr>
 				</thead>
 
