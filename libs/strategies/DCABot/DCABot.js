@@ -161,7 +161,6 @@ async function start(data, startBot, reload) {
 			askPrice = firstOrderPrice;
 		}
 
-		var t = new Table();
 		const orders = [];
 
 		if (startBot && isActive) {
@@ -398,19 +397,6 @@ async function start(data, startBot, reload) {
 					}
 				}
 
-				let ordersDeviation = [];
-
-				for (let x = 0; x < orders.length; x++) {
-
-					let order = orders[x];
-
-					let deviationPerc = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, x);
-
-					deviationPerc = Number(deviationPerc.toFixed(2));
-
-					ordersDeviation.push(deviationPerc);
-				}
-
 				if (orders.length > 1) {
 
 					let res = await ordersValid(pair, orders);
@@ -421,22 +407,10 @@ async function start(data, startBot, reload) {
 					}
 				}
 
-				orders.forEach(function (order) {
-					t.cell('No', order.orderNo);
-					t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
-					t.cell('Price', '$' + order.price);
-					t.cell('Average', '$' + order.average);
-					t.cell('Target', '$' + order.target);
-					t.cell('Qty', order.qty);
-					t.cell('Amount($)', '$' + order.amount);
-					t.cell('Sum(Qty)', order.qtySum);
-					t.cell('Sum($)', '$' + order.sum);
-					t.cell('Type', order.type);
-					t.cell('Filled', order.filled == 0 ? 'Waiting' : 'Filled');
-					t.newRow();
-				});
+				let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, true);
 
-				const maxDeviation = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, orders.length - 1);
+				let t = orderData['table'];
+				let maxDeviation = orderData['max_deviation'];
 
 				//console.log(t.toString());
 				//Common.logger(t.toString());
@@ -728,19 +702,6 @@ async function start(data, startBot, reload) {
 					}
 				}
 
-				let ordersDeviation = [];
-
-				for (let x = 0; x < orders.length; x++) {
-
-					let order = orders[x];
-
-					let deviationPerc = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, x);
-
-					deviationPerc = Number(deviationPerc.toFixed(2));
-
-					ordersDeviation.push(deviationPerc);
-				}
-
 				if (orders.length > 1) {
 
 					let res = await ordersValid(pair, orders);
@@ -751,22 +712,10 @@ async function start(data, startBot, reload) {
 					}
 				}
 
-				orders.forEach(function (order) {
-					t.cell('No', order.orderNo);
-					t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
-					t.cell('Price', '$' + order.price);
-					t.cell('Average', '$' + order.average);
-					t.cell('Target', '$' + order.target);
-					t.cell('Qty', order.qty);
-					t.cell('Amount($)', '$' + order.amount);
-					t.cell('Sum(Qty)', order.qtySum);
-					t.cell('Sum($)', '$' + order.sum);
-					t.cell('Type', order.type);
-					t.cell('Filled', order.filled == 0 ? 'Waiting' : 'Filled');
-					t.newRow();
-				});
+				let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, true);
 
-				const maxDeviation = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, orders.length - 1);
+				let t = orderData['table'];
+				let maxDeviation = orderData['max_deviation'];
 
 				//console.log(t.toString());
 				//Common.logger(t.toString());
@@ -1071,7 +1020,6 @@ const dcaFollow = async (configData, exchange, dealId) => {
 			//const price = parseFloat(symbol.bidPrice);
 			const price = parseFloat(bidPrice);
 
-			const t = new Table();
 			let targetPrice = 0;
 
 			let orders = deal.orders;
@@ -1116,22 +1064,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						);
 					}
 
-					orders.forEach(function (order) {
-						t.cell('No', order.orderNo);
-						t.cell('Price', '$' + order.price);
-						t.cell('Average', '$' + order.average);
-						t.cell('Target', '$' + order.target);
-						t.cell('Qty', order.qty);
-						t.cell('Amount($)', '$' + order.amount);
-						t.cell('Sum(Qty)', order.qtySum);
-						t.cell('Sum($)', '$' + order.sum);
-						t.cell('Type', order.type);
-						t.cell(
-							'Filled',
-							order.filled == 0 ? 'Waiting' : colors.bgGreen('Filled')
-						);
-						t.newRow();
-					});
+					let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, false);
+
+					let t = orderData['table'];
+					let maxDeviation = orderData['max_deviation'];
 
 					//console.log(t.toString());
 					//Common.logger(t.toString());
@@ -1182,22 +1118,10 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							);
 						}
 
-						orders.forEach(function (order) {
-							t.cell('No', order.orderNo);
-							t.cell('Price', '$' + order.price);
-							t.cell('Average', '$' + order.average);
-							t.cell('Target', '$' + order.target);
-							t.cell('Qty', order.qty);
-							t.cell('Amount($)', '$' + order.amount);
-							t.cell('Sum(Qty)', order.qtySum);
-							t.cell('Sum($)', '$' + order.sum);
-							t.cell('Type', order.type);
-							t.cell(
-								'Filled',
-								order.filled == 0 ? 'Waiting' : colors.bgGreen('Filled')
-							);
-							t.newRow();
-						});
+						let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, false);
+
+						let t = orderData['table'];
+						let maxDeviation = orderData['max_deviation'];
 
 						//console.log(t.toString());
 						//Common.logger(t.toString());
@@ -1856,6 +1780,53 @@ async function updateDeal(botId, dealId, data) {
 }
 
 
+async function updateOrders(orderData) {
+
+	let ordersOrig = orderData['orig'];
+	let orderSteps = orderData['new'];
+
+	let ordersNew = [];
+
+	for (let i = 0; i < orderSteps.length; i++) {
+
+		let orderNew;
+
+		let priceTargetNew = orderSteps[i][4].replace(/[^0-9.]/g, '');
+
+		// Use existing order data if available
+		if (ordersOrig[i] != undefined && ordersOrig[i] != null) {
+
+			let priceTargetOrig = ordersOrig[i]['target'];
+
+			orderNew = ordersOrig[i];
+
+			orderNew['target'] = priceTargetNew;
+		}
+		else {
+
+			let orderObj = {
+								orderNo: orderSteps[i][0],
+								price: orderSteps[i][2].replace(/[^0-9.]/g, ''),
+								average: orderSteps[i][3].replace(/[^0-9.]/g, ''),
+								target: priceTargetNew,
+								qty: orderSteps[i][5].replace(/[^0-9.]/g, ''),
+								amount: orderSteps[i][6].replace(/[^0-9.]/g, ''),
+								qtySum: orderSteps[i][7].replace(/[^0-9.]/g, ''),
+								sum: orderSteps[i][8].replace(/[^0-9.]/g, ''),
+								type: orderSteps[i][9],
+								filled: 0
+							};
+
+			orderNew = orderObj;
+		}
+
+		ordersNew.push(orderNew);
+	}
+
+	return ordersNew;
+}
+
+
 async function checkTracker() {
 
 	// Monitor existing deals if they weren't updated after n minutes to take potential action
@@ -2073,6 +2044,63 @@ async function ordersToData(data) {
 	const orders = { 'headers': headers, 'steps': steps };
 
 	return orders;
+}
+
+
+async function ordersCreateTable(data, showDeviation) {
+
+	let config = data['config'];
+	let orders = data['orders'];
+
+	let ordersDeviation = [];
+
+	let t = new Table();
+
+	for (let x = 0; x < orders.length; x++) {
+
+		let order = orders[x];
+
+		let deviationPerc = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, x);
+
+		deviationPerc = Number(deviationPerc.toFixed(2));
+
+		ordersDeviation.push(deviationPerc);
+	}
+
+	orders.forEach(function (order) {
+		
+		t.cell('No', order.orderNo);
+
+		if (showDeviation) {
+
+			t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
+		}
+
+		t.cell('Price', '$' + order.price);
+		t.cell('Average', '$' + order.average);
+		t.cell('Target', '$' + order.target);
+		t.cell('Qty', order.qty);
+		t.cell('Amount($)', '$' + order.amount);
+		t.cell('Sum(Qty)', order.qtySum);
+		t.cell('Sum($)', '$' + order.sum);
+		t.cell('Type', order.type);
+
+		if (showDeviation) {
+
+			t.cell('Filled', order.filled == 0 ? 'Waiting' : 'Filled');
+		}
+		else {
+
+			// DCA follow
+			t.cell('Filled', order.filled == 0 ? 'Waiting' : colors.bgGreen('Filled'));
+		}
+
+		t.newRow();
+	});
+
+	let maxDeviation = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, orders.length - 1);
+
+	return ( { 'table': t, 'max_deviation': maxDeviation } );
 }
 
 
@@ -2713,6 +2741,7 @@ module.exports = {
 	colors,
 	start,
 	updateBot,
+	updateOrders,
 	stopDeal,
 	updateDeal,
 	panicSellDeal,

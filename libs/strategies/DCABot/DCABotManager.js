@@ -429,8 +429,6 @@ async function apiUpdateDeal(req, res) {
 
 				if (orderSuccess) {
 
-					let ordersNew = [];
-
 					let orderHeaders = data['orders']['data']['orders']['headers'];
 					let orderSteps = data['orders']['data']['orders']['steps'];
 					let orderContent = data['orders']['data']['content'];
@@ -445,41 +443,7 @@ async function apiUpdateDeal(req, res) {
 						if (stopData['success']) {
 
 							// Apply new order calculations to deal, update db, then resume
-							for (let i = 0; i < orderSteps.length; i++) {
-
-								let orderNew;
-
-								let priceTargetNew = orderSteps[i][4].replace(/[^0-9.]/g, '');
-
-								// Use exiting order data if available
-								if (ordersOrig[i] != undefined && ordersOrig[i] != null) {
-
-									let priceTargetOrig = ordersOrig[i]['target'];
-
-									orderNew = ordersOrig[i];
-
-									orderNew['target'] = priceTargetNew;
-								}
-								else {
-
-									let orderObj = {
-														orderNo: orderSteps[i][0],
-														price: orderSteps[i][2].replace(/[^0-9.]/g, ''),
-														average: orderSteps[i][3].replace(/[^0-9.]/g, ''),
-														target: priceTargetNew,
-														qty: orderSteps[i][5].replace(/[^0-9.]/g, ''),
-														amount: orderSteps[i][6].replace(/[^0-9.]/g, ''),
-														qtySum: orderSteps[i][7].replace(/[^0-9.]/g, ''),
-														sum: orderSteps[i][8].replace(/[^0-9.]/g, ''),
-														type: orderSteps[i][9],
-														filled: 0
-													};
-
-									orderNew = orderObj;
-								}
-
-								ordersNew.push(orderNew);
-							}
+							let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps });
 
 							// Update deal in database
 							let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
