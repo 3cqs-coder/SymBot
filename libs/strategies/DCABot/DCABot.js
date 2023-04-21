@@ -2184,7 +2184,7 @@ async function ordersValid(pair, orders) {
 
 	let priceAverage1 = orders[0]['average'];
 	let priceAverage2 = orders[1]['average'];
-					
+
 	if (priceAverage1 == priceAverage2) {
 
 		success = false;
@@ -2729,6 +2729,7 @@ module.exports = {
 	colors,
 	start,
 	updateBot,
+	ordersValid,
 	updateOrders,
 	stopDeal,
 	updateDeal,

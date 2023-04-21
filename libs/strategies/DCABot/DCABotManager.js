@@ -435,7 +435,16 @@ async function apiUpdateDeal(req, res) {
 
 					let maxDeviationPercent = orderContent['max_deviation_percent'];
 
-					if (isUpdate) {
+					let ordersNew = await shareData.DCABot.updateOrders({ 'orig': [], 'new': orderSteps });
+					let ordersValidate = await shareData.DCABot.ordersValid(dealData['pair'], ordersNew);
+
+					// Verify new order step price averages
+					if (!ordersValidate['success']) {
+
+						success = false;
+						content = ordersValidate['data'];
+					}
+					else if (isUpdate) {
 
 						let stopData = await shareData.DCABot.stopDeal(dealId);
 
