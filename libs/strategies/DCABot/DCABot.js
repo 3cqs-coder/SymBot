@@ -407,7 +407,7 @@ async function start(data, startBot, reload) {
 					}
 				}
 
-				let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, true);
+				let orderData = await ordersCreateTable({ 'config': config, 'orders': orders });
 
 				let t = orderData['table'];
 				let maxDeviation = orderData['max_deviation'];
@@ -712,7 +712,7 @@ async function start(data, startBot, reload) {
 					}
 				}
 
-				let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, true);
+				let orderData = await ordersCreateTable({ 'config': config, 'orders': orders });
 
 				let t = orderData['table'];
 				let maxDeviation = orderData['max_deviation'];
@@ -1064,7 +1064,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 						);
 					}
 
-					let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, false);
+					let orderData = await ordersCreateTable({ 'config': config, 'orders': orders });
 
 					let t = orderData['table'];
 					let maxDeviation = orderData['max_deviation'];
@@ -1118,7 +1118,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 							);
 						}
 
-						let orderData = await ordersCreateTable({ 'config': config, 'orders': orders }, false);
+						let orderData = await ordersCreateTable({ 'config': config, 'orders': orders });
 
 						let t = orderData['table'];
 						let maxDeviation = orderData['max_deviation'];
@@ -1780,7 +1780,9 @@ async function updateDeal(botId, dealId, data) {
 }
 
 
-async function updateOrders(orderData) {
+async function updateOrders(data) {
+
+	let orderData = JSON.parse(JSON.stringify(data));
 
 	let ordersOrig = orderData['orig'];
 	let orderSteps = orderData['new'];
@@ -2047,7 +2049,7 @@ async function ordersToData(data) {
 }
 
 
-async function ordersCreateTable(data, showDeviation) {
+async function ordersCreateTable(data) {
 
 	let config = data['config'];
 	let orders = data['orders'];
@@ -2068,14 +2070,9 @@ async function ordersCreateTable(data, showDeviation) {
 	}
 
 	orders.forEach(function (order) {
-		
+	
 		t.cell('No', order.orderNo);
-
-		if (showDeviation) {
-
-			t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
-		}
-
+		t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
 		t.cell('Price', '$' + order.price);
 		t.cell('Average', '$' + order.average);
 		t.cell('Target', '$' + order.target);
@@ -2084,16 +2081,7 @@ async function ordersCreateTable(data, showDeviation) {
 		t.cell('Sum(Qty)', order.qtySum);
 		t.cell('Sum($)', '$' + order.sum);
 		t.cell('Type', order.type);
-
-		if (showDeviation) {
-
-			t.cell('Filled', order.filled == 0 ? 'Waiting' : 'Filled');
-		}
-		else {
-
-			// DCA follow
-			t.cell('Filled', order.filled == 0 ? 'Waiting' : colors.bgGreen('Filled'));
-		}
+		t.cell('Filled', order.filled == 0 ? 'Waiting' : 'Filled');
 
 		t.newRow();
 	});

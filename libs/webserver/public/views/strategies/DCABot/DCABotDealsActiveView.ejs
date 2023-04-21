@@ -157,13 +157,14 @@
 					url: '/api/deals',
 					data: {},
 					dataType: 'json',
-					success: function({ data }) {
+					success: function(data) {
 
 						//$('#spinner-overlay').fadeOut(100);
 
-						let deals = data;
+						let date = data.date;
+						let deals = data.data;
 
-						populateDeals(deals);
+						populateDeals(date, deals);
 
 						setReloadTimeout();
 					},
@@ -325,13 +326,18 @@
 	}
 
 
-	function populateDeals(deals) {
+	function populateDeals(date, deals) {
+
+		const maxMins = 2;
 
 		let totalProfit = 0;
 		let inDeals = 0;
+
+		let msgBoxColor = '#386ec2';
 		let profitTotalColor = '#1a9f00';
 
 		let contentArr = [];
+		let dealsErrorArr = [];
 
 		dealTracker = {};
 
@@ -353,6 +359,7 @@
 
 			const config = deal['config'];
 			const dealId = deal['dealId'];
+			const lastUpdated = deal['info']['updated'];
 			const botActive = deal['info']['bot_active'];
 			const profit = deal['info']['profit'];
 			const profitPerc = deal['info']['profit_percentage'];
@@ -381,6 +388,15 @@
 			else {
 
 				dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
+			}
+
+			let diffSec = (new Date(date).getTime() - new Date(lastUpdated).getTime()) / 1000;
+
+			if (diffSec > (60 * maxMins)) {
+
+				diffSec = (diffSec / 60).toFixed(2);
+
+				dealsErrorArr.push(dealId);
 			}
 
 			totalProfit += profit;
@@ -415,7 +431,17 @@
 			profitTotalColor = '#d82715';
 		}
 
+		$('#msgBox').empty();
 		$('#botsDeals tbody').empty();
+
+		if (dealsErrorArr.length > 0) {
+
+			let msg = '<b>WARNING:</b> ' + dealsErrorArr.length + ' deals exceed last updated time of ' + maxMins + ' minutes. Check logs for more details.';
+
+			$('#msgBox').css('color', msgBoxColor);
+			$('#msgBox').html(msg);
+		}
+
 		$('#botsDeals tbody').append(contentArr.join(''));
 
 		$('#totalProfit').css('color', profitTotalColor);
@@ -622,6 +648,8 @@
 					<p style="margin-top: 0; margin-bottom: 0;">Deals: <span id="totalDeals"></span></p>
 				</span>
 			</div>
+
+			<span id="msgBox" style="position: relative; display: flex; justify-content: center;"></span>
 
 			<div class="botsDealsBox">
 

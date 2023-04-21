@@ -63,27 +63,37 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
+		let msg;
+		let success = false;
+
 		const body = req.body;
 		const password = body.password;
 		const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
+		const userAgent = req.headers['user-agent'];
 
 		if (password == shareData.appData.password) {
 
 			req.session.loggedIn = true;
 
-			let msg = 'Login success from: ' + ip;
+			success = true;
+			msg = 'success';
+		}
+		else {
 
-			shareData.Common.logger(msg);
-			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+			success = false;
+			msg = 'failed';
+		}
+
+		msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;
+
+		shareData.Common.logger(msg);
+		shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+
+		if (success) {
 
 			goHome(req, res);
 		}
 		else {
-
-			let msg = 'Login failed from: ' + ip;
-
-			shareData.Common.logger(msg);
-			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
 
 			res.redirect('/login');
 		}
