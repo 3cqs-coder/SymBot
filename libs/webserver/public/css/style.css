@@ -549,6 +549,24 @@ table#botsDeals tr:hover {
 }
 
 
+.logRow {
+
+	font-size: 1.0rem;
+	padding: 5px;
+	border-bottom: 1px solid #cdcdcd;
+	background: #e2e2e2;
+	cursor: pointer;
+	overflow-wrap: break-word;
+}
+
+
+.logRow:hover {
+
+    background-color: #c5c5c5;
+    cursor: pointer;
+}
+
+
 .contentHeader {
 
 	position: relative;

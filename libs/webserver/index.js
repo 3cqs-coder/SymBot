@@ -16,7 +16,10 @@ const router = express.Router();
 const Routes = require(pathRoot + '/webserver/routes.js');
 
 
+const roomAuth = 'logs';
+
 let shareData;
+let socket;
 
 
 
@@ -113,16 +116,79 @@ function initApp() {
 
 	app.use('/', router);
 
-	Routes.start(router);
+	return sessionMiddleware;
+}
+
+
+function initSocket(sessionMiddleware, server) {
+
+	socket = require('socket.io')(server, {
+
+		cors: {    
+				origin: '*',
+				methods: ['PUT', 'GET', 'POST', 'DELETE', 'OPTIONS'],
+				credentials: false
+		},
+		path: '/ws',
+		serveClient: false,
+		pingInterval: 10000,
+		pingTimeout: 5000,
+		maxHttpBufferSize: 1e6,
+		cookie: false
+	});
+
+
+	const wrap = middleware => (socket, next) => middleware(socket.request, {}, next);
+
+	socket.use(wrap(sessionMiddleware));
+
+	socket.use((client, next) => {
+
+		return next();
+	});
+
+	socket.on('connect', function (client) {
+
+		let clientId = client.id;
+		let loggedIn = client.request.session.loggedIn;
+
+		//console.log('Connected ID:', clientId, loggedIn);
+
+		if (!loggedIn) {
+
+			client.emit('error', 'Unauthorized');
+			client.disconnect();			
+		}
+		else {
+
+			client.join(roomAuth);
+		}
+	});
+}
+
+
+async function sendSocketMsg(msg, room) {
+
+	let sendRoom = roomAuth;
+
+	if (room != undefined && room != null && room != '') {
+
+		sendRoom = room;
+	}
+
+	if (socket) {
+
+		socket.to(sendRoom).emit('data', msg);
+	}
 }
 
 
 function start(port) {
 
-	initApp();
+	const sessionMiddleware = initApp();
 
-	app.listen(port, () => {
-	
+	const server = app.listen(port, () => {
+
 		shareData.Common.logger(`${shareData.appData.name} v${shareData.appData.version} listening on port ${port}`, true);
 
 	}).on('error', function(err) {
@@ -134,6 +200,10 @@ function start(port) {
 			process.exit(1);
 		}
 	});
+
+	initSocket(sessionMiddleware, server);
+
+	Routes.start(router);
 }
 
 
@@ -141,6 +211,7 @@ module.exports = {
 
 	app,
 	start,
+	sendSocketMsg,
 
 	init: function(obj) {
 

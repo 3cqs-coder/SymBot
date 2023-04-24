@@ -59,6 +59,14 @@ function initRoutes(router) {
 	});
 
 
+	router.get('/logs', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		res.render( 'logsView', { 'appData': shareData.appData } );
+	});
+
+
 	router.post('/login', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');

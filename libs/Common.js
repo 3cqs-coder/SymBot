@@ -7,10 +7,12 @@ const pathRoot = path
 	.split(path.sep)
 	.join(path.posix.sep);
 
+const Convert = require('ansi-to-html');
 const delay = require('delay');
 const fetch = require('node-fetch-commonjs');
 const { v4: uuidv4 } = require('uuid');
 
+const convertAnsi = new Convert();
 
 let shareData;
 
@@ -151,12 +153,15 @@ async function logger(data, consoleLog) {
 	let logData = `${dateNow} ${data}`;
 
 	if (consoleLog || shareData.appData.console_log) {
+
 		console.log(logData);
 	}
 
 	const dateObj = getDateParts(dateNow);
 
 	const fileName = pathRoot + '/logs/' + dateObj.date + '.log';
+
+	const logDataOrig = logData;
 
 	logData = logData.replace(
 		/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
@@ -166,6 +171,11 @@ async function logger(data, consoleLog) {
 	logData = logData.replace(/[\t\r\n]+/g, ' ');
 
 	fs.appendFileSync(fileName, logData + '\n', 'utf8');
+
+	if (shareData && shareData.WebServer) {
+
+		shareData.WebServer.sendSocketMsg(convertAnsi.toHtml(logDataOrig));
+	}
 }
 
 

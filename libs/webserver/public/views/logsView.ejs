@@ -1,0 +1,81 @@
+<%- include('./partialsHeaderView'); %>
+
+	<script>
+
+		$(document).ready(function() {
+
+			const maxRows = 1000;
+			const offsetBottom = -225;
+
+			$(window).resize(function() {
+
+				resizeBotsDeals(offsetBottom);
+			});
+
+
+			const socket = io('/', {
+
+				query: {},
+				extraHeaders: {
+
+					'user-agent': '<%- appData.name %>/<%- appData.version %>'
+				},
+				transports: ['websocket', 'polling'],
+				path: '/ws',
+				reconnection: true,
+				reconnectionDelay: 10000
+			});
+
+
+			socket.on('connect', (data) => {
+
+			});
+
+
+			socket.on('error', (data) => {
+
+				alertBox('Error:' + JSON.stringify(data));
+			});
+
+
+			socket.on('disconnect', (data) => {
+
+			});
+
+
+			socket.on('data', (data) => {
+
+				let msg = '<div class="logRow">' + data + '</div>';
+
+				$('#dataBox').prepend(msg);
+
+				let currentRows = $('.logRow').length;
+
+				if (currentRows > maxRows) {
+
+					$('.logRow').slice((maxRows - currentRows)).remove();
+				}
+
+				resizeBotsDeals(offsetBottom);
+			});
+
+		});
+
+	</script>
+</head>
+
+
+<main>
+
+	<div id="contentBox">
+
+		<div class="contentHeaderBox" style="text-align: center; width: 100%;">
+			<b class="contentHeader"><%- appData.name %> Realtime Logs</b>
+		</div>
+
+		<div id="dataBox" class="botsDealsBox" style="width: 100%;"></div>
+	</div>
+
+</main>
+
+<%- include('./partialsFooterView'); %>
