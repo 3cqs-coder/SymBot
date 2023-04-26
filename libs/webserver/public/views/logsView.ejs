@@ -1,79 +1,37 @@
 <%- include('./partialsHeaderView'); %>
 
-	<script>
-
-		$(document).ready(function() {
-
-			const maxRows = 1000;
-			const offsetBottom = -225;
-
-			$(window).resize(function() {
-
-				resizeBotsDeals(offsetBottom);
-			});
-
-
-			const socket = io('/', {
-
-				query: {},
-				extraHeaders: {
-
-					'user-agent': '<%- appData.name %>/<%- appData.version %>'
-				},
-				transports: ['websocket', 'polling'],
-				path: '/ws',
-				reconnection: true,
-				reconnectionDelay: 10000
-			});
-
-
-			socket.on('connect', (data) => {
-
-			});
-
-
-			socket.on('error', (data) => {
-
-				alertBox('Error:' + JSON.stringify(data));
-			});
-
-
-			socket.on('disconnect', (data) => {
-
-			});
-
-
-			socket.on('data', (data) => {
-
-				let msg = '<div class="logRow">' + data + '</div>';
-
-				$('#dataBox').prepend(msg);
-
-				let currentRows = $('.logRow').length;
-
-				if (currentRows > maxRows) {
-
-					$('.logRow').slice((maxRows - currentRows)).remove();
-				}
-
-				resizeBotsDeals(offsetBottom);
-			});
-
-		});
-
-	</script>
-</head>
-
 
 <main>
 
-	<div id="contentBox">
+	<div id="contentBox" style="text-align: center; max-width: 400px;">
 
 		<div class="contentHeaderBox" style="text-align: center; width: 100%;">
-			<b class="contentHeader"><%- appData.name %> Realtime Logs</b>
+			<b class="contentHeader"><%- appData.name %> Logs</b>
+
+			<br><br>
+			<a href="/logs/live">View Live Logs</a>
 		</div>
 
-		<div id="dataBox" class="botsDealsBox" style="width: 100%;"></div>
+
+		<div id="dataBox" class="botsDealsBox" style="width: 100%;">
+
+			<div style="display: inline-block; text-align: left; font-size: 1.2rem; width: 100%;">
+
+			<% 
+				for (let i = 0; i < files.length; i++) {
+					
+					let fileName = files[i]['name'].split(/[\\\/]/).pop();
+					let size = files[i]['size_human'];
+			%>
+
+				<div class="mainMenuItem" style="justify-content: space-between;">
+					<a href="/logs/download/<%- fileName %>"><%- fileName %></a> <%- size %>
+				</div>
+			
+			<% } %>
+
+			</div>
+		</div>
 	</div>
 
 </main>

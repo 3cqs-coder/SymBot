@@ -142,6 +142,66 @@ async function makeDir(dirName) {
 }
 
 
+async function showLogs(req, res) {
+
+	const files = await getLogs();
+
+	res.render( 'logsView', { 'appData': shareData.appData, 'files': files } );
+}
+
+
+async function getLogs() {
+
+	let allFiles = [];
+	let sortedFiles = [];
+
+	let dir = pathRoot + '/logs';
+
+	let files = fs.readdirSync(dir);
+
+	for (let i in files) {
+
+		let file = dir + '/' + files[i];
+
+		let stats = fs.statSync(file);
+
+		let created = stats.ctime;
+		let modified = stats.mtime;
+		let size = stats.size;
+
+		if (!stats.isDirectory()) {
+
+			let obj = { 'name': file, 'created': created, 'modified': modified, 'size': size, 'size_human': numFormatter(size) };
+
+			allFiles.push(obj);
+		}
+	}
+
+	if (allFiles.length > 0) {
+
+		sortedFiles = sortByKey(allFiles, 'created');
+	}
+
+	return sortedFiles.reverse();
+}
+
+
+async function downloadLog(file, req, res) {
+
+	res.download(pathRoot + '/logs/' + file, function (err) {
+
+		if (err) {
+
+			let obj = { 'error': err };
+
+			let code = err['statusCode'];
+
+			res.status(code).send(obj);
+		}
+    });
+}
+
+
 async function logger(data, consoleLog) {
 
 	if (typeof data !== 'string') {
@@ -196,9 +256,7 @@ async function getSignalConfigs() {
 	let success = true;
 	let configs = {};
 
-	let dir =
-		fs.realpathSync(__dirname).split(path.sep).join(path.posix.sep) +
-		'/signals';
+	let dir = fs.realpathSync(__dirname).split(path.sep).join(path.posix.sep) + '/signals';
 
 	let files = fs.readdirSync(dir);
 
@@ -474,6 +532,35 @@ function numToBase26(num) {
 }
 
 
+function numFormatter(num) {
+
+	num = Number(num);
+
+	if (num > 999 && num < 1000000) {
+
+		return (num / 1000).toFixed(2) + 'k';
+
+	}
+	else if (num > 1000000000000) {
+
+		return (num / 1000000000000).toFixed(2) + 'T';
+	}
+	else if (num > 1000000000) {
+
+		return (num / 1000000000).toFixed(2) + 'B';
+	}
+	else if (num > 1000000) {
+
+		return (num / 1000000).toFixed(2) + 'M'; 
+	}
+	else if (num < 900) {
+
+		num = Number(roundNumber(num, 5));
+		return num;
+	}
+}
+
+
 function sortByKey(array, key) {
 
 	return array.sort(function(a, b) {
@@ -498,10 +585,13 @@ module.exports = {
 	getDateParts,
 	getTimeZone,
 	numToBase26,
+	numFormatter,
 	hashCode,
 	timeDiff,
 	logger,
 	logMonitor,
+	showLogs,
+	downloadLog,
 	fetchURL,
 	getProcessInfo,
 

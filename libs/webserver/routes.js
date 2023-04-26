@@ -61,9 +61,39 @@ function initRoutes(router) {
 
 	router.get('/logs', (req, res) => {
 
+		if (req.session.loggedIn) {
+
+			shareData.Common.showLogs(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get('/logs/live', (req, res) => {
+
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'logsView', { 'appData': shareData.appData } );
+		res.render( 'logsLiveView', { 'appData': shareData.appData } );
+	});
+
+
+	router.get('/logs/download/:file', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			let fileName = req.params.file;
+
+			shareData.Common.downloadLog(fileName, req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	});
 
 

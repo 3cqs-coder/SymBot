@@ -375,6 +375,7 @@ select[id^='startCondition'], [id^='botValue'] {
 	width: 100%;
 	height: 50px;
 	padding-left: 10px;
+	padding-right: 10px;
 	border-bottom: 1px solid #dbdbdb;
 }
 
