@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+	<body>
+		<div style="width: 99%; padding-top: 20px; margin: 0 auto;">
+
+			<!-- TradingView Widget BEGIN -->
+			<div class="tradingview-widget-copyright" style="margin-top: -20px; text-align: center; width: 100%; background-color: #000000;">Provided by TradingView</div>
+			<div class="tradingview-widget-container">
+
+				<script type="text/javascript">
+
+					$('.tradingview-widget-container').append('<div id="' + tradingViewData['id'] + '"></div>');
+
+					function _resizeTvChart() {
+
+						$('#' + tradingViewData['id']).height($('#modal').height() - 50);
+					}
+
+					$(this).resize(function() {
+	
+						_resizeTvChart();
+					});
+
+					$(document).ready(function() { 
+
+						let tvStudies = [ { } ];
+
+						let tvId = tradingViewData['id'];
+						let tvPair = tradingViewData['pair'];
+						let tvTheme = tradingViewData['theme'];
+						let tvInterval = tradingViewData['interval'].split('-')[0];
+						let tvBarStyle = tradingViewData['bar_style'].split('-')[0];
+
+						let width = Math.round(window.screen.width / 2);
+						let height = Math.round(window.screen.height / 2);
+
+						let timeZoneIANA = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+						// Resize TV chart height to container
+						_resizeTvChart();
+
+						let tvWidget = new TradingView.widget({
+
+							"autosize": true,
+							"symbol": tvPair,
+							"interval": tvInterval,
+							"timezone": timeZoneIANA,
+							"theme": tvTheme,
+							"style": tvBarStyle,
+							"locale": "en",
+							"toolbar_bg": "#f1f3f6",
+							"hide_side_toolbar": true,
+							"hide_top_toolbar": false,
+							"hide_volume": false,
+							"enable_publishing": false,
+							"allow_symbol_change": true,
+							"show_popup_button": true,
+							"popup_width": width,
+							"popup_height": height,
+							"studies": tvStudies,
+							"container_id": tvId
+						});
+					});
+					
+				</script>
+
+			</div>
+			<!-- TradingView Widget END -->
+
+		</div>
+	</body>
+</html>
