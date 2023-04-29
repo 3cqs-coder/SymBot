@@ -154,7 +154,7 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited (Can reset for multi-pair bots |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
-| startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |
+| startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
 ```
 POST /api/bots/create
@@ -177,7 +177,7 @@ POST /api/bots/create
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited (Can reset for multi-pair bots |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
-| startCondition                | string   | NO            | asap                 | Start deals using "asap" or by "api"                                    |
+| startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
 ```
 POST /api/bots/update
@@ -266,6 +266,22 @@ GET /api/deals/completed
 
 ```
 POST /api/bots/{botId}/start_deal
+```
+
+### Show TradingView chart
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| script   | boolean  | NO            | true                 | Automatically add jQuery and TradingView scripts required to display charts |
+| containerId | string   | NO         |                      | Element id used for the TradingView chart container |
+| theme    | string   | NO            | dark                 | Theme to be used can be "*light*" or "*dark*" |
+| exchange | string   | NO            | binance              | Exchange to be used for chart |
+| pair     | string   | NO            | BTC_USDT             | Symbol pair to be used for chart |
+| width    | integer  | NO            |                      | Width of chart in pixels |
+| height   | integer  | NO            |                      | Height of chart in pixels |
+
+```
+GET /api/tradingview
 ```
 
 ### Sample  Usage:
@@ -400,6 +416,11 @@ curl -i -X POST \
 -H 'api-key: {API-KEY}' \
 -d '{ "pair": "BTC/USD" }' \
 http://127.0.0.1:3000/api/bots/{botId}/start_deal
+```
+
+#### TradingView chart
+```
+http://127.0.0.1:3000/api/tradingview?script=true&exchange=binance&pair=BTC_USDT&theme=dark&width=1000&height=600
 ```
 
 ## Resetting SymBot

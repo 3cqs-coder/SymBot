@@ -1,38 +1,76 @@
 <!DOCTYPE html>
 <html>
 	<body>
-		<div style="width: 99%; padding-top: 20px; margin: 0 auto;">
+		<div id="<%- data['container_id'] %>" style="width: 99%; padding-top: 20px; margin: 0 auto;">
 
 			<!-- TradingView Widget BEGIN -->
 			<div class="tradingview-widget-copyright" style="margin-top: -20px; text-align: center; width: 100%; background-color: #000000;">Provided by TradingView</div>
-			<div class="tradingview-widget-container">
+			<div class="tradingview-widget-container" id="<%- data['container_id'] %>_widget">
+
+				<% if (data['script']) { %>
+
+					<script src="/js/vendor/jquery/jquery-3.6.3.min.js"></script>
+					<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+
+				<% } %>
 
 				<script type="text/javascript">
-
-					$('.tradingview-widget-container').append('<div id="' + tradingViewData['id'] + '"></div>');
-
-					function _resizeTvChart() {
-
-						$('#' + tradingViewData['id']).height($('#modal').height() - 50);
-					}
-
-					$(this).resize(function() {
-	
-						_resizeTvChart();
-					});
-
+ 
 					$(document).ready(function() { 
+
+						const tvIntervals = [ '1-1m', '5-5m', '15-15m', '30-30m', '60-1h', '120-2h', '180-3h', '240-4h', 'D-Day', 'W-Week', 'M-Month' ];
+						const tvBarStyles = [ '0-Bars', '1-Candles', '2-Line', '3-Area', '4-Renko', '5-Kagi', '6-Point & Figure', '7-Line Break', '8-Heikin Ashi', '9-Hollow Candles' ];
+
+						const tradingViewData = {
+													'script': <%- data['script'] %>,
+													'id': '<%- data['container_id'] %>' + Math.floor(1000 + Math.random() * 90000),
+													'width': '<%- data['width'] %>',
+													'height': '<%- data['height'] %>',
+													'theme': '<%- data['theme'] %>',
+													'interval': tvIntervals[0],
+													'bar_style': tvBarStyles[8],
+													'pair': '<%- data['pair'] %>',
+													'exchange': '<%- data['exchange'] %>'
+												}
+
+						$('#' + tradingViewData['id']).remove();
+						$('#<%- data['container_id'] %>_widget').append('<div id="' + tradingViewData['id'] + '"></div>');
+
+						function _resizeTvChart() {
+
+							let divId = 'modal';
+
+							if (tradingViewData['script'] || tradingViewData['width'] > 0) {
+
+								let width = window.screen.width / 2;
+								let height = window.screen.height / 2;
+
+								if (tradingViewData['width'] > 0 && tradingViewData['height'] > 0) {
+
+									width = tradingViewData['width'];
+									height = tradingViewData['height'];									
+								}
+
+								$('#<%- data['container_id'] %>').width(width);
+								$('#<%- data['container_id'] %>').height(height);
+
+								divId = '<%- data['container_id'] %>';
+							}
+
+							$('#' + tradingViewData['id']).height($('#' + divId).height() - 50);
+						}
 
 						let tvStudies = [ { } ];
 
 						let tvId = tradingViewData['id'];
+						let tvExchange = tradingViewData['exchange'];
 						let tvPair = tradingViewData['pair'];
 						let tvTheme = tradingViewData['theme'];
 						let tvInterval = tradingViewData['interval'].split('-')[0];
 						let tvBarStyle = tradingViewData['bar_style'].split('-')[0];
 
-						let width = Math.round(window.screen.width / 2);
-						let height = Math.round(window.screen.height / 2);
+						let widthPopUp = Math.round(window.screen.width / 2);
+						let heightPopUp = Math.round(window.screen.height / 2);
 
 						let timeZoneIANA = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -42,7 +80,7 @@
 						let tvWidget = new TradingView.widget({
 
 							"autosize": true,
-							"symbol": tvPair,
+							"symbol": tvExchange.toUpperCase() + ':' + tvPair.replace(/[^a-z0-9]/gi, '').toUpperCase(),
 							"interval": tvInterval,
 							"timezone": timeZoneIANA,
 							"theme": tvTheme,
@@ -55,8 +93,8 @@
 							"enable_publishing": false,
 							"allow_symbol_change": true,
 							"show_popup_button": true,
-							"popup_width": width,
-							"popup_height": height,
+							"popup_width": widthPopUp,
+							"popup_height": heightPopUp,
 							"studies": tvStudies,
 							"container_id": tvId
 						});

@@ -7,14 +7,6 @@
 	let modalId;
 	let timeOutId;
 	let dealTracker = {};
-	let tradingViewData = {};
-
-	let tvIntervals = [ '1-1m', '5-5m', '15-15m', '30-30m', '60-1h', '120-2h', '180-3h', '240-4h', 'D-Day', 'W-Week', 'M-Month' ];
-	let tvBarStyles = [ '0-Bars', '1-Candles', '2-Line', '3-Area', '4-Renko', '5-Kagi', '6-Point & Figure', '7-Line Break', '8-Heikin Ashi', '9-Hollow Candles' ];
-
-	tradingViewData['theme'] = 'dark';
-	tradingViewData['interval'] = tvIntervals[0];
-	tradingViewData['bar_style'] = tvBarStyles[8];
 
 
 	function setReloadTimeout() {
@@ -295,14 +287,11 @@
 
 	function showTradingView(pair, exchange) {
 
-		let randNum = Math.floor(1000 + Math.random() * 90000);
-
-		tradingViewData['id'] = 'tv' + randNum;
-		tradingViewData['pair'] = exchange.toUpperCase() + ':' + pair.replace(/[^a-z0-9]/gi, '');
+		let url = '/api/tradingview?script=false&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
 
 		openModal('#modal', 'TradingView Chart ' + pair, 'Loading...');
 
-		$('#modal').load('/tradingview');
+		$('#modal').load(url);
 	}
 
 

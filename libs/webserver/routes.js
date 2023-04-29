@@ -148,21 +148,6 @@ function initRoutes(router) {
 	});
 
 
-	router.get('/tradingview', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		if (req.session.loggedIn) {
-
-			res.render( 'tradingView', { 'appData': shareData.appData } );
-		}
-		else {
-
-			res.redirect('/login');
-		}
-	});
-
-
 	router.get('/bots/create', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -224,6 +209,21 @@ function initRoutes(router) {
 		if (req.session.loggedIn) {
 
 			shareData.DCABotManager.viewHistoryDeals(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get('/api/tradingview', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.Common.showTradingView(req, res);
 		}
 		else {
 

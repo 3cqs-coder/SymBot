@@ -142,6 +142,50 @@ async function makeDir(dirName) {
 }
 
 
+async function showTradingView(req, res) {
+
+	let script = convertBoolean(req.query.script, true);
+	let containerId = req.query.containerId;
+	let width = req.query.width;
+	let height = req.query.height;
+	let theme = req.query.theme;
+	let exchange = req.query.exchange;
+	let pair = req.query.pair;
+
+	if (containerId == undefined || containerId == null || containerId == '') {
+
+		containerId = 'tvChart' + Math.floor(1000 + Math.random() * 90000);
+	}
+
+	if (theme == undefined || theme == null || theme == '') {
+
+		theme = 'dark';
+	}
+
+	if (exchange == undefined || exchange == null || exchange == '') {
+
+		exchange = 'BINANCE';
+	}
+
+	if (pair == undefined || pair == null || pair == '') {
+
+		pair = 'BTC_USDT';
+	}
+
+	let dataObj = {
+					'container_id': containerId,
+					'script': script,
+					'width': width,
+					'height': height,
+					'theme': theme,
+					'exchange': exchange.toUpperCase(),
+					'pair': pair.replace(/[^a-z0-9]/gi, '').toUpperCase()
+				  };
+
+	res.render( 'tradingView', { 'appData': shareData.appData, 'data': dataObj } );
+}
+
+
 async function showLogs(req, res) {
 
 	const files = await getLogs();
@@ -497,13 +541,27 @@ function timeDiff(dateStart, dateEnd) {
 }
 
 
-function convertBoolean(param) {
+function convertBoolean(param, defaultVal) {
 
 	let paramBool;
 
 	if (param) {
 
-		paramBool = param.toLowerCase() === 'false' ? false : true;
+		if (typeof param == 'boolean') {
+
+        	paramBool = param;
+		}
+		else {
+
+			paramBool = param.toLowerCase() === 'false' ? false : true;
+		}
+	}
+	else {
+
+		if (typeof defaultVal == 'boolean') {
+
+			paramBool = defaultVal;
+		}
 	}
 
 	return paramBool;
@@ -592,6 +650,7 @@ module.exports = {
 	logMonitor,
 	showLogs,
 	downloadLog,
+	showTradingView,
 	fetchURL,
 	getProcessInfo,
 
