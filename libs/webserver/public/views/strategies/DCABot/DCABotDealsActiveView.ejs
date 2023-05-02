@@ -1,56 +1,14 @@
 <%- include('../../partialsHeaderView'); %>
 
-<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-
 <script>
 
-	let modalId;
 	let timeOutId;
 	let dealTracker = {};
-
+	let modalId = 'activeDealsView';
 
 	function setReloadTimeout() {
 
 		timeOutId = setTimeout(() => { getActiveDeals(); }, 5000);
-	}
-
-
-	function openModal(divModal, title, content, divAppend) {
-
-		modalId = $(divModal).dialog({
-
-			dialogClass: 'fixed-dialog',
-			create: function (event, ui) {
-
-				$('.ui-dialog').css('border-radius', '5px');
-			},
-			show: {
-					effect: 'scale',
-					duration: 250
-			},
-			hide: {
-					effect: 'scale',
-					duration: 250
-			},
-			title: title,
-			autoOpen: false,
-			draggable: false,
-			width: '90%',
-			height: ($(window).height() - 200),
-			modal: true,
-			appendTo: divAppend,
-			open: function (event, ui) {
-
-				if (content != undefined && content != null && content != '') {
-
-					$(divModal).html(content);
-				}
-			},
-			close: function (event, ui) {
-			}
-		});
-
-		$(divModal).dialog('open');
 	}
 
 
@@ -65,7 +23,7 @@
 		$('#dcaMaxOrder').val(dcaMaxOrder);
 		$('#dcaTakeProfitPercent').val(dcaTakeProfitPercent);
 
-		openModal('#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
+		openModal(modalId, '#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
   	}
 
 
@@ -285,16 +243,6 @@
 	}
 
 
-	function showTradingView(pair, exchange) {
-
-		let url = '/api/tradingview?script=false&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
-
-		openModal('#modal', 'TradingView Chart ' + pair, 'Loading...');
-
-		$('#modal').load(url);
-	}
-
-
 	function showOrderHistory(dealId) {
 
 		if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
@@ -334,7 +282,7 @@
 			}
 		}
 
-		openModal('#modal', 'Order History ' + dealId, table);
+		openModal(modalId, '#modal', 'Order History ' + dealId, table);
 	}
 
 
@@ -489,7 +437,7 @@
 							'dcaTakeProfitPercent': dcaTakeProfitPercent
 						  };
 
-			modalId.dialog('close');
+			modalTracker[modalId].dialog('close');
 
 			dealUpdate(dealId, dataObj);
 		});
@@ -592,12 +540,7 @@
 				let dealId = row.data('dealid');
 				let exchange = dealTracker[dealId]['config']['exchange'].toUpperCase();
 
-				if (exchange.startsWith('COINBASE')) {
-
-					exchange = 'COINBASE';
-				}
-
-				showTradingView(pair, exchange);
+				showTradingView(modalId, 'modal', false, false, pair, exchange);
 			}
 			else if (col == (colCount - 1) && content != '') {
 
@@ -655,9 +598,6 @@
 
 <center>
 <main>
-
-	<div id="modal"></div>
-	<div id="modalDealEdit"></div>
 
 	<div id="contentBox">
 

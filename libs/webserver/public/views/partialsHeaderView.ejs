@@ -33,14 +33,27 @@
 	<script src="/js/vendor/tablesorter/widgets/widget-columnSelector.min.js"></script>
 	<script src="/js/vendor/tablesorter/widgets/widget-filter-formatter-jui.min.js"></script>
 
+	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+
 	<script>
+
+	let modalTracker = {};
+	let pairBTC = 'BTC/USD';
+	let exchangeBTC = 'bitstamp';
 
 	$(document).ready(function() {
 	
-		$('#headerBox').on('click', function() {
+		$('#logo').on('click', function() {
 
 			window.location.href = '/';
 		});
+
+		$('#btcPrice').on('click', function() {
+
+			showTradingView('homeView', 'modal', false, false, pairBTC, exchangeBTC);
+		});
+
+		getPriceBTC();
 	});
 
 
@@ -175,6 +188,166 @@
 		});
 	}
 
+
+	function openModal(modalId, divModal, title, content, divAppend) {
+
+		modalTracker[modalId] = $(divModal).dialog({
+
+			dialogClass: 'fixed-dialog',
+			create: function (event, ui) {
+
+				$('.ui-dialog').css('border-radius', '5px');
+			},
+			show: {
+					effect: 'scale',
+					duration: 250
+			},
+			hide: {
+					effect: 'scale',
+					duration: 250
+			},
+			title: title,
+			autoOpen: false,
+			draggable: false,
+			width: '90%',
+			height: ($(window).height() - 200),
+			modal: true,
+			appendTo: divAppend,
+			open: function (event, ui) {
+
+				if (content != undefined && content != null && content != '') {
+
+					$(divModal).html(content);
+				}
+			},
+			close: function (event, ui) {
+			}
+		});
+
+		$(divModal).dialog('open');
+	}
+
+
+	async function getMarkets(pair, exchange) {
+
+		let res;
+
+		try {
+
+			res = await $.ajax({
+		
+						type: 'GET',
+						url: '/api/markets',
+						data: { 'exchange': exchange, 'pair': pair },
+						dataType: 'json',
+						success: function(data) {
+
+						},
+						error: function(data) {
+
+							// Some error in ajax call
+						}
+			});
+		}
+		catch(e) {
+		}
+		
+		return res;
+	}
+
+
+	async function getPriceBTC() {
+
+		let sec = 30;
+
+		let price;
+		let diffSec;
+		let	priceObj;
+
+		try {
+
+			priceObj = JSON.parse(localStorage.getItem('priceObj'));
+		}
+		catch(e) {
+
+		}
+
+		if (priceObj) {
+
+			let dateLast = priceObj['btc']['date'];
+			price = priceObj['btc']['price'];
+
+			diffSec = (new Date().getTime() - new Date(dateLast).getTime()) / 1000;
+		}
+
+		// Get price only if last check exceeds n seconds
+		if (!priceObj || diffSec > (sec - 10)) {
+
+			let data = await getMarkets(pairBTC, exchangeBTC);
+
+			if (data) {
+
+				let date = data.date;
+				let success = data.success;
+
+				if (success) {
+
+					price = data.data.last;
+
+					if (price == undefined || price == null) {
+
+						price = data.data.price;
+					}
+
+					if (priceObj == undefined || priceObj == null) {
+					
+						priceObj = {};
+					}
+
+					if (priceObj['btc'] == undefined || priceObj['btc'] == null) {
+
+						priceObj['btc'] = {};
+					}
+
+					priceObj['btc']['date'] = new Date();
+					priceObj['btc']['price'] = price;
+
+					localStorage.setItem('priceObj', JSON.stringify(priceObj));
+				}
+			}
+			else {
+
+				price = 0;
+			}
+		}
+
+		$('#btcPrice').html('BTC: $' + price);
+
+		setTimeout(() => { getPriceBTC(); }, (sec * 1000));
+	}
+
+
+	function showTradingView(modalId, divId, jquery, script, pair, exchange) {
+
+		if (exchange == undefined || exchange == null || exchange == '') {
+
+			return;
+		}
+
+		exchange = exchange.toUpperCase();
+
+		if (exchange.startsWith('COINBASE')) {
+
+			exchange = 'COINBASE';
+		}
+
+		let url = '/api/tradingview?jquery=' + jquery + '&script=' + script + '&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
+
+		openModal(modalId, '#' + divId, 'TradingView Chart ' + pair, 'Loading...');
+
+		$('#' + divId).load(url);
+	}
+
 	</script>
 
 </head>
@@ -183,8 +356,10 @@
 
 <div id="headerBox"> 
 
+	<div id="btcPrice"></div>
+
 	<div style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);">
-		<img src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
+		<img id="logo" src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
 
 </div>
@@ -192,3 +367,8 @@
 <div id="spinner-overlay">
 	<div class="spinner-container"><span class="spinner"></span></div>
 </div>
+
+<center>
+	<div id="modal"></div>
+	<div id="modalDealEdit"></div>
+</center>

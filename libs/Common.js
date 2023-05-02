@@ -144,6 +144,7 @@ async function makeDir(dirName) {
 
 async function showTradingView(req, res) {
 
+	let jquery = convertBoolean(req.query.jquery, true);
 	let script = convertBoolean(req.query.script, true);
 	let containerId = req.query.containerId;
 	let width = req.query.width;
@@ -174,6 +175,7 @@ async function showTradingView(req, res) {
 
 	let dataObj = {
 					'container_id': containerId,
+					'jquery': jquery,
 					'script': script,
 					'width': width,
 					'height': height,

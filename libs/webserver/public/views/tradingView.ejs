@@ -7,11 +7,12 @@
 			<div class="tradingview-widget-copyright" style="margin-top: -20px; text-align: center; width: 100%; background-color: #000000;">Provided by TradingView</div>
 			<div class="tradingview-widget-container" id="<%- data['container_id'] %>_widget">
 
-				<% if (data['script']) { %>
-
+				<% if (data['jquery']) { %>
 					<script src="/js/vendor/jquery/jquery-3.6.3.min.js"></script>
-					<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+				<% } %>
 
+				<% if (data['script']) { %>
+					<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 				<% } %>
 
 				<script type="text/javascript">
@@ -22,6 +23,7 @@
 						const tvBarStyles = [ '0-Bars', '1-Candles', '2-Line', '3-Area', '4-Renko', '5-Kagi', '6-Point & Figure', '7-Line Break', '8-Heikin Ashi', '9-Hollow Candles' ];
 
 						const tradingViewData = {
+													'jquery': <%- data['jquery'] %>,
 													'script': <%- data['script'] %>,
 													'id': '<%- data['container_id'] %>' + Math.floor(1000 + Math.random() * 90000),
 													'width': '<%- data['width'] %>',

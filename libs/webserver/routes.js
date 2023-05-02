@@ -217,6 +217,21 @@ function initRoutes(router) {
 	});
 
 
+	router.get('/api/markets', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiGetMarkets(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get('/api/tradingview', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');

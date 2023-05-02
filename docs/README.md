@@ -11,6 +11,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [MongoDB](https://www.mongodb.com) installed or a cloud host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection
+- 1GB RAM minimum but recommended at least 4GB
 
 **NOTE:** Trading requires your system and internet connection to be running 24/7. Any interruption could result in missed trades, signals, etc.
 
@@ -43,7 +44,7 @@ module.exports = {
 				namespace: 'symbot',
 				script: '/home/symbot/symbot.js',
 				kill_timeout: 8000,
-				max_memory_restart: '1000M'
+				max_memory_restart: '4000M'
 			}
 		  ]
 }
@@ -53,7 +54,7 @@ module.exports = {
 5. Type: `pm2 save` to save the configuration
 6. If you don't already have **pm2** starting at system boot time, type this with root privileges: `pm2 startup`. Then type: `pm2 save`
 
-SymBot will now start automatically even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly one gigabyte, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. **pm2** will then start SymBot again. You can change those settings to suit your own server requirements and needs.
+SymBot will now start automatically even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly four gigabytes, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. **pm2** will then start SymBot again. You can change those settings to suit your own server requirements and needs.
 
 ## Installation (Docker)
 
@@ -71,6 +72,20 @@ The Docker build files can be modified as necessary, but should only be done if 
 8. Open a web browser and type: http://127.0.0.1:3000
 
 Mongo Express is also installed which can be used to access MongoDB visually by opening a web browser to  http://127.0.0.1:3010
+
+## Upgrading
+
+When upgrading to a new version of SymBot it is recommended to follow the basic steps below.
+
+1. Stop all running SymBot instances
+	- If using **pm2** suggested in the installation above, you can type: `pm2 stop ecosystem.config.js` in a command line terminal
+2. Make a backup of the directory to where all current SymBot files are located
+3. Extract new SymBot files to existing directory
+4. Copy existing configuration files from backup created previously
+5. Compare parameters in the new SymBot configuration files such as **app.json** to existing files if any have been added or removed. Any changes must be added to existing configurations or this may cause SymBot to not start or run properly
+6. Type: `npm install` to ensure all modules are installed properly
+7. Start SymBot and verify the new version is running
+8. Monitor logs for a few minutes either on the console, log files, or the web portal to ensure everything is operating as before
 
 ## Configuration
 
@@ -268,11 +283,25 @@ GET /api/deals/completed
 POST /api/bots/{botId}/start_deal
 ```
 
+### Get markets
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| exchange | string   | YES           |                      | Exchange to retrieve market data for |
+| pair     | string   | NO            |                      | Symbol pair pricing and data to retrieve. Omitting will return all valid symbols for specified exchange |
+
+
+```
+GET /api/markets
+```
+
+
 ### Show TradingView chart
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
 |----------|----------|---------------|----------------------|-----------------|
-| script   | boolean  | NO            | true                 | Automatically add jQuery and TradingView scripts required to display charts |
+| jquery   | boolean  | NO            | true                 | Automatically add required jQuery script to display charts |
+| script   | boolean  | NO            | true                 | Automatically add required TradingView script to display charts |
 | containerId | string   | NO         |                      | Element id used for the TradingView chart container |
 | theme    | string   | NO            | dark                 | Theme to be used can be "*light*" or "*dark*" |
 | exchange | string   | NO            | binance              | Exchange to be used for chart |
@@ -416,6 +445,14 @@ curl -i -X POST \
 -H 'api-key: {API-KEY}' \
 -d '{ "pair": "BTC/USD" }' \
 http://127.0.0.1:3000/api/bots/{botId}/start_deal
+```
+
+#### Get markets
+```
+curl -i -X GET \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+'http://127.0.0.1:3000/api/markets?exchange=binance&pair=BTC_USDT'
 ```
 
 #### TradingView chart

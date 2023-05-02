@@ -243,6 +243,15 @@ form textarea {
 }
 
 
+#btcPrice {
+
+	position: absolute;
+	z-index: 9999;
+	left: 5px;
+	bottom: 0;
+}
+
+
 #headerBox {
 
 	z-index: 9999;

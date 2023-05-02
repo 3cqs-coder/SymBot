@@ -108,6 +108,68 @@ async function viewHistoryDeals(req, res) {
 }
 
 
+async function apiGetMarkets(req, res) {
+
+	let pair = req.query.pair;
+	let exchangeName = req.query.exchange;
+
+	let success = true;
+	let data;
+
+	if (exchangeName == undefined || exchangeName == null || exchangeName == '') {
+
+		success = false;
+		data = 'Exchange must be specified';
+	}
+
+	if (success) {
+
+		let config = { 'exchange': exchangeName.toLowerCase() };
+
+		const exchange = await shareData.DCABot.connectExchange(config);
+
+		// Get all market symbols
+		if (pair == undefined || pair == null || pair == '') {
+		
+			data = await shareData.DCABot.getSymbolsAll(exchange);
+
+			if (!data['success']) {
+
+				success = false;
+				data = data['msg'];
+			}
+			else {
+
+				let symbols = data.symbols;
+
+				data = {};
+				data['exchange'] = exchangeName.toLowerCase();
+				data['symbols'] = symbols;
+			}
+		}
+		else {
+
+			// Get pair information
+			pair = pair.replace(/[_-]/g, '/');
+
+			data = await shareData.DCABot.getSymbol(exchange, pair.toUpperCase());
+
+			if (data['invalid'] || (data['error'] != undefined && data['error'] != null && data['error'] != '')) {
+
+				success = false;
+				data = data['error'];
+			}
+			else {
+				
+				data = data['info'];
+			}
+		}
+	}
+
+	res.send( { 'date': new Date(), 'success': success, 'data': data } );
+}
+
+
 async function apiGetBots(req, res) {
 
 	let query = {};
@@ -1125,6 +1187,7 @@ async function calculateOrders(body) {
 module.exports = {
 
 	apiStartDeal,
+	apiGetMarkets,
 	apiGetBots,
 	apiGetActiveDeals,
 	apiGetDealsHistory,

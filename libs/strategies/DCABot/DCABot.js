@@ -1433,7 +1433,18 @@ const getSymbolsAll = async (exchange) => {
 	catch(e) {
 
 		success = false;
-		errMsg = 'Unable to get symbols: ' + JSON.stringify(e);
+
+		let symbolError = e;
+		let msg = '';
+
+		if (symbolError.message != undefined && symbolError.message != null) {
+
+			msg = ' ' + symbolError.message;
+		}
+
+		symbolError = JSON.stringify(symbolError) + msg;
+
+		errMsg = 'Unable to get symbols: ' + symbolError;
 
 		Common.logger(colors.bgRed.bold.italic(errMsg));
 	}
@@ -2739,6 +2750,7 @@ module.exports = {
 	initBot,
 	getBots,
 	getDeals,
+	getSymbol,
 	getSymbolsAll,
 	applyConfigData,
 	startDelay,
