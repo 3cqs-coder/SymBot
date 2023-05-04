@@ -1475,6 +1475,22 @@ const getSymbol = async (exchange, pair) => {
 			const symbol = await exchange.fetchTicker(pair);
 			symbolInfo = symbol.info;
 
+			// Verify bid / ask are defined
+			if ((symbolInfo.bid == undefined || symbolInfo.bid == null) && (symbolInfo.ask == undefined || symbolInfo.ask == null)) {
+
+				if ((symbol.bid != undefined && symbol.bid != null) && (symbol.ask != undefined && symbol.ask != null)) {
+
+					symbolInfo.bid = symbol.bid;
+					symbolInfo.ask = symbol.ask;
+				}
+			}
+
+			// Verify volume is defined
+			if ((symbolInfo.volume == undefined || symbolInfo.volume == null) && (symbol.baseVolume != undefined && symbol.baseVolume != null)) {
+
+				symbolInfo.volume = symbol.baseVolume;
+			}
+
 			finished = true;
 		}
 		catch (e) {
