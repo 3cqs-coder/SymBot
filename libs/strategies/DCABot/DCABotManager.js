@@ -160,8 +160,8 @@ async function apiGetMarkets(req, res) {
 				data = data['error'];
 			}
 			else {
-				
-				data = data['info'];
+
+				data = data['data'];
 			}
 		}
 	}

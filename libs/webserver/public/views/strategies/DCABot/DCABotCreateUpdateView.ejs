@@ -677,16 +677,76 @@
 				</div>
 
 				</td></tr>
-				<tr><td>Base Order Size:</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
-				<tr><td>Safety Order Size:</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
-				<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" class="form-field"></td></tr>
-				<tr><td>Safety Order Price Deviation:</td> <td><input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent %>" class="form-field"></td></tr>
-				<tr><td>Safety Order Volume Scale:</td> <td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" class="form-field"></td></tr>
-				<tr><td>Safety Order Step Scale:</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" class="form-field"></td></tr>
-				<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
-				<tr><td>Max Deals:</td> <td><input id="dealMax" name="dealMax" value="<%- botData.dealMax %>" class="form-field"></td></tr>
-				<tr><td>Max Pairs:</td> <td><input id="pairMax" name="pairMax" value="<%- botData.pairMax %>" class="form-field"></td></tr>
-				<tr><td>Minimum 24h Volume:</td> <td><input id="volumeMin" name="volumeMin" value="<%- botData.volumeMin %>" class="form-field"> Million</td></tr>
+				<tr><td>Base Order Size: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				This is the amount of funds used for the first order the bot will create when starting a new deal.
+				</span></span>
+
+				</td> <td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount %>" class="form-field"></td></tr>
+				<tr><td>Safety Order Size: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				This is the amount of funds your DCA (safety) orders will use to average down the cost of the asset being traded.
+				</span></span>
+
+				</td> <td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount %>" class="form-field"></td></tr>
+				<tr><td>Max Safety Orders: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				This is the total number of DCA (safety) orders the bot is allowed to use per deal.
+				</span></span>
+
+				</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder %>" class="form-field"></td></tr>
+				<tr><td>Safety Order Price Deviation: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				This is the price percentage difference to create the first DCA (safety) order. All DCA (safety) orders are calculated from the price the initial base order was filled on the exchange.
+				</span></span>
+
+				</td> <td><input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent %>" class="form-field"></td></tr>
+				<tr><td>Safety Order Volume Scale: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				This will multiply the amount of funds used by the last DCA (safety) order that was created. Using a larger amount of funds for DCA (safety) orders allows the bot to be more aggressive at dollar cost averaging the price of the asset being traded.
+				</span></span>
+
+				</td> <td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier %>" class="form-field"></td></tr>
+				<tr><td>Safety Order Step Scale: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				This will multiply the price deviation percentage used by the last DCA (safety) order placed on the exchange. Using a larger value will reduce the number of DCA (safety) orders the bot will require to cover a larger price movement in the opposite direction of the deal's take profit target.
+				</span></span>
+
+				</td> <td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier %>" class="form-field"></td></tr>
+				<tr><td>Target Profit %:
+
+				<span class="toolTip">?<span class="toolTipText">
+				This is the take profit target percentage the bot will use to close successful deals.
+				</span></span>
+
+				</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent %>" class="form-field"></td></tr>
+				<tr><td>Max Deals: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				Maximum number of deals that will be run before the bot is disabled. Multi-pair bots count as one deal per pair that is run. To limit the number of deals running concurrently for multi-pair bots, leave this empty or set to 0 and set max pairs instead. <div style="height: 15px;"></div> Deals will only start again and the counter will reset if the bot is re-enabled manually, through the API, or if an automated signal is received. Current deals already running will not be changed.
+				</span></span>
+
+				</td> <td><input id="dealMax" name="dealMax" value="<%- botData.dealMax %>" class="form-field"></td></tr>
+				<tr><td>Max Pairs: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				Maximum number of pairs that can be run concurrently when a bot is using more than one pair. This is only used for multi-pair bots and has no effect on single pair bots.
+				</span></span>
+
+				</td> <td><input id="pairMax" name="pairMax" value="<%- botData.pairMax %>" class="form-field"></td></tr>
+				<tr><td>Minimum 24h Volume: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				Set this to prevent trading assets with low liquidity. Volume is calculated in quote currency for the pair that will run and is defined in millions. If an asset has less daily trading volume than the value entered, then the bot will not start a deal.
+				</span></span>
+
+				</td> <td><input id="volumeMin" name="volumeMin" value="<%- botData.volumeMin %>" class="form-field"> Million</td></tr>
 				<tr id="startConditionFirst"><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
 				<%- startConditionSubString %>
 				<tr><td>Enabled:</td> <td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>

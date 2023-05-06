@@ -110,7 +110,7 @@ async function start(data, startBot, reload) {
 
 		const isActive = await checkActiveDeal(botIdMain, pair);
 		const symbolData = await getSymbol(exchange, pair);
-		const symbol = symbolData.info;
+		const symbol = symbolData.data;
 
 		// Check for valid symbol data on start
 		if (symbolData.invalid) {
@@ -148,12 +148,7 @@ async function start(data, startBot, reload) {
 			return ( { 'success': false, 'data': JSON.stringify(symbolData.error) } );
 		}
 
-		let askPrice = symbol.askPrice;
-
-		if (symbol.askPrice == undefined || symbol.askPrice == null) {
-
-			askPrice = symbol.ask;
-		}
+		let askPrice = symbol.ask;
 
 		// Override price if passed in
 		if (firstOrderPrice != undefined && firstOrderPrice != null && firstOrderPrice != 0) {
@@ -995,7 +990,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 			const pair = deal.pair;
 			const symbolData = await getSymbol(exchange, pair);
-			const symbol = symbolData.info;
+			const symbol = symbolData.data;
 
 			// Error getting symbol data
 			if (symbolData.error != undefined && symbolData.error != null) {
@@ -1010,14 +1005,8 @@ const dcaFollow = async (configData, exchange, dealId) => {
 				return ( { 'success': success, 'finished': finished } );
 			}
 
-			let bidPrice = symbol.bidPrice;
+			let bidPrice = symbol.bid;
 
-			if (symbol.bidPrice == undefined || symbol.bidPrice == null) {
-
-				bidPrice = symbol.bid;
-			}
-
-			//const price = parseFloat(symbol.bidPrice);
 			const price = parseFloat(bidPrice);
 
 			let targetPrice = 0;
@@ -1457,9 +1446,10 @@ const getSymbol = async (exchange, pair) => {
 
 	const maxTries = 5;
 
-	let symbolInfo;
+	let symbolData;
 	let symbolError;
 
+	let success = false;
 	let finished = false;
 	let symbolInvalid = false;
 
@@ -1473,23 +1463,7 @@ const getSymbol = async (exchange, pair) => {
 		try {
 
 			const symbol = await exchange.fetchTicker(pair);
-			symbolInfo = symbol.info;
-
-			// Verify bid / ask are defined
-			if ((symbolInfo.bid == undefined || symbolInfo.bid == null) && (symbolInfo.ask == undefined || symbolInfo.ask == null)) {
-
-				if ((symbol.bid != undefined && symbol.bid != null) && (symbol.ask != undefined && symbol.ask != null)) {
-
-					symbolInfo.bid = symbol.bid;
-					symbolInfo.ask = symbol.ask;
-				}
-			}
-
-			// Verify volume is defined
-			if ((symbolInfo.volume == undefined || symbolInfo.volume == null) && (symbol.baseVolume != undefined && symbol.baseVolume != null)) {
-
-				symbolInfo.volume = symbol.baseVolume;
-			}
+			symbolData = symbol;
 
 			finished = true;
 		}
@@ -1535,7 +1509,12 @@ const getSymbol = async (exchange, pair) => {
 		}
 	}
 
-	return ( { 'info': symbolInfo, 'invalid': symbolInvalid, 'error': symbolError } );
+	if (symbolError == undefined || symbolError == null || symbolError == '') {
+
+		success = true;
+	}
+
+	return ( { 'date': new Date(), 'success': success, 'data': symbolData, 'invalid': symbolInvalid, 'error': symbolError } );
 };
 
 
@@ -2233,7 +2212,7 @@ async function volumeValid(startBot, pair, symbol, config) {
 
 	const volumeMin = Number(config.volumeMin);
 
-	const volume24h = Number(((symbol.price * symbol.volume) / 1000000).toFixed(2));
+	const volume24h = Number(((symbol.last * symbol.baseVolume) / 1000000).toFixed(2));
 
 	const timerKey = config.botId + pair;
 

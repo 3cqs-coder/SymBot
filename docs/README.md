@@ -469,6 +469,23 @@ If you want to reset the SymBot database for any reason, you can do so only from
 1. Stop any running instances of SymBot
 2. Type: `npm start reset` (or `node ./symbot.js reset`)
 
+## Frequently Asked Questions (FAQ)
+
+- ### Can I run SymBot on my home network? 
+	- Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected issues, that may result in unplaced orders or missed trading signals which could impact your deals significantly. 
+
+- ### If my system is restarted will my deals be lost? 
+	- SymBot is designed with resiliency in mind. Providing there are no issues with your database or other technical problems that caused your system to reboot, your bot deals will automatically resume upon restart. It is recommended to monitor the logs for a period of time to ensure everything is operating as expected.
+
+- ### If I disable a DCA bot will it sell my deals? 
+	- No. Disabling a DCA bot will only prevent new deals from being started. Any existing deals that are running will continue until they complete. 
+
+- ### Why are my deals not updating or not getting pricing? 
+	- Your exchange credentials may be incorrect or you may be getting blocked, rate-limited, or experiencing some type of connectivity issues. Check the logs for any error messages or unusual activity. You can do this from a command line terminal or in the SymBot web view. 
+
+- ### Why is my system suddenly using more CPU or memory? 
+	- SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience.
+
 ## Disclaimer
 
 All investment strategies and investments involve risk of loss. All information found here, including any ideas, opinions, views, predictions, forecasts, or suggestions, expressed or implied herein, are for informational, entertainment or educational purposes only and should not be construed as personal investment advice. Conduct your own due diligence, or consult a licensed financial advisor or broker before making any and all investment decisions. Any investments, trades, speculations, or discussions made on the basis of any information found here, expressed or implied herein, are committed at your own risk, financial or otherwise. Use at your own risk.
