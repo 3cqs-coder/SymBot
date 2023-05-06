@@ -4,6 +4,20 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 ![SymBot](https://user-images.githubusercontent.com/111208586/219070191-abe2ef94-ca5a-43a9-867c-2c2ff9609699.jpg)
 
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Docker Installation](#installation-docker)
+- [Upgrading](#upgrading)
+- [Configuration](#configuration)
+- [Telegram Setup](#telegram-setup)
+- [API Information](#api-information)
+- [API Sample Usage](#api-sample-usage)
+- [Resetting SymBot](#resetting-symbot)
+- [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
+- [Disclaimer](#disclaimer)
+
 ## Requirements
 
 - Linux, MacOS, or Windows based system
@@ -122,7 +136,7 @@ mongodb://localhost:27017/SymBot
 - **bot.json**
 
 	- This contains all default settings for your bot and exchange information. For test purposes, always leave `sandBox: true`.
-	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the ccxt library so if the exchange is supported, you should be able to connect to it
+	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the [CCXT](https://github.com/ccxt/ccxt)  library so if the exchange is supported, you should be able to connect to it
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web view
 
 - **server.json**
@@ -313,7 +327,7 @@ GET /api/markets
 GET /api/tradingview
 ```
 
-### Sample  Usage:
+## API Sample Usage
 
 #### Create bot
 ```
@@ -471,20 +485,23 @@ If you want to reset the SymBot database for any reason, you can do so only from
 
 ## Frequently Asked Questions (FAQ)
 
-- ### Can I run SymBot on my home network? 
-	- Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected issues, that may result in unplaced orders or missed trading signals which could impact your deals significantly. 
+### What exchanges does SymBot support?
+- SymBot uses the [CCXT](https://github.com/ccxt/ccxt) (CryptoCurrency eXchange Trading) library which supports many popular exchanges such as Binance and Coinbase. If your exchange is listed then you should be able to connect to it.
 
-- ### If my system is restarted will my deals be lost? 
-	- SymBot is designed with resiliency in mind. Providing there are no issues with your database or other technical problems that caused your system to reboot, your bot deals will automatically resume upon restart. It is recommended to monitor the logs for a period of time to ensure everything is operating as expected.
+### Can I run SymBot on my home network?
+- Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected issues, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
 
-- ### If I disable a DCA bot will it sell my deals? 
-	- No. Disabling a DCA bot will only prevent new deals from being started. Any existing deals that are running will continue until they complete. 
+### If my system is restarted will my deals be lost?
+- SymBot is designed with resiliency in mind. Providing there are no issues with your database or other technical problems that caused your system to reboot, your bot deals will automatically resume upon restart. It is recommended to monitor the logs for a period of time to ensure everything is operating as expected.
 
-- ### Why are my deals not updating or not getting pricing? 
-	- Your exchange credentials may be incorrect or you may be getting blocked, rate-limited, or experiencing some type of connectivity issues. Check the logs for any error messages or unusual activity. You can do this from a command line terminal or in the SymBot web view. 
+### If I disable a DCA bot will it sell my deals?
+- No. Disabling a DCA bot will only prevent new deals from being started. Any existing deals that are running will continue until they complete or if you choose to panic sell.
 
-- ### Why is my system suddenly using more CPU or memory? 
-	- SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience.
+### Why are my deals not updating or not getting pricing?
+- Your exchange credentials may be incorrect or you may be getting blocked, rate-limited, or experiencing some type of connectivity issues. Check the logs for any error messages or unusual activity. You can do this from a command line terminal or in the SymBot web view.
+
+### Why is my system suddenly using more CPU or memory?
+- SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience.
 
 ## Disclaimer
 
