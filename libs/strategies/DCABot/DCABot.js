@@ -2188,16 +2188,19 @@ async function ordersValid(pair, orders) {
 	let msg;
 	let success = true;
 
-	let priceAverage1 = orders[0]['average'];
-	let priceAverage2 = orders[1]['average'];
+	if (Array.isArray(orders) && orders.length > 1) {
 
-	if (priceAverage1 == priceAverage2) {
+		let priceAverage1 = orders[0]['average'];
+		let priceAverage2 = orders[1]['average'];
 
-		success = false;
+		if (priceAverage1 == priceAverage2) {
 
-		msg = pair + ' average price calculations are identical. Not allowing pair.';
+			success = false;
 
-		if (shareData.appData.verboseLog) { Common.logger( colors.bgRed.bold(msg) ); }
+			msg = pair + ' average price calculations are identical. Not allowing pair.';
+
+			if (shareData.appData.verboseLog) { Common.logger( colors.bgRed.bold(msg) ); }
+		}
 	}
 
 	return ( { 'success': success, 'data': msg } );
