@@ -1,3 +1,4 @@
+
 ![SymBot Logo](https://user-images.githubusercontent.com/111208586/221390681-d13b9bce-dafb-4b55-a6f1-1bc5218cd204.png)
 
 SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser or with simple built-in APIs. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
@@ -137,7 +138,7 @@ mongodb://localhost:27017/SymBot
 
 	- This contains all default settings for your bot and exchange information. For test purposes, always leave `sandBox: true`.
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the [CCXT](https://github.com/ccxt/ccxt)  library so if the exchange is supported, you should be able to connect to it
-	- Most bot settings do not need to be set here since they can be set when creating a bot in the web view
+	- Most bot settings do not need to be set here since they can be set when creating a bot in the web interface
 
 - **server.json**
 
@@ -180,7 +181,7 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
-| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited (Can reset for multi-pair bots |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
@@ -203,7 +204,7 @@ POST /api/bots/create
 | dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
-| dealMax                       | integer  | NO            |                      | Maximum deals allowed per pair. Set to 0 for unlimited (Can reset for multi-pair bots |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
@@ -498,7 +499,7 @@ If you want to reset the SymBot database for any reason, you can do so only from
 - No. Disabling a DCA bot will only prevent new deals from being started. Any existing deals that are running will continue until they complete or if you choose to panic sell.
 
 ### Why are my deals not updating or not getting pricing?
-- Your exchange credentials may be incorrect or you may be getting blocked, rate-limited, or experiencing some type of connectivity issues. Check the logs for any error messages or unusual activity. You can do this from a command line terminal or in the SymBot web view.
+- Your exchange credentials may be incorrect or you may be getting blocked, rate-limited, or experiencing some type of connectivity issues. Some exchanges also restrict access by region, so your server's IP address must reside in a location that is allowed. Check the logs for any error messages or unusual activity. You can do this from a command line terminal or in the SymBot web interface.
 
 ### Why is my system suddenly using more CPU or memory?
 - SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience.
