@@ -148,6 +148,12 @@
 		let botText = 'Create Bot';
 		let headerText = 'Create DCA Bot';
 
+		// Display any error messages
+		if ($('#errorMsg').text() != '') {
+
+			alertBox($('#errorMsg').text());
+		}
+
 		// Set names depending on create or update bot
 		if (formAction.indexOf('update') > -1) {
 
@@ -491,6 +497,7 @@
 									{ 'operator': '<=', 'display': '<=' }
 								 ];
 
+			let errorMsg = '';
 			let symbolString = '';
 			let activeChecked = '';
 
@@ -502,6 +509,11 @@
 			let pairsObj = {};
 			let startConditionSubObj = {};
 			let botPairs = [];
+
+			if (errorData != undefined && errorData != null && errorData != '') {
+
+				errorMsg = errorData;
+			}
 
 			if (botData.active) {
 
@@ -638,6 +650,8 @@
 		<div class="contentHeaderBox">
 			<b id="headerText" class="contentHeader"></b>
 		</div>
+
+		<div id="errorMsg" style="display: none;"><%- errorMsg %></div>
 
 		<div class="botsDealsBox">
 

@@ -11,6 +11,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 	let maxMins = 60;
 
+	let errMsg;
 	let botData;
 	let botUpdate = false;
 
@@ -49,13 +50,50 @@ async function viewCreateUpdateBot(req, res, botId) {
 	if (diffSec > (60 * maxMins)) {
 
 		const exchange = await shareData.DCABot.connectExchange(botConfig.data);
-		const symbolData = await shareData.DCABot.getSymbolsAll(exchange);
 
-		if (symbolData.success) {
+		if (exchange) {
 
-			symbolList[exchangeName]['updated'] = new Date();
-			symbolList[exchangeName]['symbols'] = [];
-			symbolList[exchangeName]['symbols'] = symbolData.symbols;
+			let symbolData;
+			let count = 0;
+
+			let success = false;
+			let finished = false;
+
+			while (!finished) {
+
+				symbolData = await shareData.DCABot.getSymbolsAll(exchange);
+
+				if (symbolData.success) {
+
+					success = true;
+					finished = true;
+				}
+				else if (count >= 5) {
+
+					// Timeout
+					errMsg = symbolData.msg;
+
+					success = false;
+					finished = true;
+				}
+				else {
+
+					await shareData.Common.delay(1000);
+				}
+
+				count++;
+			}
+
+			if (success) {
+
+				symbolList[exchangeName]['updated'] = new Date();
+				symbolList[exchangeName]['symbols'] = [];
+				symbolList[exchangeName]['symbols'] = symbolData.symbols;
+			}
+		}
+		else {
+
+			errMsg = 'Unable to connect to exchange';
 		}
 	}
 
@@ -64,7 +102,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 		botData = botConfig.data;
 	}
 
-	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'symbols': symbolList[exchangeName]['symbols'], 'botData': botData } );
+	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'symbols': symbolList[exchangeName]['symbols'], 'botData': botData, 'errorData': errMsg } );
 }
 
 
