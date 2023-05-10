@@ -125,7 +125,7 @@ function initRoutes(router) {
 		msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;
 
 		shareData.Common.logger(msg);
-		shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+		shareData.Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 
 		if (success) {
 

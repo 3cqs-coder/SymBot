@@ -227,7 +227,9 @@ async function init() {
 
 		setTimeout(() => {
 
-			Telegram.sendMessage(appDataConfig.telegram_id, appDataConfig.name + ' v' + appDataConfig.version + ' started at ' + new Date(appDataConfig.started).toISOString());
+			let msg = appDataConfig.name + ' v' + appDataConfig.version + ' started at ' + new Date(appDataConfig.started).toISOString();
+
+			Common.sendNotification({ 'message': msg, 'telegram_id': appDataConfig.telegram_id });
 
 		}, 1000);
 	}
@@ -394,7 +396,9 @@ function shutDown() {
 
 			appDataConfig['sig_int'] = true;
 
-			Telegram.sendMessage(appDataConfig.telegram_id, appDataConfig.name + ' v' + appDataConfig.version + ' shutting down at ' + new Date().toISOString());
+			let msg = appDataConfig.name + ' v' + appDataConfig.version + ' shutting down at ' + new Date().toISOString();
+
+			Common.sendNotification({ 'message': msg, 'telegram_id': appDataConfig.telegram_id });
 		}
 
 		setTimeout(() => {

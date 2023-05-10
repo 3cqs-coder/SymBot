@@ -35,6 +35,8 @@
 
 	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
+	<%- include('./partialsSocketView'); %>
+
 	<script>
 
 	let modalTracker = {};
@@ -42,7 +44,7 @@
 	let exchangeBTC = 'bitstamp';
 
 	$(document).ready(function() {
-	
+
 		$('#logo').on('click', function() {
 
 			window.location.href = '/';
@@ -372,3 +374,5 @@
 	<div id="modal"></div>
 	<div id="modalDealEdit"></div>
 </center>
+
+<div id="notificationsBox"></div>

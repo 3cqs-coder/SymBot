@@ -151,6 +151,7 @@ function initSocket(sessionMiddleware, server) {
 
 		let clientId = client.id;
 		let loggedIn = client.request.session.loggedIn;
+		let query = client.handshake.query;
 
 		//console.log('Connected ID:', clientId, loggedIn);
 
@@ -161,7 +162,14 @@ function initSocket(sessionMiddleware, server) {
 		}
 		else {
 
-			client.join(roomAuth);
+			if (query.room == undefined || query.room == null || query.room == '') {
+
+				client.join(roomAuth);
+			}
+			else {
+
+				client.join(query.room);
+			}
 		}
 	});
 }

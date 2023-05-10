@@ -1722,7 +1722,7 @@ async function connectExchange(configObj) {
 
 		Common.logger(msg);
 
-		shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+		Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 	}
 
 	return exchange;
@@ -1854,7 +1854,7 @@ async function checkTracker() {
 
 			Common.logger(msg);
 
-			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+			Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 		}
 	}
 }
@@ -2122,7 +2122,7 @@ async function sendTelegramStart(botName, dealId, pair) {
 
 	let msg = botName + ': Starting new deal. Pair: ' + pair.toUpperCase();
 
-	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+	Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 }
 
 
@@ -2179,7 +2179,7 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 	msg = msg.replace(/\{PROFIT_PERCENT\}/g, profitPerc);
 	msg = msg.replace(/\{DURATION\}/g, duration);
 
-	shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+	Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 }
 
 
@@ -2235,7 +2235,7 @@ async function volumeValid(startBot, pair, symbol, config) {
 			timerTracker[timerKey] = {};
 			timerTracker[timerKey]['started'] = new Date();
 
-			shareData.Telegram.sendMessage(shareData.appData.telegram_id, msg);
+			Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 		}
 
 		let diffSec = (new Date().getTime() - new Date(timerTracker[timerKey]['started']).getTime()) / 1000;
@@ -2710,7 +2710,9 @@ async function startDelay(obj) {
 	setTimeout(() => {
 						if (telegram) {
 
-							shareData.Telegram.sendMessage(shareData.appData.telegram_id, config.botName + ' (' + config.pair.toUpperCase() + ') Start command received.');
+							let msg = config.botName + ' (' + config.pair.toUpperCase() + ') Start command received.';
+
+							Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 						}
 
 						start(config, true, true);

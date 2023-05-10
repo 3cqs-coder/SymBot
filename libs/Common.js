@@ -188,6 +188,21 @@ async function showTradingView(req, res) {
 }
 
 
+async function sendNotification(data) {
+
+	let msg = data['message'];
+	let telegramId = data['telegram_id'];
+
+	if (telegramId != undefined && telegramId != null && telegramId != '') {
+
+		shareData.Telegram.sendMessage(telegramId, msg);
+	}
+
+	// Relay message to WebSocket notifications room
+	shareData.WebServer.sendSocketMsg(msg, 'notifications');
+}
+
+
 async function showLogs(req, res) {
 
 	const files = await getLogs();
@@ -652,6 +667,7 @@ module.exports = {
 	logMonitor,
 	showLogs,
 	downloadLog,
+	sendNotification,
 	showTradingView,
 	fetchURL,
 	getProcessInfo,

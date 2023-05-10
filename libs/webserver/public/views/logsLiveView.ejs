@@ -15,7 +15,7 @@
 
 			const socket = io('/', {
 
-				query: {},
+				query: { 'room': 'logs' },
 				extraHeaders: {
 
 					'user-agent': '<%- appData.name %>/<%- appData.version %>'

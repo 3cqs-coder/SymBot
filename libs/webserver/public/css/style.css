@@ -577,6 +577,45 @@ table#botsDeals tr:hover {
 }
 
 
+#notificationsBox {
+
+	z-index: 6500;
+	position: fixed; 
+	bottom: 50px;
+	right: 10px;
+	min-width: 300px;
+	max-width: 300px;
+	text-align: left;
+}
+
+
+.notificationsRow {
+
+	font-size: 1.0rem;
+	margin-top: 5px;
+	margin-bottom: 5px;
+	padding: 8px;
+	border: 1px solid #272727;
+	cursor: pointer;
+	overflow-wrap: break-word;
+	-webkit-border-radius: 5px;
+	-moz-border-radius: 5px;
+	border-radius: 5px;
+	color: #cccccc;
+
+	box-shadow: 0 3px 3px rgba(3, 0, 3, 0.6); 
+	-webkit-box-shadow: 0 3px 3px rgba(3, 0, 3, 0.6); 
+	-moz-box-shadow: 0 3px 3px rgba(3, 0, 3, 0.6);
+
+	/* Permalink - use to edit and share this gradient: https://colorzilla.com/gradient-editor/#000000+0,2e3034+100 */
+	background: rgb(0,0,0); /* Old browsers */
+	background: -moz-linear-gradient(top,  rgba(0,0,0,1) 0%, rgba(46,48,52,1) 100%); /* FF3.6-15 */
+	background: -webkit-linear-gradient(top,  rgba(0,0,0,1) 0%,rgba(46,48,52,1) 100%); /* Chrome10-25,Safari5.1-6 */
+	background: linear-gradient(to bottom,  rgba(0,0,0,1) 0%,rgba(46,48,52,1) 100%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
+	filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#000000', endColorstr='#2e3034',GradientType=0 ); /* IE6-9 */
+}
+
+
 .logRow {
 
 	font-size: 1.0rem;

@@ -1121,7 +1121,9 @@ async function sendUpdateStatus(botId, botName, active, success) {
 
 	if (success) {
 
-		shareData.Telegram.sendMessage(shareData.appData.telegram_id, botName + ' is now ' + status);
+		let msg = botName + ' is now ' + status;
+
+		shareData.Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
 	}
 	
 	return status;

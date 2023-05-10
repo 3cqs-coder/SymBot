@@ -1,0 +1,62 @@
+<script>
+
+$(document).ready(function() {
+
+	const maxRows = 10;
+	const removeSec = 12;
+
+	const socket = io('/', {
+
+		query: {
+			'room': 'notifications'
+		},
+		extraHeaders: {
+			'user-agent': '<%- appData.name %>/<%- appData.version %>'
+		},
+		transports: ['websocket', 'polling'],
+		path: '/ws',
+		reconnection: true,
+		reconnectionDelay: 10000
+	});
+
+	socket.on('connect', (data) => {});
+
+	socket.on('connect_error', (data) => {});
+
+	socket.on('connect_failed', (data) => {});
+
+	socket.on('error', (data) => {});
+
+	socket.on('disconnect', (data) => {});
+
+	socket.on('data', (data) => {
+
+		let id = 'notifs' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
+
+		let msg = '<div id="' + id + '" class="notificationsRow">' + data + '</div>';
+
+		$('#notificationsBox').append(msg);
+
+		$('#' + id).hide();
+		$('#' + id).fadeIn(500);
+
+		let currentRows = $('.notificationsRow').length;
+
+		setTimeout(() => {
+
+			$('#' + id).fadeOut(1000, function() {
+
+				$(this).remove();
+			});
+
+		}, (removeSec * 1000));
+
+		if (currentRows > maxRows) {
+
+			//$('.notificationsRow').slice((maxRows - currentRows)).remove();
+		}
+	});
+
+});
+
+</script>
