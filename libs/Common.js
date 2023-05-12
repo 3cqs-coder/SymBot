@@ -14,6 +14,9 @@ const { v4: uuidv4 } = require('uuid');
 
 const convertAnsi = new Convert();
 
+const logNotifications = pathRoot + '/logs/services/notifications/notifications.log';
+
+
 let shareData;
 
 
@@ -118,6 +121,54 @@ async function updateConfig(req, res) {
 }
 
 
+async function getData(fileName) {
+
+	let data;
+	let err = '';
+	let success = true;
+
+	if (fs.existsSync(fileName)) {
+
+		try {
+				data = fs.readFileSync(fileName, {
+							encoding: 'utf8',
+							flag: 'r'
+						}
+					);
+			}
+			catch (e) {
+
+				err = e;
+				success = false;
+			}
+	}
+	else {
+
+		success = false;
+		err = fileName + ' does not exist';
+	}
+
+	return ({ 'success': success, 'data': data, 'error': err });
+}
+
+
+async function saveData(fileName, data) {
+
+	let err = '';
+
+	try {
+
+		fs.writeFileSync(fileName, data);
+	}
+	catch (e) {
+
+		err = e;
+	}
+
+	return err;
+}
+
+
 async function fetchURL(url, method, headers, body) {
 
 	const response = await fetch(url, {
@@ -190,8 +241,26 @@ async function showTradingView(req, res) {
 
 async function sendNotification(data) {
 
+	let maxNotifications = 500;
+	let fileName = logNotifications;
+
 	let msg = data['message'];
+	let msgType = data['type'];
 	let telegramId = data['telegram_id'];
+
+	if (msgType == undefined || msgType == null || msgType == '') {
+
+		msgType = 'info';
+	}
+
+	let obj = { 'date': new Date(), 'type': msgType, 'message': msg };
+
+	// Get notifications
+	let historyArr = await getNotificationHistory();
+
+	historyArr.push(obj);
+
+	historyArr = historyArr.slice(-maxNotifications);
 
 	if (telegramId != undefined && telegramId != null && telegramId != '') {
 
@@ -200,6 +269,39 @@ async function sendNotification(data) {
 
 	// Relay message to WebSocket notifications room
 	shareData.WebServer.sendSocketMsg(msg, 'notifications');
+
+	// Save notifications
+	saveData(fileName, JSON.stringify(historyArr));
+}
+
+
+async function getNotificationHistory(client, data) {
+
+	let fileName = logNotifications;
+
+	let historyArr = [];
+
+	try {
+		
+		let data = await getData(fileName);
+
+		if (data.success) {
+
+			historyArr = JSON.parse(data.data);
+		}
+	}
+	catch (e) {
+
+	}
+
+	if (client) {
+
+		client.emit('history', historyArr);
+	}
+	else {
+
+		return historyArr;
+	}
 }
 
 
@@ -372,13 +474,16 @@ function delFiles(path, days) {
 		let created = stats.ctime;
 		let modified = stats.mtime;
 
-		let diffSec =
-			(new Date(dateNow).getTime() - new Date(modified).getTime()) / 1000;
+		let diffSec = (new Date(dateNow).getTime() - new Date(modified).getTime()) / 1000;
 
 		if (diffSec >= 86400 * days) {
-			let diffDays = Math.round(diffSec / 86400);
+		
+			if (!stats.isDirectory()) {
 
-			fs.unlinkSync(file);
+				let diffDays = Math.round(diffSec / 86400);
+
+				fs.unlinkSync(file);
+			}
 		}
 	}
 }
@@ -657,6 +762,8 @@ module.exports = {
 	getSignalConfigs,
 	saveConfig,
 	updateConfig,
+	getData,
+	saveData,
 	getDateParts,
 	getTimeZone,
 	numToBase26,
@@ -668,6 +775,7 @@ module.exports = {
 	showLogs,
 	downloadLog,
 	sendNotification,
+	getNotificationHistory,
 	showTradingView,
 	fetchURL,
 	getProcessInfo,

@@ -342,6 +342,8 @@ async function start() {
 	let initData;
 
 	await Common.makeDir('logs');
+	await Common.makeDir('logs/services');
+	await Common.makeDir('logs/services/notifications');
 
 	try {
 

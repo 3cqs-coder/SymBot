@@ -1722,7 +1722,7 @@ async function connectExchange(configObj) {
 
 		Common.logger(msg);
 
-		Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+		Common.sendNotification({ 'message': msg, 'type': 'error', 'telegram_id': shareData.appData.telegram_id });
 	}
 
 	return exchange;
@@ -1854,7 +1854,7 @@ async function checkTracker() {
 
 			Common.logger(msg);
 
-			Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+			Common.sendNotification({ 'message': msg, 'type': 'warning', 'telegram_id': shareData.appData.telegram_id });
 		}
 	}
 }
@@ -2122,7 +2122,7 @@ async function sendTelegramStart(botName, dealId, pair) {
 
 	let msg = botName + ': Starting new deal. Pair: ' + pair.toUpperCase();
 
-	Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	Common.sendNotification({ 'message': msg, 'type': 'deal_open', 'telegram_id': shareData.appData.telegram_id });
 }
 
 
@@ -2179,7 +2179,7 @@ async function sendTelegramFinish(botName, dealId, pair, sellData) {
 	msg = msg.replace(/\{PROFIT_PERCENT\}/g, profitPerc);
 	msg = msg.replace(/\{DURATION\}/g, duration);
 
-	Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	Common.sendNotification({ 'message': msg, 'type': 'deal_close', 'telegram_id': shareData.appData.telegram_id });
 }
 
 
@@ -2235,7 +2235,7 @@ async function volumeValid(startBot, pair, symbol, config) {
 			timerTracker[timerKey] = {};
 			timerTracker[timerKey]['started'] = new Date();
 
-			Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+			Common.sendNotification({ 'message': msg, 'type': 'warning', 'telegram_id': shareData.appData.telegram_id });
 		}
 
 		let diffSec = (new Date().getTime() - new Date(timerTracker[timerKey]['started']).getTime()) / 1000;
@@ -2521,7 +2521,7 @@ async function startAsap(pairIgnore) {
 
 					if (pairMax == 0 || pairCount < pairMax) {
 
-						startDelay({ 'config': config, 'delay': count + 1, 'telegram': false });
+						startDelay({ 'config': config, 'delay': count + 1, 'notify': false });
 
 						count++;
 						pairCount++;
@@ -2704,15 +2704,15 @@ async function startDelay(obj) {
 	const configObj = JSON.parse(JSON.stringify(obj));
 
 	const config = configObj['config'];
-	const telegram = configObj['telegram'];
+	const notify = configObj['notify'];
 
 	// Start bot
 	setTimeout(() => {
-						if (telegram) {
+						if (notify) {
 
 							let msg = config.botName + ' (' + config.pair.toUpperCase() + ') Start command received.';
 
-							Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+							Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
 						}
 
 						start(config, true, true);

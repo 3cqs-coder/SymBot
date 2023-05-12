@@ -95,12 +95,14 @@ When upgrading to a new version of SymBot it is recommended to follow the basic 
 1. Stop all running SymBot instances
 	- If using **pm2** suggested in the installation above, you can type: `pm2 stop ecosystem.config.js` in a command line terminal
 2. Make a backup of the directory to where all current SymBot files are located
-3. Extract new SymBot files to existing directory
+3. Extract new SymBot files to existing directory. If prompted, be sure to allow new files to replace the original or you may be running portions of a previous version
 4. Copy existing configuration files from backup created previously
 5. Compare parameters in the new SymBot configuration files such as **app.json** to existing files if any have been added or removed. Any changes must be added to existing configurations or this may cause SymBot to not start or run properly
 6. Type: `npm install` to ensure all modules are installed properly
 7. Start SymBot and verify the new version is running
-8. Monitor logs for a few minutes either on the console, log files, or the web portal to ensure everything is operating as before
+8. Monitor logs for a few minutes either on the console, log files, or the web interface to ensure everything is operating as before
+
+**NOTE:** If you are running SymBot behind any other services such as Apache, Nginx, Cloudflare, etc. you may need to clear caches in order for the latest upgraded files to be served properly.
 
 ## Configuration
 
@@ -108,7 +110,7 @@ These files are located in the `config` directory
 
 - **app.json**
 
-	- `password` is the password used to login to the SymBot web portal. The default password is "admin".
+	- `password` is the password used to login to the SymBot web interface. The default password is "admin".
 
 	- `api_key` is a UUID v4 value that is randomly generated the first time SymBot starts. It is used to make API calls to SymBot. This can be set to most any string value you choose.
 

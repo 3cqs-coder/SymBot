@@ -170,6 +170,11 @@ function initSocket(sessionMiddleware, server) {
 
 				client.join(query.room);
 			}
+
+			client.on('notifications_history', function (data) {
+
+				shareData.Common.getNotificationHistory(client, data);
+			});
 		}
 	});
 }

@@ -723,7 +723,7 @@ async function apiCreateUpdateBot(req, res) {
 				if (active && startCondition == 'asap') {
 
 					let pairCount = 0;
-					let telegram = true;
+					let notify = true;
 
 					let pairMax = configObj.pairMax;
 
@@ -743,13 +743,13 @@ async function apiCreateUpdateBot(req, res) {
 							config['pair'] = pair;
 
 							if (i > 0) {
-								
-								telegram = false;
+
+								notify = false;
 							}
 
 							pairCount++;
 
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': telegram });
+							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': notify });
 						}
 					}
 				}
@@ -823,7 +823,7 @@ async function apiCreateUpdateBot(req, res) {
 
 							pairCount++;
 
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
+							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
 						}
 					}
 				}
@@ -935,7 +935,7 @@ async function apiEnableDisableBot(req, res) {
 
 							pairCount++;
 
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'telegram': false });
+							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
 						}
 					}
 				}
@@ -1064,7 +1064,7 @@ async function apiStartDeal(req, res) {
 						config['pair'] = pair;
 						config = await shareData.DCABot.applyConfigData(botId, botName, config);
 
-						shareData.DCABot.startDelay({ 'config': config, 'delay': 1, 'telegram': false });
+						shareData.DCABot.startDelay({ 'config': config, 'delay': 1, 'notify': false });
 					}
 					else {
 
@@ -1123,7 +1123,7 @@ async function sendUpdateStatus(botId, botName, active, success) {
 
 		let msg = botName + ' is now ' + status;
 
-		shareData.Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+		shareData.Common.sendNotification({ 'message': msg, 'type': 'bot_' + status.toLowerCase(), 'telegram_id': shareData.appData.telegram_id });
 	}
 	
 	return status;

@@ -35,15 +35,16 @@
 
 	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
-	<%- include('./partialsSocketView'); %>
-
 	<script>
 
+	let dataTracker = {};
 	let modalTracker = {};
 	let pairBTC = 'BTC/USD';
 	let exchangeBTC = 'bitstamp';
 
 	$(document).ready(function() {
+
+		dataTracker = getDataTracker();
 
 		$('#logo').on('click', function() {
 
@@ -230,6 +231,28 @@
 	}
 
 
+	function getDataTracker() {
+
+		let data = {};
+
+		try {
+
+			data = JSON.parse(localStorage.getItem('dataTracker'));
+		}
+		catch(e) {
+
+		}
+		
+		return data;
+	}
+
+
+	function updateDataTracker() {
+
+		localStorage.setItem('dataTracker', JSON.stringify(dataTracker));
+	}
+
+
 	async function getMarkets(pair, exchange) {
 
 		let res;
@@ -264,26 +287,17 @@
 
 		let price;
 		let diffSec;
-		let	priceObj;
 
-		try {
+		if (dataTracker) {
 
-			priceObj = JSON.parse(localStorage.getItem('priceObj'));
-		}
-		catch(e) {
-
-		}
-
-		if (priceObj) {
-
-			let dateLast = priceObj['btc']['date'];
-			price = priceObj['btc']['price'];
+			let dateLast = dataTracker['btc']['date'];
+			price = dataTracker['btc']['price'];
 
 			diffSec = (new Date().getTime() - new Date(dateLast).getTime()) / 1000;
 		}
 
 		// Get price only if last check exceeds n seconds
-		if (!priceObj || diffSec > (sec - 10)) {
+		if (!dataTracker || diffSec > (sec - 10)) {
 
 			let data = await getMarkets(pairBTC, exchangeBTC);
 
@@ -301,20 +315,20 @@
 						price = data.data.price;
 					}
 
-					if (priceObj == undefined || priceObj == null) {
+					if (dataTracker == undefined || dataTracker == null) {
 					
-						priceObj = {};
+						dataTracker = {};
 					}
 
-					if (priceObj['btc'] == undefined || priceObj['btc'] == null) {
+					if (dataTracker['btc'] == undefined || dataTracker['btc'] == null) {
 
-						priceObj['btc'] = {};
+						dataTracker['btc'] = {};
 					}
 
-					priceObj['btc']['date'] = new Date();
-					priceObj['btc']['price'] = price;
+					dataTracker['btc']['date'] = new Date();
+					dataTracker['btc']['price'] = price;
 
-					localStorage.setItem('priceObj', JSON.stringify(priceObj));
+					updateDataTracker();
 				}
 			}
 			else {
@@ -352,6 +366,8 @@
 
 	</script>
 
+	<%- include('./partialsSocketView'); %>
+
 </head>
 
 <body>
@@ -364,6 +380,7 @@
 		<img id="logo" src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
 
+	<div id="notifications" class="notificationButton">&#128276;</div>
 </div>
 
 <div id="spinner-overlay">
@@ -373,6 +390,7 @@
 <center>
 	<div id="modal"></div>
 	<div id="modalDealEdit"></div>
+	<div id="modalNotifications"></div>
 </center>
 
 <div id="notificationsBox"></div>

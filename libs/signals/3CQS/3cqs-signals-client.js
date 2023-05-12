@@ -468,7 +468,7 @@ async function sendTelegram(msg, logMsg) {
 		showLog(msg);
 	}
 
-	shareData.Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	shareData.Common.sendNotification({ 'message': msg, 'type': 'signal', 'telegram_id': shareData.appData.telegram_id });
 }
 
 

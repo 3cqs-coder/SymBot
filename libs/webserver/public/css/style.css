@@ -115,6 +115,13 @@ a:visited {
 }
 
 
+#modalNotifications {
+
+	max-height: 90%;
+	overflow: auto;
+}
+
+
 #modalDealEdit {
 
 	max-height: 90%;
@@ -254,6 +261,29 @@ form textarea {
 	z-index: 9999;
 	left: 5px;
 	bottom: 0;
+}
+
+
+#notifications {
+
+	position: absolute;
+	z-index: 9999;
+	right: 5px;
+	bottom: 0;
+}
+
+
+.notificationButton {
+
+	color: transparent;
+	font-size: 1.35rem;
+	text-shadow: #d8d8d8 1px 0 0, 0 0 1px #000000, 0 0 4px #000000;
+}
+
+
+.notificationButtonAlert {
+
+	text-shadow: #55c6c4 1px 0 0, 0 0 1px #000000, 0 0 8px #1377e3;
 }
 
 

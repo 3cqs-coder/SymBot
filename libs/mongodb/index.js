@@ -66,7 +66,7 @@ async function log(msg) {
 
 	shareData.Common.logger(msg, true);
 
-	shareData.Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	shareData.Common.sendNotification({ 'message': msg, 'type': 'database', 'telegram_id': shareData.appData.telegram_id });
 }
 
 

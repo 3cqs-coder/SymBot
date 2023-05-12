@@ -4,6 +4,21 @@ $(document).ready(function() {
 
 	const maxRows = 10;
 	const removeSec = 12;
+	const modalNotifyId = '#modalNotifications';
+
+	try {
+
+		dataTracker = JSON.parse(localStorage.getItem('dataTracker'));
+
+		// Reset alert if notification flag is set
+		if (dataTracker['notifications'] != undefined && dataTracker['notifications'] != null) {
+
+			$('.notificationButton').addClass('notificationButtonAlert');
+		}
+	}
+	catch(e) {
+
+	}
 
 	const socket = io('/', {
 
@@ -29,11 +44,48 @@ $(document).ready(function() {
 
 	socket.on('disconnect', (data) => {});
 
+	// Show notification history
+	socket.on('history', (data) => {
+
+		let content = '';
+
+		if (data.length > 0) {
+
+			let dataArr = sortByKey(data, 'date');
+
+			dataArr = dataArr.reverse();
+
+			for (let i = 0; i < dataArr.length; i++) {
+
+				let msg = data[i]['message'];
+				let dateMsg = data[i]['date'];
+
+				content += '<div class="notificationsRow">' + msg + '<div style="margin-top: 10px; font-size: 0.85rem;">' + dateConvertLocal(dateMsg) + '</div></div>';
+			}
+		}
+
+		//content = '<div style="max-width: 800px;">' + content + '</div>';
+
+		openModal('notificationsView', modalNotifyId, 'Notification Center History', content);
+	});
+
 	socket.on('data', (data) => {
 
 		let id = 'notifs' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
 
 		let msg = '<div id="' + id + '" class="notificationsRow">' + data + '</div>';
+
+		if (dataTracker['notifications'] == undefined || dataTracker['notifications'] == null) {
+
+			dataTracker['notifications'] = {};
+		}
+
+		dataTracker['notifications']['date'] = new Date();
+		dataTracker['notifications']['alert'] = true;
+
+		updateDataTracker();
+
+		$('.notificationButton').addClass('notificationButtonAlert');
 
 		$('#notificationsBox').append(msg);
 
@@ -54,6 +106,38 @@ $(document).ready(function() {
 		if (currentRows > maxRows) {
 
 			//$('.notificationsRow').slice((maxRows - currentRows)).remove();
+		}
+	});
+
+
+	$('#notifications').on('click', function() {
+
+		let showModal = true;
+
+		// Remove alert from tracker
+		delete dataTracker['notifications'];
+
+		updateDataTracker();
+
+		$('.notificationButton').removeClass('notificationButtonAlert');
+
+		try {
+
+			if ($(modalNotifyId).is(':visible')) {
+
+				$(modalNotifyId).dialog('close');
+
+				showModal = false;
+			}
+		}
+		catch (e) {
+
+			showModal = true;
+		}
+
+		if (showModal) {
+
+			socket.emit('notifications_history', {});
 		}
 	});
 
