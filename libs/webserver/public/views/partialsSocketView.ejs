@@ -57,16 +57,15 @@ $(document).ready(function() {
 
 			for (let i = 0; i < dataArr.length; i++) {
 
-				let msg = data[i]['message'];
-				let dateMsg = data[i]['date'];
+				let msg = dataArr[i]['message'];
+				let dateMsg = dataArr[i]['date'];
 
 				content += '<div class="notificationsRow">' + msg + '<div style="margin-top: 10px; font-size: 0.85rem;">' + dateConvertLocal(dateMsg) + '</div></div>';
 			}
 		}
 
 		//content = '<div style="max-width: 800px;">' + content + '</div>';
-
-		openModal('notificationsView', modalNotifyId, 'Notification Center History', content);
+		$(modalNotifyId).html(content);
 	});
 
 	socket.on('data', (data) => {
@@ -136,6 +135,10 @@ $(document).ready(function() {
 		}
 
 		if (showModal) {
+
+			let content = '<div class="spinner-dynamic-container"><div class="spinner-dynamic"></div></div>';
+
+			openModal('notificationsView', modalNotifyId, 'Notification Center History', content);
 
 			socket.emit('notifications_history', {});
 		}

@@ -1315,7 +1315,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 
 									if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.')); }
 
-									sendTelegramFinish(config.botName, dealId, pair, sellData);
+									sendNotificationFinish(config.botName, dealId, pair, sellData);
 								}
 
 								success = true;
@@ -2118,7 +2118,7 @@ async function ordersAddContent(wallet, lastDcaOrderSum, maxDeviation, balanceOb
 }
 
 
-async function sendTelegramStart(botName, dealId, pair) {
+async function sendNotificationStart(botName, dealId, pair) {
 
 	let msg = botName + ': Starting new deal. Pair: ' + pair.toUpperCase();
 
@@ -2126,7 +2126,7 @@ async function sendTelegramStart(botName, dealId, pair) {
 }
 
 
-async function sendTelegramFinish(botName, dealId, pair, sellData) {
+async function sendNotificationFinish(botName, dealId, pair, sellData) {
 
 	let orderCount = 0;
 
@@ -2407,7 +2407,7 @@ async function createDeal(pair, pairMax, dealCount, dealMax, config, orders) {
 		Common.logger(colors.green.bold(config.botName + ': Starting new deal. Pair: ' + pair.toUpperCase() + ' / Deal ID: ' + dealId));
 	}
 
-	sendTelegramStart(config.botName, dealId, pair);
+	sendNotificationStart(config.botName, dealId, pair);
 
 	return ({ 'deal': deal, 'deal_id': dealId });
 }

@@ -141,6 +141,10 @@
 				active = true;
 			}
 
+			dataTracker['show_active'] = active;
+
+			updateDataTracker();
+
 			showActive(active);
 		});
 
@@ -192,6 +196,13 @@
 			durationLength : 4,
 			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)'
 		});
+
+
+		// Check last active state
+		if (dataTracker['show_active']) {
+
+			$('#showActive').click();
+		}
 
 		resizeBotsDeals();
 	});

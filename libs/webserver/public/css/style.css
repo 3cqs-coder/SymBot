@@ -177,6 +177,46 @@ a:visited {
 }
 
 
+.spinner-dynamic-container {
+
+	height: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+
+.spinner-dynamic {
+	display: inline-block;
+	width: 80px;
+	height: 80px;
+}
+
+
+.spinner-dynamic:after {
+	content: " ";
+	display: block;
+	width: 36px;
+	height: 36px;
+	margin: 8px;
+	border-radius: 50%;
+	border: 6px solid #000000;
+	border-color: #000000 transparent #000000 transparent;
+	animation: spinner-dynamic 1.2s linear infinite;
+}
+
+
+@keyframes spinner-dynamic {
+	0% {
+		transform: rotate(0deg);
+	}
+
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+
 main {
 
 	position: relative;
