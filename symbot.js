@@ -132,6 +132,18 @@ async function init() {
 		apiKey = appConfig['data']['api_key'];
 	}
 
+	if (appConfig['data']['password'] == undefined || appConfig['data']['password'] == null || appConfig['data']['password'] == '' || appConfig['data']['password'].indexOf(':') == -1) {
+
+		const dataPass = await Common.genPasswordHash('admin');
+
+		appConfig['data']['password'] = dataPass['salt'] + ':' + dataPass['hash'];
+
+		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
+
+		await Common.saveConfig('app.json', appConfigObj.data);
+	}
+
+
 	let shareData = {
 						'appData': {
 										'name': packageJson.description,

@@ -12,7 +12,7 @@ function initRoutes(router) {
 
 		if (req.session.loggedIn) {
 
-			goHome(req, res);
+			shareData.Common.goHome(req, res);
 		}
 		else {
 
@@ -101,40 +101,7 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		let msg;
-		let success = false;
-
-		const body = req.body;
-		const password = body.password;
-		const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
-		const userAgent = req.headers['user-agent'];
-
-		if (password == shareData.appData.password) {
-
-			req.session.loggedIn = true;
-
-			success = true;
-			msg = 'success';
-		}
-		else {
-
-			success = false;
-			msg = 'failed';
-		}
-
-		msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;
-
-		shareData.Common.logger(msg);
-		shareData.Common.sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
-
-		if (success) {
-
-			goHome(req, res);
-		}
-		else {
-
-			res.redirect('/login');
-		}
+		shareData.Common.verifyLogin(req, res);
 	});
 
 
@@ -361,12 +328,6 @@ function initRoutes(router) {
 
 		res.status(404).send(obj);
 	});
-}
-
-
-async function goHome(req, res) {
-
-	res.render( 'homeView', { 'appData': shareData.appData } );
 }
 
 

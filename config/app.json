@@ -1,5 +1,5 @@
 {
-	"password": "admin",
+	"password": "",
 	"mongo_db_url": "",
 	"web_server": {
 					"port": 3000

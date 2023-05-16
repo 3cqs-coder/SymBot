@@ -110,7 +110,7 @@ These files are located in the `config` directory
 
 - **app.json**
 
-	- `password` is the password used to login to the SymBot web interface. The default password is "admin".
+	- `password` is a hashed password used to login to the SymBot web interface. The default password is automatically set as "*admin*" the very first time SymBot is started. This is not a plain text password, but rather an encrypted form of it, so it should not be manually entered or you may not be able to login properly. It is strongly recommended to change the default password using the web interface configuration.
 
 	- `api_key` is a UUID v4 value that is randomly generated the first time SymBot starts. It is used to make API calls to SymBot. This can be set to most any string value you choose.
 

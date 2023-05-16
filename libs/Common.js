@@ -7,6 +7,7 @@ const pathRoot = path
 	.split(path.sep)
 	.join(path.posix.sep);
 
+const crypto = require('crypto');
 const Convert = require('ansi-to-html');
 const delay = require('delay');
 const fetch = require('node-fetch-commonjs');
@@ -80,7 +81,11 @@ async function updateConfig(req, res) {
 
 	let telegramEnabled = false;
 
-	if (password == shareData.appData.password) {
+	const dataPass = shareData.appData.password.split(':');
+
+	let success = await verifyPasswordHash( { 'salt': dataPass[0], 'hash': dataPass[1], 'data': password } );
+
+	if (success) {
 
 		let data = await getConfig('app.json');
 
@@ -88,8 +93,12 @@ async function updateConfig(req, res) {
 
 		if (passwordNew != undefined && passwordNew != null && passwordNew != '') {
 
-			appConfig['password'] = passwordNew;
-			shareData['appData']['password'] = passwordNew;
+			const dataPassNew = await genPasswordHash(passwordNew);
+
+			const passwordHashed = dataPassNew['salt'] + ':' + dataPassNew['hash'];
+
+			appConfig['password'] = passwordHashed;
+			shareData['appData']['password'] = passwordHashed;
 
 			// Remove all other existing sessions to require login again
 			const collection = await shareData.DB.mongoose.connection.db.collection('sessions');
@@ -751,6 +760,83 @@ function sortByKey(array, key) {
 }
 
 
+async function genPasswordHash(data) {
+
+	const salt = crypto.randomBytes(16).toString('hex'); 
+
+	const hash = crypto.pbkdf2Sync(data, salt, 1000, 64, 'sha256').toString('hex');
+
+	let obj = { 'salt': salt, 'hash': hash };
+
+	return obj;
+}
+
+
+async function verifyPasswordHash(dataObj) {
+
+	let success = false;
+
+	let salt = dataObj['salt'];
+	let hash = dataObj['hash'];
+	let data = dataObj['data'];
+
+	const hashData = crypto.pbkdf2Sync(data, salt, 1000, 64, 'sha256').toString('hex');
+
+	if (hash === hashData) {
+
+		success = true;
+	}
+
+	return success;
+}
+
+
+async function verifyLogin(req, res) {
+
+	let msg;
+
+	const body = req.body;
+	const password = body.password;
+	const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
+	const userAgent = req.headers['user-agent'];
+
+	const dataPass = shareData.appData.password.split(':');
+	
+	let success = await verifyPasswordHash( { 'salt': dataPass[0], 'hash': dataPass[1], 'data': password } );
+
+	if (success) {
+
+		req.session.loggedIn = true;
+
+		msg = 'success';
+	}
+	else {
+
+		msg = 'failed';
+	}
+
+	msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;
+
+	logger(msg);
+	sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+
+	if (success) {
+
+		goHome(req, res);
+	}
+	else {
+
+		res.redirect('/login');
+	}
+}
+
+
+async function goHome(req, res) {
+
+	res.render( 'homeView', { 'appData': shareData.appData } );
+}
+
+
 module.exports = {
 
 	delay,
@@ -769,6 +855,10 @@ module.exports = {
 	numToBase26,
 	numFormatter,
 	hashCode,
+	genPasswordHash,
+	verifyPasswordHash,
+	verifyLogin,
+	goHome,
 	timeDiff,
 	logger,
 	logMonitor,
