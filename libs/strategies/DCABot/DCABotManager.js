@@ -448,6 +448,7 @@ async function apiUpdateDeal(req, res) {
 	const body = req.body;
 	const dealId = req.params.dealId;
 
+	let dealLast = body.dealLast;
 	const dcaMaxOrder = body.dcaMaxOrder;
 	const dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
@@ -489,6 +490,21 @@ async function apiUpdateDeal(req, res) {
 
 			// Override price to recalculate from original starting price
 			config['firstOrderPrice'] = price;
+
+			// Only set deal last flag if value exists and to not change current status
+			if (dealLast != undefined && dealLast != null) {
+
+				dealLast = shareData.Common.convertBoolean(dealLast, false);
+				
+				if (dealLast) {
+					
+					config['dealLast'] = true;
+				}
+				else {
+					
+					delete config['dealLast'];
+				}
+			}
 
 			// Override max safety orders if set
 			if (dcaMaxOrder != undefined && dcaMaxOrder != null) {
@@ -792,7 +808,7 @@ async function apiCreateUpdateBot(req, res) {
 
 					if (active != botOrig[0]['active']) {
 
-						const status = await sendUpdateStatus(botId, botName, active, success);
+						const statusObj = await shareData.DCABot.sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
 					}
 
 					// Get total active pairs currently running on bot
@@ -888,9 +904,9 @@ async function apiEnableDisableBot(req, res) {
 
 		const botName = bot.botName;
 
-		const status = await sendUpdateStatus(botId, botName, active, success);
+		const statusObj = await shareData.DCABot.sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
 
-		msg = 'Bot is now ' + status;
+		msg = 'Bot is now ' + statusObj.status;
 
 		if (active) {
 
@@ -1050,14 +1066,20 @@ async function apiStartDeal(req, res) {
 				let config = bot['config'];
 
 				let pairMax = config.pairMax;
+				let pairDealsMax = config.pairDealsMax;
 
 				if (pairMax == undefined || pairMax == null || pairMax == '') {
 
 					pairMax = 0;
 				}
 
-				// Start bot if active and no deals currently running
-				if (dealsActive.length == 0) {
+				if (pairDealsMax == undefined || pairDealsMax == null || pairDealsMax == '') {
+
+					pairDealsMax = 0;
+				}
+
+				// Start bot if active and no deals currently running or pair deals is less than max set
+				if (dealsActive.length == 0 || dealsActive.length < pairDealsMax) {
 
 					if (pairMax == 0 || pairCount < pairMax) {
 
@@ -1075,7 +1097,7 @@ async function apiStartDeal(req, res) {
 				else {
 
 					success = false;
-					msg = pair + ' deal is already running';
+					msg = pair + ' pair max deals already running';
 				}
 			}
 		}
@@ -1101,32 +1123,6 @@ async function removeDbKeys(bot) {
 	}
 	
 	return bot;
-}
-
-
-async function sendUpdateStatus(botId, botName, active, success) {
-
-	let status;
-
-	if (active) {
-
-		status = 'enabled';
-	}
-	else {
-	
-		status = 'disabled';
-	}
-
-	shareData.Common.logger('Bot Status Changed: ID: ' + botId + ' / Status: ' + status + ' / Success: ' + success);
-
-	if (success) {
-
-		let msg = botName + ' is now ' + status;
-
-		shareData.Common.sendNotification({ 'message': msg, 'type': 'bot_' + status.toLowerCase(), 'telegram_id': shareData.appData.telegram_id });
-	}
-	
-	return status;
 }
 
 
@@ -1178,6 +1174,7 @@ async function calculateOrders(body) {
 	botData.pair = pair;
 	botData.dealMax = body.dealMax;
 	botData.pairMax = body.pairMax;
+	botData.pairDealsMax = body.pairDealsMax;
 	botData.volumeMin = body.volumeMin;
 	botData.firstOrderPrice = body.firstOrderPrice;
 	botData.firstOrderAmount = body.firstOrderAmount;
@@ -1197,6 +1194,11 @@ async function calculateOrders(body) {
 	if (botData.pairMax == undefined || botData.pairMax == null || botData.pairMax == '') {
 
 		botData.pairMax = 0;
+	}
+
+	if (botData.pairDealsMax == undefined || botData.pairDealsMax == null || botData.pairDealsMax == '') {
+
+		botData.pairDealsMax = 0;
 	}
 
 	// Check for bot id passed in from body for update

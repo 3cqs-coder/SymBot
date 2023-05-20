@@ -185,6 +185,7 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
+| pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
@@ -208,6 +209,7 @@ POST /api/bots/create
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
+| pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
@@ -251,6 +253,7 @@ POST /api/bots/{botId}/disable
 |----------|----------|---------------|----------------------|-----------------|
 | dcaTakeProfitPercent| number        | NO                   |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder         | integer       | NO                   |                      | Maximum DCA / safety orders allowed per deal                            |
+| dealLast            | boolean       | NO                   | false                | Prevents a new deal from starting after this deal completes. Setting only applies to this deal. If you have multiple deals running with the same pair, this will not affect the other deals. |
 
 ```
 POST /api/deals/{dealId}/update_deal

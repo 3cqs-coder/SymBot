@@ -36,10 +36,10 @@ async function start(data, startBot, reload) {
 
 	data = await initBot(startBot, JSON.parse(JSON.stringify(data)));
 
-	const dealResume = data['dealResume'];
+	const dealResumeId = data['dealResumeId'];
 	const firstOrderPrice = data['firstOrderPrice'];
 
-	delete data['dealResume'];
+	delete data['dealResumeId'];
 	delete data['firstOrderPrice'];
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
@@ -52,6 +52,8 @@ async function start(data, startBot, reload) {
 	let pairFoundDb = false;
 	let dealLast = false;
 	let dealStop = false;
+	let pairDealsLast = false;
+	let checkActivePairOverride = false;
 
 	let totalOrderSize = 0;
 	let totalAmount = 0;
@@ -62,6 +64,7 @@ async function start(data, startBot, reload) {
 	let dealCount = config.dealCount;
 	let dealMax = config.dealMax;
 	let pairMax = config.pairMax;
+	let pairDealsMax = config.pairDealsMax;
 
 	if (dealCount == undefined || dealCount == null) {
 
@@ -76,6 +79,11 @@ async function start(data, startBot, reload) {
 	if (pairMax == undefined || pairMax == null) {
 
 		pairMax = 0;
+	}
+
+	if (pairDealsMax == undefined || pairDealsMax == null) {
+
+		pairDealsMax = 0;
 	}
 
 	let exchange = await connectExchange(config);
@@ -109,8 +117,19 @@ async function start(data, startBot, reload) {
 		}
 
 		const isActive = await checkActiveDeal(botIdMain, pair);
+		const pairDealsActive = await getDeals({ 'botId': botIdMain, 'pair': pair, 'status': 0 });
 		const symbolData = await getSymbol(exchange, pair);
 		const symbol = symbolData.data;
+
+		// Verify number of same pairs running on bot before start to allow override
+		if (pairDealsMax > 1 && pairDealsActive.length < pairDealsMax) {
+
+			// Only override if not resuming deal
+			if (dealResumeId == undefined || dealResumeId == null || dealResumeId == '') {
+
+				checkActivePairOverride = true;
+			}
+		}
 
 		// Check for valid symbol data on start
 		if (symbolData.invalid) {
@@ -125,14 +144,14 @@ async function start(data, startBot, reload) {
 		else if (symbolData.error != undefined && symbolData.error != null) {
 
 			// Try again if resuming existing bot deal
-			if (dealResume) {
+			if (dealResumeId != undefined && dealResumeId != null && dealResumeId != '') {
 
 				const retryDelay = Number((1000 + (Math.random() * 5000)).toFixed(4));
 
 				let configObj = JSON.parse(JSON.stringify(config));
 
 				// Reset dealResume flag
-				configObj['dealResume'] = true;
+				configObj['dealResumeId'] = dealResumeId;
 
 				const msg = 'Unable to resume ' + configObj.botName + ' / Pair: ' + pair + ' / Error: ' + symbolData.error + ' Trying again in ' + retryDelay + ' seconds';
 
@@ -158,17 +177,23 @@ async function start(data, startBot, reload) {
 
 		const orders = [];
 
-		if (startBot && isActive) {
+		if (startBot && isActive && !checkActivePairOverride) {
 
 			dealIdMain = isActive.dealId;
+
+			if (dealResumeId != undefined && dealResumeId != null && dealResumeId != '') {
+
+				dealIdMain = dealResumeId;
+			}
 
 			if (!reload) {
 
 				// Active deal found so get original config from db and restart bot
+				const activeDeal = await getDeals({ 'botId': botIdMain, 'dealId': dealIdMain });
 
-				if (dealTracker[isActive.dealId] != undefined && dealTracker[isActive.dealId] != null) {
+				if (dealTracker[dealIdMain] != undefined && dealTracker[dealIdMain] != null) {
 
-					let msg = 'Deal ID ' + isActive.dealId + ' already running for ' + pair + '...';
+					let msg = 'Deal ID ' + dealIdMain + ' already running for ' + pair + '...';
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold(msg) ); }
 
@@ -177,7 +202,7 @@ async function start(data, startBot, reload) {
 
 				if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Found active DCA deal for ' + pair + '...') ); }
 
-				let configObj = JSON.parse(JSON.stringify(isActive.config));
+				let configObj = JSON.parse(JSON.stringify(activeDeal[0].config));
 
 				start(configObj, true, true);
 
@@ -193,7 +218,7 @@ async function start(data, startBot, reload) {
 
 				while (!followFinished) {
 
-					let followRes = await dcaFollow(config, exchange, isActive.dealId);
+					let followRes = await dcaFollow(config, exchange, dealIdMain);
 
 					followSuccess = followRes['success'];
 					followFinished = followRes['finished'];
@@ -869,6 +894,7 @@ async function start(data, startBot, reload) {
 
 				dealMax = botConfigDb['dealMax'];
 				pairMax = botConfigDb['pairMax'];
+				pairDealsMax = botConfigDb['pairDealsMax'];
 			}
 		}
 	}
@@ -880,11 +906,21 @@ async function start(data, startBot, reload) {
 
 		// Deactivate bot
 		const data = await updateBot(botIdMain, { 'active': false });
-
+		
 		if (shareData.appData.verboseLog) {
 			
 			Common.logger( colors.bgYellow.bold(config.botName + ': Max deal count reached. Bot will not start another deal.') );
 		}
+
+		const statusObj = await sendBotStatus({ 'bot_id': botIdMain, 'bot_name': config.botName, 'active': false, 'success': data.success });
+	}
+
+	// Get total active same pairs currently running on bot
+	let pairDealsActive = await getDeals({ 'botId': botIdMain, 'pair': pair, 'status': 0 });
+
+	if (pairDealsMax > 1 && pairDealsActive.length >= pairDealsMax) {
+
+		pairDealsLast = true;
 	}
 
 	// Get total active pairs currently running on bot
@@ -927,7 +963,7 @@ async function start(data, startBot, reload) {
 
 
 	// Start another bot deal if max deals and max pairs have not been reached
-	if (!dealStop && botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
+	if (!pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
@@ -1729,6 +1765,37 @@ async function connectExchange(configObj) {
 }
 
 
+async function sendBotStatus(data) {
+
+	let status;
+
+	let botId = data['bot_id'];
+	let botName = data['bot_name'];
+	let active = data['active'];
+	let success = data['success'];
+
+	if (active) {
+
+		status = 'enabled';
+	}
+	else {
+	
+		status = 'disabled';
+	}
+
+	Common.logger('Bot Status Changed: ID: ' + botId + ' / Status: ' + status + ' / Success: ' + success);
+
+	if (success) {
+
+		let msg = botName + ' is now ' + status;
+
+		Common.sendNotification({ 'message': msg, 'type': 'bot_' + status.toLowerCase(), 'telegram_id': shareData.appData.telegram_id });
+	}
+
+	return ( { 'status': status } );
+}
+
+
 async function updateBot(botId, data) {
 
 	let botData;
@@ -2174,6 +2241,7 @@ async function sendNotificationFinish(botName, dealId, pair, sellData) {
 	}
 
 	msg = msg.replace(/\{BOT_NAME\}/g, botName);
+	msg = msg.replace(/\{DEAL_ID\}/g, dealId);
 	msg = msg.replace(/\{PAIR\}/g, pair.toUpperCase());
 	msg = msg.replace(/\{PROFIT\}/g, profit);
 	msg = msg.replace(/\{PROFIT_PERCENT\}/g, profitPerc);
@@ -2576,7 +2644,7 @@ async function resumeDeal(deal) {
 	config['botName'] = botName;
 	config['dealCount'] = dealCount;
 	config['dealMax'] = dealMax;
-	config['dealResume'] = true;
+	config['dealResumeId'] = dealId;
 
 	deal['config'] = config;
 
@@ -2603,10 +2671,10 @@ async function stopDeal(dealId) {
 
 	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
 
-		while (!finished) {
+		// Set deal_stop flag
+		dealTracker[dealId]['info']['deal_stop'] = true;
 
-			// Set deal_stop flag
-			dealTracker[dealId]['info']['deal_stop'] = true;
+		while (!finished) {
 
 			await Common.delay(1000);
 		
@@ -2615,7 +2683,7 @@ async function stopDeal(dealId) {
 
 				finished = true;
 			}
-			else if (count >= 5) {
+			else if (count >= 10) {
 
 				// Timeout
 				success = false;
@@ -2649,10 +2717,10 @@ async function panicSellDeal(dealId) {
 
 		Common.logger(colors.red.bold('Panic sell deal ID ' + dealId + ' requested.'));
 
-		while (!finished) {
+		// Set deal_panic_sell flag
+		dealTracker[dealId]['info']['deal_panic_sell'] = true;
 
-			// Set deal_panic_sell flag
-			dealTracker[dealId]['info']['deal_panic_sell'] = true;
+		while (!finished) {
 
 			await Common.delay(1000);
 
@@ -2661,11 +2729,11 @@ async function panicSellDeal(dealId) {
 
 				finished = true;
 			}
-			else if (count >= 5) {
+			else if (count >= 10) {
 
 				// Timeout
 				success = false;
-				msg = 'Deal stop timeout';
+				msg = 'Sell timeout';
 
 				finished = true;
 			}
@@ -2740,6 +2808,7 @@ module.exports = {
 	colors,
 	start,
 	updateBot,
+	sendBotStatus,
 	ordersValid,
 	updateOrders,
 	stopDeal,

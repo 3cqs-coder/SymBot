@@ -65,7 +65,7 @@ async function start(apiKey) {
 
 		let msg = 'Connected to 3CQS Signals';
 
-		sendTelegram(msg, true);
+		sendNotification(msg, true);
 
 		let messageId = randomString(15);
 
@@ -96,8 +96,6 @@ async function start(apiKey) {
 
 			content += ' (HISTORY)';
 		}
-
-		updateDb(data);
 
 		processSignal(data);
 
@@ -159,14 +157,14 @@ async function start(apiKey) {
 
 		let msg = '3CQS SIGNAL Client Disconnected: ' + reason;
 
-		sendTelegram(msg, true);
+		sendNotification(msg, true);
 
 		//Either 'io server disconnect' or 'io client disconnect'
 		if (reason === 'io server disconnect') {
 
 			let msg = '3CQS SIGNAL Server disconnected the client. Trying to reconnect.';
 
-			sendTelegram(msg, true);
+			sendNotification(msg, true);
 
 			// Disconnected by server,so reconnect again
 			setTimeout(() => {
@@ -230,7 +228,13 @@ async function processSignal(data) {
 
 	let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
 
-	if (isNew && signal == 'BOT_START' && diffSec < (60 * maxMins)) {
+	// Check if signal was already logged
+	const signalDataDb = await getSignalDb({ 'signal_id': signalId });
+
+	updateDb(data);
+
+	// Only start if signal has not been seen before
+	if (isNew && signalDataDb.length == 0 && signal == 'BOT_START' && diffSec < (60 * maxMins)) {
 
 		let query = {
 						'active': true,
@@ -315,13 +319,13 @@ async function processSignal(data) {
 
 					let msg = '3CQS Signal Start Failed: ' + botName + ' (' + pairUse + '). Reason: ' + data;
 
-					sendTelegram(msg, true);
+					sendNotification(msg, true);
 				}
 				else {
 
 					let msg = '3CQS Signal Start: ' + botName + ' (' + pairUse + ')';
 
-					sendTelegram(msg, true);
+					sendNotification(msg, true);
 				}
 			}
 		}
@@ -363,7 +367,7 @@ async function processSignal(data) {
 
 				let msg = '3CQS Signal Stop: ' + botName + ' (' + pair + ')';
 
-				sendTelegram(msg, false);
+				sendNotification(msg, false);
 
 				botsDisable[botId] = 1;
 			}
@@ -461,7 +465,28 @@ async function updateDb(data) {
 }
 
 
-async function sendTelegram(msg, logMsg) {
+async function getSignalDb(query) {
+
+	if (query == undefined || query == null) {
+
+		query = {};
+	}
+
+	try {
+
+		const data = await Signals.find(query);
+
+		return data;
+	}
+	catch (e) {
+
+	}
+	
+	return [];
+};
+
+
+async function sendNotification(msg, logMsg) {
 
 	if (logMsg) {
 

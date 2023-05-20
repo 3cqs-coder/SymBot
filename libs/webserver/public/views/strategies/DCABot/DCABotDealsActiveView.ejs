@@ -18,10 +18,21 @@
 
 		const dcaMaxOrder = deal['info']['safety_orders_max']
 		const dcaTakeProfitPercent = deal['config']['dcaTakeProfitPercent'];
+		const dealLast = deal['config']['dealLast'];
 
 		$('#dealEditId').val(dealId);
 		$('#dcaMaxOrder').val(dcaMaxOrder);
+		$('#dealLast').val(dealLast);
 		$('#dcaTakeProfitPercent').val(dcaTakeProfitPercent);
+
+		$('#dealLast').prop('checked', false);
+		$('#dealLast').switchToggle(false);
+
+		if (dealLast != undefined && dealLast != null && dealLast != '') {
+
+			$('#dealLast').prop('checked', true);
+			$('#dealLast').switchToggle(true);
+		}
 
 		openModal(modalId, '#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
   	}
@@ -418,6 +429,8 @@
 
 	$(document).ready(function() {
  
+ 		$('#dealLast').simpleSwitch();
+ 
 		$(window).resize(function() {
 
 			resizeBotsDeals();
@@ -429,10 +442,12 @@
 			e.preventDefault();
 
 			const dealId = $('#dealEditId').val();
+			const dealLast = $('#dealLast').prop('checked');
 			const dcaMaxOrder = $('#dcaMaxOrder').val();
 			const dcaTakeProfitPercent = $('#dcaTakeProfitPercent').val();
-
+	
 			let dataObj = {
+							'dealLast': dealLast,
 							'dcaMaxOrder': dcaMaxOrder,
 							'dcaTakeProfitPercent': dcaTakeProfitPercent
 						  };
@@ -643,6 +658,13 @@
 
 				<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" class="form-field"></td></tr>
 				<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" class="form-field"></td></tr>
+				<tr><td>Last Deal:
+				
+				<span class="toolTip" style="padding: 0px 4px;">?<span class="toolTipText">
+				This will prevent a new deal from starting after this deal completes. Setting only applies to this deal. If you have multiple deals running with the same pair, it will not affect the other deals. Changing this may override all other bot or deal settings and signals, however it is possible signals received afterward can change this again.
+				</span></span>
+
+				</td> <td><input id="dealLast" name="dealLast" type=checkbox class="form-field"></td></tr>
 
 				<tr><td colspan=2 style="padding-top: 20px;"><button id="formSubmitEdit" class="btn">Update Deal</button></td></tr>
 			</form>
