@@ -91,6 +91,7 @@ function initApp() {
 
 	app.use('/js', express.static(pathRoot + '/webserver/public/js'));
 	app.use('/css', express.static(pathRoot + '/webserver/public/css'));
+	app.use('/data', express.static(pathRoot + '/webserver/public/data'));
 	app.use('/images', express.static(pathRoot + '/webserver/public/images'));
 
 	app.use(sessionMiddleware);

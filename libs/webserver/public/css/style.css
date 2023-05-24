@@ -107,6 +107,13 @@ a:visited {
 }
 
 
+#tradingViewSettings {
+
+	font-size: 1.8rem;
+	cursor: pointer;
+}
+
+
 #modal {
 
 	#display: inline-block !important;
@@ -124,6 +131,14 @@ a:visited {
 
 #modalDealEdit {
 
+	max-height: 90%;
+	overflow: auto;
+}
+
+
+#modalTvSettings {
+
+	display: none;
 	max-height: 90%;
 	overflow: auto;
 }

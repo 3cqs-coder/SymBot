@@ -44,7 +44,38 @@
 
 	$(document).ready(function() {
 
+		const modalTvId = '#modalTvSettings';
+
 		dataTracker = getDataTracker();
+
+		if (dataTracker['tradingView'] == undefined || dataTracker['tradingView'] == null) {
+
+			dataTracker['tradingView'] = {};
+			updateDataTracker();
+		}
+
+		getTradingViewData();
+
+		// Allow html in modal title
+		$.widget('ui.dialog', $.extend({}, $.ui.dialog.prototype, {
+
+			_title: function(title) {
+
+				if (!this.options.title) {
+
+					title.html('&#160;');
+				}
+				else {
+
+					title.html(this.options.title);
+				}
+			}
+		}));
+
+		$(document).on('click', '#tradingViewSettings', function() {
+
+			openModal('tvSettingsView', modalTvId, 'TradingView Settings');
+		});
 
 		$('#logo').on('click', function() {
 
@@ -58,6 +89,131 @@
 
 		getPriceBTC();
 	});
+
+
+	function getTradingViewData() {
+
+		fetch('/data/tradingViewData.json')
+		.then(response => response.json())
+		.then(function(json) {
+
+			populateTradingViewData(json);
+		});
+	}
+
+
+	function populateTradingViewData(data) {
+
+		let studies = data['studies'];
+		let intervals = data['intervals'];
+		let barStyles = data['bar_styles'];
+
+		if (Object.keys(dataTracker['tradingView']).length == 0) {
+
+			dataTracker['tradingView']['inverval'] = intervals[0].split('-')[0];
+			dataTracker['tradingView']['bar_style'] = barStyles[8].split('-')[0];
+			dataTracker['tradingView']['studies'] = {};
+		}
+
+		let content = '<div><br><i>Changes will take affect the next time a chart is loaded</i><br><br>';
+
+		content += '<b>Time Interval:</b> <select id="tvInterval">';
+
+		for (let i = 0; i < intervals.length; i++) {
+
+			let words = intervals[i].split('-');
+
+			content += '<option value="' + words[0] + '">' + words[1] + '</option>';
+		}
+
+		content += '</select><br><br>';
+
+		content += '<b>Bar Style:</b> <select id="tvBarStyle">';
+
+		for (let i = 0; i < barStyles.length; i++) {
+
+			let words = barStyles[i].split('-');
+
+			content += '<option value="' + words[0] + '">' + words[1] + '</option>';
+		}
+
+		content += '</select><br><br>';
+
+		content += '<div id="tvStudiesBoxes">';
+		content += '<b>Choose Indicators:</b>';
+		content += '<br><br>';
+
+		$('#modalTvSettings').empty();
+
+		let tvStudiesSort = sortByKey(studies, '_name');
+
+		for (let i = 0; i < tvStudiesSort.length; i++) {
+
+			let checked = '';
+
+			let tvId = tvStudiesSort[i]['id'];
+			let tvName = tvStudiesSort[i]['_name'];
+ 
+			let tvIdHash = numToBase26(hashCode(tvId));
+
+			if (dataTracker['tradingView']['studies'][tvIdHash] != undefined && dataTracker['tradingView']['studies'][tvIdHash] != null) {
+
+				checked = ' CHECKED';
+			}
+
+			content += '<input type=checkbox id="' + tvIdHash + '"' + checked + '> ' + tvName + '<br>';
+		}
+
+		content += '</div></div>';
+
+		$('#modalTvSettings').html(content);
+
+		if (dataTracker['tradingView']['interval'] != undefined && dataTracker['tradingView']['interval'] != null && dataTracker['tradingView']['interval'] != '') {
+
+			$('#tvInterval option[value="' + dataTracker['tradingView']['interval'] + '"]').attr('selected', true);	
+		}
+
+		if (dataTracker['tradingView']['bar_style'] != undefined && dataTracker['tradingView']['bar_style'] != null && dataTracker['tradingView']['bar_style'] != '') {
+
+			$('#tvBarStyle option[value="' + dataTracker['tradingView']['bar_style'] + '"]').attr('selected', true);	
+		}
+
+		$(document).on('change', '#tvInterval', function() {
+
+			dataTracker['tradingView']['interval'] = $(this).val();
+
+			updateDataTracker();
+		});
+
+		$(document).on('change', '#tvBarStyle', function() {
+
+			dataTracker['tradingView']['bar_style'] = $(this).val();
+
+			updateDataTracker();
+		});
+
+
+		$(document).on('change', '#tvStudiesBoxes input[type=checkbox]', function() {
+
+			let tvStudiesSelected = {};
+
+			dataTracker['tradingView']['studies'] = {};
+
+			$('#tvStudiesBoxes input[type=checkbox]').each(function() {
+
+				let id = $(this).attr('id');
+
+				if ($(this).is(':checked') == true) {
+
+					tvStudiesSelected[id] = 1;
+				}
+			});
+
+			dataTracker['tradingView']['studies'] = tvStudiesSelected;
+
+			updateDataTracker();
+		});
+	}
 
 
 	function dateConvertLocal(date) {
@@ -133,6 +289,29 @@
 			var y = b[key];
 			return x < y ? -1 : x > y ? 1 : 0;
 		});
+	}
+
+
+	function hashCode(str) {
+
+		let h;
+
+		for (let i = 0; i < str.length; i++) {
+
+			h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+		}
+
+		return Math.abs(h);
+	}
+
+
+	function numToBase26(num) {
+
+		num = parseInt(num, 10);
+
+		let str = num.toString(26).toUpperCase();
+
+		return str;
 	}
 
 
@@ -233,7 +412,7 @@
 
 	function getDataTracker() {
 
-		let data = {};
+		let data;
 
 		try {
 
@@ -242,7 +421,12 @@
 		catch(e) {
 
 		}
-		
+
+		if (data == undefined || data == null || data == '') {
+			
+			data = {};
+		}
+
 		return data;
 	}
 
@@ -288,7 +472,7 @@
 		let price;
 		let diffSec;
 
-		if (dataTracker) {
+		if (dataTracker['btc']) {
 
 			let dateLast = dataTracker['btc']['date'];
 			price = dataTracker['btc']['price'];
@@ -297,7 +481,7 @@
 		}
 
 		// Get price only if last check exceeds n seconds
-		if (!dataTracker || diffSec > (sec - 10)) {
+		if (!dataTracker['btc'] || diffSec > (sec - 10)) {
 
 			let data = await getMarkets(pairBTC, exchangeBTC);
 
@@ -359,7 +543,7 @@
 
 		let url = '/api/tradingview?jquery=' + jquery + '&script=' + script + '&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
 
-		openModal(modalId, '#' + divId, 'TradingView Chart ' + pair, 'Loading...');
+		openModal(modalId, '#' + divId, '<span id="tradingViewSettings">&#9881;</span> TradingView Chart ' + pair, 'Loading...');
 
 		$('#' + divId).load(url);
 	}
@@ -391,6 +575,7 @@
 	<div id="modal"></div>
 	<div id="modalDealEdit"></div>
 	<div id="modalNotifications"></div>
+	<div id="modalTvSettings"></div>
 </center>
 
 <div id="notificationsBox"></div>

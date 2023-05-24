@@ -1,0 +1,277 @@
+{
+ "intervals": [
+  "1-1m",
+  "5-5m",
+  "15-15m",
+  "30-30m",
+  "60-1h",
+  "120-2h",
+  "180-3h",
+  "240-4h",
+  "D-Day",
+  "W-Week",
+  "M-Month"
+ ],
+ "bar_styles": [
+  "0-Bars",
+  "1-Candles",
+  "2-Line",
+  "3-Area",
+  "4-Renko",
+  "5-Kagi",
+  "6-Point & Figure",
+  "7-Line Break",
+  "8-Heikin Ashi",
+  "9-Hollow Candles"
+ ],
+ "studies": [
+  {
+   "id": "ACCD@tv-basicstudies",
+   "_name": "Accumulation/Distribution"
+  },
+  {
+   "id": "studyADR@tv-basicstudies",
+   "_name": "ADR"
+  },
+  {
+   "id": "AROON@tv-basicstudies",
+   "_name": "Aroon"
+  },
+  {
+   "id": "ATR@tv-basicstudies",
+   "_name": "Average True Range"
+  },
+  {
+   "id": "AwesomeOscillator@tv-basicstudies",
+   "_name": "Awesome Oscillator"
+  },
+  {
+   "id": "BB@tv-basicstudies",
+   "_name": "Bollinger Bands"
+  },
+  {
+   "id": "BollingerBandsR@tv-basicstudies",
+   "_name": "Bollinger Bands %B"
+  },
+  {
+   "id": "BollingerBandsWidth@tv-basicstudies",
+   "_name": "Bollinger Bands Width"
+  },
+  {
+   "id": "CMF@tv-basicstudies",
+   "_name": "Chaikin Money Flow"
+  },
+  {
+   "id": "ChaikinOscillator@tv-basicstudies",
+   "_name": "Chaikin Oscillator"
+  },
+  {
+   "id": "chandeMO@tv-basicstudies",
+   "_name": "Chande Momentum Oscillator"
+  },
+  {
+   "id": "ChoppinessIndex@tv-basicstudies",
+   "_name": "Choppiness Index"
+  },
+  {
+   "id": "CCI@tv-basicstudies",
+   "_name": "Commodity Channel Index"
+  },
+  {
+   "id": "CRSI@tv-basicstudies",
+   "_name": "ConnorsRSI"
+  },
+  {
+   "id": "CorrelationCoefficient@tv-basicstudies",
+   "_name": "Correlation Coefficient"
+  },
+  {
+   "id": "DetrendedPriceOscillator@tv-basicstudies",
+   "_name": "Detrended Price Oscillator"
+  },
+  {
+   "id": "DM@tv-basicstudies",
+   "_name": "Directional Movement"
+  },
+  {
+   "id": "DONCH@tv-basicstudies",
+   "_name": "Donchian Channels"
+  },
+  {
+   "id": "DoubleEMA@tv-basicstudies",
+   "_name": "Double EMA"
+  },
+  {
+   "id": "EaseOfMovement@tv-basicstudies",
+   "_name": "Ease Of Movement"
+  },
+  {
+   "id": "EFI@tv-basicstudies",
+   "_name": "Elder's Force Index"
+  },
+  {
+   "id": "ElliottWave@tv-basicstudies",
+   "_name": "Elliott Wave"
+  },
+  {
+   "id": "ENV@tv-basicstudies",
+   "_name": "Envelope"
+  },
+  {
+   "id": "FisherTransform@tv-basicstudies",
+   "_name": "Fisher Transform"
+  },
+  {
+   "id": "HV@tv-basicstudies",
+   "_name": "Historical Volatility"
+  },
+  {
+   "id": "hullMA@tv-basicstudies",
+   "_name": "Hull Moving Average"
+  },
+  {
+   "id": "IchimokuCloud@tv-basicstudies",
+   "_name": "Ichimoku Cloud"
+  },
+  {
+   "id": "KLTNR@tv-basicstudies",
+   "_name": "Keltner Channels"
+  },
+  {
+   "id": "KST@tv-basicstudies",
+   "_name": "Know Sure Thing"
+  },
+  {
+   "id": "LinearRegression@tv-basicstudies",
+   "_name": "Linear Regression"
+  },
+  {
+   "id": "MACD@tv-basicstudies",
+   "_name": "MACD"
+  },
+  {
+   "id": "MOM@tv-basicstudies",
+   "_name": "Momentum"
+  },
+  {
+   "id": "MF@tv-basicstudies",
+   "_name": "Money Flow"
+  },
+  {
+   "id": "MoonPhases@tv-basicstudies",
+   "_name": "Moon Phases"
+  },
+  {
+   "id": "MASimple@tv-basicstudies",
+   "_name": "Moving Average"
+  },
+  {
+   "id": "MAExp@tv-basicstudies",
+   "_name": "Moving Average Exponentional"
+  },
+  {
+   "id": "MAWeighted@tv-basicstudies",
+   "_name": "Moving Average Weighted"
+  },
+  {
+   "id": "OBV@tv-basicstudies",
+   "_name": "On Balance Volume"
+  },
+  {
+   "id": "PSAR@tv-basicstudies",
+   "_name": "Parabolic SAR"
+  },
+  {
+   "id": "PivotPointsHighLow@tv-basicstudies",
+   "_name": "Pivot Points High Low"
+  },
+  {
+   "id": "PivotPointsStandard@tv-basicstudies",
+   "_name": "Pivot Points Standard"
+  },
+  {
+   "id": "PriceOsc@tv-basicstudies",
+   "_name": "Price Oscillator"
+  },
+  {
+   "id": "PriceVolumeTrend@tv-basicstudies",
+   "_name": "Price Volume Trend"
+  },
+  {
+   "id": "ROC@tv-basicstudies",
+   "_name": "Rate Of Change"
+  },
+  {
+   "id": "RSI@tv-basicstudies",
+   "_name": "Relative Strength Index"
+  },
+  {
+   "id": "VigorIndex@tv-basicstudies",
+   "_name": "Relative Vigor Index"
+  },
+  {
+   "id": "VolatilityIndex@tv-basicstudies",
+   "_name": "Relative Volatility Index"
+  },
+  {
+   "id": "SMIErgodicIndicator@tv-basicstudies",
+   "_name": "SMI Ergodic Indicator"
+  },
+  {
+   "id": "SMIErgodicOscillator@tv-basicstudies",
+   "_name": "SMI Ergodic Oscillator"
+  },
+  {
+   "id": "Stochastic@tv-basicstudies",
+   "_name": "Stochastic"
+  },
+  {
+   "id": "StochasticRSI@tv-basicstudies",
+   "_name": "Stochastic RSI"
+  },
+  {
+   "id": "TripleEMA@tv-basicstudies",
+   "_name": "Triple EMA"
+  },
+  {
+   "id": "Trix@tv-basicstudies",
+   "_name": "TRIX"
+  },
+  {
+   "id": "UltimateOsc@tv-basicstudies",
+   "_name": "Ultimate Oscillator"
+  },
+  {
+   "id": "VSTOP@tv-basicstudies",
+   "_name": "Volatility Stop"
+  },
+  {
+   "id": "Volume@tv-basicstudies",
+   "_name": "Volume"
+  },
+  {
+   "id": "VWAP@tv-basicstudies",
+   "_name": "VWAP"
+  },
+  {
+   "id": "MAVolumeWeighted@tv-basicstudies",
+   "_name": "VWMA"
+  },
+  {
+   "id": "WilliamR@tv-basicstudies",
+   "_name": "Williams %R"
+  },
+  {
+   "id": "WilliamsAlligator@tv-basicstudies",
+   "_name": "Williams Alligator"
+  },
+  {
+   "id": "WilliamsFractal@tv-basicstudies",
+   "_name": "Williams Fractal"
+  },
+  {
+   "id": "ZigZag@tv-basicstudies",
+   "_name": "Zig Zag"
+  }
+ ]
+}

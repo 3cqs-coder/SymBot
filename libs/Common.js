@@ -233,6 +233,8 @@ async function showTradingView(req, res) {
 		pair = 'BTC_USDT';
 	}
 
+	let tvData = await getData(pathRoot + '/libs/webserver/public/data/tradingViewData.json');
+
 	let dataObj = {
 					'container_id': containerId,
 					'jquery': jquery,
@@ -241,7 +243,8 @@ async function showTradingView(req, res) {
 					'height': height,
 					'theme': theme,
 					'exchange': exchange.toUpperCase(),
-					'pair': pair.replace(/[^a-z0-9]/gi, '').toUpperCase()
+					'pair': pair.replace(/[^a-z0-9]/gi, '').toUpperCase(),
+					'tv_data': tvData.data
 				  };
 
 	res.render( 'tradingView', { 'appData': shareData.appData, 'data': dataObj } );
@@ -704,6 +707,7 @@ function hashCode(str) {
 	let h;
 
 	for (let i = 0; i < str.length; i++) {
+
 		h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
 	}
 
