@@ -217,6 +217,8 @@ async function processSignal(data) {
 	let port = shareData.appData.web_server_port;
 	let apiKey = shareData.appData.api_key;
 
+	let baseUrl = 'http://127.0.0.1:' + port;
+
 	let headers = {
 						'Accept': 'application/json',
 						'Content-Type': 'application/json',
@@ -303,27 +305,51 @@ async function processSignal(data) {
 					}
 				}
 
-				let body = { 'pair': pairUse };
+				let body = { 'pair': pairUse, 'signalId': signalId };
 
 				// Start deal
-				let res = await shareData.Common.fetchURL('http://127.0.0.1:' + port + '/api/bots/' + botId + '/start_deal', 'post', headers, body);
+				let res = await shareData.Common.fetchURL({
+															'url': baseUrl + '/api/bots/' + botId + '/start_deal',
+															'method': 'post',
+															'headers': headers,
+															'body': body
+														 });
 
-				if (!res.success) {
+				if (res.success) {
 
-					let data = res.data;
+					let resApi = res.data;
 
-					if (typeof data != 'string') {
+					if (!resApi.success) {
 
-						data = JSON.stringify(data);
+						let data = resApi.data;
+
+						if (typeof data != 'string') {
+
+							data = JSON.stringify(data);
+						}
+
+						let msg = '3CQS Signal Start Failed: ' + botName + ' (' + pairUse + '). Reason: ' + data;
+
+						sendNotification(msg, true);
 					}
+					else {
 
-					let msg = '3CQS Signal Start Failed: ' + botName + ' (' + pairUse + '). Reason: ' + data;
+						let msg = '3CQS Signal Start: ' + botName + ' (' + pairUse + ')';
 
-					sendNotification(msg, true);
+						sendNotification(msg, true);
+					}
 				}
 				else {
 
-					let msg = '3CQS Signal Start: ' + botName + ' (' + pairUse + ')';
+					// API error
+					let errMsg = res.error;
+					
+					if (typeof errMsg !== 'string') {
+
+						errMsg = JSON.stringify(errMsg);
+					}
+
+					let msg = '3CQS Signal Start Failed (API Error): ' + botName + ' (' + pairUse + '). Reason: ' + errMsg;
 
 					sendNotification(msg, true);
 				}
@@ -333,8 +359,6 @@ async function processSignal(data) {
 
 
 	if (isNew && signal == 'BOT_STOP') {
-
-		let botsDisable = {};
 
 		let query = {
 						'status': 0,
@@ -358,24 +382,19 @@ async function processSignal(data) {
 				const dealId = deal.dealId;
 				const pair = deal.pair;
 
-				let config = deal.config;
+				let body = { 'dealLast': true };
 
-				// Set last deal flag				
-				config.dealLast = true;
-
-				const data = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config });
+				// Update last deal flag
+				let res = await shareData.Common.fetchURL({
+															'url': baseUrl + '/api/deals/' + dealId + '/update_deal',
+															'method': 'post',
+															'headers': headers,
+															'body': body
+														 });
 
 				let msg = '3CQS Signal Stop: ' + botName + ' (' + pair + ')';
 
 				sendNotification(msg, false);
-
-				botsDisable[botId] = 1;
-			}
-
-			// Disable bot
-			for (let botId in botsDisable) {
-
-				//let res = await shareData.Common.fetchURL('http://127.0.0.1:' + port + '/api/bots/' + botId + '/disable', 'post', headers, {});
 			}
 		}
 	}

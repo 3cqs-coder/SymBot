@@ -442,6 +442,7 @@ async function apiUpdateDeal(req, res) {
 
 	let success = true;
 	let isUpdate = false;
+	let dealLastUpdate = false;
 
 	let content;
 
@@ -479,13 +480,14 @@ async function apiUpdateDeal(req, res) {
 			config['createStep'] = 'getOrders';
 			config['pair'] = dealData['pair'];
 
+			// Remove data to only calculate orders
 			delete config['botId'];
 			delete config['botName'];
 
 			const ordersOrig = dealData['orders'];
 			const price = ordersOrig[0]['price'];
 
-			// Set first start condition
+			// Set first start condition for calculate orders, then remove when updating
 			config['startCondition'] = config['startConditions'][0];
 
 			// Override price to recalculate from original starting price
@@ -504,6 +506,8 @@ async function apiUpdateDeal(req, res) {
 					
 					delete config['dealLast'];
 				}
+				
+				dealLastUpdate = true;
 			}
 
 			// Override max safety orders if set
@@ -531,19 +535,24 @@ async function apiUpdateDeal(req, res) {
 
 			if (success) {
 
-				// Get newly calculated order steps
-				let data = await calculateOrders(config);
+				let data;
 
-				// Replace config data
-				config['startCondition'] = configOrig['startCondition'];
+				if (isUpdate) {
+
+					// Get newly calculated order steps if update required
+					data = await calculateOrders(config);
+				}
+
+				// Remove and replace config data
+				delete config['createStep'];
+				delete config['startCondition'];
+				delete config['firstOrderPrice'];
+
 				config['botId'] = configOrig['botId'];
 				config['botName'] = configOrig['botName'];
 
-				delete config['firstOrderPrice'];
-
-				let orderSuccess = data['orders']['success'];
-
-				if (orderSuccess) {
+				// Only calculate if orders or tp were set
+				if (data && data['orders']['success']) {
 
 					let orderHeaders = data['orders']['data']['orders']['headers'];
 					let orderSteps = data['orders']['data']['orders']['steps'];
@@ -560,7 +569,7 @@ async function apiUpdateDeal(req, res) {
 						success = false;
 						content = ordersValidate['data'];
 					}
-					else if (isUpdate) {
+					else {
 
 						let stopData = await shareData.DCABot.stopDeal(dealId);
 
@@ -599,8 +608,19 @@ async function apiUpdateDeal(req, res) {
 				}
 				else {
 
-					success = false;
-					content = 'Unable to calculate orders';
+					if (dealLastUpdate && !isUpdate) {
+
+						// Update last deal flag without stopping deal
+						let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config });
+
+						// Notify deal tracker to update
+						let dataRefresh = await shareData.DCABot.refreshUpdateDeal({ 'deal_id': dealId, 'config': config });
+					}
+					else {
+
+						success = false;
+						content = 'Unable to calculate orders';
+					}
 				}
 			}
 		}
@@ -832,7 +852,7 @@ async function apiCreateUpdateBot(req, res) {
 						}
 
 						config['pair'] = pair;
-						config = await shareData.DCABot.applyConfigData(botId, botName, config);
+						config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
 						// Start bot if active, no deals are currently running and start condition is now asap
 						if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && (pairMax == 0 || pairCount < pairMax) && startCondition == 'asap') {
@@ -937,7 +957,7 @@ async function apiEnableDisableBot(req, res) {
 					let startCondition;
 
 					config['pair'] = pair;
-					config = await shareData.DCABot.applyConfigData(botId, botName, config);
+					config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
 					if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
 
@@ -1005,6 +1025,7 @@ async function apiStartDeal(req, res) {
 	const body = req.body;
 
 	let pair = body.pair;
+	let signalId = body.signalId;
 
 	const botId = req.params.botId;
 
@@ -1084,7 +1105,7 @@ async function apiStartDeal(req, res) {
 					if (pairMax == 0 || pairCount < pairMax) {
 
 						config['pair'] = pair;
-						config = await shareData.DCABot.applyConfigData(botId, botName, config);
+						config = await shareData.DCABot.applyConfigData({ 'signal_id': signalId, 'bot_id': botId, 'bot_name': botName, 'config': config });
 
 						shareData.DCABot.startDelay({ 'config': config, 'delay': 1, 'notify': false });
 					}

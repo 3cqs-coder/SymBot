@@ -17,13 +17,11 @@ const Schema = require(pathRoot + '/mongodb/DCABotSchema');
 const Bots = Schema.Bots;
 const Deals = Schema.Deals;
 
-const prompt = require('prompt-sync')({
-	sigint: true
-});
-
-
 const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA orders!';
 
+// Max minutes before trackers are removed
+const maxMinsDeals = 2;
+const maxMinsVolume = 5;
 
 let dealTracker = {};
 let timerTracker = {};
@@ -32,7 +30,7 @@ let shareData;
 
 
 
-async function start(data, startBot, reload) {
+async function start(data, startBot) {
 
 	data = await initBot(startBot, JSON.parse(JSON.stringify(data)));
 
@@ -101,7 +99,6 @@ async function start(data, startBot, reload) {
 
 		if (pairConfig == undefined || pairConfig == null || pairConfig == '') {
 
-			//pair = prompt(colors.bgGreen('Please enter pair (BASE/QUOTE): '));
 			return;
 		}
 		else {
@@ -110,11 +107,6 @@ async function start(data, startBot, reload) {
 		}
 
 		pair = pair.toUpperCase();
-
-		if (!reload) {
-
-			if (shareData.appData.verboseLog) { Common.logger(colors.green('Getting pair information for ' + pair + '...')); }
-		}
 
 		const isActive = await checkActiveDeal(botIdMain, pair);
 		const pairDealsActive = await getDeals({ 'botId': botIdMain, 'pair': pair, 'status': 0 });
@@ -159,7 +151,7 @@ async function start(data, startBot, reload) {
 
 				setTimeout(() => {
 
-					start(configObj, startBot, reload);
+					start(configObj, startBot);
 
 				}, retryDelay);
 			}
@@ -186,53 +178,28 @@ async function start(data, startBot, reload) {
 				dealIdMain = dealResumeId;
 			}
 
-			if (!reload) {
+			// Config reloaded from db so continue
+			//await Common.delay(1000);
 
-				// Active deal found so get original config from db and restart bot
-				const activeDeal = await getDeals({ 'botId': botIdMain, 'dealId': dealIdMain });
+			let followSuccess = false;
+			let followFinished = false;
 
-				if (dealTracker[dealIdMain] != undefined && dealTracker[dealIdMain] != null) {
+			while (!followFinished) {
 
-					let msg = 'Deal ID ' + dealIdMain + ' already running for ' + pair + '...';
+				let followRes = await dcaFollow(config, exchange, dealIdMain);
 
-					if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold(msg) ); }
+				followSuccess = followRes['success'];
+				followFinished = followRes['finished'];
 
-					return ( { 'success': false, 'data': msg } );
+				if (!followSuccess) {
+
+					await Common.delay(1000);
 				}
-
-				if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Found active DCA deal for ' + pair + '...') ); }
-
-				let configObj = JSON.parse(JSON.stringify(activeDeal[0].config));
-
-				start(configObj, true, true);
-
-				return;
 			}
-			else {
 
-				// Config reloaded from db so bot and continue
-				//await Common.delay(1000);
+			if (followFinished) {
 
-				let followSuccess = false;
-				let followFinished = false;
-
-				while (!followFinished) {
-
-					let followRes = await dcaFollow(config, exchange, dealIdMain);
-
-					followSuccess = followRes['success'];
-					followFinished = followRes['finished'];
-
-					if (!followSuccess) {
-
-						await Common.delay(1000);
-					}
-				}
-
-				if (followFinished) {
-
-					//break;
-				}
+				//break;
 			}
 		}
 		else {
@@ -486,25 +453,7 @@ async function start(data, startBot, reload) {
 											'content': contentAdd,
 										}
 							});
-
-/*
-					sendOrders = prompt(
-						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
-					);
-
-					if (sendOrders.toUpperCase() == 'Y') {
-
-						let configStart = JSON.parse(JSON.stringify(config));
-
-						// Set pair
-						configStart.pair = pair;
-
-						start(configStart, true);
-						return;
-					}
-*/
 				}
-
 
 				if (startBot) {
 
@@ -518,6 +467,7 @@ async function start(data, startBot, reload) {
 					dealTracker[dealId] = {};
 					dealTracker[dealId]['deal'] = {};
 					dealTracker[dealId]['info'] = {};
+					dealTracker[dealId]['update'] = {};
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
@@ -791,25 +741,7 @@ async function start(data, startBot, reload) {
 											'content': contentAdd
 										}
 							});
-
-/*
-					sendOrders = prompt(
-						colors.bgYellow('Do you want to start ' + shareData.appData.name + ' (y/n) : ')
-					);
-
-					if (sendOrders.toUpperCase() == 'Y') {
-
-						let configStart = JSON.parse(JSON.stringify(config));
-
-						// Set pair
-						configStart.pair = pair;
-
-						start(configStart, true);
-						return;
-					}
-*/
 				}
-
 
 				if (startBot) {
 
@@ -823,6 +755,7 @@ async function start(data, startBot, reload) {
 					dealTracker[dealId] = {};
 					dealTracker[dealId]['deal'] = {};
 					dealTracker[dealId]['info'] = {};
+					dealTracker[dealId]['update'] = {};
 
 					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
@@ -951,7 +884,7 @@ async function start(data, startBot, reload) {
 	// Check if deal stop was requested
 	try {
 
-		if (dealTracker[dealIdMain]['info']['deal_stop']) {
+		if (dealTracker[dealIdMain]['update']['deal_stop']) {
 
 			dealStop = true;
 			delete dealTracker[dealIdMain];
@@ -981,7 +914,7 @@ async function start(data, startBot, reload) {
 				Common.logger(colors.bgGreen('Starting new bot deal for ' + pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
 			}
 
-			start(botConfigDb, true, true);
+			start(botConfigDb, true);
 		}
 		else {
 
@@ -994,9 +927,11 @@ async function start(data, startBot, reload) {
 }
 
 
-const dcaFollow = async (configData, exchange, dealId) => {
+const dcaFollow = async (configDataObj, exchange, dealId) => {
 
-	if (dealTracker[dealId]['info']['deal_stop']) {
+	let configData = JSON.parse(JSON.stringify(configDataObj));
+
+	if (dealTracker[dealId]['update']['deal_stop']) {
 
 		Common.logger(colors.red.bold('Deal ID ' + dealId + ' stop requested. Not processing'));
 
@@ -1008,6 +943,21 @@ const dcaFollow = async (configData, exchange, dealId) => {
 		Common.logger(colors.red.bold(shareData.appData.name + ' is terminating. Not processing deal ' + dealId));
 
 		return ( { 'success': false, 'finished': false } );
+	}
+
+	// Refresh config without restarting deal
+	if (dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null && dealTracker[dealId]['update']['config']) {
+
+		const configRefresh = JSON.parse(JSON.stringify(dealTracker[dealId]['update']['config']));
+
+		delete configData['dealLast'];
+	
+		if (configRefresh['dealLast']) {
+
+			configData['dealLast'] = true;
+		}
+
+		delete dealTracker[dealId]['update']['config'];
 	}
 
 	const config = Object.freeze(JSON.parse(JSON.stringify(configData)));
@@ -1282,7 +1232,7 @@ const dcaFollow = async (configData, exchange, dealId) => {
 								orders: orders
 							});
 						}
-						else if (price >= parseFloat(currentOrder.target) || dealTracker[dealId]['info']['deal_panic_sell']) {
+						else if (price >= parseFloat(currentOrder.target) || dealTracker[dealId]['update']['deal_panic_sell']) {
 
 							//Sell order
 
@@ -1905,7 +1855,6 @@ async function updateOrders(data) {
 async function checkTracker() {
 
 	// Monitor existing deals if they weren't updated after n minutes to take potential action
-	const maxMins = 2;
 
 	for (let dealId in dealTracker) {
 
@@ -1913,7 +1862,7 @@ async function checkTracker() {
 
 		let diffSec = (new Date().getTime() - new Date(deal['updated']).getTime()) / 1000;
 
-		if (diffSec > (60 * maxMins)) {
+		if (diffSec > (60 * maxMinsDeals)) {
 
 			diffSec = (diffSec / 60).toFixed(2);
 
@@ -1922,6 +1871,22 @@ async function checkTracker() {
 			Common.logger(msg);
 
 			Common.sendNotification({ 'message': msg, 'type': 'warning', 'telegram_id': shareData.appData.telegram_id });
+		}
+	}
+
+
+	// Remove delayed volume timers
+	for (let key in timerTracker) {
+
+		let timerObj = timerTracker[key];
+
+		let diffSec = (new Date().getTime() - new Date(timerObj['started']).getTime()) / 1000;
+
+		if (diffSec > (60 * (maxMinsVolume + 1.5))) {
+
+			clearTimeout(timerObj['id']);
+
+			delete timerTracker[key];
 		}
 	}
 }
@@ -2277,15 +2242,15 @@ async function ordersValid(pair, orders) {
 
 async function volumeValid(startBot, pair, symbol, config) {
 
-	const maxMins = 5;
-
 	let success = true;
+
+	const pairSafe = pair.replace(/\//g, '_');
 
 	const volumeMin = Number(config.volumeMin);
 
 	const volume24h = Number(((symbol.last * symbol.baseVolume) / 1000000).toFixed(2));
 
-	const timerKey = config.botId + pair;
+	const timerKey = config.botId + pairSafe;
 
 	let msg = 'Delaying deal start. ' + pair + ' 24h volume: ' + volume24h + 'M. Minimum required: ' + volumeMin + 'M';
 
@@ -2308,18 +2273,18 @@ async function volumeValid(startBot, pair, symbol, config) {
 
 		let diffSec = (new Date().getTime() - new Date(timerTracker[timerKey]['started']).getTime()) / 1000;
 
-		if (diffSec > (60 * maxMins)) {
+		if (diffSec > (60 * maxMinsVolume)) {
 
 			delete timerTracker[timerKey];
 
-			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Timeout reached for delayed deal start: ' + pair) ); }
+			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold('Timeout reached for volume delayed deal start: ' + pair) ); }
 		}
 		else {
 
 			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold(msg) ); }
 
 			timerTracker[timerKey]['id'] = setTimeout(() => {
-																startVerify(configObj, true, true);
+																startVerify(configObj);
 
 															}, (60000 * 1));
 		}
@@ -2485,7 +2450,7 @@ async function startVerify(config) {
 
 	// Verify bot is still enabled / active
 
-	const pair = config.pair;		
+	const pair = config.pair;
 	const botId = config.botId;
 	const dealCount = config.dealCount;
 
@@ -2518,7 +2483,7 @@ async function startVerify(config) {
 					botConfigDb['botId'] = botId;
 					botConfigDb['dealCount'] = dealCount;
 
-					start(botConfigDb, true, true);
+					start(botConfigDb, true);
 				}
 			}
 		}
@@ -2582,7 +2547,7 @@ async function startAsap(pairIgnore) {
 				let dealsActive = await getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
 				config['pair'] = pair;
-				config = await applyConfigData(botId, botName, config);
+				config = await applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
 				// Start bot if active, no deals are currently running and start condition is now asap
 				if (dealsActive && dealsActive.length == 0) {
@@ -2650,14 +2615,61 @@ async function resumeDeal(deal) {
 
 	dealTracker[dealId] = {};
 	dealTracker[dealId]['info'] = {};
+	dealTracker[dealId]['update'] = {};
 
 	dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
 
 	Common.logger( colors.bgGreen.bold('Resuming Deal ID ' + dealId) );
 
-	start(config, true, true);
+	start(config, true);
 
 	await Common.delay(1000);
+}
+
+
+async function refreshUpdateDeal(data) {
+
+	let dealId = data['deal_id'];
+	let config = data['config'];
+
+	let finished = false;
+	let success = true;
+
+	let count = 0;
+	let msg = 'Success';
+
+	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+
+		dealTracker[dealId]['update']['config'] = config;
+
+		while (!finished) {
+
+			await Common.delay(1000);
+		
+			// Verify deal refresh
+			if (!dealTracker[dealId]['update']['config']) {
+
+				finished = true;
+			}
+			else if (count >= 10) {
+
+				// Timeout
+				success = false;
+				msg = 'Deal refresh timeout';
+
+				finished = true;
+			}
+
+			count++;
+		}
+	}
+	else {
+
+		success = false;
+		msg = 'Deal ID not found';
+	}
+
+	return ( { 'success': success, 'data': msg } );
 }
 
 
@@ -2672,12 +2684,12 @@ async function stopDeal(dealId) {
 	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
 
 		// Set deal_stop flag
-		dealTracker[dealId]['info']['deal_stop'] = true;
+		dealTracker[dealId]['update']['deal_stop'] = true;
 
 		while (!finished) {
 
 			await Common.delay(1000);
-		
+
 			// Verify deal is stopped
 			if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
 
@@ -2718,7 +2730,7 @@ async function panicSellDeal(dealId) {
 		Common.logger(colors.red.bold('Panic sell deal ID ' + dealId + ' requested.'));
 
 		// Set deal_panic_sell flag
-		dealTracker[dealId]['info']['deal_panic_sell'] = true;
+		dealTracker[dealId]['update']['deal_panic_sell'] = true;
 
 		while (!finished) {
 
@@ -2751,7 +2763,12 @@ async function panicSellDeal(dealId) {
 }
 
 
-async function applyConfigData(botId, botName, config) {
+async function applyConfigData(data) {
+
+	let botId = data['bot_id'];
+	let botName = data['bot_name'];
+	let signalId = data['signal_id'];
+	let config = data['config'];
 
 	// Pass bot id in config so existing bot is used
 	config['botId'] = botId;
@@ -2761,6 +2778,12 @@ async function applyConfigData(botId, botName, config) {
 	if (config['dealCount'] == undefined || config['dealCount'] == null || config['dealCount'] == '') {
 
 		config['dealCount'] = 0;
+	}
+
+	// Set signal id if present
+	if (signalId != undefined && signalId != null && signalId != '') {
+
+		config['signalId'] = signalId;
 	}
 
 	return config;
@@ -2783,7 +2806,7 @@ async function startDelay(obj) {
 							Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
 						}
 
-						start(config, true, true);
+						start(config, true);
 
 					 }, (1000 * (configObj['delay'])));
 }
@@ -2813,6 +2836,7 @@ module.exports = {
 	updateOrders,
 	stopDeal,
 	updateDeal,
+	refreshUpdateDeal,
 	panicSellDeal,
 	connectExchange,
 	removeConfigData,

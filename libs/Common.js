@@ -178,17 +178,65 @@ async function saveData(fileName, data) {
 }
 
 
-async function fetchURL(url, method, headers, body) {
+async function fetchURL(data) {
+
+	let url = data['url'];
+	let method = data['method'];
+	let headers = data['headers'];
+	let body = data['body'];
+
+	let res;
+	let errMsg;
+
+	let success = true;
+	let isJSON = false;
+
+	if (method == undefined || method == null || method == '') {
+
+		method = 'get';
+	}
 
 	const response = await fetch(url, {
 		method: method,
 		headers: headers,
 		body: JSON.stringify(body),
+	})
+	.then(response => {
+
+		return response;
+	})
+	.catch(err => {
+
+		success = false;
+		errMsg = err;
+
+		return err;
 	});
 
-	const data = await response.json();
+	if (success) {
 
-	return data;
+		res = await response.text();
+
+		try {
+
+			res = JSON.parse(res);
+
+			isJSON = true;
+		}
+		catch(e) {
+
+			isJSON = false;
+		}
+	}
+
+	let resObj = {
+					'success': success,
+					'json': isJSON,
+					'data': res,
+					'error': errMsg
+				 };
+
+	return resObj;
 }
 
 

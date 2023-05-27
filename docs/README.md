@@ -296,6 +296,7 @@ GET /api/deals/completed
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
 |----------|----------|---------------|----------------------|-----------------|
 | botId    | string   | YES           |                      |                 |
+| signalId | string   | NO            |                      | Used to identify signal that started deal |
 | pair     | string   | NO            |                      | Only required for multi-pair bots |
 
 
