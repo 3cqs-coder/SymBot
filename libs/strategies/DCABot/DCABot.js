@@ -30,9 +30,11 @@ let shareData;
 
 
 
-async function start(data, startBot) {
+async function start(dataObj) {
 
-	data = await initBot(startBot, JSON.parse(JSON.stringify(data)));
+	let startBot = dataObj['create'];
+
+	let data = await initBot({ 'create': startBot, 'config': JSON.parse(JSON.stringify(dataObj['config'])) });
 
 	const dealResumeId = data['dealResumeId'];
 	const firstOrderPrice = data['firstOrderPrice'];
@@ -59,6 +61,7 @@ async function start(data, startBot) {
 	let pair = '';
 	let pairConfig = config.pair;
 	let botIdMain = config.botId;
+	let botNameMain = config.botName;
 	let dealCount = config.dealCount;
 	let dealMax = config.dealMax;
 	let pairMax = config.pairMax;
@@ -151,7 +154,7 @@ async function start(data, startBot) {
 
 				setTimeout(() => {
 
-					start(configObj, startBot);
+					start({ 'create': startBot, 'config': configObj });
 
 				}, retryDelay);
 			}
@@ -464,12 +467,7 @@ async function start(data, startBot) {
 
 					dealIdMain = dealId;
 
-					dealTracker[dealId] = {};
-					dealTracker[dealId]['deal'] = {};
-					dealTracker[dealId]['info'] = {};
-					dealTracker[dealId]['update'] = {};
-
-					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
+					await createDealTracker({ 'deal_id': dealId, 'deal': deal });
 
 					let followSuccess = false;
 					let followFinished = false;
@@ -752,12 +750,7 @@ async function start(data, startBot) {
 
 					dealIdMain = dealId;
 
-					dealTracker[dealId] = {};
-					dealTracker[dealId]['deal'] = {};
-					dealTracker[dealId]['info'] = {};
-					dealTracker[dealId]['update'] = {};
-
-					dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
+					await createDealTracker({ 'deal_id': dealId, 'deal': deal });
 
 					let followSuccess = false;
 					let followFinished = false;
@@ -806,6 +799,8 @@ async function start(data, startBot) {
 
 			botFoundDb = true;
 
+			botNameMain = bot[0]['botName'];
+
 			let botPairsDb = bot[0]['config']['pair'];
 
 			// Make sure pair was not removed from bot configuration
@@ -845,7 +840,7 @@ async function start(data, startBot) {
 			Common.logger( colors.bgYellow.bold(config.botName + ': Max deal count reached. Bot will not start another deal.') );
 		}
 
-		const statusObj = await sendBotStatus({ 'bot_id': botIdMain, 'bot_name': config.botName, 'active': false, 'success': data.success });
+		const statusObj = await sendBotStatus({ 'bot_id': botIdMain, 'bot_name': botNameMain, 'active': false, 'success': data.success });
 	}
 
 	// Get total active same pairs currently running on bot
@@ -902,19 +897,21 @@ async function start(data, startBot) {
 
 		if (pairFoundDb && (dealCount < dealMax || dealMax == 0)) {
 
-			// Be sure bot id is set on config reload and increment deal count
-			configObj['dealCount']++;
-
-			botConfigDb['botId'] = botIdMain;
 			botConfigDb['pair'] = pair; // Set single pair
 			botConfigDb['dealCount'] = configObj['dealCount'];
+
+			// Increment deal count
+			botConfigDb['dealCount']++;
+
+			// Apply config data again
+			botConfigDb = await applyConfigData({ 'signal_id': configObj.signalId, 'bot_id': botIdMain, 'bot_name': botNameMain, 'config': botConfigDb });
 
 			if (shareData.appData.verboseLog) {
 
 				Common.logger(colors.bgGreen('Starting new bot deal for ' + pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
 			}
 
-			start(botConfigDb, true);
+			start({ 'create': true, 'config': botConfigDb });
 		}
 		else {
 
@@ -1047,7 +1044,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					//console.log(t.toString());
 					//Common.logger(t.toString());
 
-					updateTracker(dealId, price, config, orders);
+					updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
 
 					await Deals.updateOne({
 						dealId: dealId
@@ -1100,7 +1097,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						//console.log(t.toString());
 						//Common.logger(t.toString());
-						updateTracker(dealId, price, config, orders);
+						updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
 
 						await Deals.updateOne({
 							dealId: dealId
@@ -1224,7 +1221,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 							orders[i].filled = 1;
 							orders[i].dateFilled = new Date();
 
-							updateTracker(dealId, price, config, orders);
+							updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
 
 							await Deals.updateOne({
 								dealId: dealId
@@ -1254,7 +1251,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								if (sellSuccess) {
 
-									updateTracker(dealId, price, config, orders);
+									updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
 
 									if (shareData.appData.verboseLog) {
 
@@ -1311,7 +1308,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						}
 						else {
 
-							updateTracker(dealId, price, config, orders);
+							updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
 
 							if (shareData.appData.verboseLog) {
 							
@@ -1892,10 +1889,26 @@ async function checkTracker() {
 }
 
 
-async function updateTracker(dealId, price, configObj, ordersObj) {
+async function createDealTracker(data) {
 
-	const config = JSON.parse(JSON.stringify(configObj));
-	const orders = JSON.parse(JSON.stringify(ordersObj));
+	const dealId = data['deal_id'];
+
+	dealTracker[dealId] = {};
+	dealTracker[dealId]['deal'] = {};
+	dealTracker[dealId]['info'] = {};
+	dealTracker[dealId]['update'] = {};
+
+	dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(data['deal']));
+}
+
+
+async function updateDealTracker(data) {
+
+	const dealId = data['deal_id'];
+	const price = data['price'];
+
+	const config = JSON.parse(JSON.stringify(data['config']));
+	const orders = JSON.parse(JSON.stringify(data['orders']));
 
 	const filledOrders = orders.filter(item => item.filled == 1);
 	const currentOrder = filledOrders.pop();
@@ -1932,29 +1945,31 @@ async function updateTracker(dealId, price, configObj, ordersObj) {
 }
 
 
-async function initBot(startBot, config) {
+async function initBot(data) {
 
-	let configObj = JSON.parse(JSON.stringify(config));
+	let create = data['create'];
+	let configObj = JSON.parse(JSON.stringify(data['config']));
 
-	if (startBot) {
+	if (create) {
 
 		configObj = await createBot(configObj);
 	}
 	else {
 
-		configObj = await setConfigData(configObj);
+		configObj = await initConfigData(configObj);
 	}
 
 	return configObj;
 }
 
 
-async function setConfigData(config) {
+async function initConfigData(config) {
 
 	let configObj = JSON.parse(JSON.stringify(config));
 
 	const botConfig = await shareData.Common.getConfig('bot.json');
 
+	// Set credentials
 	for (let key in botConfig.data) {
 
 		if (key.substring(0, 3).toLowerCase() == 'api') {
@@ -2328,7 +2343,7 @@ async function createBot(config) {
 		let isErr;
 
 		configObj = JSON.parse(JSON.stringify(configPassed));
-		configObj = await setConfigData(configObj);
+		configObj = await initConfigData(configObj);
 
 		let bot = await Bots.findOne({
 		
@@ -2483,7 +2498,7 @@ async function startVerify(config) {
 					botConfigDb['botId'] = botId;
 					botConfigDb['dealCount'] = dealCount;
 
-					start(botConfigDb, true);
+					start({ 'create': true, 'config': botConfigDb });
 				}
 			}
 		}
@@ -2593,7 +2608,11 @@ async function resumeBots() {
 }
 
 
-async function resumeDeal(deal) {
+async function resumeDeal(dealObj) {
+
+	let deal = JSON.parse(JSON.stringify(dealObj));
+
+	let config = deal.config;
 
 	const botId = deal.botId;
 	const botName = deal.botName;
@@ -2601,27 +2620,21 @@ async function resumeDeal(deal) {
 	const pair = deal.pair;
 	const dealCount = deal.dealCount;
 	const dealMax = deal.dealMax;
+	const signalId = config.signalId;
 
-	// Set previous deal counts
-	let config = deal.config;
+	// Apply previous config data
 
-	config['botId'] = botId;
-	config['botName'] = botName;
 	config['dealCount'] = dealCount;
 	config['dealMax'] = dealMax;
 	config['dealResumeId'] = dealId;
 
-	deal['config'] = config;
+	deal['config'] = await applyConfigData({ 'signal_id': signalId, 'bot_id': botId, 'bot_name': botName, 'config': config });
 
-	dealTracker[dealId] = {};
-	dealTracker[dealId]['info'] = {};
-	dealTracker[dealId]['update'] = {};
-
-	dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(deal));
+	await createDealTracker({ 'deal_id': dealId, 'deal': deal });
 
 	Common.logger( colors.bgGreen.bold('Resuming Deal ID ' + dealId) );
 
-	start(config, true);
+	start({ 'create': true, 'config': config });
 
 	await Common.delay(1000);
 }
@@ -2806,7 +2819,7 @@ async function startDelay(obj) {
 							Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
 						}
 
-						start(config, true);
+						start({ 'create': true, 'config': config });
 
 					 }, (1000 * (configObj['delay'])));
 }

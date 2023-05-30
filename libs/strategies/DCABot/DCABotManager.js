@@ -406,17 +406,9 @@ async function apiGetActiveDeals(req, res) {
 		let info = JSON.parse(JSON.stringify(deal['info']));
 
 		let dealRoot = deal['deal'];
+
 		dealRoot = await removeDbKeys(dealRoot);
-
-		delete deal['info'];
-
-		for (let key in config) {
-
-			if (key.substring(0, 3).toLowerCase() == 'api') {
-
-				delete config[key];
-			}
-		}
+		dealRoot['config'] = await shareData.DCABot.removeConfigData(config);
 
 		if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
 
@@ -752,7 +744,7 @@ async function apiCreateUpdateBot(req, res) {
 				botData['active'] = active;
 
 				// Save initial bot configuration
-				const configObj = await shareData.DCABot.initBot(true, botData);
+				const configObj = await shareData.DCABot.initBot({ 'create': true, 'config': botData });
 
 				botIdMain = configObj['botId'];
 
@@ -1112,13 +1104,20 @@ async function apiStartDeal(req, res) {
 					else {
 
 						success = false;
-						msg = 'Bot max pairs of ' + pairMax + ' reached';
+						msg = 'Bot max ' + pairMax + ' pairs reached';
 					}
 				}
 				else {
 
+					let displayMax = pairDealsMax;
+
+					if (displayMax < 2) {
+
+						displayMax = 1;
+					}
+
 					success = false;
-					msg = pair + ' pair max deals already running';
+					msg = pair + ' pair max ' + displayMax + ' deals already running';
 				}
 			}
 		}
@@ -1239,7 +1238,7 @@ async function calculateOrders(body) {
 	botData.botName = botName;
 
 	// Only get orders, don't start bot
-	let orders = await shareData.DCABot.start(botData, false);
+	let orders = await shareData.DCABot.start({ 'create': false, 'config': botData });
 
 	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
 }

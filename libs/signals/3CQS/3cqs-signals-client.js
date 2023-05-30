@@ -1,3 +1,5 @@
+'use strict';
+
 /*
 	3CQS Signals Client
 	https://www.3cqs.com
