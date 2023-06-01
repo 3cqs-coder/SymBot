@@ -48,6 +48,9 @@
 
 		dataTracker = getDataTracker();
 
+		// Set theme / mode
+		changeMode(dataTracker['mode']);
+
 		if (dataTracker['tradingView'] == undefined || dataTracker['tradingView'] == null) {
 
 			dataTracker['tradingView'] = {};
@@ -72,6 +75,20 @@
 			}
 		}));
 
+		$('#mode').on('click', function() {
+
+			let mode = dataTracker['mode'];
+
+			if (mode != undefined && mode != null && mode == 'dark') {
+
+				changeMode('light');
+			}
+			else {
+
+				changeMode('dark');
+			}
+		});
+
 		$(document).on('click', '#tradingViewSettings', function() {
 
 			openModal('tvSettingsView', modalTvId, 'TradingView Settings');
@@ -89,6 +106,27 @@
 
 		getPriceBTC();
 	});
+
+
+	function changeMode(mode) {
+
+		if (mode != undefined && mode != null && mode == 'dark') {
+
+			$('#mode').html('&#127769;');
+			$('#mode').css('font-size', '1.4rem');
+			$('body').attr('data-theme', 'dark');
+		}
+		else {
+
+			$('#mode').html('&#9788;');
+			$('#mode').css('font-size', '1.7rem');
+			$('body').removeAttr('data-theme');
+		}
+
+		dataTracker['mode'] = mode;
+
+		updateDataTracker();
+	}
 
 
 	function getTradingViewData() {
@@ -393,6 +431,7 @@
 			draggable: false,
 			width: '90%',
 			height: ($(window).height() - 200),
+			dialogClass: 'dialogClass',
 			modal: true,
 			appendTo: divAppend,
 			open: function (event, ui) {
@@ -564,7 +603,10 @@
 		<img id="logo" src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
 
-	<div id="notifications" class="notificationButton">&#128276;</div>
+	<div class="headerButtons">
+		<div id="mode" class="modeButton"></div>
+		<div id="notifications" class="notificationButton">&#128276;</div>
+	</div>
 </div>
 
 <div id="spinner-overlay">

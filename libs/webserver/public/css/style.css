@@ -53,6 +53,34 @@
 }
 
 
+:root {
+
+	--link-color: #008aeb;
+	--table-content-color: #3e3e3e;
+	--table-background-color: #e2e2e2;
+	--table-background-hover-color: #c5c5c5;
+	--table-border: 1px solid #cdcdcd;
+	--content-box-color: #000000;
+	--content-box-background-color: #ffffff;
+	--dialog-background-color: #ffffff;
+	--modify-buttons-color: 0 0 0 rgb(0, 0, 0);
+}
+
+
+[data-theme="dark"] {
+
+	--link-color: #74caf8;
+	--table-content-color: #cccccc;
+	--table-background-color: #353535;
+	--table-background-hover-color: #585858;
+	--table-border: 1px solid #424242;
+	--content-box-color: #cccccc;
+	--content-box-background-color: #252525;
+	--dialog-background-color: #252525;
+	--modify-buttons-color: 0 0 0 rgb(208, 208, 202, 1);
+}
+
+
 * {
 	box-sizing: border-box;
 }
@@ -79,12 +107,18 @@ a {
 
 a:link {
 
-	color: #008aeb;
+	color: var(--link-color);
 }
 
 a:visited {
 
-	color: #008aeb;
+	color: var(--link-color);
+}
+
+
+.dialogClass {
+
+	background: var(--dialog-background-color);
 }
 
 
@@ -141,6 +175,7 @@ a:visited {
 	display: none;
 	max-height: 90%;
 	overflow: auto;
+	color: var(--table-content-color);
 }
 
 
@@ -299,7 +334,7 @@ form textarea {
 .disableButton {
 
 	color: transparent;
-	text-shadow: 0 0 0 rgb(0, 0, 0);
+	text-shadow: var(--modify-buttons-color);
 	font-size: 1.1rem;
 }
 
@@ -319,20 +354,27 @@ form textarea {
 }
 
 
-#notifications {
+.headerButtons {
 
 	position: absolute;
 	z-index: 9999;
 	right: 5px;
 	bottom: 0;
+	font-size: 1.35rem;
+	text-shadow: #d8d8d8 1px 0 0, 0 0 1px #000000, 0 0 4px #000000;
+	color: transparent;
+}
+
+
+.modeButton {
+
+	display: inline-block;
 }
 
 
 .notificationButton {
 
-	color: transparent;
-	font-size: 1.35rem;
-	text-shadow: #d8d8d8 1px 0 0, 0 0 1px #000000, 0 0 4px #000000;
+	display: inline-block;
 }
 
 
@@ -411,7 +453,8 @@ form textarea {
 	margin: 0 auto;
 	padding: 15px;
 	overflow: auto;
-	background-color: #ffffff;
+	color: var(--content-box-color);
+	background: var(--content-box-background-color);
 	-webkit-border-radius: 5px;
 	-moz-border-radius: 5px;
 	border-radius: 5px;
@@ -430,7 +473,8 @@ form textarea {
 	top: 10px;
 	margin-bottom: 20px;
 	overflow: auto;
-	background-color: #ffffff;
+	color: var(--table-content-color);
+	background: var(--content-box-background-color);
 	-webkit-border-radius: 7px;
 	-moz-border-radius: 7px;
 	border-radius: 7px;
@@ -445,17 +489,26 @@ form textarea {
 }
 
 
+.tableHeader {
+
+	font-weight: bold;
+	text-align: left;
+	white-space: nowrap;
+}
+
+
 table#ordersTable th,
 table#ordersTable td {
 
 	text-align: left;
-	border-bottom: 1px solid #cccccc;
+	color: var(--table-content-color);
+	border-bottom: var(--table-border);
 }
 
 
 table#ordersTable tr:not(:first-child):hover {
 
-	background-color: #dfdfdf;
+	background-color: var(--table-background-color);
 	cursor: pointer;
 }
 
@@ -488,13 +541,13 @@ select[id^='startCondition'],
 	height: 50px;
 	padding-left: 10px;
 	padding-right: 10px;
-	border-bottom: 1px solid #dbdbdb;
+	border-bottom: var(--table-border);
 }
 
 
 .mainMenuItem:hover {
 
-	background: #676767;
+	background: var(--table-background-hover-color);
 	cursor: pointer;
 	-webkit-border-radius: 5px;
 	-moz-border-radius: 5px;
@@ -504,7 +557,7 @@ select[id^='startCondition'],
 
 .mainMenuItem:hover a {
 
-	color: #e0e0e0;
+	color: var(--table-content-color);
 }
 
 
@@ -560,7 +613,7 @@ select[id^='startCondition'],
 table#login {
 
 	font-size: 1.2rem;
-	color: #000000;
+	color: var(--table-content-color);
 	border: 0;
 	width: auto;
 	text-align: left;
@@ -570,7 +623,7 @@ table#login {
 table#botsCreate {
 
 	font-size: 1.2rem;
-	color: #000000;
+	color: var(--table-content-color);
 	border: 0;
 	width: 495px;
 	text-align: left;
@@ -631,21 +684,21 @@ table#botsDeals td:last-child {
 table#botsDeals td {
 
 	padding: 5px;
-	color: #3e3e3e;
+	color: var(--table-content-color);
 	font-weight: bold;
-	border-bottom: 1px solid #b9b9b9;
+	border-bottom: var(--table-border);
 }
 
 
 table#botsDeals tr:nth-child(even) {
 
-	background: #e2e2e2;
+	background: var(--table-background-color);
 }
 
 
 table#botsDeals tr:nth-child(odd) {
 
-	background: #e2e2e2;
+	background: var(--table-background-color);
 }
 
 
@@ -657,7 +710,7 @@ table#botsDeals tr:nth-child(1) {
 
 table#botsDeals tr:hover {
 
-	background-color: #c5c5c5;
+	background-color: var(--table-background-hover-color);
 	cursor: pointer;
 }
 
@@ -705,8 +758,9 @@ table#botsDeals tr:hover {
 
 	font-size: 1.0rem;
 	padding: 5px;
-	border-bottom: 1px solid #cdcdcd;
-	background: #e2e2e2;
+	border-bottom: var(--table-border);
+	color: var(--table-content-color);
+	background: var(--table-background-color);
 	cursor: pointer;
 	overflow-wrap: break-word;
 }
@@ -714,7 +768,7 @@ table#botsDeals tr:hover {
 
 .logRow:hover {
 
-	background-color: #c5c5c5;
+	background: var(--table-background-hover-color);;
 	cursor: pointer;
 }
 
@@ -730,10 +784,11 @@ table#botsDeals tr:hover {
 
 	position: relative;
 	width: 99%;
-	background-color: #e2e2e2;
+	color: var(--table-content-color);
+	background-color: var(--table-background-color);
 	padding: 10px;
 	margin-bottom: 25px;
-	border: 1px solid #cdcdcd;
+	border: var(--table-border);
 	-webkit-border-radius: 5px;
 	-moz-border-radius: 5px;
 	border-radius: 5px;
