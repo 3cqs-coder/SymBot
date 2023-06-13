@@ -72,6 +72,31 @@ async function init() {
 
 	const serverConfig = await Common.getConfig('server.json');
 
+	if (appConfig['data']['api_key'] == undefined || appConfig['data']['api_key'] == null || appConfig['data']['api_key'] == '') {
+
+		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
+
+		apiKey = Common.uuidv4();
+		appConfigObj['data']['api_key'] = apiKey;
+
+		await Common.saveConfig('app.json', appConfigObj.data);
+	}
+	else {
+
+		apiKey = appConfig['data']['api_key'];
+	}
+
+	if (appConfig['data']['password'] == undefined || appConfig['data']['password'] == null || appConfig['data']['password'] == '' || appConfig['data']['password'].indexOf(':') == -1) {
+
+		const dataPass = await Common.genPasswordHash('admin');
+
+		appConfig['data']['password'] = dataPass['salt'] + ':' + dataPass['hash'];
+
+		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
+
+		await Common.saveConfig('app.json', appConfigObj.data);
+	}
+
 	if (signalConfigs.success && Object.keys(signalConfigsData).length > 0) {
 
 		let startSubsObj = {};
@@ -117,32 +142,6 @@ async function init() {
 			appConfig['data']['bots']['start_conditions'] = Object.assign({}, appConfig['data']['bots']['start_conditions'], signalObj);
 		}
 	}
-
-	if (appConfig['data']['api_key'] == undefined || appConfig['data']['api_key'] == null || appConfig['data']['api_key'] == '') {
-
-		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
-
-		apiKey = Common.uuidv4();
-		appConfigObj['data']['api_key'] = apiKey;
-
-		await Common.saveConfig('app.json', appConfigObj.data);
-	}
-	else {
-
-		apiKey = appConfig['data']['api_key'];
-	}
-
-	if (appConfig['data']['password'] == undefined || appConfig['data']['password'] == null || appConfig['data']['password'] == '' || appConfig['data']['password'].indexOf(':') == -1) {
-
-		const dataPass = await Common.genPasswordHash('admin');
-
-		appConfig['data']['password'] = dataPass['salt'] + ':' + dataPass['hash'];
-
-		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
-
-		await Common.saveConfig('app.json', appConfigObj.data);
-	}
-
 
 	let shareData = {
 						'appData': {
