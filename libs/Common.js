@@ -9,7 +9,6 @@ const pathRoot = path
 
 const crypto = require('crypto');
 const Convert = require('ansi-to-html');
-const delay = require('delay');
 const fetch = require('node-fetch-commonjs');
 const { v4: uuidv4 } = require('uuid');
 
@@ -470,6 +469,15 @@ function logMonitor() {
 	setInterval(() => {
 		delFiles(pathRoot + '/logs', maxDays);
 	}, 43200);
+}
+
+
+async function delay(msec) {
+
+	return new Promise(resolve => {
+
+		setTimeout(() => { resolve('') }, msec);
+	});
 }
 
 
