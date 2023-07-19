@@ -320,6 +320,23 @@
 	}
 
 
+	function sortHashAsc(hash) {
+
+		return Object.keys(hash)
+		.sort()
+		.reduce((acc, key) => ({ ...acc, [key]: hash[key] }), {});
+	}
+
+
+	function sortHashDesc(hash) {
+
+		return Object.keys(hash)
+		.sort()
+		.reverse()
+		.reduce((acc, key) => ({ ...acc, [key]: hash[key] }), {});
+	}
+
+
 	function sortByKey(array, key) {
 
 		return array.sort(function(a, b) {

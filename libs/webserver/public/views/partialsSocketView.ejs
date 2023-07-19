@@ -51,6 +51,8 @@ $(document).ready(function() {
 
 		if (data.length > 0) {
 
+			let typesObj = {};
+
 			let dataArr = sortByKey(data, 'date');
 
 			dataArr = dataArr.reverse();
@@ -58,9 +60,22 @@ $(document).ready(function() {
 			for (let i = 0; i < dataArr.length; i++) {
 
 				let msg = dataArr[i]['message'];
+				let typeMsg = dataArr[i]['type'];
 				let dateMsg = dataArr[i]['date'];
 
-				content += '<div class="notificationsRow">' + msg + '<div style="margin-top: 10px; font-size: 0.85rem;">' + dateConvertLocal(dateMsg) + '</div></div>';
+				if (typeMsg != undefined && typeMsg != null && typeMsg != '') {
+
+					typesObj[typeMsg] = 1;
+				}
+
+				content += '<div class="notificationsRow" data-type="' + typeMsg + '">' + msg + '<div class="notificationsItem">' + dateConvertLocal(dateMsg) + '</div></div>';
+			}
+
+			typesObj = sortHashAsc(typesObj);
+
+			for (let typeMsg in typesObj) {
+
+				$('#notificationsList').append('<option>' + typeMsg);
 			}
 		}
 
@@ -108,6 +123,18 @@ $(document).ready(function() {
 		}
 	});
 
+	$(document).on('change', '#notificationsList', function() {
+
+		let optionSelected = $('option:selected', this).val();
+
+		$('.notificationsRow').show();
+	
+		if (optionSelected != '') {
+
+			$('.notificationsRow').hide();
+			$('.notificationsRow[data-type="' + optionSelected + '"]').show();
+		}
+	});
 
 	$('#notifications').on('click', function() {
 
@@ -136,9 +163,11 @@ $(document).ready(function() {
 
 		if (showModal) {
 
+			let titleExtra = '<span style="padding-left: 10px;"><select id="notificationsList"><option value="">Show All</select></span>';
+
 			let content = '<div class="spinner-dynamic-container"><div class="spinner-dynamic"></div></div>';
 
-			openModal('notificationsView', modalNotifyId, 'Notification Center History', content);
+			openModal('notificationsView', modalNotifyId, 'Notification Center History ' + titleExtra, content);
 
 			socket.emit('notifications_history', {});
 		}

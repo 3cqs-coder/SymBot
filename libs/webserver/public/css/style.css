@@ -372,6 +372,25 @@ form textarea {
 }
 
 
+#notificationsList {
+
+	cursor: pointer;
+}
+
+
+.notificationsRow {
+
+
+}
+
+
+.notificationsItem {
+
+	margin-top: 10px;
+	font-size: 0.85rem;
+}
+
+
 .notificationButton {
 
 	display: inline-block;
