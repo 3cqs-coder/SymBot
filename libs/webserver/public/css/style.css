@@ -901,3 +901,86 @@ table#botsDeals tr:hover {
 	border-style: solid;
 	border-color: transparent #525252 transparent transparent;
 }
+
+
+#dealSelectorShow {
+
+	position: absolute;
+	top: 0;
+	right: 10px;
+	font-size: 1.8rem;
+	cursor: pointer;
+}
+
+
+.dealSelectorWrapper {
+
+	z-index: 6000;
+	position: fixed;
+	top: 75px;
+	left: 10px;
+	display: none;
+}
+
+
+.dealSelector, .dealSelectorHidden {
+
+	display: block;
+}
+
+
+.dealSelector {
+
+	width: 150px;
+	text-align: left;
+	position: absolute;
+	padding: 10px;
+	background: var(--content-box-background-color);
+	color: var(--content-box-color);
+	border: #5d5d5d 1px solid;
+	border-radius: 5px;
+}
+
+
+.dealSelector label {
+
+	display: block;
+}
+
+
+.dealSelector label:nth-child(1) {
+
+	border-bottom: #cccccc solid 1px;
+	margin-bottom: 5px;
+}
+
+
+.dealSelector input {
+
+	margin-right: 5px;
+}
+
+
+.dealSelector .disabled {
+
+	color: #ddd;
+}
+
+
+#popover-deals label {
+
+	margin: 0 5px;
+	display: block;
+}
+
+
+#popover-deals input {
+
+	margin-right: 5px;
+}
+
+
+#popover-deals .disabled {
+
+	color: #ddd;
+}
