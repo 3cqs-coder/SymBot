@@ -1690,16 +1690,27 @@ async function connectExchange(configObj) {
 
 	try {
 
-		exchange = new ccxt.pro[config.exchange]({
+		if (shareData.appData.exchanges[config.exchange] != undefined && shareData.appData.exchanges[config.exchange] != null) {
 
-			'enableRateLimit': false,
-			'apiKey': config.apiKey,
-			'secret': config.apiSecret,
-			'passphrase': config.apiPassphrase,
-			'password': config.apiPassword,			
-		});
+			exchange = shareData.appData.exchanges[config.exchange];
+		}
+		else {
+
+			exchange = new ccxt.pro[config.exchange]({
+
+				'enableRateLimit': true,
+				'apiKey': config.apiKey,
+				'secret': config.apiSecret,
+				'passphrase': config.apiPassphrase,
+				'password': config.apiPassword,			
+			});
+
+			shareData.appData.exchanges[config.exchange] = exchange;
+		}
 	}
 	catch(e) {
+
+		delete shareData.appData.exchanges[config.exchange];
 
 		let msg = 'Connect exchange error: ' + e;
 

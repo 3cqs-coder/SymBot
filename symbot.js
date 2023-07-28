@@ -152,6 +152,7 @@ async function init() {
 										'console_log': consoleLog,
 										'mongo_db_url': appConfig['data']['mongo_db_url'],
 										'web_server_port': appConfig['data']['web_server']['port'],
+										'exchanges': {},
 										'api_key': apiKey,
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
