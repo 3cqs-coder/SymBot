@@ -170,9 +170,13 @@ You just need to create a Telegram bot with `@BotFather`. Here are some simple s
 
 A reverse proxy is a special type of web server that receives requests, forwards them to another web server somewhere else, receives a reply, and forwards the reply to the original requester. Although there are many reasons to use a reverse proxy, they are generally used to help increase performance, security, and reliability. Two popular open-source software packages that can act as a reverse proxy are [Apache](https://apache.org) and [NGINX](https://nginx.org).
 
+This is how requests will work when using a reverse proxy in front of SymBot:
+
+***User*** <---> ***Reverse Proxy (Port 80)*** <---> ***SymBot (Port 3000)***
+
 There are many different ways to set up either Apache or NGINX as a reverse proxy that can be used in front of SymBot, so this is just a basic guide. You may need to change configuration parameters depending on your operating system, version of these software packages, or if you're already running one of them on your system (server). The commands described here will also vary depending on your operating system.
 
-If setting up a reverse proxy seems too advanced, a great alternative is to use a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks) instead. This can also automatically encrypt all of your traffic without installing any additional SSL certificates to your web server and system.
+If setting up a reverse proxy seems too advanced, a great alternative is to use a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks) instead. This can also automatically encrypt all of your traffic without installing any additional SSL certificates on your web server and system.
 
 ### Apache
 
@@ -181,7 +185,7 @@ If setting up a reverse proxy seems too advanced, a great alternative is to use 
 sudo apt-get update
 ```
 
-2. Install Apache
+2. Install Apache:
 ```
 sudo apt-get install apache2
 ```
@@ -200,12 +204,12 @@ LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
 LoadModule rewrite_module modules/mod_rewrite.so
 ```
 
-5. For Debian based systems enable the modules using the following command:
+5. For Debian based systems, enable the modules using the following command:
 ```
 sudo a2enmod proxy proxy_http proxy_wstunnel rewrite
 ```
 
-6. Create a virtual host configuration file for your domain under **/etc/apache2/sites-available/** directory:
+6. Create a virtual host configuration file for your domain:
 ```
 # Debian based systems 
 sudo nano /etc/apache2/sites-available/your-domain-name.com.conf
@@ -641,3 +645,4 @@ If you want to reset the SymBot database for any reason, you can do so only from
 ## Disclaimer
 
 All investment strategies and investments involve risk of loss. All information found here, including any ideas, opinions, views, predictions, forecasts, or suggestions, expressed or implied herein, are for informational, entertainment or educational purposes only and should not be construed as personal investment advice. Conduct your own due diligence, or consult a licensed financial advisor or broker before making any and all investment decisions. Any investments, trades, speculations, or discussions made on the basis of any information found here, expressed or implied herein, are committed at your own risk, financial or otherwise. Use at your own risk.
+
