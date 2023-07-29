@@ -13,6 +13,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Upgrading](#upgrading)
 - [Configuration](#configuration)
 - [Telegram Setup](#telegram-setup)
+- [Reverse Proxy Setup](#reverse-proxy-setup)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
 - [Resetting SymBot](#resetting-symbot)
@@ -49,7 +50,7 @@ If you would rather run SymBot using Docker then skip this section and go to the
 To have SymBot run in the background it is recommended to use the Node.js process manager called **pm2**. Here's how to use it:
 
 1. Install **pm2** by typing: `npm install pm2 -g`
-2. Create a file called `ecosystem.config.js` and place the below configuration into it:
+2. Create a file called `ecosystem.config.js` in the same location where your SymBot files are located and place the below configuration into it:
 ```
 module.exports = {
 
@@ -164,6 +165,127 @@ You just need to create a Telegram bot with `@BotFather`. Here are some simple s
 8. Type or click on `/start`
 9. Copy your Telegram bot token into the SymBot **app.json** configuration file. You must also enter your own Telegram id or SymBot will not allow messages to be sent. If you don't know your Telegram id, open a chat with `@userinfobot`
 10. Restart SymBot 
+
+## Reverse Proxy Setup
+
+A reverse proxy is a special type of web server that receives requests, forwards them to another web server somewhere else, receives a reply, and forwards the reply to the original requester. Although there are many reasons to use a reverse proxy, they are generally used to help increase performance, security, and reliability. Two popular open-source software packages that can act as a reverse proxy are [Apache](https://apache.org) and [NGINX](https://nginx.org).
+
+There are many different ways to set up either Apache or NGINX as a reverse proxy that can be used in front of SymBot, so this is just a basic guide. You may need to change configuration parameters depending on your operating system, version of these software packages, or if you're already running one of them on your system (server). The commands described here will also vary depending on your operating system.
+
+If setting up a reverse proxy seems too advanced, a great alternative is to use a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks) instead. This can also automatically encrypt all of your traffic without installing any additional SSL certificates to your web server and system.
+
+### Apache
+
+1. Update the apt-get package lists with the following command:
+```
+sudo apt-get update
+```
+
+2. Install Apache
+```
+sudo apt-get install apache2
+```
+
+3. Open the Apache configuration file:
+	- For Apache 2.4+ use **/etc/httpd/conf.modules.d/00-proxy.conf** or previous versions use **/etc/httpd/conf/httpd.conf**
+```
+sudo nano /etc/httpd/conf/httpd.conf
+```
+
+4. Enable the Proxy and Rewrite modules by adding or uncommenting the below lines:
+```
+LoadModule proxy_module modules/mod_proxy.so
+LoadModule proxy_http_module modules/mod_proxy_http.so
+LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
+LoadModule rewrite_module modules/mod_rewrite.so
+```
+
+5. For Debian based systems enable the modules using the following command:
+```
+sudo a2enmod proxy proxy_http proxy_wstunnel rewrite
+```
+
+6. Create a virtual host configuration file for your domain under **/etc/apache2/sites-available/** directory:
+```
+# Debian based systems 
+sudo nano /etc/apache2/sites-available/your-domain-name.com.conf
+
+# Redhat based systems 
+sudo nano /etc/httpd/conf.d/your-domain-name.com.conf
+```
+
+7. Add  the below configuration block and save:
+```
+<VirtualHost *:80>
+	ServerName your-domain-name.com
+	ServerAlias www.your-domain-name.com
+	ServerAdmin webmaster@your-domain-name.com
+
+	RewriteEngine on
+	RewriteCond ${HTTP:Upgrade} websocket [NC]
+	RewriteCond ${HTTP:Connection} upgrade [NC]
+	RewriteRule .* "ws:/127.0.0.1:3000/$1" [P,L]
+  
+	ProxyPass / http://127.0.0.1:3000/
+	ProxyPassReverse / http://127.0.0.1:3000/
+	ProxyRequests off
+</VirtualHost>
+```
+8. Restart Apache:
+```
+# Debian based systems 
+sudo a2ensite your-domain-name.com
+sudo systemctl restart apache2
+
+# Redhat based systems 
+sudo systemctl restart httpd
+```
+
+You should now be able to access SymBot by opening your web browser to http://your-domain-name.com
+
+
+### NGINX
+
+1. Update the apt-get package lists with the following command:
+```
+sudo apt-get update
+```
+
+2. Install NGINX:
+```
+sudo apt-get install nginx
+```
+
+3. Open the default server block configuration file for editing:
+```
+sudo nano /etc/nginx/sites-available/default
+```
+
+4. Add the below configuration block and save:
+```
+server {
+	listen 80;
+
+	server_name your-domain-name.com;
+
+	location / {
+				proxy_pass http://127.0.0.1:3000;
+				proxy_http_version 1.1;
+				proxy_set_header Upgrade $http_upgrade;
+				proxy_set_header Connection 'upgrade';
+				proxy_set_header Host $host;
+				proxy_cache_bypass $http_upgrade;
+	}
+}
+```
+
+5. Restart NGINX:
+```
+sudo systemctl nginx restart
+```
+
+You should now be able to access SymBot by opening your web browser to http://your-domain-name.com
+
 
 ## API Information
 
@@ -497,6 +619,9 @@ If you want to reset the SymBot database for any reason, you can do so only from
 
 #### Can I run SymBot on my home network?
 - Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected issues, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
+
+#### Can I access SymBot from my mobile device?
+- Yes. If you set up SymBot on a home network and your mobile device is connected to the same wireless network, you should be able to open a web browser on your device and access SymBot at http://127.0.0.1:3000 just fine. However, being able to access it from other locations depends if your system is accessible to the public internet. This generally requires either opening ports on your router and system, or setting up a [Reverse Proxy](#reverse-proxy-setup).
 
 #### How many DCA bots can I run at the same time?
 - You can technically run an unlimited number of bots, however any limitations mostly come from how often your exchange allows APIs to be accessed, and the amount of resources your system (server) has such as CPU, memory, etc. The more bots you run generally requires additional API calls to your exchange and more system processing capability to manage all of your deals efficiently.
