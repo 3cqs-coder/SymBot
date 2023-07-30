@@ -191,8 +191,11 @@ sudo apt-get install apache2
 ```
 
 3. Open the Apache configuration file:
-	- For Apache 2.4+ use **/etc/httpd/conf.modules.d/00-proxy.conf** or previous versions use **/etc/httpd/conf/httpd.conf**
 ```
+# Apache 2.4+
+sudo nano /etc/httpd/conf.modules.d/00-proxy.conf
+
+# Apache < 2.4
 sudo nano /etc/httpd/conf/httpd.conf
 ```
 
@@ -618,11 +621,16 @@ If you want to reset the SymBot database for any reason, you can do so only from
 
 ## Frequently Asked Questions (FAQ)
 
+#### Why SymBot?
+- SymBot was developed with two primary goals in mind:
+	- Create a simple, easy to use, yet powerful crypto trading bot that would provide anyone who wanted to start trading cryptocurrencies with the ability to get up and running quickly with little technical knowledge.
+	- Reduce the risk of having any other parties with access to your most valuable information when it comes to trading, which are your exchange credentials or API keys. There are ever growing cyber-hacks, data breaches, and just overall bad actors that are constantly looking for ways to scam through sometimes fairly elaborate schemes. If your keys get into the hands of anyone with malicious intentions, you could lose all of your money and cryptocurrencies on your exchange. SymBot connects directly to your exchange so your API keys are never sent or shared with any other third-party.
+
 #### What exchanges does SymBot support?
 - SymBot uses the [CCXT](https://github.com/ccxt/ccxt) (CryptoCurrency eXchange Trading) library which supports many popular exchanges such as Binance and Coinbase. If your exchange is listed then you should be able to connect to it.
 
 #### Can I run SymBot on my home network?
-- Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected issues, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
+- Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected scenarios, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
 
 #### Can I access SymBot from my mobile device?
 - Yes. If you set up SymBot on a home network and your mobile device is connected to the same wireless network, you should be able to open a web browser on your device and access SymBot at http://127.0.0.1:3000 just fine. However, being able to access it from other locations depends if your system is accessible to the public internet. This generally requires either opening ports on your router and system, or setting up a [Reverse Proxy](#reverse-proxy-setup).
@@ -645,4 +653,3 @@ If you want to reset the SymBot database for any reason, you can do so only from
 ## Disclaimer
 
 All investment strategies and investments involve risk of loss. All information found here, including any ideas, opinions, views, predictions, forecasts, or suggestions, expressed or implied herein, are for informational, entertainment or educational purposes only and should not be construed as personal investment advice. Conduct your own due diligence, or consult a licensed financial advisor or broker before making any and all investment decisions. Any investments, trades, speculations, or discussions made on the basis of any information found here, expressed or implied herein, are committed at your own risk, financial or otherwise. Use at your own risk.
-
