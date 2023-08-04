@@ -12,6 +12,7 @@
 	"dcaTakeProfitPercent": 1.5,
 	"exchange": "coinbasepro",
 	"exchangeFee": 0.45,
+	"exchangeOptions": { "defaultType": "spot" },
 	"firstOrderAmount": 20,
 	"firstOrderLimitPrice": 1300,
 	"firstOrderType": "MARKET",

@@ -1008,7 +1008,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						const buy = await buyOrder(exchange, pair, baseOrder.qty);
 
-						if (!buy) {
+						if (!buy.success) {
 
 							Commong.logger(buy);
 
@@ -1062,7 +1062,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							const buy = await buyOrder(exchange, pair, baseOrder.qty);
 
-							if (!buy) {
+							if (!buy.success) {
 
 								Common.logger(buy);
 
@@ -1186,7 +1186,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								const buy = await buyOrder(exchange, pair, order.qty);
 
-								if (!buy) {
+								if (!buy.success) {
 
 									Common.logger(buy);
 
@@ -1241,7 +1241,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 									const sell = await sellOrder(exchange, pair, order.qtySum);
 
-									if (!sell) {
+									if (!sell.success) {
 
 										sellSuccess = false;
 
@@ -1629,33 +1629,53 @@ const getBalance = async (exchange, symbol) => {
 
 const buyOrder = async (exchange, pair, qty) => {
 
+	let order;
+	let isErr;
+	let success;
+
 	try {
 
-		const order = await exchange.createMarketBuyOrder(pair, qty, null);
-		return true;
+		success = true;
+
+		order = await exchange.createMarketBuyOrder(pair, qty, null);
 	}
 	catch (e) {
 
-		Common.logger(JSON.stringify(e));
+		isErr = e;
+		success = false;
 
-		return 'Error : ' + e.message;
+		let msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
+
+		Common.logger(msg);
 	}
+
+	return ( { 'date': new Date(), 'success': success, 'data': order, 'error': isErr } );
 };
 
 
 const sellOrder = async (exchange, pair, qty) => {
 
+	let order;
+	let isErr;
+	let success;
+
 	try {
 
-		const order = await exchange.createMarketSellOrder(pair, qty, null);
-		return true;
+		success = true;
+
+		order = await exchange.createMarketSellOrder(pair, qty, null);
 	}
 	catch (e) {
 
-		Common.logger(JSON.stringify(e));
+		isErr = e;
+		success = false;
 
-		return 'Error : ' + e.message;
+		let msg = 'SELL ERROR: ' + e.name + ' ' + e.message;
+
+		Common.logger(msg);
 	}
+
+	return ( { 'date': new Date(), 'success': success, 'data': order, 'error': isErr } );
 };
 
 
@@ -1687,8 +1707,14 @@ async function connectExchange(configObj) {
 	const config = JSON.parse(JSON.stringify(configObj));
 
 	let exchange;
+	let options = { 'defaultType': 'spot' };
 
 	try {
+
+		if (config.exchangeOptions != undefined && config.exchangeOptions != null && config.exchangeOptions != '') {
+
+			options = config.exchangeOptions;
+		}
 
 		if (shareData.appData.exchanges[config.exchange] != undefined && shareData.appData.exchanges[config.exchange] != null) {
 
@@ -1702,7 +1728,8 @@ async function connectExchange(configObj) {
 				'apiKey': config.apiKey,
 				'secret': config.apiSecret,
 				'passphrase': config.apiPassphrase,
-				'password': config.apiPassword,			
+				'password': config.apiPassword,
+				'options': options
 			});
 
 			shareData.appData.exchanges[config.exchange] = exchange;
@@ -1710,13 +1737,13 @@ async function connectExchange(configObj) {
 	}
 	catch(e) {
 
-		delete shareData.appData.exchanges[config.exchange];
-
 		let msg = 'Connect exchange error: ' + e;
 
 		Common.logger(msg);
 
 		Common.sendNotification({ 'message': msg, 'type': 'error', 'telegram_id': shareData.appData.telegram_id });
+
+		delete shareData.appData.exchanges[config.exchange];
 	}
 
 	return exchange;
