@@ -267,6 +267,19 @@ function initRoutes(router) {
 	});
 
 
+	router.post([ '/api/deals/:dealId/add_funds' ], (req, res) => {
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiAddFundsDeal(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.post([ '/api/deals/:dealId/panic_sell' ], (req, res) => {
 
 		if (req.session.loggedIn || validApiKey(req)) {

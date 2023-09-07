@@ -16,7 +16,8 @@
 
 		const deal = dealTracker[dealId];
 
-		const dcaMaxOrder = deal['info']['safety_orders_max']
+		//const dcaMaxOrder = deal['info']['safety_orders_max'];
+		const dcaMaxOrder = deal['config']['dcaMaxOrder'];
 		const dcaTakeProfitPercent = deal['config']['dcaTakeProfitPercent'];
 		const dealLast = deal['config']['dealLast'];
 
@@ -254,6 +255,110 @@
 	}
 
 
+	function showAddFunds(pair, dealId) {
+
+		let pairSplit = pair.split('/');
+		let quote = pairSplit[1];
+
+		$.confirm({
+  			title: false,
+  			boxWidth: "50%",
+  			useBootstrap: false,
+  			content: `<div style="font-size: 1.2rem; text-align: left;">Add funds to deal ${dealId}?<br><br>
+      	Enter the amount of ${quote} funds to add:
+      	<form action="" style="display: inline;">
+        <input type="text" id="confirmNum" class="form-field" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;" required />
+		<br><br>
+        <input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm adding funds</b>
+		</form>
+    	</div>`,
+  			buttons: {
+  				formSubmit: {
+  					btnClass: 'btn-default',
+  					text: '<div style="color: #1a9f00;">Add Funds</div>',
+  					action: function() {
+
+  						const inputValue = parseFloat($('#confirmNum').val());
+						const confirmBox = $('#confirmBox').prop('checked');
+
+						if (!confirmBox) {
+
+							alertBox('You must check the box to confirm adding funds', function() {});
+
+						} else if (!isNaN(inputValue)) {
+
+  							processAddFunds(inputValue, dealId);
+
+  						} else {
+
+  							alertBox('Invalid amount entered', function() {});
+  						}
+  					},
+  				},
+  				cancel: {
+  					btnClass: 'btn-default',
+  					text: '<div style="color: #000000;">Cancel</div>',
+  					action: function() {},
+  				},
+  			},
+  			onContentReady: function() {
+
+				$('#confirmBox').prop('checked', false);
+
+  				let jc = this;
+  				this.$content.find("form").on("submit", function(e) {
+  					e.preventDefault();
+  					jc.$$formSubmit.trigger("click");
+  				});
+  			},
+  		});
+
+
+	}
+
+
+	function processAddFunds(value, dealId) {
+
+		if (isNaN(value)) {
+
+			alertBox('Invalid amount entered', function() {});
+  			return;
+  		}
+
+  		const requestBody = {
+
+			volume: parseFloat(value),
+		};
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+
+			type: 'POST',
+  			url: '/api/deals/' + dealId + '/add_funds',
+  			data: requestBody,
+  			dataType: 'json',
+  			success: function(data) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+  				if (!data.success) {
+  					alertBox('Unable to update deal: ' + data['data'], function() {});
+  				}
+				else {
+  					alertBox('Sucessfully added funds to: ' + dealId, function() {});
+  				}
+  			},
+  			error: function(data) {
+  				// Some error in ajax call
+  				$('#spinner-overlay').fadeOut(100);
+
+	  			alertBox('Error: ' + JSON.stringify(data), function() {});
+  			},
+  		});
+	}
+
+
 	function showOrderHistory(dealId) {
 
 		if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
@@ -261,9 +366,10 @@
 			return;
 		}
 
-		let count = 1;
-
 		let orders = JSON.parse(JSON.stringify(dealTracker[dealId]['orders'])).reverse();
+		let ordersFilled = orders.filter(item => item.filled);
+
+		let count = ordersFilled.length;
 
 		let table = $('<table id="ordersTable" style="width: 100%;" cellspacing=0 cellpadding=0>');
 
@@ -275,11 +381,18 @@
 
 			let data = orders[i];
 
-			if (data['filled'] != 0) {
+			if (data['filled']) {
 
 				let row = $('<tr />');
 
-				row.append($('<td style="padding: 3px;">' + count + '.</td>'));
+				let style = 'padding: 3px;';
+
+				if (data['manual']) {
+
+					style += ' color: #e38302;';
+				}
+
+				row.append($('<td style="' + style + '">' + count + '.</td>'));
 				row.append($('<td>' + dateConvertLocal(data['dateFilled']) + '</td>'));
 				row.append($('<td>$' + data['price'] + '</td>'));
 				row.append($('<td>' + data['qty'] + '</td>'));
@@ -289,7 +402,7 @@
 
 				table.append(row);
 
-				count++;
+				count--;
 			}
 		}
 
@@ -315,11 +428,13 @@
 		for (let i = 0; i < deals.length; i++) {
 
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
+			let addFundsButton = '<span class="disableButton">$+</span>';
 			let editButton = '<span class="disableButton">&#9998;</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
 			let panicButton = '<span class="disableButton" style="font-size: 1.0rem;">&#128176</span>';
 
-			let dealVolume = deals[i].orders.filter(order => order.filled === 1).reduce((acc, order) => acc + Number(order.amount), 0);
+			let dealVolume = deals[i].orders.filter(order => order.filled).reduce((acc, order) => acc + Number(order.amount), 0);
+
 			inDeals += dealVolume;
 
 			let profitPercColor = '#1a9f00';
@@ -378,7 +493,17 @@
 			dealTracker[dealId]['config'] = config;
 			dealTracker[dealId]['orders'] = deal['orders'];
 
-			contentArr.push('<tr data-dealid="' + dealId + '">');
+			const filledOrders = deal['orders'].filter(item => item.filled);
+			const manualOrders = filledOrders.filter(item => item.manual);
+
+			let safetyOrdersTotalDisplay = config['dcaMaxOrder'];
+
+			if (manualOrders.length > 0) {
+
+				safetyOrdersTotalDisplay += ' (+' + manualOrders.length + ')';
+			}
+
+			contentArr.push('<tr data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '">');
 			contentArr.push('<td>' + deal['info']['bot_name'] + '</td>');
 			contentArr.push('<td>' + dealId + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
@@ -389,10 +514,11 @@
 			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit + '</td>');
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '%</td>');
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
-			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + deal['info']['safety_orders_max'] + '</td>');
+			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
 			contentArr.push('<td>' + dealCount + '</td>');
 			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButton + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButton + '</div></td>');
+			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + addFundsButton + '</div></td>');
 			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
 			contentArr.push('</tr>');
 		}
@@ -589,6 +715,16 @@
 			}
 			else if (col == (colCount - 2)) {
 
+				let pair = row.data('pair');
+				let dealId = row.data('dealid');
+
+				if (dealId) {
+
+					showAddFunds(pair, dealId);	
+				}
+      		} 
+			else if (col == (colCount - 3)) {
+
 				// Panic sell
 				let dealId = row.data('dealid');
 
@@ -597,7 +733,7 @@
 					panicSellConfirm(dealId);
 				}
 			}
-			else if (col == (colCount - 3)) {
+			else if (col == (colCount - 4)) {
 
 				// Edit deal
 				let data = { 'deal_id': '' };
@@ -662,7 +798,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

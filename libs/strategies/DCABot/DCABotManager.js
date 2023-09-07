@@ -453,6 +453,7 @@ async function apiUpdateDeal(req, res) {
 
 		const status = dealData['status'];
 		const filledOrders = dealData.orders.filter(item => item.filled == 1);
+		const manualOrders = filledOrders.filter(item => item.manual);
 
 		if (status != 0) {
 
@@ -505,9 +506,11 @@ async function apiUpdateDeal(req, res) {
 			// Override max safety orders if set
 			if (dcaMaxOrder != undefined && dcaMaxOrder != null) {
 
-				config['dcaMaxOrder'] = dcaMaxOrder;
-				
-				isUpdate = true;
+				if (dcaMaxOrder != config['dcaMaxOrder']) {
+
+					isUpdate = true;
+					config['dcaMaxOrder'] = dcaMaxOrder;
+				}
 
 				// Verify max orders
 				if (dcaMaxOrder < (filledOrders.length - 1)) {
@@ -520,9 +523,18 @@ async function apiUpdateDeal(req, res) {
 			// Override take profit if set
 			if (dcaTakeProfitPercent != undefined && dcaTakeProfitPercent != null) {
 
-				config['dcaTakeProfitPercent'] = dcaTakeProfitPercent;
-				
-				isUpdate = true;
+				if (dcaTakeProfitPercent != config['dcaTakeProfitPercent']) {
+
+					isUpdate = true;
+					config['dcaTakeProfitPercent'] = dcaTakeProfitPercent;
+				}
+			}
+
+			// Block updating until refactoring calculations can be implemented
+			if (isUpdate && manualOrders.length > 0) {
+
+				success = false;
+				content = 'Take profit percentage or max safety orders cannot be changed when manual orders are placed';
 			}
 
 			if (success) {
@@ -663,6 +675,83 @@ async function apiPanicSellDeal(req, res) {
 
 		success = false;
 		content = 'Invalid Deal ID';
+	}
+
+	res.send({ 'date': new Date(), 'success': success, 'data': content });
+}
+
+
+async function apiAddFundsDeal(req, res) {
+
+	let success = true;
+	let isValid = true;
+
+	let content = 'Success';
+	
+	const dealId = req.params.dealId;
+	const volume = parseFloat(req.body.volume);
+	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (volume == undefined || volume == null || volume == 0) {
+
+		isValid = false;
+	}
+
+	if (isValid && data && data.length > 0) {
+
+		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+
+		const status = dealData['status'];
+		
+		if (status != 0) {
+
+			success = false;
+			content = 'Deal ID ' + dealId + ' is not active';
+		}
+		else {
+
+			const stopData = await shareData.DCABot.stopDeal(dealId);
+
+			// Verify deal is stopped
+			if (stopData['success']) {
+
+				const addData = await shareData.DCABot.addFundsDeal(dealId, volume);
+
+				if (!addData['success']) {
+
+					success = false;
+					content = addData['data'];
+				}
+
+				// Check for active deal and resume
+				let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
+
+				if (dealActive && dealActive.length > 0) {
+
+					let deal = dealActive[0];
+				
+					await shareData.DCABot.resumeDeal(deal);
+				}
+			}
+			else {
+
+				success = false;
+				content = stopData['data'];
+			}
+		}
+	}
+	else {
+
+		success = false;
+
+		if (!isValid) {
+
+			content = 'Volume must be greater than zero';
+		}
+		else {
+
+			content = 'Invalid Deal ID';
+		}
 	}
 
 	res.send({ 'date': new Date(), 'success': success, 'data': content });
@@ -1254,6 +1343,7 @@ module.exports = {
 	apiGetActiveDeals,
 	apiGetDealsHistory,
 	apiUpdateDeal,
+	apiAddFundsDeal,
 	apiPanicSellDeal,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,

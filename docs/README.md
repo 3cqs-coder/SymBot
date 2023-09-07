@@ -142,6 +142,7 @@ mongodb://localhost:27017/SymBot
 	- This contains all default settings for your bot and exchange information. For test purposes, always leave `sandBox: true`.
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the [CCXT](https://github.com/ccxt/ccxt)  library so if the exchange is supported, you should be able to connect to it
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web interface
+	- If you experience any issues with your bots or deals using a specific exchange, there is a special parameter that can pass options directly to the CCXT library by modifying `"exchangeOptions": { "defaultType": "spot" }`
 
 - **server.json**
 
@@ -388,6 +389,16 @@ POST /api/bots/{botId}/disable
 POST /api/deals/{dealId}/update_deal
 ```
 
+### Add funds
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| volume   | number   | YES           |                      | Add funds to a deal by placing a manual safety order |
+
+```
+POST /api/deals/{dealId}/add_funds
+```
+
 ### Panic sell deal
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -561,6 +572,19 @@ curl -i -X POST \
 	}' \
 http://127.0.0.1:3000/api/deals/{dealId}/update_deal
 ```
+
+#### Add funds
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{
+		"volume": 25
+	}' \
+http://127.0.0.1:3000/api/deals/{dealId}/add_funds
+```
+
 
 #### Panic sell deal
 ```

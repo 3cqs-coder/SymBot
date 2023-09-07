@@ -2768,6 +2768,158 @@ async function stopDeal(dealId) {
 }
 
 
+async function addFundsDeal(dealId, volume) {
+
+	let success = true;
+	let isUpdated = false;
+	let msg = 'Success';
+
+	const deal = await Deals.findOne({
+		dealId: dealId,
+		status: 0,
+	});
+
+	if (deal) {
+
+		const config = JSON.parse(JSON.stringify(deal.config));
+		const orders = JSON.parse(JSON.stringify(deal.orders));
+
+		Common.logger(
+			colors.red.bold('Add Funds to deal ID ' + dealId + ' requested.')
+		);
+
+		let oldOrders = orders;
+		let exchange = await connectExchange(config).catch(console.log);
+
+		const ex = await exchange.loadMarkets();
+
+		for (let i = 0; i < oldOrders.length; i++) {
+
+			if (!oldOrders[i].filled && !isUpdated) {
+
+				const symbolData = await getSymbol(exchange, config.pair);
+				const symbol = symbolData.data;
+				const askprice = symbol.ask;
+
+				let newOrder = Object.assign({}, oldOrders[i]);
+				let price = await filterPrice(exchange, config.pair, askprice);
+				let amount = await filterPrice(exchange, config.pair, volume);
+				let qty = await filterAmount(exchange, config.pair, ((volume) / askprice));
+
+				let qtySum = (parseFloat(qty) + parseFloat(oldOrders[i - 1].qtySum));
+				qtySum = await filterAmount(exchange, config.pair, qtySum);
+
+				let orderSum = (parseFloat(amount) + parseFloat(oldOrders[i - 1].sum));
+				orderSum = await filterPrice(exchange, config.pair, orderSum);
+
+				let sum = await filterPrice(exchange, config.pair, orderSum);
+
+				const avgPrice = await filterPrice(exchange, config.pair, (parseFloat(orderSum) / parseFloat(qtySum)));
+
+				let targetPrice = Percentage.addPerc(
+					(avgPrice),
+					(config.dcaTakeProfitPercent)
+				);
+
+				targetPrice = await filterPrice(exchange, config.pair, targetPrice);
+
+				if (targetPrice != undefined && targetPrice != null && targetPrice != false && targetPrice > 0) {
+
+					isUpdated = true;
+
+					if (!config.sandBox) {
+
+						const buy = await buyOrder(exchange, config.pair, qty);
+	
+						if (!buy.success) {
+	
+							success = false;
+							isUpdated = false;
+							msg = buy;
+	
+							Common.logger(buy);
+						}
+					}
+
+					newOrder.price = price;
+					newOrder.average = avgPrice;
+					newOrder.target = targetPrice;
+					newOrder.qty = qty;
+					newOrder.amount = amount;
+					newOrder.qtySum = qtySum;
+					newOrder.sum = orderSum;
+					newOrder.manual = true;
+					newOrder.filled = 1;
+					newOrder.dateFilled = new Date();
+
+					oldOrders.splice(i, 0, newOrder);
+				}
+
+			} else if (isUpdated) {
+
+				let price = Percentage.subPerc(
+					(oldOrders[i - 1].price),
+					(config.dcaOrderStartDistance)
+				);
+
+				price = await filterPrice(exchange, config.pair, price);
+
+				let orderSize = (oldOrders[i].qty);
+
+				orderSize = await filterAmount(exchange, config.pair, orderSize);
+
+				let orderAmount = parseFloat(orderSize) * parseFloat(price);
+				orderAmount = await filterPrice(exchange, config.pair, orderAmount);
+
+				let orderSum = parseFloat(orderAmount) + parseFloat(oldOrders[i - 1].sum);
+				orderSum = await filterPrice(exchange, config.pair, orderSum);
+
+				let orderQtySum = parseFloat(orderSize) + parseFloat(oldOrders[i - 1].qtySum);
+				orderQtySum = await filterAmount(exchange, config.pair, orderQtySum);
+
+				const avgPrice = await filterPrice(exchange, config.pair, parseFloat(orderSum) / parseFloat(orderQtySum));
+
+				let targetPrice = Percentage.addPerc(
+					(avgPrice),
+					(config.dcaTakeProfitPercent)
+				);
+
+				targetPrice = await filterPrice(exchange, config.pair, targetPrice);
+
+				oldOrders[i].orderNo = oldOrders[i].orderNo + 1;
+				oldOrders[i].price = price;
+				oldOrders[i].average = avgPrice;
+				oldOrders[i].target = targetPrice;
+				oldOrders[i].qty = orderSize;
+				oldOrders[i].amount = orderAmount;
+				oldOrders[i].qtySum = orderQtySum;
+				oldOrders[i].sum = orderSum;
+			}
+		}
+
+		//console.table(oldOrders);
+
+		if (success) {
+
+			const botId = deal.botId;
+			const config = deal.config;
+
+			let dataUpdate = await updateDeal(botId, dealId, {
+				config: config,
+				orders: oldOrders,
+			});
+		}
+	}
+	else {
+
+		success = false;
+		msg = 'Deal ID not found';
+	}
+
+	return ( { 'success': success, 'data': msg } );
+}
+
+
 async function panicSellDeal(dealId) {
 
 	let finished = false;
@@ -2888,6 +3040,7 @@ module.exports = {
 	stopDeal,
 	updateDeal,
 	refreshUpdateDeal,
+	addFundsDeal,
 	panicSellDeal,
 	connectExchange,
 	removeConfigData,
