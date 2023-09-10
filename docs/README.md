@@ -317,6 +317,7 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
+| dealCoolDown                  | integer  | NO            |                      | Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair. |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
 ```
@@ -341,6 +342,7 @@ POST /api/bots/create
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
+| dealCoolDown                  | integer  | NO            |                      | Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair. |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
 ```
@@ -389,7 +391,7 @@ POST /api/bots/{botId}/disable
 POST /api/deals/{dealId}/update_deal
 ```
 
-### Add funds
+### Add funds to deal
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
 |----------|----------|---------------|----------------------|-----------------|
@@ -573,7 +575,7 @@ curl -i -X POST \
 http://127.0.0.1:3000/api/deals/{dealId}/update_deal
 ```
 
-#### Add funds
+#### Add funds to deal
 ```
 curl -i -X POST \
 -H 'Content-Type: application/json' \

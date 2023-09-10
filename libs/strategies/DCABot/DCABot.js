@@ -911,7 +911,19 @@ async function start(dataObj) {
 				Common.logger(colors.bgGreen('Starting new bot deal for ' + pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
 			}
 
-			start({ 'create': true, 'config': botConfigDb });
+			if (botConfigDb['dealCoolDown'] == 0) {
+
+				start({ 'create': true, 'config': botConfigDb });
+			}
+			else {
+
+				if (shareData.appData.verboseLog) {
+
+					Common.logger(colors.bgYellow.bold('Waiting ' + botConfigDb['dealCoolDown'] + ' seconds for ' + pair.toUpperCase() + ' cooldown before starting new deal.'));
+				}
+
+				startDelay({ 'config': botConfigDb, 'delay': botConfigDb['dealCoolDown'], 'notify': false });
+			}
 		}
 		else {
 
@@ -2993,12 +3005,12 @@ async function applyConfigData(data) {
 }
 
 
-async function startDelay(obj) {
+async function startDelay(dataObj) {
 
-	const configObj = JSON.parse(JSON.stringify(obj));
+	const data = JSON.parse(JSON.stringify(dataObj));
 
-	const config = configObj['config'];
-	const notify = configObj['notify'];
+	const config = data['config'];
+	const notify = data['notify'];
 
 	// Start bot
 	setTimeout(() => {
@@ -3011,7 +3023,7 @@ async function startDelay(obj) {
 
 						start({ 'create': true, 'config': config });
 
-					 }, (1000 * (configObj['delay'])));
+					 }, (1000 * (data['delay'])));
 }
 
 

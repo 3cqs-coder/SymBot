@@ -1282,6 +1282,7 @@ async function calculateOrders(body) {
 
 	botData.pair = pair;
 	botData.dealMax = body.dealMax;
+	botData.dealCoolDown = body.dealCoolDown;
 	botData.pairMax = body.pairMax;
 	botData.pairDealsMax = body.pairDealsMax;
 	botData.volumeMin = body.volumeMin;
@@ -1298,6 +1299,11 @@ async function calculateOrders(body) {
 	if (botData.dealMax == undefined || botData.dealMax == null || botData.dealMax == '') {
 
 		botData.dealMax = 0;
+	}
+
+	if (botData.dealCoolDown == undefined || botData.dealCoolDown == null || botData.dealCoolDown == '') {
+
+		botData.dealCoolDown = 0;
 	}
 
 	if (botData.pairMax == undefined || botData.pairMax == null || botData.pairMax == '') {

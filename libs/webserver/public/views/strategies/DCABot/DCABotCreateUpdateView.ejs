@@ -471,7 +471,7 @@
 
 			let regEx = /[^0-9\.]/g;
 
-			if (id.toLowerCase() == 'dealmax' || id.toLowerCase() == 'pairmax' || id.toLowerCase() == 'dcamaxorder') {
+			if (id.toLowerCase() == 'dealmax' || id.toLowerCase() == 'dealcooldown' || id.toLowerCase() == 'pairmax' || id.toLowerCase() == 'dcamaxorder') {
 
 				regEx = /[^0-9]/g;
 			}
@@ -768,6 +768,15 @@
 				</span></span>
 
 				</td> <td><input id="volumeMin" name="volumeMin" value="<%- botData.volumeMin %>" class="form-field"> Million</td></tr>
+
+				<tr><td>Cooldown between deals: 
+
+				<span class="toolTip">?<span class="toolTipText">
+				Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair.
+				</span></span>
+
+				</td> <td><input id="dealCoolDown" name="dealCoolDown" value="<%- botData.dealCoolDown %>" class="form-field"> Seconds</td></tr>
+
 				<tr id="startConditionFirst"><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
 				<%- startConditionSubString %>
 				<tr><td>Enabled:</td> <td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>
