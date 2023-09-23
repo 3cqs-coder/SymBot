@@ -140,10 +140,10 @@
 
 							"autosize": true,
 							"symbol": tvExchange.toUpperCase() + ':' + tvPair.replace(/[^a-z0-9]/gi, '').toUpperCase(),
-							"interval": tvInterval,
-							"timezone": timeZoneIANA,
 							"theme": tvTheme,
-							"style": tvBarStyle,
+							"style": tvBarStyle.toString(),
+							"interval": tvInterval.toString(),
+							"timezone": timeZoneIANA,
 							"locale": "en",
 							"toolbar_bg": "#f1f3f6",
 							"hide_side_toolbar": true,

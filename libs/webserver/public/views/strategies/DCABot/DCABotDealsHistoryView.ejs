@@ -34,6 +34,33 @@
 		});
 	}
 
+	function getDealInfo(dealId) {
+
+		let modalId = 'historyDealsView';
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'GET',
+					url: '/api/deals/' + dealId + '/show',
+					data: {},
+					dataType: 'json',
+					success: function({ data }) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						showOrderHistory(modalId, dealId, data['orders']);
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+					}
+		});
+	}
+
 
 	function getBots() {
 
@@ -95,10 +122,11 @@
 			let profitPercColor = '#1a9f00';
 
 			let deal = deals[i];
+			let dealId = deal['deal_id'];
 			let profit = deal['profit'];
 			let profitPerc = deal['profit_percent'];
 			let dateEnd = new Date(deal['date_end']).getTime();
-		
+
 			let duration = timeDiff(new Date(deal['date_start']), new Date(deal['date_end']));
 
 			if (profitPerc <= 0) {
@@ -106,7 +134,7 @@
 				profitPercColor = '#d82715';
 			}
 
-			contentArr.push('<tr>');
+			contentArr.push('<tr data-dealid="' + dealId + '">');
 			contentArr.push('<td id="date' + i + '" data-date="' + dateEnd + '">' + dateConvertLocal(dateEnd) + '</td>');
 			contentArr.push('<td>' + deal['bot_name'] + '</td>');
 			contentArr.push('<td>' + deal['deal_id'] + '</td>');
@@ -149,6 +177,18 @@
 		$(document).on('click', '#submit', function() {
 
 			getDeals({ 'from': $('#fromDate').val(), 'to': $('#toDate').val(), 'botId': $('#botValue').val() });
+		});
+
+
+		$(document).on('click', '#botsDeals tbody tr td', function() {
+
+			let col = $(this).index();
+			let row = $(this).closest('tr');
+			let content = $(this).text();
+
+			let dealId = row.data('dealid');
+
+			getDealInfo(dealId);
 		});
 
 

@@ -868,11 +868,11 @@ async function verifyLogin(req, res) {
 
 		req.session.loggedIn = true;
 
-		msg = 'success';
+		msg = 'SUCCESS';
 	}
 	else {
 
-		msg = 'failed';
+		msg = 'FAILED';
 	}
 
 	msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;

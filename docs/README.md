@@ -411,6 +411,18 @@ POST /api/deals/{dealId}/add_funds
 POST /api/deals/{dealId}/panic_sell
 ```
 
+
+### Get deal information
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| -        |          |               |                      | Get information for a deal |
+
+
+```
+GET /api/deals/{dealId}/show
+```
+
 ### Get active deals
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -587,7 +599,6 @@ curl -i -X POST \
 http://127.0.0.1:3000/api/deals/{dealId}/add_funds
 ```
 
-
 #### Panic sell deal
 ```
 curl -i -X POST \
@@ -596,6 +607,13 @@ curl -i -X POST \
 http://127.0.0.1:3000/api/deals/{dealId}/panic_sell
 ```
 
+#### Get deal information
+```
+curl -i -X GET \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+'http://127.0.0.1:3000/api/deals/{dealId}/show'
+```
 
 #### Get active deals
 ```

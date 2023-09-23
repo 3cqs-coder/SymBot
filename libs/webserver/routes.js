@@ -229,7 +229,7 @@ function initRoutes(router) {
 	});
 
 
-	router.get([ '/api/deals', '/api/deals/completed', '/api/deals/:dealId' ], (req, res) => {
+	router.get([ '/api/deals', '/api/deals/completed', '/api/deals/:dealId/show' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
@@ -242,9 +242,17 @@ function initRoutes(router) {
 
 				shareData.DCABotManager.apiGetDealsHistory(req, res, true);
 			}
+			else if (reqPath.indexOf('show') > -1 && dealId) {
+
+				shareData.DCABotManager.apiShowDeal(req, res, dealId);
+			}
 			else if (dealId == undefined || dealId == null || dealId == '' || dealId == 'active') {
 
 				shareData.DCABotManager.apiGetActiveDeals(req, res);
+			}
+			else {
+
+				redirectNotFound(res);
 			}
 		}
 		else {
@@ -334,13 +342,19 @@ function initRoutes(router) {
 
 	router.all('*', (req, res) => {
 
-		let obj = {
-
-			'error': 'Not Found'
-		};
-
-		res.status(404).send(obj);
+		redirectNotFound(res);
 	});
+}
+
+
+function redirectNotFound(res) {
+
+	let obj = {
+
+		'error': 'Not Found'
+	};
+
+	res.status(404).send(obj);
 }
 
 

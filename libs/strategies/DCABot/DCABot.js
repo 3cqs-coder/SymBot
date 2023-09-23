@@ -947,6 +947,13 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 		return ( { 'success': false, 'finished': true } );
 	}
 
+	if (dealTracker[dealId]['update']['deal_pause']) {
+
+		Common.logger(colors.red.bold('Deal ID ' + dealId + ' pause requested. Not processing'));
+
+		return ( { 'success': false, 'finished': false } );
+	}
+
 	if (shareData.appData.sig_int) {
 
 		Common.logger(colors.red.bold(shareData.appData.name + ' is terminating. Not processing deal ' + dealId));
@@ -1954,7 +1961,26 @@ async function createDealTracker(data) {
 
 async function updateDealTracker(data) {
 
+	let dataObj = JSON.parse(JSON.stringify(data));
+
+	dataObj['active'] = true;
+	dataObj['updated'] = new Date();
+
 	const dealId = data['deal_id'];
+
+	const dealData = await getDealInfo(dataObj);
+
+	dealTracker[dealId]['info'] = dealData['info'];
+	dealTracker[dealId]['deal']['config'] = dealData['config'];
+	dealTracker[dealId]['deal']['orders'] = dealData['orders'];
+}
+
+
+async function getDealInfo(data) {
+
+	const updated = data['updated'];
+	const dealId = data['deal_id'];
+	const active = data['active'];
 	const price = data['price'];
 
 	const config = JSON.parse(JSON.stringify(data['config']));
@@ -1973,8 +1999,9 @@ async function updateDealTracker(data) {
 	profitPerc = Number(profitPerc).toFixed(2);
 	takeProfit = Number(takeProfit).toFixed(2);
 
-	const dealObj = {
-						'updated': new Date(),
+	const dealInfo = {
+						'updated': updated,
+						'active': active,
 						'bot_id': config.botId,
 						'bot_name': config.botName,
 						'safety_orders_used': filledOrders.length,
@@ -1987,11 +2014,9 @@ async function updateDealTracker(data) {
 						'take_profit': takeProfit,
 						'deal_count': config.dealCount,
 						'deal_max': config.dealMax
-					};
+					 };
 
-	dealTracker[dealId]['info'] = dealObj;
-	dealTracker[dealId]['deal']['config'] = config;
-	dealTracker[dealId]['deal']['orders'] = orders;
+	return ({ 'info': dealInfo, 'config': config, 'orders': orders });
 }
 
 
@@ -2018,6 +2043,9 @@ async function initConfigData(config) {
 	let configObj = JSON.parse(JSON.stringify(config));
 
 	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	// Set exchange options
+	configObj['exchangeOptions'] = botConfig.data['exchangeOptions'];
 
 	// Set credentials
 	for (let key in botConfig.data) {
@@ -2736,6 +2764,34 @@ async function refreshUpdateDeal(data) {
 }
 
 
+async function pauseDeal(dealId, pause) {
+
+	let success = true;
+	let msg = 'Success';
+
+	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+
+		if (pause) {
+
+			// Set deal_pause flag
+			dealTracker[dealId]['update']['deal_pause'] = true;
+		}
+		else {
+
+			// Remove deal_pause flag
+			delete dealTracker[dealId]['update']['deal_pause'];
+		}
+	}
+	else {
+
+		success = false;
+		msg = 'Deal ID not found';
+	}
+
+	return ( { 'success': success, 'data': msg } );
+}
+
+
 async function stopDeal(dealId) {
 
 	let finished = false;
@@ -3049,6 +3105,7 @@ module.exports = {
 	sendBotStatus,
 	ordersValid,
 	updateOrders,
+	pauseDeal,
 	stopDeal,
 	updateDeal,
 	refreshUpdateDeal,
@@ -3059,6 +3116,7 @@ module.exports = {
 	initBot,
 	getBots,
 	getDeals,
+	getDealInfo,
 	getSymbol,
 	getSymbolsAll,
 	applyConfigData,

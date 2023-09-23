@@ -358,6 +358,60 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 }
 
 
+async function apiShowDeal(req, res, dealId) {
+
+	let content;
+	let priceLast;
+
+	let active = true;
+	let success = true;
+
+	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (data && data.length > 0) {
+
+		let price;
+
+		const dealDataDb = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+
+		const updated = dealDataDb['updatedAt'];
+		const sellData = dealDataDb['sellData'];
+
+		if (shareData.dealTracker[dealId] != undefined && shareData.dealTracker[dealId] != null) {
+
+			priceLast = shareData.dealTracker[dealId]['info']['price_last'];
+		}
+
+		if (sellData != undefined && sellData != null) {
+
+			price = sellData['price'];
+		}
+
+		// Use current price from deal tracker if sell price does not exist
+		if (price == undefined || price == null) {
+
+			price = priceLast;
+		}
+
+		if (dealDataDb['status']) {
+
+			active = false;
+		}
+
+		const dealData = await shareData.DCABot.getDealInfo({ 'updated': new Date(updated), 'active': active, 'deal_id': dealId, 'price': price, 'config': dealDataDb['config'], 'orders': dealDataDb['orders'] });
+
+		content = dealData;
+	}
+	else {
+
+		success = false;
+		content = 'Invalid Deal ID';
+	}
+
+	res.send({ 'date': new Date(), 'success': success, 'data': content });
+}
+
+
 async function apiGetActiveDeals(req, res) {
 
 	let query = {};
@@ -1348,6 +1402,7 @@ module.exports = {
 	apiGetBots,
 	apiGetActiveDeals,
 	apiGetDealsHistory,
+	apiShowDeal,
 	apiUpdateDeal,
 	apiAddFundsDeal,
 	apiPanicSellDeal,

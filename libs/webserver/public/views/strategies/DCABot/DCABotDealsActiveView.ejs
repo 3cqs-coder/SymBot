@@ -359,57 +359,6 @@
 	}
 
 
-	function showOrderHistory(dealId) {
-
-		if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
-
-			return;
-		}
-
-		let orders = JSON.parse(JSON.stringify(dealTracker[dealId]['orders'])).reverse();
-		let ordersFilled = orders.filter(item => item.filled);
-
-		let count = ordersFilled.length;
-
-		let table = $('<table id="ordersTable" style="width: 100%;" cellspacing=0 cellpadding=0>');
-
-		let row = $('<tr />');
-		row.append($('<th></th> <th>Date</th> <th>Price</th> <th>Qty</th> <th>Amount</th> <th>Sum(Qty)</th> <th>Sum($)</th>'));
-		table.append(row);
-
-		for (let i = 0; i < orders.length; i++) {
-
-			let data = orders[i];
-
-			if (data['filled']) {
-
-				let row = $('<tr />');
-
-				let style = 'padding: 3px;';
-
-				if (data['manual']) {
-
-					style += ' color: #e38302;';
-				}
-
-				row.append($('<td style="' + style + '">' + count + '.</td>'));
-				row.append($('<td>' + dateConvertLocal(data['dateFilled']) + '</td>'));
-				row.append($('<td>$' + data['price'] + '</td>'));
-				row.append($('<td>' + data['qty'] + '</td>'));
-				row.append($('<td>$' + data['amount'] + '</td>'));
-				row.append($('<td>' + data['qtySum'] + '</td>'));
-				row.append($('<td>$' + data['sum'] + '</td>'));
-
-				table.append(row);
-
-				count--;
-			}
-		}
-
-		openModal(modalId, '#modal', 'Order History ' + dealId, table);
-	}
-
-
 	function populateDeals(date, deals) {
 
 		const maxMins = 2;
@@ -751,7 +700,12 @@
 
 				let dealId = row.data('dealid');
 
-				showOrderHistory(dealId);
+				if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
+
+					return;
+				}
+
+				showOrderHistory(modalId, dealId, dealTracker[dealId]['orders']);
 			}
 		});
 
