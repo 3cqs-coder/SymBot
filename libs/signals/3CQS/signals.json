@@ -106,8 +106,52 @@
         "description": "SymScore X-Treme Bearish"
       },
       {
+        "id": 39,
+        "description": "SymSense Super Greed"
+      },
+      {
+        "id": 40,
+        "description": "SymSense Hyper Greed"
+      },
+      {
+        "id": 41,
+        "description": "SymSense Ultra Greed"
+      },
+      {
+        "id": 42,
+        "description": "SymSense X-Treme Greed"
+      },
+      {
+        "id": 43,
+        "description": "SymSense Neutral"
+      },
+      {
+        "id": 44,
+        "description": "SymSense Super Fear"
+      },
+      {
+        "id": 45,
+        "description": "SymSense Hyper Fear"
+      },
+      {
+        "id": 46,
+        "description": "SymSense Ultra Fear"
+      },
+      {
+        "id": 47,
+        "description": "SymSense X-Treme Fear"
+      },
+      {
         "id": 9,
         "description": "Super Volatility"
+      },
+      {
+        "id": 33,
+        "description": "Super Volatility Range"
+      },
+      {
+        "id": 36,
+        "description": "Super-Hyper Volatility Range"
       },
       {
         "id": 10,
@@ -118,12 +162,28 @@
         "description": "Hyper Volatility"
       },
       {
+        "id": 34,
+        "description": "Hyper Volatility Range"
+      },
+      {
+        "id": 37,
+        "description": "Hyper-Ultra Volatility Range"
+      },
+      {
         "id": 8,
         "description": "Hyper Volatility Double Tracker"
       },
       {
         "id": 4,
         "description": "Ultra Volatility"
+      },
+      {
+        "id": 35,
+        "description": "Ultra Volatility Range"
+      },
+      {
+        "id": 38,
+        "description": "Ultra-X-Treme Volatility Range"
       },
       {
         "id": 5,
@@ -138,6 +198,10 @@
       {
         "id": "sym_score",
         "description": "SymScore"
+      },
+      {
+        "id": "sym_sense",
+        "description": "SymSense"
       },
       {
         "id": "market_cap_rank",

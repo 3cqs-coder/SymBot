@@ -76,9 +76,18 @@ async function updateConfig(req, res) {
 	const sessionId = req.session.id;
 	const password = body.password;
 	const passwordNew = body.passwordnew;
+	const apiKey = body.apikey;
 	const telegram = body.telegram;
 
+	let pairBlacklist = body.pairblacklist;
 	let telegramEnabled = false;
+
+	if (pairBlacklist == undefined || pairBlacklist == null || pairBlacklist == '') {
+
+		pairBlacklist = [];
+	}
+
+	const pairBlacklistUC = pairBlacklist.map(data => data.toUpperCase());
 
 	const dataPass = shareData.appData.password.split(':');
 
@@ -106,10 +115,19 @@ async function updateConfig(req, res) {
 			const sessionData = await collection.deleteMany(query).catch(e => {});
 		}
 
+		if (apiKey != undefined && apiKey != null && apiKey != '') {
+
+			appConfig['api_key'] = apiKey;
+			shareData['appData']['api_key'] = apiKey;
+		}
+
 		if (telegram != undefined && telegram != null && telegram != '') {
 
 			telegramEnabled = true;
 		}
+
+		appConfig['bots']['pair_autofill_blacklist'] = pairBlacklistUC;
+		shareData['appData']['bots']['pair_autofill_blacklist'] = pairBlacklistUC;
 
 		appConfig['telegram']['enabled'] = telegramEnabled;
 		shareData['appData']['telegram_enabled'] = telegramEnabled;

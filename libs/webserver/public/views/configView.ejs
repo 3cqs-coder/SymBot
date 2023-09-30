@@ -3,7 +3,7 @@
 <script>
 
 	const telegram = '<%= appData['telegram_enabled'] %>';
-
+	const pairBlackList = <%- '[' + appData.bots['pair_autofill_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
 
 	function convertBoolean(param) {
 
@@ -15,6 +15,51 @@
 		}
 
 		return paramBool;
+	}
+
+
+	function genUUIDv4() {
+
+		let dt = new Date().getTime();
+
+		let uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+
+			let r = (dt + Math.random()*16)%16 | 0;
+			dt = Math.floor(dt/16);
+			return (c=='x' ? r :(r&0x3|0x8)).toString(16);
+		});
+
+		return uuid;
+	}
+
+
+	function generateApiKey() {
+
+		$.confirm({
+
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;"><b>WARNING:</b> This will replace your existing API key after you update the configuration</div>',
+			buttons: {
+
+						ok: {
+								btnClass: 'btn-default',
+								text: '<div style="color: #4aa602;">Generate API Key</div>',
+								action: function () {
+
+									const uuid = genUUIDv4();
+
+									$('#apikey').val(uuid);
+								}
+							 },
+						 cancel: {
+									 btnClass: 'btn-default',
+									 text: '<div style="color: #000000;">Cancel</div>',	
+									 action: function () { }
+								 }
+					 }
+		});
 	}
 
 
@@ -43,11 +88,11 @@
 
 						if (!data.success) {
 
-							alertBox(data.data);
+							alertBox(data.data, function() { window.location.reload(); });
 						}
 						else {
 
-							alertBox(data.data);
+							alertBox(data.data, function() { window.location.reload(); });
 						}
 
 						$('#password').val('');
@@ -67,10 +112,25 @@
 
 		$('[id*="toggle"]').simpleSwitch();
 
+		$('#pairblacklist').select2({ tags: true, data: pairBlackList });
+		$('#pairblacklist').val(pairBlackList);
+		$('#pairblacklist').trigger('change');
+
 		if (convertBoolean(telegram)) {
 
 			$('#toggleTelegram').click();
 		}
+
+		$('#configChangePass').on('click', function(e) {
+
+			$('#configNewPass').toggle();
+			$('#configConfirmPass').toggle();
+		});
+
+		$('#configApiKey').on('click', function(e) {
+
+			generateApiKey();
+		});
 
 		$('#submitButton').on('click', function(e) {
 
@@ -96,17 +156,27 @@
 
 			<div style="padding-bottom: 5px;">
 				<label for="password">Current Password</label>
-				<input type="password" name="password" id="password" class="form-field" style="width: 250px;" required>
+				<input type="password" name="password" id="password" class="form-field" style="width: 250px;" required> <span id="configChangePass" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Change</span>
 			</div>
 
-			<div style="padding-bottom: 5px;">
+			<div style="padding-bottom: 5px; display: none;" id="configNewPass">
 				<label for="passwordnew">New Password</label>
 				<input type="password" name="passwordnew" id="passwordnew" class="form-field" style="width: 250px;">
 			</div>
 
-			<div style="padding-bottom: 5px;">
+			<div style="padding-bottom: 5px; display: none;" id="configConfirmPass">
 				<label for="passwordnew2">New Password Again</label>
 				<input type="password" name="passwordnew2" id="passwordnew2" class="form-field" style="width: 250px;">
+			</div>
+
+			<div style="padding-bottom: 5px;">
+				<label for="apikey">API Key <span style="font-size: 0.99rem;"><i>(Not displayed for security)</i></span></label>
+				<input name="apikey" id="apikey" class="form-field" style="width: 250px;" required> <span id="configApiKey" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Generate</span>
+			</div>
+
+			<div style="padding-top: 10px; padding-bottom: 5px;">
+				<label for="pairblacklist">Pair Autofill Blacklist</label>
+				<select id="pairblacklist" name="pairblacklist" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
