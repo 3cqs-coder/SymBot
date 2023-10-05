@@ -168,7 +168,7 @@ async function start(apiKey) {
 
 			sendNotification(msg, true);
 
-			// Disconnected by server,so reconnect again
+			// Disconnected by server, so reconnect again
 			setTimeout(() => {
 
 				socket.connect();				
@@ -179,6 +179,19 @@ async function start(apiKey) {
 
 
 	return socket;
+}
+
+
+async function stop(socket) {
+
+	if (socket != undefined && socket != null && socket != '' && socket) {
+
+		try {
+				socket.disconnect();
+		}
+		catch(e) {
+		}
+	}
 }
 
 
@@ -209,6 +222,7 @@ async function processSignal(data) {
 
 	const symRank = data['sym_rank'];
 	const symScore = data['sym_score'];
+	const symSense = data['sym_sense'];
 	const volatilityScore = data['volatility_score'];
 	const priceActionScore = data['price_action_score'];
 	const marketCapRank = data['market_cap_rank'];
@@ -536,6 +550,7 @@ function showLog(content, data) {
 module.exports = {
 
 	start,
+	stop,
 
 	init: function(obj) {
 

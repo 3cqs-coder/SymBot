@@ -1025,11 +1025,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 					if (!config.sandBox) {
 
-						const buy = await buyOrder(exchange, pair, baseOrder.qty);
+						const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty);
 
 						if (!buy.success) {
-
-							Commong.logger(buy);
 
 							return ( { 'success': false, 'finished': false } );
 						}
@@ -1079,11 +1077,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						if (!config.sandBox) {
 
-							const buy = await buyOrder(exchange, pair, baseOrder.qty);
+							const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty);
 
 							if (!buy.success) {
-
-								Common.logger(buy);
 
 								return ( { 'success': false, 'finished': false } );
 							}
@@ -1203,11 +1199,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							if (!config.sandBox) {
 
-								const buy = await buyOrder(exchange, pair, order.qty);
+								const buy = await buyOrder(exchange, dealId, pair, order.qty);
 
 								if (!buy.success) {
-
-									Common.logger(buy);
 
 									return ( { 'success': false, 'finished': false } );
 								}
@@ -1258,13 +1252,11 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								if (!config.sandBox) {
 
-									const sell = await sellOrder(exchange, pair, order.qtySum);
+									const sell = await sellOrder(exchange, dealId, pair, order.qtySum);
 
 									if (!sell.success) {
 
 										sellSuccess = false;
-
-										Common.logger(sell);
 									}
 								}
 
@@ -1646,8 +1638,9 @@ const getBalance = async (exchange, symbol) => {
 };
 
 
-const buyOrder = async (exchange, pair, qty) => {
+const buyOrder = async (exchange, dealId, pair, qty) => {
 
+	let msg;
 	let order;
 	let isErr;
 	let success;
@@ -1655,6 +1648,7 @@ const buyOrder = async (exchange, pair, qty) => {
 	try {
 
 		success = true;
+		msg = 'BUY SUCCESS';
 
 		order = await exchange.createMarketBuyOrder(pair, qty, null);
 	}
@@ -1663,17 +1657,29 @@ const buyOrder = async (exchange, pair, qty) => {
 		isErr = e;
 		success = false;
 
-		let msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
-
-		Common.logger(msg);
+		msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
 	}
 
-	return ( { 'date': new Date(), 'success': success, 'data': order, 'error': isErr } );
+	const dataObj = {
+						'date': new Date(),
+						'success': success,
+						'data': order,
+						'error': isErr,
+						'message': msg,
+						'deal_id': dealId,
+						'pair': pair,
+						'quantity': qty
+					};
+
+	Common.logger(dataObj);
+
+	return dataObj;
 };
 
 
-const sellOrder = async (exchange, pair, qty) => {
+const sellOrder = async (exchange, dealId, pair, qty) => {
 
+	let msg;
 	let order;
 	let isErr;
 	let success;
@@ -1681,6 +1687,7 @@ const sellOrder = async (exchange, pair, qty) => {
 	try {
 
 		success = true;
+		msg = 'SELL SUCCESS';
 
 		order = await exchange.createMarketSellOrder(pair, qty, null);
 	}
@@ -1689,12 +1696,23 @@ const sellOrder = async (exchange, pair, qty) => {
 		isErr = e;
 		success = false;
 
-		let msg = 'SELL ERROR: ' + e.name + ' ' + e.message;
-
-		Common.logger(msg);
+		msg = 'SELL ERROR: ' + e.name + ' ' + e.message;
 	}
 
-	return ( { 'date': new Date(), 'success': success, 'data': order, 'error': isErr } );
+	const dataObj = {
+						'date': new Date(),
+						'success': success,
+						'data': order,
+						'error': isErr,
+						'message': msg,
+						'deal_id': dealId,
+						'pair': pair,
+						'quantity': qty
+					};
+
+	Common.logger(dataObj);
+
+	return dataObj;
 };
 
 
@@ -2897,15 +2915,13 @@ async function addFundsDeal(dealId, volume) {
 
 					if (!config.sandBox) {
 
-						const buy = await buyOrder(exchange, config.pair, qty);
+						const buy = await buyOrder(exchange, dealId, config.pair, qty);
 	
 						if (!buy.success) {
 	
 							success = false;
 							isUpdated = false;
 							msg = buy;
-	
-							Common.logger(buy);
 						}
 					}
 
