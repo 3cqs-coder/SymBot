@@ -19,6 +19,8 @@ const Common = require(__dirname + '/libs/Common.js');
 const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const packageJson = require(__dirname + '/package.json');
+const Dependencies = require('check-dependencies').sync({ verbose: false });
+
 
 
 const prompt = require('prompt-sync')({
@@ -64,6 +66,8 @@ async function init() {
 	}
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
+
+	await checkDependencies();
 
 	let appConfig = await Common.getConfig('app.json');
 	let signalConfigs = await Common.getSignalConfigs();
@@ -295,6 +299,24 @@ async function verifyServerId(serverConfig) {
 	}
 
 	return ({ 'success': success, 'server_id': serverId });
+}
+
+
+async function checkDependencies() {
+
+	if (Dependencies.error.length > 0) {
+
+		const pref = 'WARNING: ';
+
+		for (let i in Dependencies.error) {
+
+			let dep = Dependencies.error[i];
+	
+			Common.logger(pref + dep, true);
+		}
+
+		Common.logger(pref + 'Packages installed do not match package list. You may want to update using npm install or another method', true);
+	}
 }
 
 

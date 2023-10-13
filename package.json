@@ -1,6 +1,6 @@
 {
   "name": "SymBot",
-  "version": "0.99.160-beta.0",
+  "version": "0.99.170-beta.0",
   "description": "SymBot",
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,8 @@
   "dependencies": {
     "ansi-to-html": "^0.7.2",
     "body-parser": "^1.20.2",
-    "ccxt": "^4.0.5",
+    "ccxt": "^4.1.12",
+    "check-dependencies": "^1.1.0",
     "colors": "^1.4.0",
     "compression": "^1.7.4",
     "connect-mongodb-session": "^3.1.1",
@@ -21,13 +22,13 @@
     "ejs": "^3.1.9",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
-    "mongoose": "^7.3.1",
-    "node-fetch-commonjs": "^3.3.1",
+    "mongoose": "^7.6.2",
+    "node-fetch-commonjs": "^3.3.2",
     "percentagejs": "^1.0.2",
     "prompt-sync": "^4.2.0",
-    "socket.io": "^4.7.1",
-    "socket.io-client": "^4.7.1",
-    "telegraf": "^4.12.2",
-    "uuid": "^9.0.0"
+    "socket.io": "^4.7.2",
+    "socket.io-client": "^4.7.2",
+    "telegraf": "^4.14.0",
+    "uuid": "^9.0.1"
   }
 }
