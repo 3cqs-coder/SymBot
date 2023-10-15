@@ -9,6 +9,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Installation Video](#installation-video)
 - [Docker Installation](#installation-docker)
 - [Upgrading](#upgrading)
 - [Configuration](#configuration)
@@ -71,6 +72,12 @@ module.exports = {
 6. If you don't already have **pm2** starting at system boot time, type this with root privileges: `pm2 startup`. Then type: `pm2 save`
 
 SymBot will now start automatically even when the system is rebooted. With the above configuration **pm2** will monitor SymBot and if memory exceeds roughly four gigabytes, a kill signal will be sent to SymBot. **pm2** will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. **pm2** will then start SymBot again. You can change those settings to suit your own server requirements and needs.
+
+## Installation Video
+
+Sometimes you want just a little more guidance on how to get everything installed, so here's a quick video that demonstrates how to get SymBot installed along with Node.js and MongoDB on Ubuntu.
+
+[![SymBot Installation Video](https://img.youtube.com/vi/p_gZtRrgNNQ/0.jpg)](https://youtu.be/p_gZtRrgNNQ)
 
 ## Installation (Docker)
 
