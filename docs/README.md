@@ -77,7 +77,7 @@ SymBot will now start automatically even when the system is rebooted. With the a
 
 Sometimes you want just a little more guidance on how to get everything installed, so here's a quick video that demonstrates how to get SymBot installed along with Node.js and MongoDB on Ubuntu.
 
-[<img src="https://github.com/3cqs-coder/SymBot/assets/111208586/b428f4d4-7f1b-4ce3-9c48-0bb29d2b4e7e" width="720" />](https://youtu.be/p_gZtRrgNNQ)
+<a href="https://youtu.be/p_gZtRrgNNQ" title="SymBot Installation Video"><img src="https://github.com/3cqs-coder/SymBot/assets/111208586/b428f4d4-7f1b-4ce3-9c48-0bb29d2b4e7e" width="720"></a>
 
 ## Installation (Docker)
 
