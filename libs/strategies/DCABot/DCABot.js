@@ -1007,7 +1007,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				return ( { 'success': success, 'finished': finished } );
 			}
 
-			let bidPrice = symbol.bid;
+			const bidPrice = symbol.bid;
+			const askPrice = symbol.ask;
 
 			const price = parseFloat(bidPrice);
 
@@ -1025,7 +1026,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 					if (!config.sandBox) {
 
-						const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty);
+						const priceFiltered = await filterPrice(exchange, pair, price);
+
+						const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
 
 						if (!buy.success) {
 
@@ -1077,7 +1080,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						if (!config.sandBox) {
 
-							const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty);
+							const priceFiltered = await filterPrice(exchange, pair, price);
+
+							const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
 
 							if (!buy.success) {
 
@@ -1199,7 +1204,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							if (!config.sandBox) {
 
-								const buy = await buyOrder(exchange, dealId, pair, order.qty);
+								const priceFiltered = await filterPrice(exchange, pair, price);
+
+								const buy = await buyOrder(exchange, dealId, pair, order.qty, priceFiltered);
 
 								if (!buy.success) {
 
@@ -1252,7 +1259,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								if (!config.sandBox) {
 
-									const sell = await sellOrder(exchange, dealId, pair, order.qtySum);
+									const priceFiltered = await filterPrice(exchange, pair, price);
+
+									const sell = await sellOrder(exchange, dealId, pair, order.qtySum, priceFiltered);
 
 									if (!sell.success) {
 
@@ -1638,7 +1647,7 @@ const getBalance = async (exchange, symbol) => {
 };
 
 
-const buyOrder = async (exchange, dealId, pair, qty) => {
+const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 	let msg;
 	let order;
@@ -1650,7 +1659,7 @@ const buyOrder = async (exchange, dealId, pair, qty) => {
 		success = true;
 		msg = 'BUY SUCCESS';
 
-		order = await exchange.createMarketBuyOrder(pair, qty, null);
+		order = await exchange.createOrder(pair, 'market', 'buy', qty, price);
 	}
 	catch (e) {
 
@@ -1677,7 +1686,7 @@ const buyOrder = async (exchange, dealId, pair, qty) => {
 };
 
 
-const sellOrder = async (exchange, dealId, pair, qty) => {
+const sellOrder = async (exchange, dealId, pair, qty, price) => {
 
 	let msg;
 	let order;
@@ -1689,7 +1698,7 @@ const sellOrder = async (exchange, dealId, pair, qty) => {
 		success = true;
 		msg = 'SELL SUCCESS';
 
-		order = await exchange.createMarketSellOrder(pair, qty, null);
+		order = await exchange.createOrder(pair, 'market', 'sell', qty, price);
 	}
 	catch (e) {
 
@@ -2885,12 +2894,14 @@ async function addFundsDeal(dealId, volume) {
 
 				const symbolData = await getSymbol(exchange, config.pair);
 				const symbol = symbolData.data;
-				const askprice = symbol.ask;
+
+				const bidPrice = symbol.bid;
+				const askPrice = symbol.ask;
 
 				let newOrder = Object.assign({}, oldOrders[i]);
-				let price = await filterPrice(exchange, config.pair, askprice);
+				let price = await filterPrice(exchange, config.pair, askPrice);
 				let amount = await filterPrice(exchange, config.pair, volume);
-				let qty = await filterAmount(exchange, config.pair, ((volume) / askprice));
+				let qty = await filterAmount(exchange, config.pair, ((volume) / askPrice));
 
 				let qtySum = (parseFloat(qty) + parseFloat(oldOrders[i - 1].qtySum));
 				qtySum = await filterAmount(exchange, config.pair, qtySum);
@@ -2915,8 +2926,8 @@ async function addFundsDeal(dealId, volume) {
 
 					if (!config.sandBox) {
 
-						const buy = await buyOrder(exchange, dealId, config.pair, qty);
-	
+						const buy = await buyOrder(exchange, dealId, config.pair, qty, targetPrice);
+
 						if (!buy.success) {
 	
 							success = false;

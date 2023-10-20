@@ -2,6 +2,7 @@
 
 <script>
 
+	const token = '<%= token %>';
 	const telegram = '<%= appData['telegram_enabled'] %>';
 	const pairBlackList = <%- '[' + appData.bots['pair_autofill_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
 
@@ -132,6 +133,12 @@
 			generateApiKey();
 		});
 
+		$('#configApiToken').on('click', function(e) {
+
+			$('#apitoken').toggle();
+			$('#apitoken').html(window.atob(token));
+		});
+
 		$('#submitButton').on('click', function(e) {
 
 			e.preventDefault();
@@ -172,6 +179,11 @@
 			<div style="padding-bottom: 5px;">
 				<label for="apikey">API Key <span style="font-size: 0.99rem;"><i>(Not displayed for security)</i></span></label>
 				<input name="apikey" id="apikey" class="form-field" style="width: 250px;" required> <span id="configApiKey" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Generate</span>
+			</div>
+
+			<div style="padding-bottom: 5px;">
+				<label for="apitoken">Webhook API Token <span style="font-size: 0.99rem;"></span><span id="configApiToken" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span></label>
+				<span id="apitoken" style="display: none; overflow-wrap: break-word;"></span>
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">

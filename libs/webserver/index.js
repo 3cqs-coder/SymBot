@@ -15,7 +15,7 @@ const app = express();
 const router = express.Router();
 const Routes = require(pathRoot + '/webserver/routes.js');
 
-
+const serverTimeoutMins = 3;
 const roomAuth = 'logs';
 
 let shareData;
@@ -76,6 +76,9 @@ function initApp() {
 
 	app.use((req, res, next) => {
 
+		const timeOut = (60 * 1000) * serverTimeoutMins;
+
+		req.setTimeout((timeOut - (1000 * 5)));
 		res.append('Server', shareData.appData.name + ' v' + shareData.appData.version);
 
 		next();
@@ -199,13 +202,17 @@ async function sendSocketMsg(msg, room) {
 
 function start(port) {
 
+	let isError;
+
 	const sessionMiddleware = initApp();
 
-	const server = app.listen(port, () => {
+	let server = app.listen(port, () => {
 
 		shareData.Common.logger(`${shareData.appData.name} v${shareData.appData.version} listening on port ${port}`, true);
 
 	}).on('error', function(err) {
+
+		isError = err;
 
 		if (err.code === 'EADDRINUSE') {
 
@@ -213,11 +220,28 @@ function start(port) {
 
 			process.exit(1);
 		}
+		else {
+
+			shareData.Common.logger('Web Server Error: ' + err, true);
+		}
 	});
 
-	initSocket(sessionMiddleware, server);
+	if (isError == undefined || isError == null) {
 
-	Routes.start(router);
+		const serverTimeout = (60 * 1000) * serverTimeoutMins;
+
+		const keepAliveTimeout = serverTimeout - (1000 * 5);
+		const headersTimeout = keepAliveTimeout + (1000 * 3);
+
+		server.setTimeout(serverTimeout);
+
+		server.keepAliveTimeout = keepAliveTimeout;
+		server.headersTimeout = headersTimeout;
+
+		initSocket(sessionMiddleware, server);
+
+		Routes.start(router);
+	}
 }
 
 

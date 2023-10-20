@@ -162,6 +162,7 @@ async function init() {
 										'bots': appConfig['data']['bots'],
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
 										'telegram_enabled': appConfig['data']['telegram']['enabled'],
+										'webhook_enabled': appConfig['data']['webhook']['enabled'],
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
 										'started': new Date()

@@ -4,6 +4,9 @@
 	"web_server": {
 					"port": 3000
 				},
+	"webhook": {
+					"enabled": true
+				},
 	"telegram": {
 					"enabled": true,
 					"token_id": "",

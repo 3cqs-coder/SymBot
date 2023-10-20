@@ -101,7 +101,7 @@ async function updateConfig(req, res) {
 
 		if (passwordNew != undefined && passwordNew != null && passwordNew != '') {
 
-			const dataPassNew = await genPasswordHash(passwordNew);
+			const dataPassNew = await genPasswordHash({ 'data': passwordNew });
 
 			const passwordHashed = dataPassNew['salt'] + ':' + dataPassNew['hash'];
 
@@ -838,9 +838,25 @@ function sortByKey(array, key) {
 }
 
 
-async function genPasswordHash(data) {
+async function genToken() {
 
-	const salt = crypto.randomBytes(16).toString('hex'); 
+	const salt = shareData.appData.server_id;
+
+	const token = await genPasswordHash({'data': shareData.appData.api_key, 'salt': salt });
+
+	return token;
+}
+
+
+async function genPasswordHash(dataObj) {
+
+	let salt = dataObj['salt'];
+	let data = dataObj['data'];
+
+	if (salt == undefined || salt == null || salt == '') {
+
+		salt = crypto.randomBytes(16).toString('hex');
+	}
 
 	const hash = crypto.pbkdf2Sync(data, salt, 1000, 64, 'sha256').toString('hex');
 
@@ -852,13 +868,18 @@ async function genPasswordHash(data) {
 
 async function verifyPasswordHash(dataObj) {
 
+	let hashData;
 	let success = false;
 
 	let salt = dataObj['salt'];
 	let hash = dataObj['hash'];
 	let data = dataObj['data'];
 
-	const hashData = crypto.pbkdf2Sync(data, salt, 1000, 64, 'sha256').toString('hex');
+	try {
+
+		hashData = crypto.pbkdf2Sync(data, salt, 1000, 64, 'sha256').toString('hex');
+	}
+	catch(e) {}
 
 	if (hash === hashData) {
 
@@ -933,6 +954,7 @@ module.exports = {
 	numToBase26,
 	numFormatter,
 	hashCode,
+	genToken,
 	genPasswordHash,
 	verifyPasswordHash,
 	verifyLogin,

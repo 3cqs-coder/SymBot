@@ -17,6 +17,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Reverse Proxy Setup](#reverse-proxy-setup)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
+- [Webhooks](#webhooks)
 - [Resetting SymBot](#resetting-symbot)
 - [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
 - [Disclaimer](#disclaimer)
@@ -127,6 +128,8 @@ These files are located in the `config` directory
 	- `api_key` is a UUID v4 value that is randomly generated the first time SymBot starts. It is used to make API calls to SymBot. This can be set to most any string value you choose.
 
 	- `web_server` contains settings for the SymBot web server. The default port is 3000.
+
+	- `webhook` contains data pertaining to webhooks. Set `enabled: true` to allow webhook usage.
 
 	-	`bots`
 		-	`start_conditions` contains keys and descriptions such as `asap` and `api` for various start conditions that can be used to start bots and deals. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
@@ -664,6 +667,33 @@ curl -i -X GET \
 ```
 http://127.0.0.1:3000/api/tradingview?script=true&exchange=binance&pair=BTC_USDT&theme=dark&width=1000&height=600
 ```
+
+## Webhooks
+
+A webhook is like a special type of API. While APIs rely on one program asking for data and waiting for a response, webhooks work differently. They instantly send data from one program or service to another when a specific event happens. This eliminates the need for manual requests and makes data sharing between software systems smoother and faster.
+
+SymBot makes using webhooks easy because they're nearly identical to API usage. SymBot also adds another layer of security by using a token to access webhooks. The token is a hash of your API key and SymBot server id.  This is used in your webhook requests instead of your API key in the header. Many companies do not allow passing custom headers, so using Symbot webhooks makes it easier to integrate with third-parties such as TradingView.
+
+Since SymBot webhooks are layered on top of the APIs, you only need to prepend **/webhook** to the URL and supply your token. For example, let's say you wanted to start a new deal using a webhook. This is how the request would look:
+
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-d '{
+		"apiToken": "{API-TOKEN}",
+		"pair": "BTC/USD"
+	}' \
+http://127.0.0.1:3000/webhook/api/bots/{botId}/start_deal
+```
+
+From this example you can see there are only three differences from SymBot APIs:
+
+- No API key is passed in the header
+- Prepend **/webhook** to the URL
+- Add your token to the **apiToken** parameter of the body
+
+Remember if you ever change your API key or alter your server id, your token will also change automatically. You can get your token from the SymBot web interface configuration section.
 
 ## Resetting SymBot
 

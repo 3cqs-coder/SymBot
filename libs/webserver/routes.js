@@ -6,6 +6,12 @@ let shareData;
 
 function initRoutes(router) {
 
+	router.post([ '/webhook/api/*' ], (req, res, next) => {
+
+		processWebHook(req, res, next);
+	});
+
+
 	router.get('/', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -25,14 +31,7 @@ function initRoutes(router) {
 
 		res.set('Cache-Control', 'no-store');
 
-		if (req.session.loggedIn) {
-
-			res.render( 'configView', { 'appData': shareData.appData } );
-		}
-		else {
-
-			res.redirect('/login');
-		}
+		processConfig(req, res);
 	});
 
 
@@ -344,6 +343,74 @@ function initRoutes(router) {
 
 		redirectNotFound(res);
 	});
+}
+
+
+async function processConfig(req, res) {
+
+	if (req.session.loggedIn) {
+
+		const token = await shareData.Common.genToken();
+
+		const tokenBase64 = Buffer.from(token['hash'], 'utf8').toString('base64');
+
+		res.render( 'configView', { 'appData': shareData.appData, 'token': tokenBase64 } );
+	}
+	else {
+
+		res.redirect('/login');
+	}
+}
+
+
+async function processWebHook(req, res, next) {
+
+	let reqPath = req.path;
+
+	let errorObj = {};
+
+	reqPath = reqPath.replace(/\/webhook/g, '');
+
+	if (!shareData.appData.webhook_enabled) {
+
+		errorObj['error'] = 'Webhooks are disabled';
+
+		res.status(403).send(errorObj);
+
+		return;
+	}
+
+	try {
+
+		const tokenKey = 'apiToken';
+
+		const apiToken = req.body[tokenKey];
+
+		const dataPass = shareData.appData.password.split(':');
+		const salt = dataPass[0];
+
+		const tokenApp = await shareData.Common.genToken();
+
+		if (apiToken === tokenApp['hash']) {
+
+			req.headers['api-key'] = shareData.appData.api_key;
+		}
+
+		delete req.body[tokenKey];
+	}
+	catch(e) {}
+
+	if (req.session.loggedIn || validApiKey(req)) {
+
+		req.url = reqPath;
+		next();
+	}
+	else {
+
+		errorObj['error'] = 'Invalid Token';
+
+		res.status(401).send(errorObj);
+	}
 }
 
 
