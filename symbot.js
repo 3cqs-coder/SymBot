@@ -387,6 +387,7 @@ async function start() {
 	catch(e) {
 
 		Common.logger('Initialization error: ' + e, true);
+		Common.logger('Please verify your configuration files have all required parameters', true);
 
 		shutDown();
 		return;

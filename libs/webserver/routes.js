@@ -386,9 +386,6 @@ async function processWebHook(req, res, next) {
 
 		const apiToken = req.body[tokenKey];
 
-		const dataPass = shareData.appData.password.split(':');
-		const salt = dataPass[0];
-
 		const tokenApp = await shareData.Common.genToken();
 
 		if (apiToken === tokenApp['hash']) {

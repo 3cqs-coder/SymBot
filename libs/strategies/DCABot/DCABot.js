@@ -1677,7 +1677,8 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 						'message': msg,
 						'deal_id': dealId,
 						'pair': pair,
-						'quantity': qty
+						'quantity': qty,
+						'price': price
 					};
 
 	Common.logger(dataObj);
@@ -1716,7 +1717,8 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 						'message': msg,
 						'deal_id': dealId,
 						'pair': pair,
-						'quantity': qty
+						'quantity': qty,
+						'price': price
 					};
 
 	Common.logger(dataObj);
