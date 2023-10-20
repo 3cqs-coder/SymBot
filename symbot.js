@@ -92,7 +92,7 @@ async function init() {
 
 	if (appConfig['data']['password'] == undefined || appConfig['data']['password'] == null || appConfig['data']['password'] == '' || appConfig['data']['password'].indexOf(':') == -1) {
 
-		const dataPass = await Common.genPasswordHash('admin');
+		const dataPass = await Common.genPasswordHash({'data': 'admin'});
 
 		appConfig['data']['password'] = dataPass['salt'] + ':' + dataPass['hash'];
 
