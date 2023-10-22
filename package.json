@@ -1,6 +1,6 @@
 {
   "name": "SymBot",
-  "version": "0.99.202-beta.0",
+  "version": "0.99.210-beta.0",
   "description": "SymBot",
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,7 @@
   "dependencies": {
     "ansi-to-html": "^0.7.2",
     "body-parser": "^1.20.2",
-    "ccxt": "^4.1.12",
+    "ccxt": "^4.1.20",
     "check-dependencies": "^1.1.0",
     "colors": "^1.4.0",
     "compression": "^1.7.4",
@@ -22,7 +22,7 @@
     "ejs": "^3.1.9",
     "express": "^4.18.2",
     "express-session": "^1.17.3",
-    "mongoose": "^7.6.2",
+    "mongoose": "^7.6.3",
     "node-fetch-commonjs": "^3.3.2",
     "percentagejs": "^1.0.2",
     "prompt-sync": "^4.2.0",

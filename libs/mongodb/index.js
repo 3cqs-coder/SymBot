@@ -11,10 +11,14 @@ async function start(url) {
 
 	mongoose.connection.on('connected', () => {
 
+		delete shareData.appData.database_error;
+
 		shareData.Common.logger('Database Connected', true);
 	});
 
 	mongoose.connection.on('reconnected', () => {
+
+		delete shareData.appData.database_error;
 
 		let msg = 'Database Reconnected';
 
@@ -25,12 +29,16 @@ async function start(url) {
 
 		let msg = 'Database Disconnected';
 
+		shareData.appData.database_error = msg;
+
 		log(msg);
 	});
 
 	mongoose.connection.on('close', () => {
 
 		let msg = 'Database Closed';
+
+		shareData.appData.database_error = msg;
 
 		log(msg);
 	});

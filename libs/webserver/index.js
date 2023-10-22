@@ -81,7 +81,20 @@ function initApp() {
 		req.setTimeout((timeOut - (1000 * 5)));
 		res.append('Server', shareData.appData.name + ' v' + shareData.appData.version);
 
-		next();
+		if (shareData.appData.database_error != undefined && shareData.appData.database_error != null && shareData.appData.database_error != '') {
+
+			let obj = {
+
+				'date': new Date(),
+				'error': shareData.appData.database_error
+			};
+
+			res.status(503).send(obj);
+		}
+		else {
+
+			next();
+		}
 	});
 
 	app.use(function(err, req, res, next) {

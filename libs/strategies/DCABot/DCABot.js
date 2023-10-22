@@ -940,6 +940,13 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 	let configData = JSON.parse(JSON.stringify(configDataObj));
 
+	if (shareData.appData.database_error != undefined && shareData.appData.database_error != null && shareData.appData.database_error != '') {
+
+		Common.logger(colors.red.bold(shareData.appData.database_error + ' - Not processing'));
+
+		return ( { 'success': false, 'finished': false } );
+	}
+
 	if (dealTracker[dealId]['update']['deal_stop']) {
 
 		Common.logger(colors.red.bold('Deal ID ' + dealId + ' stop requested. Not processing'));
@@ -1486,7 +1493,9 @@ const getSymbol = async (exchange, pair) => {
 				symbolError = JSON.stringify(symbolError) + msg;
 			}
 
-			Common.logger(colors.bgRed.bold.italic('Get symbol ' + pair + ' error: ' + symbolError));
+			symbolError = 'Get symbol ' + pair + ' error: ' + symbolError;
+
+			Common.logger(colors.bgRed.bold.italic(symbolError));
 
 			if (e instanceof ccxt.RateLimitExceeded && count < maxTries) {
 

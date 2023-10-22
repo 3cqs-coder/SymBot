@@ -455,7 +455,7 @@ async function checkTracker() {
 async function removeDataDb() {
 
 	// Delete signals after n days
-	const days = 14;
+	const days = 2;
 
 	let res;
 
