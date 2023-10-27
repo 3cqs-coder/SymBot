@@ -708,7 +708,7 @@ async function apiPanicSellDeal(req, res) {
 		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
 		const status = dealData['status'];
-		
+
 		if (status != 0) {
 
 			success = false;
@@ -722,6 +722,48 @@ async function apiPanicSellDeal(req, res) {
 
 				success = false;
 				content = closeData['data'];
+			}
+		}
+	}
+	else {
+
+		success = false;
+		content = 'Invalid Deal ID';
+	}
+
+	res.send({ 'date': new Date(), 'success': success, 'data': content });
+}
+
+
+async function apiCancelDeal(req, res) {
+
+	let success = true;
+
+	let content = 'Success';
+
+	const dealId = req.params.dealId;
+
+	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (data && data.length > 0) {
+
+		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+
+		const status = dealData['status'];
+		
+		if (status != 0) {
+
+			success = false;
+			content = 'Deal ID ' + dealId + ' is not active';
+		}
+		else {
+
+			const cancelData = await shareData.DCABot.cancelDeal(dealId);
+
+			if (!cancelData['success']) {
+
+				success = false;
+				content = cancelData['data'];
 			}
 		}
 	}
@@ -1403,6 +1445,7 @@ module.exports = {
 	apiGetActiveDeals,
 	apiGetDealsHistory,
 	apiShowDeal,
+	apiCancelDeal,
 	apiUpdateDeal,
 	apiAddFundsDeal,
 	apiPanicSellDeal,

@@ -4,6 +4,7 @@
 
 	let timeOutId;
 	let dealTracker = {};
+	let dealTrackerErrors = {};
 	let modalId = 'activeDealsView';
 
 	function setReloadTimeout() {
@@ -255,6 +256,94 @@
 	}
 
 
+	function cancelDeal(pair, dealId) {
+
+		let pairSplit = pair.split('/');
+		let quote = pairSplit[1];
+
+		$.confirm({
+	 		title: false,
+			boxWidth: "50%",
+	  		useBootstrap: false,
+	  		content: `<div style="font-size: 1.2rem; text-align: left;">Cancel deal ${dealId}?<br><br>
+			<form action="" style="display: inline;">
+			This will cancel and remove the active deal from any further trading without selling any assets already bought from previous orders
+			<br><br>
+			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">CANCEL</span> deal</b>
+			</form>
+			</div>`,
+	  		buttons: {
+		  		formSubmit: {
+			  		btnClass: 'btn-default',
+			  		text: '<div style="color: #d80f08;">Cancel Deal</div>',
+			  		action: function() {
+
+				  		const inputValue = parseFloat($('#confirmNum').val());
+						const confirmBox = $('#confirmBox').prop('checked');
+
+						if (!confirmBox) {
+
+							alertBox('You must check the box to confirm cancel deal', function() {});
+						}
+						else {
+
+							processCancelDeal(dealId);
+				 		}
+			  		},
+		  		},
+		  		cancel: {
+			  		btnClass: 'btn-default',
+			  		text: '<div style="color: #000000;">Cancel</div>',
+			  		action: function() {},
+				},
+			},
+	  		onContentReady: function() {
+
+				$('#confirmBox').prop('checked', false);
+
+				let jc = this;
+		  		this.$content.find("form").on("submit", function(e) {
+					e.preventDefault();
+			  		jc.$$formSubmit.trigger("click");
+		  		});
+	  		},
+  		});
+	}
+
+
+	function processCancelDeal(dealId) {
+
+		const requestBody = {};
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+
+			type: 'POST',
+	  		url: '/api/deals/' + dealId + '/cancel',
+	  		data: requestBody,
+	  		dataType: 'json',
+	  		success: function(data) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+					if (!data.success) {
+						alertBox('Unable to cancel deal: ' + data['data'], function() {});
+					}
+				else {
+					alertBox('Sucessfully canceled deal: ' + dealId, function() {});
+				}
+			},
+			error: function(data) {
+				// Some error in ajax call
+				$('#spinner-overlay').fadeOut(100);
+
+				alertBox('Error: ' + JSON.stringify(data), function() {});
+			},
+		});
+	}
+
+
 	function showAddFunds(pair, dealId) {
 
 		let pairSplit = pair.split('/');
@@ -269,7 +358,7 @@
       	<form action="" style="display: inline;">
         <input type="text" id="confirmNum" class="form-field" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;" required />
 		<br><br>
-        <input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm adding funds</b>
+        <input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #1a9f00;">ADD FUNDS</span> to deal</b>
 		</form>
     	</div>`,
   			buttons: {
@@ -312,8 +401,6 @@
   				});
   			},
   		});
-
-
 	}
 
 
@@ -365,9 +452,12 @@
 
 		let totalProfit = 0;
 		let inDeals = 0;
+		let dealDataErrors = 0;
 
 		let msgBoxColor = '#386ec2';
 		let profitTotalColor = '#1a9f00';
+
+		let msgBox = '';
 
 		let contentArr = [];
 		let dealsErrorArr = [];
@@ -379,6 +469,7 @@
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
 			let addFundsButton = '<span class="disableButton">$+</span>';
 			let editButton = '<span class="disableButton">&#9998;</span>';
+			let cancelButton = '<span class="disableButton">X</span>';
 			let stopButton = '<span class="disableButton">&#9726;</span>';
 			let panicButton = '<span class="disableButton" style="font-size: 1.0rem;">&#128176</span>';
 
@@ -386,6 +477,7 @@
 
 			inDeals += dealVolume;
 
+			let dealBackground = '';
 			let profitPercColor = '#1a9f00';
 
 			let dealCount;
@@ -416,14 +508,41 @@
 				deal['info']['deal_max'] = '&#8734;';
 			}
 
+			// Deal data issue
 			if (isNaN(deal['info']['deal_count'])) {
 
-				continue;
+				const maxSec = 30;
+
+				// Wait to display any error since deal might be starting
+				if (dealTrackerErrors[dealId] == undefined || dealTrackerErrors[dealId] == null) {
+
+					dealTrackerErrors[dealId] = {};
+					dealTrackerErrors[dealId]['date'] = new Date();
+
+					continue;
+				}
+				else {
+
+					let diffSec = (new Date().getTime() - new Date(dealTrackerErrors[dealId]['date']).getTime()) / 1000;
+
+					if (diffSec > maxSec) {
+
+						dealBackground = '#FBBD7F';
+						dealDataErrors++;
+					}
+					else {
+
+						continue;
+					}
+				}
 			}
 			else {
 
-				dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
+				// Remove from deal error tracker
+				delete dealTrackerErrors[dealId];
 			}
+
+			dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
 
 			let diffSec = (new Date(date).getTime() - new Date(lastUpdated).getTime()) / 1000;
 
@@ -452,7 +571,7 @@
 				safetyOrdersTotalDisplay += ' (+' + manualOrders.length + ')';
 			}
 
-			contentArr.push('<tr data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '">');
+			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '">');
 			contentArr.push('<td>' + deal['info']['bot_name'] + '</td>');
 			contentArr.push('<td>' + dealId + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
@@ -467,6 +586,7 @@
 			contentArr.push('<td>' + dealCount + '</td>');
 			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButton + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButton + '</div></td>');
+			contentArr.push('<td style="text-align: center;"><div id="cancel' + dealId + i + '">' + cancelButton + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="add' + dealId + i + '">' + addFundsButton + '</div></td>');
 			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
 			contentArr.push('</tr>');
@@ -482,10 +602,18 @@
 
 		if (dealsErrorArr.length > 0) {
 
-			let msg = '<b>WARNING:</b> ' + dealsErrorArr.length + ' deals exceed last updated time of ' + maxMins + ' minutes. Check logs for more details.';
+			msgBox += '<div style="display: block;"><b>WARNING:</b> ' + dealsErrorArr.length + ' deals exceed last updated time of ' + maxMins + ' minutes. Check logs for more details.</div>';
+		}
+
+		if (dealDataErrors > 0) {
+
+			msgBox += '<div style="display: block;"><b>WARNING:</b> ' + dealDataErrors + ' deals have invalid data</div>';
+		}
+
+		if (msgBox != '') {
 
 			$('#msgBox').css('color', msgBoxColor);
-			$('#msgBox').html(msg);
+			$('#msgBox').html('<div style="display: block;">' + msgBox + '</div>');
 		}
 
 		$('#botsDeals tbody').append(contentArr.join(''));
@@ -671,8 +799,18 @@
 
 					showAddFunds(pair, dealId);	
 				}
-      		} 
+      		}
 			else if (col == (colCount - 3)) {
+
+				let pair = row.data('pair');
+				let dealId = row.data('dealid');
+
+				if (dealId) {
+
+					cancelDeal(pair, dealId);	
+				}
+			}
+			else if (col == (colCount - 4)) {
 
 				// Panic sell
 				let dealId = row.data('dealid');
@@ -682,7 +820,7 @@
 					panicSellConfirm(dealId);
 				}
 			}
-			else if (col == (colCount - 4)) {
+			else if (col == (colCount - 5)) {
 
 				// Edit deal
 				let data = { 'deal_id': '' };
@@ -752,7 +890,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

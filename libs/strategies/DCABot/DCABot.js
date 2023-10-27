@@ -1256,15 +1256,27 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								orders: orders
 							});
 						}
-						else if (price >= parseFloat(currentOrder.target) || dealTracker[dealId]['update']['deal_panic_sell']) {
+						else if (price >= parseFloat(currentOrder.target) || dealTracker[dealId]['update']['deal_cancel'] || dealTracker[dealId]['update']['deal_panic_sell']) {
 
 							//Sell order
 
 							if (deal.isStart == 1) {
 
+								let canceled = false;
+								let panicSell = false;
 								let sellSuccess = true;
 
-								if (!config.sandBox) {
+								if (dealTracker[dealId]['update']['deal_cancel']) {
+
+									canceled = true;
+								}
+
+								if (dealTracker[dealId]['update']['deal_panic_sell']) {
+
+									panicSell = true;
+								}
+
+								if (!config.sandBox && !canceled) {
 
 									const priceFiltered = await filterPrice(exchange, pair, price);
 
@@ -1317,6 +1329,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										dealId: dealId
 									}, {
 										sellData: sellData,
+										panicSell: panicSell,
+										canceled: canceled,
 										status: 1
 									});
 
@@ -3026,6 +3040,52 @@ async function addFundsDeal(dealId, volume) {
 }
 
 
+async function cancelDeal(dealId) {
+
+	let finished = false;
+	let success = true;
+
+	let count = 0;
+	let msg = 'Success';
+
+	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+
+		Common.logger(colors.red.bold('Cancel deal ID ' + dealId + ' requested.'));
+
+		// Set deal_cancel flag
+		dealTracker[dealId]['update']['deal_cancel'] = true;
+
+		while (!finished) {
+
+			await Common.delay(1000);
+
+			// Verify deal is stopped
+			if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
+
+				finished = true;
+			}
+			else if (count >= 10) {
+
+				// Timeout
+				success = false;
+				msg = 'Cancel timeout';
+
+				finished = true;
+			}
+
+			count++;
+		}
+	}
+	else {
+
+		success = false;
+		msg = 'Deal ID not found';
+	}
+
+	return ( { 'success': success, 'data': msg } );
+}
+
+
 async function panicSellDeal(dealId) {
 
 	let finished = false;
@@ -3143,6 +3203,7 @@ module.exports = {
 	sendBotStatus,
 	ordersValid,
 	updateOrders,
+	cancelDeal,
 	pauseDeal,
 	stopDeal,
 	updateDeal,

@@ -415,6 +415,18 @@ POST /api/deals/{dealId}/update_deal
 POST /api/deals/{dealId}/add_funds
 ```
 
+
+### Cancel deal
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| -        |          |               |                      | Cancels deal without selling any assets bought from previous orders |
+
+```
+POST /api/deals/{dealId}/cancel
+```
+
+
 ### Panic sell deal
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -613,6 +625,15 @@ curl -i -X POST \
 http://127.0.0.1:3000/api/deals/{dealId}/add_funds
 ```
 
+#### Cancel deal
+```
+curl -i -X POST \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/deals/{dealId}/cancel
+```
+
+
 #### Panic sell deal
 ```
 curl -i -X POST \
@@ -718,7 +739,7 @@ If you want to reset the SymBot database for any reason, you can do so only from
 - Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected scenarios, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
 
 #### Can I access SymBot from my mobile device?
-- Yes. If you set up SymBot on a home network and your mobile device is connected to the same wireless network, you should be able to open a web browser on your device and access SymBot at http://127.0.0.1:3000 just fine. However, being able to access it from other locations depends if your system is accessible to the public internet. This generally requires either opening ports on your router and system, or setting up a [Reverse Proxy](#reverse-proxy-setup).
+- Yes. If you set up SymBot on a home network and your mobile device is connected to the same wireless network, you should be able to open a web browser on your device and access SymBot just fine. Keep in mind that you need to use the IP address of the server that SymBot is running on, such as http://192.168.1.10:3000. However, being able to access it from other locations depends if your system is accessible to the public internet. This generally requires either opening ports on your router and system, or setting up a [Reverse Proxy](#reverse-proxy-setup).
 
 #### How many DCA bots can I run at the same time?
 - You can technically run an unlimited number of bots, however any limitations mostly come from how often your exchange allows APIs to be accessed, and the amount of resources your system (server) has such as CPU, memory, etc. The more bots you run generally requires additional API calls to your exchange and more system processing capability to manage all of your deals efficiently.
@@ -726,7 +747,7 @@ If you want to reset the SymBot database for any reason, you can do so only from
 #### If my system is restarted will my deals be lost?
 - SymBot is designed with resiliency in mind. Providing there are no issues with your database or other technical problems that caused your system to reboot, your bot deals will automatically resume upon restart. It is recommended to monitor the logs for a period of time to ensure everything is operating as expected.
 
-#### If I disable a DCA bot will it sell my deals?
+#### If I disable a DCA bot will it close my deals?
 - No. Disabling a DCA bot will only prevent new deals from being started. Any existing deals that are running will continue until they complete or if you choose to panic sell.
 
 #### Why are my deals not updating or not getting pricing?
