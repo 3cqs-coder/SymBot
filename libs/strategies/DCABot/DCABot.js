@@ -2046,10 +2046,10 @@ async function getDealInfo(data) {
 							currentOrder.average
 						);
 
-	let takeProfit = Number(currentOrder.sum) * (Number(config.dcaTakeProfitPercent) / 100);
+	profitPerc = Number(Number(profitPerc).toFixed(2));
 
-	profitPerc = Number(profitPerc).toFixed(2);
-	takeProfit = Number(takeProfit).toFixed(2);
+	const takeProfit = shareData.Common.roundAmount(Number(Number(currentOrder.sum) * (Number(config.dcaTakeProfitPercent) / 100)));
+	const currentProfit = shareData.Common.roundAmount(Number((Number(currentOrder.sum) * (Number(profitPerc) / 100))));
 
 	const dealInfo = {
 						'updated': updated,
@@ -2061,7 +2061,7 @@ async function getDealInfo(data) {
 						'price_last': price,
 						'price_average': currentOrder.average,
 						'price_target': currentOrder.target,
-						'profit': Number((Number(currentOrder.sum) * (Number(profitPerc) / 100)).toFixed(2)),
+						'profit': currentProfit,
 						'profit_percentage': profitPerc,
 						'take_profit': takeProfit,
 						'deal_count': config.dealCount,
@@ -2327,7 +2327,7 @@ async function sendNotificationFinish(botName, dealId, pair, sellData) {
 		}
 	}
 
-	const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
+	const profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
 	const duration = shareData.Common.timeDiff(new Date(), new Date(deal['date']));
 
 	try {

@@ -799,6 +799,23 @@ function numToBase26(num) {
 }
 
 
+function roundAmount(amount) {
+
+	amount = Number(amount);
+
+	if (Math.abs(amount) >= 0.01) {
+
+		amount = Number(amount.toFixed(2));
+	}
+	else {
+
+		amount = Number(amount.toFixed(8));
+	}
+
+	return amount;
+}
+
+
 function numFormatter(num) {
 
 	num = Number(num);
@@ -951,6 +968,7 @@ module.exports = {
 	saveData,
 	getDateParts,
 	getTimeZone,
+	roundAmount,
 	numToBase26,
 	numFormatter,
 	hashCode,

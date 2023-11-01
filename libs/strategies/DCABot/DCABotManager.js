@@ -324,7 +324,7 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 
 				const profitPerc = Number(sellData.profit);
 
-				const profit = Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100)).toFixed(2));
+				const profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
 
 				const dataObj = {
 									'bot_id': deal.botId,

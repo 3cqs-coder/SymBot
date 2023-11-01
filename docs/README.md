@@ -30,6 +30,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection
 - 1GB RAM minimum but recommended at least 4GB
+- 1GB disk space minimum
 
 **NOTE:** Trading requires your system and internet connection to be running 24/7. Any interruption could result in missed trades, signals, etc.
 
@@ -146,7 +147,8 @@ mongodb://127.0.0.1:27017/SymBot
 ` or `
 mongodb://localhost:27017/SymBot
 ` should work fine, but setting up a username and password is also recommended
-		- For better security running your own local database is recommended
+		- Keep in mind when using a cloud hosted database, the disk space capacity may be different from your server or the amount of data that can be stored may be limited.  This can cause issues with your bots and deals if your database does not have adequate disk space or latency accessing a remote database is high
+		- For better speed and security, running your own local database is recommended
 
 	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. If you have an API key just copy it there or create an account at https://www.3CQS.com to get one.
 
@@ -752,6 +754,8 @@ If you want to reset the SymBot database for any reason, you can do so only from
 
 #### Why are my deals not updating or not getting pricing?
 - Your exchange credentials may be incorrect or you may be getting blocked, rate-limited, or experiencing some type of connectivity issues. Some exchanges also restrict access by region, so your server's IP address must reside in a location that is allowed. Check the logs for any error messages or unusual activity. You can do this from a command line terminal or in the SymBot web interface.
+
+- If you're experiencing connectivity problems, you might find that disabling IPv6 can help. This is often the case when there are compatibility issues or misconfiguration with IPv6. By doing this, your system will rely on IPv4, the older version of the Internet Protocol, for its connections, which can work better in certain situations. However, it's important to note that IPv6 is crucial for the future of the internet, so it's better to resolve the root cause of the problem and ensure that both IPv4 and IPv6 are correctly configured for a stable and long-term internet connection.
 
 #### Why is my system suddenly using more CPU or memory?
 - SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience.
