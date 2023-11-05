@@ -126,11 +126,14 @@ These files are located in the `config` directory
 
 	- `password` is a hashed password used to login to the SymBot web interface. The default password is automatically set as "*admin*" the very first time SymBot is started. This is not a plain text password, but rather an encrypted form of it, so it should not be manually entered or you may not be able to login properly. It is strongly recommended to change the default password using the web interface configuration.
 
-	- `api_key` is a UUID v4 value that is randomly generated the first time SymBot starts. It is used to make API calls to SymBot. This can be set to most any string value you choose.
-
 	- `web_server` contains settings for the SymBot web server. The default port is 3000.
 
-	- `webhook` contains data pertaining to webhooks. Set `enabled: true` to allow webhook usage.
+	- `api`
+		- `key` is a hashed form of your API key that is generated using the web interface configuration. Do not set this manually or SymBot may not function properly.
+		- `enabled` set to true to allow API access or false to disable access.
+
+	- `webhook`
+		- `enabled` set to true to allow Webhook usage.
 
 	-	`bots`
 		-	`start_conditions` contains keys and descriptions such as `asap` and `api` for various start conditions that can be used to start bots and deals. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
@@ -150,7 +153,7 @@ mongodb://localhost:27017/SymBot
 		- Keep in mind when using a cloud hosted database, the disk space capacity may be different from your server or the amount of data that can be stored may be limited.  This can cause issues with your bots and deals if your database does not have adequate disk space or latency accessing a remote database is high
 		- For better speed and security, running your own local database is recommended
 
-	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. If you have an API key just copy it there or create an account at https://www.3CQS.com to get one.
+	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. You must have a 3CQS API key for these to work. You can get one by signing up for free at https://www.3CQS.com. Webhooks must also be enabled for these signals to work.
 
 
 - **bot.json**
@@ -695,7 +698,7 @@ http://127.0.0.1:3000/api/tradingview?script=true&exchange=binance&pair=BTC_USDT
 
 A webhook is like a special type of API. While APIs rely on one program asking for data and waiting for a response, webhooks work differently. They instantly send data from one program or service to another when a specific event happens. This eliminates the need for manual requests and makes data sharing between software systems smoother and faster.
 
-SymBot makes using webhooks easy because they're nearly identical to API usage. SymBot also adds another layer of security by using a token to access webhooks. The token is a hash of your API key and SymBot server id.  This is used in your webhook requests instead of your API key in the header. Many companies do not allow passing custom headers, so using Symbot webhooks makes it easier to integrate with third-parties such as TradingView.
+SymBot makes using webhooks easy because they're nearly identical to API usage. SymBot also adds another layer of security by using a token to access webhooks. The token is a hash of your hashed API key and SymBot server id.  This is used in your webhook requests instead of your API key in the header. Many companies do not allow passing custom headers, so using Symbot webhooks makes it easier to integrate with third-parties such as TradingView.
 
 Since SymBot webhooks are layered on top of the APIs, you only need to prepend **/webhook** to the URL and supply your token. For example, let's say you wanted to start a new deal using a webhook. This is how the request would look:
 
@@ -742,6 +745,9 @@ If you want to reset the SymBot database for any reason, you can do so only from
 
 #### Can I access SymBot from my mobile device?
 - Yes. If you set up SymBot on a home network and your mobile device is connected to the same wireless network, you should be able to open a web browser on your device and access SymBot just fine. Keep in mind that you need to use the IP address of the server that SymBot is running on, such as http://192.168.1.10:3000. However, being able to access it from other locations depends if your system is accessible to the public internet. This generally requires either opening ports on your router and system, or setting up a [Reverse Proxy](#reverse-proxy-setup).
+
+#### Where should I host SymBot and how much does it cost?
+- While there are a lot of hosting providers to choose from, using one you trust is generally the best way to ensure SymBot runs smoothly at all times. Many providers offer free tier services or very low cost options. Although this is not a recommendation to use any of these providers, this [Cloud Free Tier Comparison](https://github.com/cloudcommunity/Cloud-Free-Tier-Comparison) list is a good place to start.
 
 #### How many DCA bots can I run at the same time?
 - You can technically run an unlimited number of bots, however any limitations mostly come from how often your exchange allows APIs to be accessed, and the amount of resources your system (server) has such as CPU, memory, etc. The more bots you run generally requires additional API calls to your exchange and more system processing capability to manage all of your deals efficiently.

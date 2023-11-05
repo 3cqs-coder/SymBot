@@ -41,7 +41,7 @@
 			title: false,
 			boxWidth: '50%',
 			useBootstrap: false,
-			content: '<div style="font-size: 1.2rem; text-align: left;"><b>WARNING:</b> This will replace your existing API key after you update the configuration</div>',
+			content: '<div style="font-size: 1.2rem; text-align: left;"><b>WARNING:</b> This will replace your existing API key after you update the configuration. Copy your key and store in a safe place since it will not be displayed again.</div>',
 			buttons: {
 
 						ok: {
@@ -68,6 +68,13 @@
 
 		let form = '#formConfig';
 		let submitUrl = $(form).attr('action');
+
+		if ($('#password').val() == '') {
+
+			alertBox('Please enter your current password');
+
+			return;
+		}
 
 		if ($('#passwordnew').val() != $('#passwordnew2').val()) {
 

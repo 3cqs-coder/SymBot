@@ -4,6 +4,10 @@
 	"web_server": {
 					"port": 3000
 				},
+	"api": {
+					"enabled": true,
+					"key": ""
+			},
 	"webhook": {
 					"enabled": true
 				},

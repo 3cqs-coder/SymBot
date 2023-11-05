@@ -231,14 +231,13 @@ async function processSignal(data) {
 	const startCondition = 'signal|3CQS|' + signalNameId;
 
 	let port = shareData.appData.web_server_port;
-	let apiKey = shareData.appData.api_key;
+	let apiToken = shareData.appData.api_token;
 
 	let baseUrl = 'http://127.0.0.1:' + port;
 
 	let headers = {
 						'Accept': 'application/json',
-						'Content-Type': 'application/json',
-						'api-key': apiKey
+						'Content-Type': 'application/json'
 				  };
 
 
@@ -321,11 +320,11 @@ async function processSignal(data) {
 					}
 				}
 
-				let body = { 'pair': pairUse, 'signalId': signalId };
+				let body = { 'apiToken': apiToken, 'pair': pairUse, 'signalId': signalId };
 
 				// Start deal
 				let res = await shareData.Common.fetchURL({
-															'url': baseUrl + '/api/bots/' + botId + '/start_deal',
+															'url': baseUrl + '/webhook/api/bots/' + botId + '/start_deal',
 															'method': 'post',
 															'headers': headers,
 															'body': body
@@ -398,11 +397,11 @@ async function processSignal(data) {
 				const dealId = deal.dealId;
 				const pair = deal.pair;
 
-				let body = { 'dealLast': true };
+				let body = { 'apiToken': apiToken, 'dealLast': true };
 
 				// Update last deal flag
 				let res = await shareData.Common.fetchURL({
-															'url': baseUrl + '/api/deals/' + dealId + '/update_deal',
+															'url': baseUrl + '/webhook/api/deals/' + dealId + '/update_deal',
 															'method': 'post',
 															'headers': headers,
 															'body': body

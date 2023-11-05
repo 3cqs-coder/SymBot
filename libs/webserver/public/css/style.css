@@ -649,6 +649,12 @@ table#botsCreate {
 }
 
 
+table#botsCreate tr {
+
+	vertical-align: top;
+}
+
+
 table#botsCreate td {
 
 	padding-bottom: 5px;

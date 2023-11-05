@@ -116,9 +116,16 @@ async function updateConfig(req, res) {
 		}
 
 		if (apiKey != undefined && apiKey != null && apiKey != '') {
+		
+			const data = await genPasswordHash({'data': apiKey });
 
-			appConfig['api_key'] = apiKey;
-			shareData['appData']['api_key'] = apiKey;
+			const apiKeyHashed = data['salt'] + ':' + data['hash'];
+
+			appConfig['api']['key'] = apiKeyHashed;
+			shareData['appData']['api_key'] = apiKeyHashed;
+
+			// Set API token
+			await setToken();
 		}
 
 		if (telegram != undefined && telegram != null && telegram != '') {
@@ -855,13 +862,39 @@ function sortByKey(array, key) {
 }
 
 
-async function genToken() {
+async function genApiKey(key) {
+
+	let appConfig = await getConfig('app.json');
+
+	let appConfigObj = JSON.parse(JSON.stringify(appConfig));
 
 	const salt = shareData.appData.server_id;
 
-	const token = await genPasswordHash({'data': shareData.appData.api_key, 'salt': salt });
+	const apiKey = await genPasswordHash({'data': key });
+
+	appConfigObj['data']['api']['key'] = apiKey['salt'] + ':' + apiKey['hash'];
+
+	await saveConfig('app.json', appConfigObj.data);
+}
+
+
+async function genToken() {
+
+	const salt = shareData.appData.server_id;
+	const data = shareData.appData.api_key.split(':');
+
+	const hash = data[1];
+
+	const token = await genPasswordHash({'data': hash, 'salt': salt });
 
 	return token;
+}
+
+
+async function setToken() {
+
+	const token = await genToken();
+	shareData.appData['api_token'] = token['hash'];
 }
 
 
@@ -917,7 +950,7 @@ async function verifyLogin(req, res) {
 	const userAgent = req.headers['user-agent'];
 
 	const dataPass = shareData.appData.password.split(':');
-	
+
 	let success = await verifyPasswordHash( { 'salt': dataPass[0], 'hash': dataPass[1], 'data': password } );
 
 	if (success) {
@@ -947,6 +980,39 @@ async function verifyLogin(req, res) {
 }
 
 
+function validateApiKey(key) {
+
+	let data;
+	let hashData;
+	let success = false;
+
+	try {
+
+		data = shareData.appData.api_key.split(':');
+	}
+	catch(e) {
+
+		return success;
+	}
+
+	const salt = data[0];
+	const hash = data[1];
+
+	try {
+
+		hashData = crypto.pbkdf2Sync(key, salt, 1000, 64, 'sha256').toString('hex');
+	}
+	catch(e) {}
+
+	if (hash === hashData) {
+
+		success = true;
+	}
+
+	return success;
+}
+
+
 async function goHome(req, res) {
 
 	res.render( 'homeView', { 'appData': shareData.appData } );
@@ -972,10 +1038,13 @@ module.exports = {
 	numToBase26,
 	numFormatter,
 	hashCode,
+	genApiKey,
 	genToken,
+	setToken,
 	genPasswordHash,
 	verifyPasswordHash,
 	verifyLogin,
+	validateApiKey,
 	goHome,
 	timeDiff,
 	logger,

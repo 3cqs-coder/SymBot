@@ -1,5 +1,10 @@
 {
   "3CQS": {
+    "metadata": {
+      "author": "3CQS.com",
+      "info": "Valid 3CQS API key required to use",
+      "description": "Trading signals from 3CQS"
+    },
     "start_conditions": [
       {
         "id": 12,

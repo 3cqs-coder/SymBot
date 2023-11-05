@@ -7,6 +7,7 @@
 
 	let formAction = '<%- formAction %>';
 	let pairBlackList = <%- '[' + appData.bots['pair_autofill_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
+	let startConditionsMeta = <%- JSON.stringify(appData.bots['start_conditions_metadata']) %>;
 
 	function formToJson(form) {
 
@@ -54,10 +55,25 @@
 
 			const key = data[1];
 
+			if (startConditionsMeta[key] != undefined && startConditionsMeta[key] != null) {
+
+				const info = startConditionsMeta[key]['info'];
+
+				if (info != undefined && info != null && info != '') {
+
+					const content = '<div style="display: block;"><i>' + info + '</i></div>';
+
+					$('#infoBox').html(content);
+					$('#infoBox').show();
+				}
+			}
+
 			$('[id^="startConditionSub-' + key + '"]').show();
 		}
 		else {
 
+			$('#infoBox').empty();
+			$('#infoBox').hide();
 			$('[id^="startConditionSub"]').hide();
 		}
 	}
@@ -573,7 +589,7 @@
 
 					const data = botData.startConditions[i].split('|');
 
-					const key =  data[1];
+					const key = data[1];
 					const id = data[2];
 					const operator = data[3];
 					const content = data[4];
@@ -781,7 +797,9 @@
 
 				</td> <td><input id="dealCoolDown" name="dealCoolDown" value="<%- botData.dealCoolDown %>" class="form-field"> Seconds</td></tr>
 
-				<tr id="startConditionFirst"><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select></td></tr>
+				<tr id="startConditionFirst"><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select>
+					<span id="infoBox" style="position: relative; display: flex; justify-content: left; padding-top: 5px;"></span>
+				</td></tr>
 				<%- startConditionSubString %>
 				<tr><td>Enabled:</td> <td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>
 

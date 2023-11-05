@@ -58,6 +58,7 @@ process.on('uncaughtException', function(err) {
 async function init() {
 
 	let apiKey;
+	let apiKeySet;
 	let consoleLog = false;
 
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
@@ -76,18 +77,14 @@ async function init() {
 
 	const serverConfig = await Common.getConfig('server.json');
 
-	if (appConfig['data']['api_key'] == undefined || appConfig['data']['api_key'] == null || appConfig['data']['api_key'] == '') {
+	if (appConfig['data']['api']['key'] == undefined || appConfig['data']['api']['key'] == null || appConfig['data']['api']['key'] == '' || appConfig['data']['api']['key'].indexOf(':') == -1) {
 
-		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
-
-		apiKey = Common.uuidv4();
-		appConfigObj['data']['api_key'] = apiKey;
-
-		await Common.saveConfig('app.json', appConfigObj.data);
+		apiKeySet = false;
 	}
 	else {
 
-		apiKey = appConfig['data']['api_key'];
+		apiKeySet = true;
+		apiKey = appConfig['data']['api']['key'];
 	}
 
 	if (appConfig['data']['password'] == undefined || appConfig['data']['password'] == null || appConfig['data']['password'] == '' || appConfig['data']['password'].indexOf(':') == -1) {
@@ -105,12 +102,15 @@ async function init() {
 
 		let startSubsObj = {};
 
+		appConfig['data']['bots']['start_conditions_metadata'] = {};
+
 		for (let key in signalConfigsData) {
 
 			let signalObj = {};
 
 			let startConditions = signalConfigsData[key]['start_conditions'];
 			let startConditionsSub = signalConfigsData[key]['start_conditions_sub'];
+			let startConditionsMeta = signalConfigsData[key]['metadata'];
 
 			for (let num in startConditions) {
 
@@ -144,6 +144,7 @@ async function init() {
 			}
 
 			appConfig['data']['bots']['start_conditions'] = Object.assign({}, appConfig['data']['bots']['start_conditions'], signalObj);
+			appConfig['data']['bots']['start_conditions_metadata'][key] = startConditionsMeta;
 		}
 	}
 
@@ -158,11 +159,12 @@ async function init() {
 										'web_server_port': appConfig['data']['web_server']['port'],
 										'exchanges': {},
 										'api_key': apiKey,
+										'api_enabled': appConfig['data']['api']['enabled'],
+										'webhook_enabled': appConfig['data']['webhook']['enabled'],
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
 										'telegram_enabled': appConfig['data']['telegram']['enabled'],
-										'webhook_enabled': appConfig['data']['webhook']['enabled'],
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
 										'started': new Date()
@@ -236,6 +238,16 @@ async function init() {
 	}
 
 	if (success) {
+
+		if (apiKeySet) {
+
+			// Set token
+			await Common.setToken();
+		}
+		else {
+
+			Common.logger('WARNING: No API key is set. You must generate one using the web interface configuration before API access or Webhook usage will be enabled', true);
+		}
 
 		const processInfo = await Common.getProcessInfo();
 

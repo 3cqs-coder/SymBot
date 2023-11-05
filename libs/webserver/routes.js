@@ -361,11 +361,16 @@ function initRoutes(router) {
 
 async function processConfig(req, res) {
 
+	let tokenBase64;
+
 	if (req.session.loggedIn) {
 
-		const token = await shareData.Common.genToken();
+		const token = shareData.appData.api_token;
 
-		const tokenBase64 = Buffer.from(token['hash'], 'utf8').toString('base64');
+		if (token != undefined && token != null && token != '') {
+
+			tokenBase64 = Buffer.from(token, 'utf8').toString('base64');
+		}
 
 		res.render( 'configView', { 'appData': shareData.appData, 'token': tokenBase64 } );
 	}
@@ -399,11 +404,9 @@ async function processWebHook(req, res, next) {
 
 		const apiToken = req.body[tokenKey];
 
-		const tokenApp = await shareData.Common.genToken();
+		if (apiToken === shareData.appData.api_token) {
 
-		if (apiToken === tokenApp['hash']) {
-
-			req.headers['api-key'] = shareData.appData.api_key;
+			req.headers['api-token'] = apiToken;
 		}
 
 		delete req.body[tokenKey];
@@ -442,10 +445,29 @@ function validApiKey(req) {
 	const headers = req.headers;
 
 	const apiKey = headers['api-key'];
+	const apiToken = headers['api-token'];
 
-	if (apiKey != undefined && apiKey != null && apiKey != '' && apiKey == shareData.appData.api_key) {
+	if (apiKey != undefined && apiKey != null && apiKey != '') {
 
-		success = true;
+		if (shareData.appData.api_enabled) {
+
+			const isValid = shareData.Common.validateApiKey(apiKey);
+
+			if (isValid) {
+	
+				success = true;
+			}
+		}
+	}
+	else if (apiToken != undefined && apiToken != null && apiToken != '') {
+
+		if (shareData.appData.webhook_enabled) {
+
+			if (apiToken === shareData.appData.api_token) {
+
+				success = true;
+			}
+		}
 	}
 
 	return success;
