@@ -1,6 +1,6 @@
 {
   "name": "SymBot",
-  "version": "0.99.410-beta.0",
+  "version": "0.99.420-beta.0",
   "description": "SymBot",
   "main": "index.js",
   "scripts": {

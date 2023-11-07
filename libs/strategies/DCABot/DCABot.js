@@ -1280,7 +1280,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 									const priceFiltered = await filterPrice(exchange, pair, price);
 
-									const sell = await sellOrder(exchange, dealId, pair, order.qtySum, priceFiltered);
+									const sell = await sellOrder(exchange, dealId, pair, currentOrder.qtySum, priceFiltered);
 
 									if (!sell.success) {
 

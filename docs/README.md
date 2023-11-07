@@ -14,6 +14,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Upgrading](#upgrading)
 - [Configuration](#configuration)
 - [Telegram Setup](#telegram-setup)
+- [Advanced Setup](#advanced-setup)
 - [Reverse Proxy Setup](#reverse-proxy-setup)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
@@ -118,6 +119,7 @@ When upgrading to a new version of SymBot it is recommended to follow the basic 
 
 **NOTE:** If you are running SymBot behind any other services such as Apache, Nginx, Cloudflare, etc. you may need to clear caches in order for the latest upgraded files to be served properly.
 
+
 ## Configuration
 
 These files are located in the `config` directory
@@ -185,6 +187,45 @@ You just need to create a Telegram bot with `@BotFather`. Here are some simple s
 8. Type or click on `/start`
 9. Copy your Telegram bot token into the SymBot **app.json** configuration file. You must also enter your own Telegram id or SymBot will not allow messages to be sent. If you don't know your Telegram id, open a chat with `@userinfobot`
 10. Restart SymBot 
+
+## Advanced Setup
+
+If you're experiencing issues such as application crashes or slow performance, there are a few things to consider:
+
+- Ensure the system running SymBot has adequate resources available such as memory and hard drive space to help prevent these issues in the first place.
+- Keep your system up to date with the latest security patches and performance improvements. Use your package manager to update the installed software regularly.
+- Disable unnecessary services and daemons that are not required for your specific use case. This reduces the system's resource usage.
+
+Below are some additional tips to optimizing your system and SymBot performance.
+
+
+### Swap space
+Swap space is a portion of a computer's hard drive or other storage devices that is used as virtual memory. It's like extra memory for your computer when the real memory (RAM) is full and prevents your computer from crashing when it runs out of memory. However, using swap space can slow down your computer, so you should only use it if you need it. The amount of swap space to use depends on how much memory your computer has and what you use it for, but it's typically recommended to have at least as much swap space as RAM.  Creating and enabling swap space will vary depending on your operating system.
+
+### Heap size
+The Node.js heap size is the memory allocated for storing data in an application. You typically don't need to change the default size, but you might increase it if your app needs more memory due to lots of data or for performance reasons. You can adjust it with the `--max-old-space-size` flag when running your app, but be cautious about using too much memory. 
+
+For example, if you wanted to increase the heap size to 4GB, you would start SymBot like this:
+
+`node --max-old-space-size=4096 symbot.js`
+
+Or if using pm2, your ecosystem.config.js file might look something like this:
+
+```
+module.exports = {
+
+	apps: [
+			{
+				name: 'symbot',
+				namespace: 'symbot',
+				script: '/home/symbot/symbot.js',
+				kill_timeout: 8000,
+				max_memory_restart: '4000M',
+				node_args: '--max_old_space_size=4096'
+			}
+		  ]
+}
+```
 
 ## Reverse Proxy Setup
 
@@ -771,7 +812,7 @@ If you want to reset the SymBot database for any reason, you can do so only from
 - Once you have confirmed your exchange credentials are correct and there are no connectivity issues, then this could be related to your bot settings. For example, if you have anything set for max deals, pairs, or minimum 24h volume, these can all restrict your bot from starting new deals. Also if your start condition is set to anything other than ASAP, such as if you're using a trading signal, then a deal will only start once a signal received matches your bot pairs and other allowed settings.
 
 #### Why is my system suddenly using more CPU or memory?
-- SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience.
+- SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience. See also [Advanced Setup](#advanced-setup) for additional tips.
 
 ## Disclaimer
 
