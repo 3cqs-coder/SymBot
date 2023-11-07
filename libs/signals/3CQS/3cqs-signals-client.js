@@ -39,9 +39,9 @@ setInterval(() => {
 
 
 
-async function start(apiKey) {
+async function start(enabled, apiKey) {
 
-	if (apiKey == undefined || apiKey == null || apiKey == '') {
+	if (!enabled || apiKey == undefined || apiKey == null || apiKey == '') {
 
 		return;
 	}

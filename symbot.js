@@ -59,6 +59,7 @@ async function init() {
 
 	let apiKey;
 	let apiKeySet;
+	let apiKeyClear;
 	let consoleLog = false;
 
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
@@ -80,6 +81,16 @@ async function init() {
 	if (appConfig['data']['api']['key'] == undefined || appConfig['data']['api']['key'] == null || appConfig['data']['api']['key'] == '' || appConfig['data']['api']['key'].indexOf(':') == -1) {
 
 		apiKeySet = false;
+
+		apiKeyClear = Common.uuidv4();
+
+		apiKey = await Common.genApiKey(apiKeyClear);
+
+		appConfig['data']['api']['key'] = apiKey;
+
+		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
+
+		await Common.saveConfig('app.json', appConfigObj.data);
 	}
 	else {
 
@@ -239,14 +250,12 @@ async function init() {
 
 	if (success) {
 
-		if (apiKeySet) {
+		// Set token
+		await Common.setToken();
 
-			// Set token
-			await Common.setToken();
-		}
-		else {
+		if (!apiKeySet) {
 
-			Common.logger('WARNING: No API key is set. You must generate one using the web interface configuration before API access or Webhook usage will be enabled', true);
+			Common.logger('WARNING: ' + appDataConfig.name + ' API key was not set and has been auto generated as: ' + apiKeyClear + '. This will not be displayed again. It is strongly recommended to generate a new one using the web interface configuration.', true);
 		}
 
 		const processInfo = await Common.getProcessInfo();

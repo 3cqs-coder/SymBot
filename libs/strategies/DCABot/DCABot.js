@@ -2642,7 +2642,9 @@ async function startSignals() {
 
 	const appConfig = await Common.getConfig('app.json');
 
-	const socket = await shareData.Signals3CQS.start(appConfig['data']['signals']['3CQS']['api_key']);
+	const enabled = appConfig['data']['signals']['3CQS']['enabled'];
+
+	const socket = await shareData.Signals3CQS.start(enabled, appConfig['data']['signals']['3CQS']['api_key']);
 }
 
 

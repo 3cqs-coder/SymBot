@@ -116,10 +116,8 @@ async function updateConfig(req, res) {
 		}
 
 		if (apiKey != undefined && apiKey != null && apiKey != '') {
-		
-			const data = await genPasswordHash({'data': apiKey });
 
-			const apiKeyHashed = data['salt'] + ':' + data['hash'];
+			const apiKeyHashed = await genApiKey(apiKey);
 
 			appConfig['api']['key'] = apiKeyHashed;
 			shareData['appData']['api_key'] = apiKeyHashed;
@@ -862,19 +860,21 @@ function sortByKey(array, key) {
 }
 
 
+function mergeObjects(origObj, newObj) {
+
+	let mergeObj = { ...newObj, ...origObj };
+
+	return mergeObj;
+}
+
+
 async function genApiKey(key) {
 
-	let appConfig = await getConfig('app.json');
+	const data = await genPasswordHash({'data': key });
 
-	let appConfigObj = JSON.parse(JSON.stringify(appConfig));
+	const apiKeyHashed = data['salt'] + ':' + data['hash'];
 
-	const salt = shareData.appData.server_id;
-
-	const apiKey = await genPasswordHash({'data': key });
-
-	appConfigObj['data']['api']['key'] = apiKey['salt'] + ':' + apiKey['hash'];
-
-	await saveConfig('app.json', appConfigObj.data);
+	return apiKeyHashed;
 }
 
 
@@ -1035,6 +1035,7 @@ module.exports = {
 	getDateParts,
 	getTimeZone,
 	roundAmount,
+	mergeObjects,
 	numToBase26,
 	numFormatter,
 	hashCode,

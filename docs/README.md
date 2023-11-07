@@ -44,7 +44,7 @@ If you would rather run SymBot using Docker then skip this section and go to the
 2. Change directory to where SymBot files are located
 3. Type: `npm install`
 4. Wait until all packages are downloaded and installed
-5. Modify the app and bot configuration files as necessary (see below)
+5. Modify the app and bot configuration files as necessary (see [Configuration](#configuration))
 6. Type: `npm start`. You can also use `npm start consolelog` to display all logging to the console for testing purposes. The same information is also logged to files in the `logs` directory
 7. Open a web browser and type: http://127.0.0.1:3000
 
@@ -94,7 +94,7 @@ The Docker build files can be modified as necessary, but should only be done if 
 1. Open a command line terminal
 2. Change directory to where SymBot files are located
 3. Open the **app.json** configuration file and set `mongo_db_url` to `mongodb://symbot:symbot123@database/symbot`
-4. Make any additional changes to the app and bot configuration files as necessary (see below)
+4. Make any additional changes to the app and bot configuration files as necessary (see [Configuration](#configuration))
 5. Change directory to `docker` in the same location where SymBot files are located
 6. Type: `docker-compose -p symbot up -d --build`
 7. Wait for Docker to build everything and all containers to start
@@ -139,7 +139,7 @@ These files are located in the `config` directory
 		-	`start_conditions` contains keys and descriptions such as `asap` and `api` for various start conditions that can be used to start bots and deals. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
 		-	`pair_autofill_blacklist` is an array of trading pairs that you don't want automatically filled in the pair selection box when creating or updating bots and clicking one of the stablecoin buttons such as USD or USDT. You can use full pairs such as BTC/USD or wildcards such as BTC/*. This can be useful to prevent bots from starting deals using stablecoin pairs such as USDT/USD as those will generally have little volatility in typical market conditions.
 
-	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see below).
+	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see [Telegram Setup](#telegram-setup)).
 
 	- `mongo_db_url` is the URL to your MongoDB instance.
 
