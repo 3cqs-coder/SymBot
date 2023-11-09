@@ -79,14 +79,21 @@ async function updateConfig(req, res) {
 	const apiKey = body.apikey;
 	const telegram = body.telegram;
 
+	let pairButtons = body.pairbuttons;
 	let pairBlacklist = body.pairblacklist;
 	let telegramEnabled = false;
+
+	if (pairButtons == undefined || pairButtons == null || pairButtons == '') {
+
+		pairButtons = [];
+	}
 
 	if (pairBlacklist == undefined || pairBlacklist == null || pairBlacklist == '') {
 
 		pairBlacklist = [];
 	}
 
+	const pairButtonsUC = pairButtons.map(data => data.toUpperCase());
 	const pairBlacklistUC = pairBlacklist.map(data => data.toUpperCase());
 
 	const dataPass = shareData.appData.password.split(':');
@@ -130,6 +137,9 @@ async function updateConfig(req, res) {
 
 			telegramEnabled = true;
 		}
+
+		appConfig['bots']['pair_autofill_buttons'] = pairButtonsUC;
+		shareData['appData']['bots']['pair_autofill_buttons'] = pairButtonsUC;
 
 		appConfig['bots']['pair_autofill_blacklist'] = pairBlacklistUC;
 		shareData['appData']['bots']['pair_autofill_blacklist'] = pairBlacklistUC;

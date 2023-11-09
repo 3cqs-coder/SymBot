@@ -6,6 +6,7 @@
 	let confirmStart = false;
 
 	let formAction = '<%- formAction %>';
+	let pairButtons = <%- '[' + appData.bots['pair_autofill_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
 	let pairBlackList = <%- '[' + appData.bots['pair_autofill_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
 	let startConditionsMeta = <%- JSON.stringify(appData.bots['start_conditions_metadata']) %>;
 
@@ -163,6 +164,15 @@
 
 		let botText = 'Create Bot';
 		let headerText = 'Create DCA Bot';
+
+		for (let i = 0; i < pairButtons.length; i++) {
+
+			let opt = pairButtons[i].toUpperCase();
+
+			let button = '<button id="selectAll-' + opt + '" class="btnAll">' + opt + '</button> ';
+
+			$('#pairButtons').append(button);
+		}
 
 		// Display any error messages
 		if ($('#errorMsg').text() != '') {
@@ -701,12 +711,7 @@
 
 					<br>
 
-					<div style="position: relative; float: left; margin-top: 5px; margin-bottom: 5px;">
-						<button id="selectAll-USD" class="btnAll">USD</button>
-						<button id="selectAll-USDT" class="btnAll">USDT</button>
-						<button id="selectAll-USDC" class="btnAll">USDC</button>
-						<button id="selectAll-BUSD" class="btnAll">BUSD</button>
-					</div>
+					<div id="pairButtons" style="position: relative; float: left; margin-top: 5px; margin-bottom: 5px;"></div>
 
 				</div>
 

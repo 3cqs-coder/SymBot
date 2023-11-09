@@ -1266,6 +1266,11 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								let panicSell = false;
 								let sellSuccess = true;
 
+								const feeData = await calculateExchangeFees(pair, price, exchange, config, currentOrder);
+
+								const qtySumSell = feeData['dcaOrderQtySumNet'];
+								const priceFiltered = feeData['priceFiltered'];
+
 								if (dealTracker[dealId]['update']['deal_cancel']) {
 
 									canceled = true;
@@ -1278,9 +1283,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								if (!config.sandBox && !canceled) {
 
-									const priceFiltered = await filterPrice(exchange, pair, price);
-
-									const sell = await sellOrder(exchange, dealId, pair, currentOrder.qtySum, priceFiltered);
+									const sell = await sellOrder(exchange, dealId, pair, qtySumSell, priceFiltered);
 
 									if (!sell.success) {
 
@@ -1319,19 +1322,21 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 									const sellData = {
 														'date': new Date(),
 														'qtySum': currentOrder.qtySum,
+														'qtySumSell': qtySumSell,
 														'price': price,
 														'average': currentOrder.average,
 														'target': currentOrder.target,
-														'profit': profitPerc
+														'profit': profitPerc,
+														'feeData': feeData
 													 };
 
 									await Deals.updateOne({
 										dealId: dealId
 									}, {
-										sellData: sellData,
-										panicSell: panicSell,
-										canceled: canceled,
-										status: 1
+										'sellData': sellData,
+										'panicSell': panicSell,
+										'canceled': canceled,
+										'status': 1
 									});
 
 									finished = true;
@@ -1770,6 +1775,45 @@ const getDeviationDca = async (dcaOrderStepPercent, dcaOrderStepPercentMultiplie
 	}
 
 	return maxDeviation;
+}
+
+
+const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj) => {
+
+	const config = JSON.parse(JSON.stringify(configObj));
+	const currentOrder = JSON.parse(JSON.stringify(orderObj));
+
+	const priceFiltered = await filterPrice(exchange, pair, price);
+
+	// Calculate total fees amount and quantity
+	const dcaOrderSum = currentOrder.sum;
+	const dcaOrderQtySum = currentOrder.qtySum;
+
+	const exchangeFeeSum = await filterPrice(exchange, pair, (dcaOrderSum / 100) * Number(config.exchangeFee));
+
+	let exchangeFeeQtySum = exchangeFeeSum / priceFiltered;
+
+	exchangeFeeQtySum = await filterAmount(exchange, pair, exchangeFeeQtySum);
+
+	if (!exchangeFeeQtySum) {
+
+		exchangeFeeQtySum = 0;
+	}
+
+	const dcaOrderSumNet = await filterPrice(exchange, pair, (dcaOrderSum - exchangeFeeSum));
+	const dcaOrderQtySumNet = await filterAmount(exchange, pair, (dcaOrderQtySum - exchangeFeeQtySum));
+
+	const obj = {
+					'dcaOrderSum': dcaOrderSum,
+					'dcaOrderQtySum': dcaOrderQtySum,
+					'dcaOrderSumNet': dcaOrderSumNet,
+					'dcaOrderQtySumNet': dcaOrderQtySumNet,
+					'exchangeFeeSum': exchangeFeeSum,
+					'exchangeFeeQtySum': exchangeFeeQtySum,
+					'priceFiltered': priceFiltered
+				};
+
+	return obj;
 }
 
 

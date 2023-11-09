@@ -4,6 +4,7 @@
 
 	const token = '<%= token %>';
 	const telegram = '<%= appData['telegram_enabled'] %>';
+	const pairButtons = <%- '[' + appData.bots['pair_autofill_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
 	const pairBlackList = <%- '[' + appData.bots['pair_autofill_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
 
 	function convertBoolean(param) {
@@ -120,6 +121,10 @@
 
 		$('[id*="toggle"]').simpleSwitch();
 
+		$('#pairbuttons').select2({ tags: true, data: pairButtons });
+		$('#pairbuttons').val(pairButtons);
+		$('#pairbuttons').trigger('change');
+
 		$('#pairblacklist').select2({ tags: true, data: pairBlackList });
 		$('#pairblacklist').val(pairBlackList);
 		$('#pairblacklist').trigger('change');
@@ -191,6 +196,11 @@
 			<div style="padding-bottom: 5px;">
 				<label for="apitoken">Webhook API Token <span style="font-size: 0.99rem;"></span><span id="configApiToken" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span></label>
 				<span id="apitoken" style="display: none; overflow-wrap: break-word;"></span>
+			</div>
+
+			<div style="padding-top: 10px; padding-bottom: 5px;">
+				<label for="pairbuttons">Pair Autofill Buttons</label>
+				<select id="pairbuttons" name="pairbuttons" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
