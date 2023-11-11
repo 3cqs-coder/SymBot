@@ -60,11 +60,18 @@ async function init() {
 	let apiKey;
 	let apiKeySet;
 	let apiKeyClear;
+	let isReset = false;
 	let consoleLog = false;
+	let serverIdError = false;
 
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
 
 		consoleLog = true;
+	}
+
+	if (process.argv[2] && process.argv[2].toLowerCase() == 'reset') {
+
+		isReset = true;
 	}
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
@@ -230,6 +237,8 @@ async function init() {
 
 			let res = await verifyServerId(serverConfig);
 			
+			serverIdError = res['server_id_error'];
+
 			if (!res.success) {
 
 				success = false;
@@ -241,9 +250,9 @@ async function init() {
 		}
 	}
 
-	if (success && process.argv[2] && process.argv[2].toLowerCase() == 'reset') {
+	if (isReset && (success || serverIdError)) {
 
-		reset();
+		reset(serverIdError);
 
 		return({ 'nostart': true });
 	}
@@ -278,8 +287,9 @@ async function init() {
 
 async function verifyServerId(serverConfig) {
 
-	let success = true;
 	let serverId;
+	let success = true;
+	let serverIdError = false;
 
 	const serverData = await ServerDB.ServerSchema.findOne({ 'serverId': { $exists: true } });
 
@@ -311,8 +321,11 @@ async function verifyServerId(serverConfig) {
 		if (!process.env.DOCKER_RUNNING && serverConfig.data.server_id != serverData.serverId) {
 
 			success = false;
+			serverIdError = true;
 
 			Common.logger('Server ID mismatch', true);
+			Common.logger('Server ID database: ' + serverData.serverId, true);
+			Common.logger('Server ID configuration: ' + serverConfig.data.server_id, true);
 		}
 		else {
 
@@ -320,7 +333,7 @@ async function verifyServerId(serverConfig) {
 		}
 	}
 
-	return ({ 'success': success, 'server_id': serverId });
+	return ({ 'success': success, 'server_id': serverId, 'server_id_error': serverIdError });
 }
 
 
@@ -342,7 +355,7 @@ async function checkDependencies() {
 }
 
 
-async function reset() {
+async function reset(serverIdError) {
 
 	// Reset database from command line
 
@@ -352,6 +365,11 @@ async function reset() {
 	let resetCode = Math.floor(Math.random() * 1000000000);
 
 	console.log('\n*** CAUTION *** You are about to reset ' + appDataConfig.name + ' database!\n');
+
+	if (serverIdError) {
+
+		console.log('\n*** WARNING *** Your server ID does not match! Confirm you are connected to the correct database!\n');
+	}
 
 	confirm = prompt('Do you want to continue? (Y/n): ');
 

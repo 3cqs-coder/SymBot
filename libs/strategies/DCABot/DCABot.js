@@ -1039,7 +1039,18 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						if (!buy.success) {
 
-							return ( { 'success': false, 'finished': false } );
+							let finished = false;
+
+							const statusObj = await orderError({ 'bot_id': config.botId, 'bot_name': config.botName, 'deal_id': dealId });
+
+							if (statusObj['success']) {
+
+								await deleteDeal(dealId);
+
+								finished = true;
+							}
+
+							return ( { 'success': false, 'finished': finished } );
 						}
 					}
 
@@ -1093,7 +1104,18 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							if (!buy.success) {
 
-								return ( { 'success': false, 'finished': false } );
+								let finished = false;
+	
+								const statusObj = await orderError({ 'bot_id': config.botId, 'bot_name': config.botName, 'deal_id': dealId });
+	
+								if (statusObj['success']) {
+	
+									await deleteDeal(dealId);
+	
+									finished = true;
+								}
+	
+								return ( { 'success': false, 'finished': finished } );
 							}
 						}
 
@@ -1865,6 +1887,34 @@ async function connectExchange(configObj) {
 }
 
 
+async function orderError(data) {
+
+	let active = false;
+	let success = true;
+
+	let botId = data['bot_id'];
+	let botName = data['bot_name'];
+	let dealId = data['deal_id'];
+
+	const dataBot = await updateBot(botId, { 'active': active });
+
+	if (!dataBot.success) {
+
+		success = false;
+	}
+
+	if (success) {
+
+		let msg = 'An error occurred starting deal ID ' + dealId + '. Disabling bot. Check the logs for details.';
+
+		await Common.sendNotification({ 'message': msg, 'type': 'deal_error', 'telegram_id': shareData.appData.telegram_id });
+		const statusObj = await sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
+	}
+
+	return ( { 'success': success } );
+}
+
+
 async function sendBotStatus(data) {
 
 	let status;
@@ -1953,6 +2003,33 @@ async function updateDeal(botId, dealId, data) {
 }
 
 
+async function deleteDeal(dealId) {
+
+	let dealData;
+	let success = true;
+
+	try {
+
+		dealData = await Deals.deleteOne({
+						dealId: dealId
+					});
+	}
+	catch (e) {
+
+		success = false;
+
+		Common.logger(JSON.stringify(e));
+	}
+
+	if (dealData == undefined || dealData == null || dealData['deletedCount'] < 1) {
+
+		success = false;
+	}
+
+	return( { 'success': success } );
+}
+
+
 async function updateOrders(data) {
 
 	let orderData = JSON.parse(JSON.stringify(data));
@@ -2016,7 +2093,7 @@ async function checkTracker() {
 
 			diffSec = (diffSec / 60).toFixed(2);
 
-			let msg = 'WARNING: ' + dealId + ' exceeds last updated time by ' + diffSec + ' minutes';
+			let msg = 'WARNING: ' + dealId + ' exceeds last updated time by ' + diffSec + ' minutes. Check the logs for details.';
 
 			Common.logger(msg);
 
@@ -2958,6 +3035,9 @@ async function addFundsDeal(dealId, volume) {
 		let exchange = await connectExchange(config).catch(console.log);
 
 		const ex = await exchange.loadMarkets();
+
+		let exchangeFee = (volume / 100) * Number(config.exchangeFee);
+		volume = await filterPrice(exchange, config.pair, (volume + exchangeFee));
 
 		for (let i = 0; i < oldOrders.length; i++) {
 
