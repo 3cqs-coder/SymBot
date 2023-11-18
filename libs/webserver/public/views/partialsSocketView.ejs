@@ -1,5 +1,13 @@
 <script>
 
+function removeNotificationDisplay(id) {
+
+	$('#' + id).fadeOut(1000, function() {
+
+		$(this).remove();
+	});
+}
+
 $(document).ready(function() {
 
 	const maxRows = 10;
@@ -85,7 +93,7 @@ $(document).ready(function() {
 
 	socket.on('data', (data) => {
 
-		let id = 'notifs' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
+		let id = 'notifs-' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
 
 		let msg = '<div id="' + id + '" class="notificationsRow">' + data + '</div>';
 
@@ -110,10 +118,7 @@ $(document).ready(function() {
 
 		setTimeout(() => {
 
-			$('#' + id).fadeOut(1000, function() {
-
-				$(this).remove();
-			});
+			removeNotificationDisplay(id);
 
 		}, (removeSec * 1000));
 
@@ -123,12 +128,19 @@ $(document).ready(function() {
 		}
 	});
 
+	$(document).on('click', '[id*="notifs-"]', function() {
+
+		let id = $(this).attr('id');
+
+		removeNotificationDisplay(id);
+	});
+
 	$(document).on('change', '#notificationsList', function() {
 
 		let optionSelected = $('option:selected', this).val();
 
 		$('.notificationsRow').show();
-	
+
 		if (optionSelected != '') {
 
 			$('.notificationsRow').hide();

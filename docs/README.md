@@ -165,7 +165,9 @@ mongodb://localhost:27017/SymBot
 	- This contains all default settings for your bot and exchange. Depending on your exchange, the API credentials you enter here usually include some of the following such as your exchange API key, secret, passphrase, or password. For testing purposes, often you can leave all of them empty but always leave `sandBox: true`.
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the [CCXT](https://github.com/ccxt/ccxt)  library so if the exchange is supported, you should be able to connect to it
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web interface
+	- Set your exchange fee appropriately. Exchanges such as Binance often use BNB (Binance Coin) for transaction fees. If you are receiving an error, it's possible that you don't have enough BNB to cover the fees associated with the trade. Binance deducts fees from your BNB balance, and if it's insufficient, the trade may fail. If you encounter trading errors such as being unable to sell or take profit, you may want to consider disabling certain trading fee enhancements like BNB (if applicable) on your exchange, and also increasing the `exchangeFee` value. Changing this value will only take affect on new deals.
 	- If you experience any issues with your bots or deals using a specific exchange, there is a special parameter that can pass options directly to the CCXT library by modifying `"exchangeOptions": { "defaultType": "spot" }`
+
 
 - **server.json**
 
@@ -236,13 +238,13 @@ module.exports = {
 
 Securing login access to servers is like putting a lock on the door of your digital space. It's important because it keeps unauthorized people out, protecting sensitive information and preventing potential damage to your system. Without proper security, hackers could gain access, mess with your data, or even use your server as a launching point for attacks on other systems. Regularly updating and patching your server is like installing security updates to fix any weak points. It's an ongoing process to stay ahead of potential threats and ensure your server stays safe and reliable. In a nutshell, securing login access is about keeping your digital space locked and guarded to maintain a strong defense against cyber threats.
 
-To secure login access to Linux, Mac, and Windows servers, it's crucial to implement robust security measures tailored to each operating system.
+To secure login access to Linux, Mac, and Windows servers, it's crucial to implement robust security measures tailored to each operating system. Below are some basic steps to consider for each type of server.
 
-For Linux servers, start by configuring SSH (Secure Shell) to use key-based authentication instead of passwords, and disable root login to prevent unauthorized access. Regularly update and patch the system to address any vulnerabilities. Additionally, implement firewall rules using tools like iptables to control incoming and outgoing traffic.
+- **Linux**: Start by configuring SSH (Secure Shell) to use key-based authentication instead of passwords, and disable root login to prevent unauthorized access. Regularly update and patch the system to address any vulnerabilities. Additionally, implement firewall rules using tools like iptables to control incoming and outgoing traffic.
 
-For Mac servers, leverage OpenSSH for secure remote access. Similar to Linux, enforce key-based authentication and disable remote root login. Regularly update the operating system and applications through the App Store or command line. Utilize macOS's built-in firewall to restrict unauthorized access to specific services.
+- **Mac**: Leverage OpenSSH for secure remote access. Similar to Linux, enforce key-based authentication and disable remote root login. Regularly update the operating system and applications through the App Store or command line. Utilize macOS's built-in firewall to restrict unauthorized access to specific services.
 
-On Windows servers, prioritize strong password policies. Regularly update the system through Windows Update and enable Windows Defender or a reputable antivirus solution. Use Group Policy to manage user access and permissions effectively. Additionally, consider implementing Network Level Authentication (NLA) for Remote Desktop Services to enhance security.
+- **Windows**: Prioritize strong password policies. Regularly update the system through Windows Update and enable Windows Defender or a reputable antivirus solution. Use Group Policy to manage user access and permissions effectively. Additionally, consider implementing Network Level Authentication (NLA) for Remote Desktop Services to enhance security.
 
 For all three operating systems, regularly monitor and audit login attempts and system logs to detect and respond to any suspicious activities promptly. Implementing intrusion detection systems and keeping abreast of security best practices will contribute to a more robust defense against potential threats. Regularly reviewing and updating these security measures will help maintain a secure and resilient server environment.
 
@@ -835,18 +837,18 @@ If you want to reset the SymBot database for any reason, you can do so only from
 
 #### Why am I getting buy or sell errors?
 
-There are a variety of reasons you might be seeing errors when buying or selling, but these are some common situations:
+- There are a variety of reasons you might be seeing errors when buying or selling, but these are some common situations:
 
-- Insufficient Funds:
-	- Ensure that you have enough funds in your trading account to execute the buy or sell order, including any fees that may be incurred.
-- Order Size Limits:
-	- Some exchanges impose minimum or maximum order size limits. Check the exchange documentation to see if your order size is within the allowed range.
-- API Rate Limits:
-	- Exchanges often have rate limits on API requests. If you exceed these limits, your requests may be rejected.
-- Authentication Issues:
-	- Ensure that you have properly configured API keys and that they have the necessary permissions for trading. Double-check that you are using the correct API key, secret, and passphrase if applicable.
+	- Insufficient Funds:
+		- Ensure that you have enough funds in your trading account to execute the buy or sell order, including any fees that may be incurred.
+	- Order Size Limits:
+		- Some exchanges impose minimum or maximum order size limits. Check the exchange documentation to see if your order size is within the allowed range.
+	- API Rate Limits:
+		- Exchanges often have rate limits on API requests. If you exceed these limits, your requests may be rejected.
+	- Authentication Issues:
+		- Ensure that you have properly configured API keys and that they have the necessary permissions for trading. Double-check that you are using the correct API key, secret, and passphrase if applicable.
 
-It is recommended to monitor your deals frequently, check logs, and if your deals continue to be unable to buy or sell, you may want to consider canceling the deal and managing the trade manually on your exchange.
+- It is recommended to monitor your deals frequently, check logs, and if your deals continue to be unable to buy or sell, you may want to consider canceling the deal and managing the trade manually on your exchange.
 
 #### Why is my system suddenly using more CPU or memory?
 - SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience. See also [Advanced Setup](#advanced-setup) for additional tips.

@@ -2,10 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const pathRoot = path
-	.dirname(fs.realpathSync(__dirname))
-	.split(path.sep)
-	.join(path.posix.sep);
+
+let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 
 const crypto = require('crypto');
 const Convert = require('ansi-to-html');
@@ -15,7 +14,6 @@ const { v4: uuidv4 } = require('uuid');
 const convertAnsi = new Convert();
 
 const logNotifications = pathRoot + '/logs/services/notifications/notifications.log';
-
 
 let shareData;
 
@@ -520,7 +518,7 @@ async function getSignalConfigs() {
 	let success = true;
 	let configs = {};
 
-	let dir = fs.realpathSync(__dirname).split(path.sep).join(path.posix.sep) + '/signals';
+	let dir = pathRoot + '/libs/signals';
 
 	let files = fs.readdirSync(dir);
 
@@ -592,10 +590,18 @@ function delFiles(path, days) {
 
 async function getProcessInfo() {
 
+	let memoryUsage = process.memoryUsage();
+
+	Object.keys(memoryUsage).forEach((key) => {
+
+		memoryUsage[key] = ((memoryUsage[key] / (1024 * 1024)).toFixed(2)) + 'MB';
+	});
+
 	const obj = {
-		pid: process.pid,
-		file_name: path.basename(shareData.appData.app_filename),
-	};
+					'pid': process.pid,
+					'memory_usage': memoryUsage,
+					'file_name': path.basename(shareData.appData.app_filename),
+				};
 
 	return obj;
 }

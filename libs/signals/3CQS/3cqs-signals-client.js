@@ -9,18 +9,16 @@ const fs = require('fs');
 const path = require('path');
 
 let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
-pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
+pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/', pathRoot.lastIndexOf('/') - 1));
 
-const Schema = require(pathRoot + '/mongodb/Signals3CQSSchema');
+const Schema = require(pathRoot + '/libs/mongodb/Signals3CQSSchema');
 
 const Signals = Schema.Signals3CQSSchema;
 
 
-let signalTracker = {};
-
 let fatalError = false;
 
-let API_KEY;
+
 let shareData;
 
 
@@ -31,13 +29,6 @@ setInterval(() => {
 }, (60000 * 60));
 
 
-setInterval(() => {
-
-	checkTracker();
-
-}, (60000 * 3));
-
-
 
 async function start(enabled, apiKey) {
 
@@ -45,8 +36,6 @@ async function start(enabled, apiKey) {
 
 		return;
 	}
-
-	API_KEY = apiKey;
 
 	const socket = require('socket.io-client')('https://stream.3cqs.com', {
 
@@ -240,9 +229,6 @@ async function processSignal(data) {
 						'Content-Type': 'application/json'
 				  };
 
-
-	let isNew = await trackSignal(signalId);
-
 	let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
 
 	// Check if signal was already logged
@@ -251,7 +237,7 @@ async function processSignal(data) {
 	updateDb(data);
 
 	// Only start if signal has not been seen before
-	if (isNew && signalDataDb.length == 0 && signal == 'BOT_START' && diffSec < (60 * maxMins)) {
+	if (signalDataDb.length == 0 && signal == 'BOT_START' && diffSec < (60 * maxMins)) {
 
 		let query = {
 						'active': true,
@@ -373,7 +359,7 @@ async function processSignal(data) {
 	}
 
 
-	if (isNew && signal == 'BOT_STOP') {
+	if (signal == 'BOT_STOP') {
 
 		let query = {
 						'status': 0,
@@ -411,41 +397,6 @@ async function processSignal(data) {
 
 				sendNotification(msg, false);
 			}
-		}
-	}
-}
-
-
-async function trackSignal(signalId) {
-
-	let isNew = false;
-
-	if (signalTracker[signalId] == undefined || signalTracker[signalId] == null) {
-
-		isNew = true;
-
-		signalTracker[signalId] = {};
-
-		signalTracker[signalId]['created'] = new Date();
-	}
-
-	return isNew;
-}
-
-
-async function checkTracker() {
-
-	const maxMins = 60;
-
-	for (let signalId in signalTracker) {
-
-		let created = signalTracker[signalId]['created'];
-
-		let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
-
-		if (diffSec > (60 * maxMins)) {
-
-			delete signalTracker[signalId];
 		}
 	}
 }

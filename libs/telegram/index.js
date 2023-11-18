@@ -3,7 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 
 const { Telegraf } = require('telegraf');
 
@@ -75,7 +76,7 @@ async function helpCommand(ctx) {
 	let data;
 	let id = ctx.from.id;
 
-	let fileName = pathRoot + '/telegram/help.txt';
+	let fileName = pathRoot + '/libs/telegram/help.txt';
 
 	try {
 

@@ -15,7 +15,8 @@ const ServerDB = require(__dirname + '/libs/mongodb/ServerSchema');
 const DCABot = require(__dirname + '/libs/strategies/DCABot/DCABot.js');
 const DCABotManager = require(__dirname + '/libs/strategies/DCABot/DCABotManager.js');
 const Signals3CQS = require(__dirname + '/libs/signals/3CQS/3cqs-signals-client.js');
-const Common = require(__dirname + '/libs/Common.js');
+const Common = require(__dirname + '/libs/app/Common.js');
+const Queue = require(__dirname + '/libs/app/Queue.js');
 const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const packageJson = require(__dirname + '/package.json');
@@ -192,19 +193,21 @@ async function init() {
 						'DCABot': DCABot,
 						'DCABotManager': DCABotManager,
 						'Common': Common,
+						'Queue': Queue,
 						'Telegram': Telegram,
 						'WebServer': WebServer
 					};
 
 	appDataConfig = shareData.appData;
 
+	Common.init(shareData);
+	Queue.init(shareData);
 	DB.init(shareData);
 	Signals3CQS.init(shareData);
 	DCABot.init(shareData);
 	DCABotManager.init(shareData);
 	Telegram.init(shareData);
 	WebServer.init(shareData);
-	Common.init(shareData);
 
 	let success = true;
 

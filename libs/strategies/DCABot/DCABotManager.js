@@ -1,10 +1,8 @@
 'use strict';
 
-
-let symbolList = {};
-
-
 let shareData;
+let queueStartDeal;
+let symbolList = {};
 
 
 async function viewCreateUpdateBot(req, res, botId) {
@@ -377,9 +375,11 @@ async function apiShowDeal(req, res, dealId) {
 		const updated = dealDataDb['updatedAt'];
 		const sellData = dealDataDb['sellData'];
 
-		if (shareData.dealTracker[dealId] != undefined && shareData.dealTracker[dealId] != null) {
+		const dealTracker = await shareData.DCABot.getDealTracker();
 
-			priceLast = shareData.dealTracker[dealId]['info']['price_last'];
+		if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+
+			priceLast = dealTracker[dealId]['info']['price_last'];
 		}
 
 		if (sellData != undefined && sellData != null) {
@@ -431,7 +431,7 @@ async function apiGetActiveDeals(req, res) {
 
 	const bots = await shareData.DCABot.getBots({ 'active': active });
 
-	let dealsObj = JSON.parse(JSON.stringify(shareData.dealTracker));
+	const dealTracker = await shareData.DCABot.getDealTracker();
 
 	if (bots && bots.length > 0) {
 
@@ -447,13 +447,13 @@ async function apiGetActiveDeals(req, res) {
 	}
 
 	// Remove sensitive data
-	for (let dealId in dealsObj) {
+	for (let dealId in dealTracker) {
 
 		let botActive = true;
 
 		let obj = {};
 
-		let deal = dealsObj[dealId];
+		let deal = dealTracker[dealId];
 
 		let botId = deal['deal']['botId'];
 		let config = deal['deal']['config'];
@@ -1196,8 +1196,17 @@ async function apiEnableDisableBot(req, res) {
 
 async function apiStartDeal(req, res) {
 
+	const taskObj = { 'req': req, 'res': res, 'name': 'start_deal' };
+
+	queueStartDeal.add(taskObj, apiStartDealProcess);
+}
+
+
+async function apiStartDealProcess(req, res, taskObj) {
+
 	let msg;
 	let success = true;
+	let startDelay = 1;
 
 	const body = req.body;
 
@@ -1284,7 +1293,7 @@ async function apiStartDeal(req, res) {
 						config['pair'] = pair;
 						config = await shareData.DCABot.applyConfigData({ 'signal_id': signalId, 'bot_id': botId, 'bot_name': botName, 'config': config });
 
-						shareData.DCABot.startDelay({ 'config': config, 'delay': 1, 'notify': false });
+						shareData.DCABot.startDelay({ 'config': config, 'delay': startDelay, 'notify': false });
 					}
 					else {
 
@@ -1313,7 +1322,15 @@ async function apiStartDeal(req, res) {
 		msg = 'Invalid Bot ID';
 	}
 
-	res.send( { 'date': new Date(), 'success': success, 'data': msg } );
+	if (success) {
+
+		// Set short delay for any potential slow deal starts
+		await shareData.Common.delay((startDelay * 2) * 1000);
+	}
+
+	const resObj = { 'date': new Date(), 'success': success, 'data': msg };
+
+	queueStartDeal.callBack(res, resObj, taskObj);
 }
 
 
@@ -1435,6 +1452,10 @@ async function calculateOrders(body) {
 }
 
 
+async function initApp() {
+
+	queueStartDeal = await shareData.Queue.create(1);
+}
 
 
 module.exports = {
@@ -1459,5 +1480,7 @@ module.exports = {
 	init: function(obj) {
 
 		shareData = obj;
+
+		initApp();
     }
 }

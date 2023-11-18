@@ -55,10 +55,7 @@ async function start(url) {
 	const run = async () => {
 
 		await mongoose.connect(
-			url, {
-				useNewUrlParser: true,
-				useUnifiedTopology: true
-			}
+			url, { }
 		);
 		
 		return true;
