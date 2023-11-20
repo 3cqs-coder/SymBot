@@ -179,7 +179,6 @@ async function start(dataObj) {
     ) {
       askPrice = firstOrderPrice;
     }
-
     const orders = [];
 
     if (startBot && isActive && !checkActivePairOverride) {
@@ -252,7 +251,7 @@ async function start(dataObj) {
           let amount = price * firstOrderSize;
           let exchangeFee = (amount / 100) * Number(config.exchangeFee);
 
-          amount = await filterPrice(exchange, pair, amount + exchangeFee);
+          // amount = await filterPrice(exchange, pair, amount + exchangeFee);
 
           let targetPrice = Percentage.addPerc(
             price,
@@ -267,7 +266,7 @@ async function start(dataObj) {
             average: price,
             target: targetPrice,
             qty: firstOrderSize,
-            amount: amount,
+            amount: totalAmount,
             qtySum: firstOrderSize,
             sum: amount,
             type: "MARKET",
@@ -289,20 +288,12 @@ async function start(dataObj) {
             );
 
             price = await filterPrice(exchange, pair, price);
-
             let dcaOrderSize = config.dcaOrderAmount / price;
             dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
-            let dcaOrderAmount = dcaOrderSize * price;
-            let exchangeFee =
-              (dcaOrderAmount / 100) * Number(config.exchangeFee);
-
-            dcaOrderAmount = await filterPrice(
-              exchange,
-              pair,
-              dcaOrderAmount + exchangeFee
-            );
-
+            // let dcaOrderAmount = dcaOrderSize * price;
+            let dcaOrderAmount = config.dcaOrderAmount;
+ 
             let dcaOrderSum =
               parseFloat(dcaOrderAmount) + parseFloat(lastDcaOrderAmount);
             dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
@@ -342,6 +333,7 @@ async function start(dataObj) {
               filled: 0,
             });
           } else {
+
             const deviationPerc = await getDeviationDca(
               config.dcaOrderStepPercent,
               config.dcaOrderStepPercentMultiplier,
@@ -351,17 +343,12 @@ async function start(dataObj) {
             let price = Percentage.subPerc(askPrice, deviationPerc);
 
             price = await filterPrice(exchange, pair, price);
-
-            //let dcaOrderSize = lastDcaOrderSize * config.dcaOrderSizeMultiplier;
-            let dcaOrderSize =
-              lastDcaOrderSize * (config.dcaOrderStepPercent / 100) +
-              lastDcaOrderSize * config.dcaOrderSizeMultiplier;
-            dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
-
-            let amount = price * dcaOrderSize;
+        
+            let amount = lastDcaOrderAmount * config.dcaOrderSizeMultiplier;
+            amount = await filterAmount(exchange, pair, amount);
             let exchangeFee = (amount / 100) * Number(config.exchangeFee);
-
-            amount = await filterPrice(exchange, pair, amount + exchangeFee);
+            let dcaOrderSize= amount/price;
+            dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
             let dcaOrderSum = parseFloat(amount) + parseFloat(lastDcaOrderSum);
             dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
@@ -381,7 +368,6 @@ async function start(dataObj) {
               pair,
               parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
             );
-
             let targetPrice = Percentage.addPerc(
               average,
               config.dcaTakeProfitPercent
