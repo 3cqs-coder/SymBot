@@ -515,6 +515,7 @@ async function delay(msec) {
 async function getSignalConfigs() {
 
 	let isError;
+	let count = 1;
 	let success = true;
 	let configs = {};
 
@@ -545,7 +546,14 @@ async function getSignalConfigs() {
 						})
 					);
 
-					configs = Object.assign({}, configs, data);
+					data.file = file;
+
+					let dataRoot = {};
+					dataRoot['PROVIDER' + count] = data;
+
+					configs = Object.assign({}, configs, dataRoot);
+
+					count++;
 				}
 				catch (e) {
 							isError = 'File: ' + signalFile + ' ' + e;

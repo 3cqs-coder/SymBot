@@ -1,229 +1,227 @@
 {
-  "3CQS": {
-    "metadata": {
-      "author": "3CQS.com",
-      "info": "Valid 3CQS API key required to use",
-      "description": "Trading signals from 3CQS"
-    },
-    "start_conditions": [
-      {
-        "id": 12,
-        "description": "SymRank Top 10"
-      },
-      {
-        "id": 2,
-        "description": "SymRank Top 30"
-      },
-      {
-        "id": 11,
-        "description": "SymRank Top 50"
-      },
-      {
-        "id": 1,
-        "description": "SymRank Top 100 Triple Tracker"
-      },
-      {
-        "id": 6,
-        "description": "SymRank Top 100 Quadruple Tracker"
-      },
-      {
-        "id": 7,
-        "description": "SymRank Top 250 Quadruple Tracker"
-      },
-      {
-        "id": 13,
-        "description": "SymScore Super Bullish"
-      },
-      {
-        "id": 22,
-        "description": "SymScore Super Bullish Range"
-      },
-      {
-        "id": 29,
-        "description": "SymScore Super-Hyper Bullish Range"
-      },
-      {
-        "id": 14,
-        "description": "SymScore Hyper Bullish"
-      },
-      {
-        "id": 23,
-        "description": "SymScore Hyper Bullish Range"
-      },
-      {
-        "id": 27,
-        "description": "SymScore Hyper-Ultra Bullish Range"
-      },
-      {
-        "id": 15,
-        "description": "SymScore Ultra Bullish"
-      },
-      {
-        "id": 25,
-        "description": "SymScore Ultra Bullish Range"
-      },
-      {
-        "id": 31,
-        "description": "SymScore Ultra-X-Treme Bullish Range"
-      },
-      {
-        "id": 16,
-        "description": "SymScore X-Treme Bullish"
-      },
-      {
-        "id": 17,
-        "description": "SymScore Super Bearish"
-      },
-      {
-        "id": 21,
-        "description": "SymScore Super Bearish Range"
-      },
-      {
-        "id": 30,
-        "description": "SymScore Super-Hyper Bearish Range"
-      },
-      {
-        "id": 18,
-        "description": "SymScore Hyper Bearish"
-      },
-      {
-        "id": 24,
-        "description": "SymScore Hyper Bearish Range"
-      },
-      {
-        "id": 28,
-        "description": "SymScore Hyper-Ultra Bearish Range"
-      },
-      {
-        "id": 19,
-        "description": "SymScore Ultra Bearish"
-      },
-      {
-        "id": 26,
-        "description": "SymScore Ultra Bearish Range"
-      },
-      {
-        "id": 32,
-        "description": "SymScore Ultra-X-Treme Bearish Range"
-      },
-      {
-        "id": 20,
-        "description": "SymScore X-Treme Bearish"
-      },
-      {
-        "id": 39,
-        "description": "SymSense Super Greed"
-      },
-      {
-        "id": 40,
-        "description": "SymSense Hyper Greed"
-      },
-      {
-        "id": 41,
-        "description": "SymSense Ultra Greed"
-      },
-      {
-        "id": 42,
-        "description": "SymSense X-Treme Greed"
-      },
-      {
-        "id": 43,
-        "description": "SymSense Neutral"
-      },
-      {
-        "id": 44,
-        "description": "SymSense Super Fear"
-      },
-      {
-        "id": 45,
-        "description": "SymSense Hyper Fear"
-      },
-      {
-        "id": 46,
-        "description": "SymSense Ultra Fear"
-      },
-      {
-        "id": 47,
-        "description": "SymSense X-Treme Fear"
-      },
-      {
-        "id": 9,
-        "description": "Super Volatility"
-      },
-      {
-        "id": 33,
-        "description": "Super Volatility Range"
-      },
-      {
-        "id": 36,
-        "description": "Super-Hyper Volatility Range"
-      },
-      {
-        "id": 10,
-        "description": "Super Volatility Double Tracker"
-      },
-      {
-        "id": 3,
-        "description": "Hyper Volatility"
-      },
-      {
-        "id": 34,
-        "description": "Hyper Volatility Range"
-      },
-      {
-        "id": 37,
-        "description": "Hyper-Ultra Volatility Range"
-      },
-      {
-        "id": 8,
-        "description": "Hyper Volatility Double Tracker"
-      },
-      {
-        "id": 4,
-        "description": "Ultra Volatility"
-      },
-      {
-        "id": 35,
-        "description": "Ultra Volatility Range"
-      },
-      {
-        "id": 38,
-        "description": "Ultra-X-Treme Volatility Range"
-      },
-      {
-        "id": 5,
-        "description": "X-Treme Volatility"
-      }
-    ],
-    "start_conditions_sub": [
-      {
-        "id": "sym_rank",
-        "description": "SymRank"
-      },
-      {
-        "id": "sym_score",
-        "description": "SymScore"
-      },
-      {
-        "id": "sym_sense",
-        "description": "SymSense"
-      },
-      {
-        "id": "market_cap_rank",
-        "description": "Market Cap Rank"
-      },
-      {
-        "id": "volatility_score",
-        "description": "Volatility Score"
-      },
-      {
-        "id": "price_action_score",
-        "description": "Price Action Score"
-      },
-      {
-        "id": "rsi14_15m",
-        "description": "RSI-14 15m"
-      }
-    ]
-  }
+	"metadata": {
+		"author": "3CQS.com",
+		"info": "Valid 3CQS API key required to use",
+		"description": "Trading signals from 3CQS",
+		"provider_id": "3CQS",
+		"provider_name": "3CQS"
+	},
+	"start_conditions": [{
+			"id": 12,
+			"description": "SymRank Top 10"
+		},
+		{
+			"id": 2,
+			"description": "SymRank Top 30"
+		},
+		{
+			"id": 11,
+			"description": "SymRank Top 50"
+		},
+		{
+			"id": 1,
+			"description": "SymRank Top 100 Triple Tracker"
+		},
+		{
+			"id": 6,
+			"description": "SymRank Top 100 Quadruple Tracker"
+		},
+		{
+			"id": 7,
+			"description": "SymRank Top 250 Quadruple Tracker"
+		},
+		{
+			"id": 13,
+			"description": "SymScore Super Bullish"
+		},
+		{
+			"id": 22,
+			"description": "SymScore Super Bullish Range"
+		},
+		{
+			"id": 29,
+			"description": "SymScore Super-Hyper Bullish Range"
+		},
+		{
+			"id": 14,
+			"description": "SymScore Hyper Bullish"
+		},
+		{
+			"id": 23,
+			"description": "SymScore Hyper Bullish Range"
+		},
+		{
+			"id": 27,
+			"description": "SymScore Hyper-Ultra Bullish Range"
+		},
+		{
+			"id": 15,
+			"description": "SymScore Ultra Bullish"
+		},
+		{
+			"id": 25,
+			"description": "SymScore Ultra Bullish Range"
+		},
+		{
+			"id": 31,
+			"description": "SymScore Ultra-X-Treme Bullish Range"
+		},
+		{
+			"id": 16,
+			"description": "SymScore X-Treme Bullish"
+		},
+		{
+			"id": 17,
+			"description": "SymScore Super Bearish"
+		},
+		{
+			"id": 21,
+			"description": "SymScore Super Bearish Range"
+		},
+		{
+			"id": 30,
+			"description": "SymScore Super-Hyper Bearish Range"
+		},
+		{
+			"id": 18,
+			"description": "SymScore Hyper Bearish"
+		},
+		{
+			"id": 24,
+			"description": "SymScore Hyper Bearish Range"
+		},
+		{
+			"id": 28,
+			"description": "SymScore Hyper-Ultra Bearish Range"
+		},
+		{
+			"id": 19,
+			"description": "SymScore Ultra Bearish"
+		},
+		{
+			"id": 26,
+			"description": "SymScore Ultra Bearish Range"
+		},
+		{
+			"id": 32,
+			"description": "SymScore Ultra-X-Treme Bearish Range"
+		},
+		{
+			"id": 20,
+			"description": "SymScore X-Treme Bearish"
+		},
+		{
+			"id": 39,
+			"description": "SymSense Super Greed"
+		},
+		{
+			"id": 40,
+			"description": "SymSense Hyper Greed"
+		},
+		{
+			"id": 41,
+			"description": "SymSense Ultra Greed"
+		},
+		{
+			"id": 42,
+			"description": "SymSense X-Treme Greed"
+		},
+		{
+			"id": 43,
+			"description": "SymSense Neutral"
+		},
+		{
+			"id": 44,
+			"description": "SymSense Super Fear"
+		},
+		{
+			"id": 45,
+			"description": "SymSense Hyper Fear"
+		},
+		{
+			"id": 46,
+			"description": "SymSense Ultra Fear"
+		},
+		{
+			"id": 47,
+			"description": "SymSense X-Treme Fear"
+		},
+		{
+			"id": 9,
+			"description": "Super Volatility"
+		},
+		{
+			"id": 33,
+			"description": "Super Volatility Range"
+		},
+		{
+			"id": 36,
+			"description": "Super-Hyper Volatility Range"
+		},
+		{
+			"id": 10,
+			"description": "Super Volatility Double Tracker"
+		},
+		{
+			"id": 3,
+			"description": "Hyper Volatility"
+		},
+		{
+			"id": 34,
+			"description": "Hyper Volatility Range"
+		},
+		{
+			"id": 37,
+			"description": "Hyper-Ultra Volatility Range"
+		},
+		{
+			"id": 8,
+			"description": "Hyper Volatility Double Tracker"
+		},
+		{
+			"id": 4,
+			"description": "Ultra Volatility"
+		},
+		{
+			"id": 35,
+			"description": "Ultra Volatility Range"
+		},
+		{
+			"id": 38,
+			"description": "Ultra-X-Treme Volatility Range"
+		},
+		{
+			"id": 5,
+			"description": "X-Treme Volatility"
+		}
+	],
+	"start_conditions_sub": [{
+			"id": "sym_rank",
+			"description": "SymRank"
+		},
+		{
+			"id": "sym_score",
+			"description": "SymScore"
+		},
+		{
+			"id": "sym_sense",
+			"description": "SymSense"
+		},
+		{
+			"id": "market_cap_rank",
+			"description": "Market Cap Rank"
+		},
+		{
+			"id": "volatility_score",
+			"description": "Volatility Score"
+		},
+		{
+			"id": "price_action_score",
+			"description": "Price Action Score"
+		},
+		{
+			"id": "rsi14_15m",
+			"description": "RSI-14 15m"
+		}
+	]
 }

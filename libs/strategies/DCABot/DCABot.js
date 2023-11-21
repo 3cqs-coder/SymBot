@@ -22,6 +22,8 @@ const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA
 const maxMinsDeals = 2;
 const maxMinsVolume = 5;
 
+const maxSellErrorCount = 3;
+
 let dealTracker = {};
 let timerTracker = {};
 
@@ -185,10 +187,19 @@ async function start(dataObj) {
 
 			let followSuccess = false;
 			let followFinished = false;
+			let followConfig = config;
 
 			while (!followFinished) {
 
-				let followRes = await dcaFollow(config, exchange, dealIdMain);
+				let followRes = await dcaFollow(followConfig, exchange, dealIdMain);
+
+				let followConfigRes = followRes['config'];
+
+				// Refresh config without stopping bot
+				if (followConfigRes != undefined && followConfigRes != null && followConfigRes != '') {
+
+					followConfig = JSON.parse(JSON.stringify(followConfigRes));
+				}
 
 				followSuccess = followRes['success'];
 				followFinished = followRes['finished'];
@@ -330,21 +341,24 @@ async function start(dataObj) {
 					}
 					else {
 
-						let price = Percentage.subPerc(
-							lastDcaOrderPrice,
-							(config.dcaOrderStepPercent * config.dcaOrderStepPercentMultiplier)
+						const deviationPerc = await getDeviationDca(
+							config.dcaOrderStepPercent,
+							config.dcaOrderStepPercentMultiplier,
+							i + 1
 						);
+
+						let price = Percentage.subPerc(askPrice, deviationPerc);
 
 						price = await filterPrice(exchange, pair, price);
 
-						//let dcaOrderSize = lastDcaOrderSize * config.dcaOrderSizeMultiplier;
-						let dcaOrderSize = (lastDcaOrderSize * (config.dcaOrderStepPercent / 100)) + lastDcaOrderSize * config.dcaOrderSizeMultiplier;
-						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
-
-						let amount = price * dcaOrderSize;
+						let amount = lastDcaOrderAmount * config.dcaOrderSizeMultiplier;
 						let exchangeFee = (amount / 100) * Number(config.exchangeFee);
 
-						amount = await filterPrice(exchange, pair, (amount + exchangeFee));
+						// Fee already applied previously
+						amount = await filterAmount(exchange, pair, amount);
+						let dcaOrderSize = amount / price;
+
+						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let dcaOrderSum = parseFloat(amount) + parseFloat(lastDcaOrderSum);
 						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
@@ -470,10 +484,19 @@ async function start(dataObj) {
 
 					let followSuccess = false;
 					let followFinished = false;
+					let followConfig = config;
 
 					while (!followFinished) {
 
-						let followRes = await dcaFollow(config, exchange, dealId);
+						let followRes = await dcaFollow(followConfig, exchange, dealId);
+
+						let followConfigRes = followRes['config'];
+
+						// Refresh config without stopping bot
+						if (followConfigRes != undefined && followConfigRes != null && followConfigRes != '') {
+		
+							followConfig = JSON.parse(JSON.stringify(followConfigRes));
+						}
 
 						followSuccess = followRes['success'];
 						followFinished = followRes['finished'];
@@ -615,10 +638,14 @@ async function start(dataObj) {
 					}
 					else {
 
-						let price = Percentage.subPerc(
-							lastDcaOrderPrice,
-							(config.dcaOrderStepPercent * config.dcaOrderStepPercentMultiplier));
+						const deviationPerc = await getDeviationDca(
+							config.dcaOrderStepPercent,
+							config.dcaOrderStepPercentMultiplier,
+							i + 1
+						);
 
+						let price = Percentage.subPerc(askPrice, deviationPerc);
+			  
 						price = await filterPrice(exchange, pair, price);
 
 						let dcaOrderSize = lastDcaOrderSize * config.dcaOrderSizeMultiplier;
@@ -753,10 +780,19 @@ async function start(dataObj) {
 
 					let followSuccess = false;
 					let followFinished = false;
+					let followConfig = config;
 
 					while (!followFinished) {
 
-						let followRes = await dcaFollow(config, exchange, dealId);
+						let followRes = await dcaFollow(followConfig, exchange, dealId);
+
+						let followConfigRes = followRes['config'];
+
+						// Refresh config without stopping bot
+						if (followConfigRes != undefined && followConfigRes != null && followConfigRes != '') {
+		
+							followConfig = JSON.parse(JSON.stringify(followConfigRes));
+						}
 
 						followSuccess = followRes['success'];
 						followFinished = followRes['finished'];
@@ -981,13 +1017,15 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 		}
 
 		delete dealTracker[dealId]['update']['config'];
+
+		return ( { 'success': true, 'finished': false, 'config': configRefresh } );
 	}
 
 	if (dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null && dealTracker[dealId]['update']['deal_sell_error']) {
 
 		let diffSec = (new Date().getTime() - new Date(dealTracker[dealId]['update']['deal_sell_error']['date']).getTime()) / 1000;
 
-		if (dealTracker[dealId]['update']['deal_sell_error']['count'] > 3 || diffSec > 30) {
+		if (dealTracker[dealId]['update']['deal_sell_error']['count'] > maxSellErrorCount || diffSec > 30) {
 
 			delete dealTracker[dealId]['update']['deal_sell_error'];
 		}
@@ -1277,11 +1315,35 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							if (deal.isStart == 1) {
 
+								let addFee;
+								let sellErrorCount;
+
 								let canceled = false;
 								let panicSell = false;
 								let sellSuccess = true;
 
-								const feeData = await calculateExchangeFees(pair, price, exchange, config, currentOrder, (0.005 * dealTracker[dealId]['update']['deal_sell_error']['count']));
+								try {
+
+									sellErrorCount = dealTracker[dealId]['update']['deal_sell_error']['count'];
+
+									addFee = (0.005 * sellErrorCount);
+								}
+								catch(e) {}
+
+								if (addFee == undefined || addFee == null) {
+
+									addFee = 0;
+								}
+
+								if (addFee > 0) {
+
+									if (shareData.appData.verboseLog) {
+
+										Common.logger('Applying additional exchange fee of ' + addFee + '% to reduce sell quantity for deal ' + dealId + '. Attempt: ' + sellErrorCount + '/' + maxSellErrorCount);
+									}
+								}
+
+								const feeData = await calculateExchangeFees(pair, price, exchange, config, currentOrder, addFee);
 
 								const qtySumSell = feeData['dcaOrderQtySumNet'];
 								const priceFiltered = feeData['priceFiltered'];

@@ -119,7 +119,11 @@ async function init() {
 
 	if (signalConfigs.success && Object.keys(signalConfigsData).length > 0) {
 
+		let providerId;
+		let providerName;
+
 		let startSubsObj = {};
+		let providerIdsObj = {};
 
 		appConfig['data']['bots']['start_conditions_metadata'] = {};
 
@@ -131,39 +135,68 @@ async function init() {
 			let startConditionsSub = signalConfigsData[key]['start_conditions_sub'];
 			let startConditionsMeta = signalConfigsData[key]['metadata'];
 
+			providerId = startConditionsMeta['provider_id'];
+			providerName = startConditionsMeta['provider_name'];
+
+			if (providerId == undefined || providerId == null || providerId == '') {
+
+				signalConfigs.success = false;
+				signalConfigs.error = 'Missing signal provider id: ' + signalConfigsData[key]['file'];
+
+				break;
+			}
+
+			if (providerName == undefined || providerName == null || providerName == '') {
+
+				signalConfigs.success = false;
+				signalConfigs.error = 'Missing signal provider name: ' + signalConfigsData[key]['file'];
+
+				break;
+			}
+
+			if (providerIdsObj[providerId] != undefined && providerIdsObj[providerId] != null) {
+
+				signalConfigs.success = false;
+				signalConfigs.error = 'Duplicate signal provider id: ' + providerId + ' in ' + signalConfigsData[key]['file'];
+
+				break;
+			}
+
+			providerIdsObj[providerId] = 1;
+
 			for (let num in startConditions) {
 
 				let id = startConditions[num]['id'];
 				let description = startConditions[num]['description'];
 
-				let signalId = 'signal|' + key + '|' + id;
+				let signalId = 'signal|' + providerId + '|' + id;
 
-				description = 'Signal ' + key + ': ' + description;
+				description = 'Signal ' + providerName + ': ' + description;
 
 				signalObj[signalId] = {};
 				signalObj[signalId]['description'] = description;
 			}
 
-			if (startSubsObj[key] == undefined || startSubsObj[key] == null) {
+			if (startSubsObj[providerId] == undefined || startSubsObj[providerId] == null) {
 
-				startSubsObj[key] = {};
+				startSubsObj[providerId] = {};
 
 				for (let num in startConditionsSub) {
 
 					let id = startConditionsSub[num]['id'];
 					let description = startConditionsSub[num]['description'];
 
-					let signalId = 'signalsub|' + key + '|' + id;
+					let signalId = 'signalsub|' + providerId + '|' + id;
 
-					startSubsObj[key][signalId] = {};
-					startSubsObj[key][signalId]['description'] = description;
+					startSubsObj[providerId][signalId] = {};
+					startSubsObj[providerId][signalId]['description'] = description;
 				}
 
-				appConfig['data']['bots']['start_conditions_sub'] = Object.assign({}, appConfig['data']['bots']['start_conditions_sub'], startSubsObj[key]);
+				appConfig['data']['bots']['start_conditions_sub'] = Object.assign({}, appConfig['data']['bots']['start_conditions_sub'], startSubsObj[providerId]);
 			}
 
 			appConfig['data']['bots']['start_conditions'] = Object.assign({}, appConfig['data']['bots']['start_conditions'], signalObj);
-			appConfig['data']['bots']['start_conditions_metadata'][key] = startConditionsMeta;
+			appConfig['data']['bots']['start_conditions_metadata'][providerId] = startConditionsMeta;
 		}
 	}
 

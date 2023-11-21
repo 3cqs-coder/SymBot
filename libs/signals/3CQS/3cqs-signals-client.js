@@ -11,10 +11,13 @@ const path = require('path');
 let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
 pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/', pathRoot.lastIndexOf('/') - 1));
 
-const Schema = require(pathRoot + '/libs/mongodb/Signals3CQSSchema');
+const signalsFile = path.dirname(fs.realpathSync(__filename)) + '/signals.json';
+const signalsJson = require(signalsFile);
 
+const Schema = require(pathRoot + '/libs/mongodb/Signals3CQSSchema');
 const Signals = Schema.Signals3CQSSchema;
 
+const providerId = signalsJson['metadata']['provider_id'];
 
 let fatalError = false;
 
@@ -31,6 +34,13 @@ setInterval(() => {
 
 
 async function start(enabled, apiKey) {
+
+	if (providerId == undefined || providerId == null  || providerId == '') {
+
+		shareData.Common.logger('Invalid Provider ID: ' + signalsFile, true);
+
+		return;
+	}
 
 	if (!enabled || apiKey == undefined || apiKey == null || apiKey == '') {
 
@@ -217,7 +227,7 @@ async function processSignal(data) {
 	const marketCapRank = data['market_cap_rank'];
 	const rsi1415m = data['rsi14_15m'];
 
-	const startCondition = 'signal|3CQS|' + signalNameId;
+	const startCondition = 'signal|' + providerId + '|' + signalNameId;
 
 	let port = shareData.appData.web_server_port;
 	let apiToken = shareData.appData.api_token;
@@ -278,12 +288,18 @@ async function processSignal(data) {
 							let operator = conditionData[3];
 							let content = conditionData[4];
 
+							let cond1 = data[id];
+							let cond2 = content;
+
+							cond1 = await convertCondition(cond1);
+							cond2 = await convertCondition(cond2);
+
 							if (x > 1) {
 
 								condition += ' && ';
 							}
 
-							condition += '("' + data[id] + '" ' + operator + ' "' + content + '")';
+							condition += '(' + cond1 + ' ' + operator + ' ' + cond2 + ')';
 						}
 
 						let signalValid = eval(condition);
@@ -427,6 +443,23 @@ async function removeDataDb() {
 	}
 
 	return res;
+}
+
+
+async function convertCondition(data) {
+
+	const numsRegEx = /^[0-9. ]+$/;
+
+	if (numsRegEx.test(data)) {
+
+		data = 'Number("' + data + '")';
+	}
+	else {
+
+		data = '"' + data + '"';
+	}
+
+	return data;
 }
 
 
