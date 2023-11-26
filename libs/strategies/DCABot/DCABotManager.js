@@ -1205,8 +1205,10 @@ async function apiStartDeal(req, res) {
 async function apiStartDealProcess(req, res, taskObj) {
 
 	let msg;
+	let startDelayConfig;
+
 	let success = true;
-	let startDelay = 1;
+	let startDelaySec = 1;
 
 	const body = req.body;
 
@@ -1293,7 +1295,7 @@ async function apiStartDealProcess(req, res, taskObj) {
 						config['pair'] = pair;
 						config = await shareData.DCABot.applyConfigData({ 'signal_id': signalId, 'bot_id': botId, 'bot_name': botName, 'config': config });
 
-						shareData.DCABot.startDelay({ 'config': config, 'delay': startDelay, 'notify': false });
+						startDelayConfig = config;
 					}
 					else {
 
@@ -1322,10 +1324,27 @@ async function apiStartDealProcess(req, res, taskObj) {
 		msg = 'Invalid Bot ID';
 	}
 
-	if (success) {
 
-		// Set short delay for any potential slow deal starts
-		await shareData.Common.delay((startDelay * 2) * 1000);
+	if (startDelayConfig != undefined && startDelayConfig != null) {
+
+		let finished = false;
+
+		const startId = await shareData.DCABot.startDelay({ 'config': startDelayConfig, 'delay': startDelaySec, 'notify': false });
+
+		// Wait for start deal tracker to be removed to confirm deal started
+		while (!finished) {
+
+			let trackerData = await shareData.DCABot.getStartDealTracker(startId);
+
+			if (trackerData == undefined || trackerData == null) {
+
+				finished = true;
+			}
+			else {
+
+				await shareData.Common.delay(500);
+			}
+		}
 	}
 
 	const resObj = { 'date': new Date(), 'success': success, 'data': msg };

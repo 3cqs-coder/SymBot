@@ -26,12 +26,13 @@ const maxSellErrorCount = 3;
 
 let dealTracker = {};
 let timerTracker = {};
+let startDealTracker = {};
 
 let shareData;
 
 
 
-async function start(dataObj) {
+async function start(dataObj, startId) {
 
 	let startBot = dataObj['create'];
 
@@ -224,6 +225,9 @@ async function start(dataObj) {
 			let lastDcaOrderPrice = 0;
 
 			if (!await volumeValid(startBot, pair, symbol, config)) {
+
+				// Delete start deal tracker to allow immediate response from start deal API
+				deleteStartDealTracker(startId);
 
 				return;
 			}
@@ -480,7 +484,7 @@ async function start(dataObj) {
 
 					dealIdMain = dealId;
 
-					await createDealTracker({ 'deal_id': dealId, 'deal': deal });
+					await createDealTracker({ 'deal_id': dealId, 'deal': deal, 'start_id': startId });
 
 					let followSuccess = false;
 					let followFinished = false;
@@ -776,7 +780,7 @@ async function start(dataObj) {
 
 					dealIdMain = dealId;
 
-					await createDealTracker({ 'deal_id': dealId, 'deal': deal });
+					await createDealTracker({ 'deal_id': dealId, 'deal': deal, 'start_id': startId });
 
 					let followSuccess = false;
 					let followFinished = false;
@@ -917,8 +921,6 @@ async function start(dataObj) {
 		if (dealTracker[dealIdMain]['update']['deal_stop']) {
 
 			dealStop = true;
-
-			await deleteDealTracker(dealIdMain);
 		}
 	}
 	catch(e) {
@@ -969,6 +971,9 @@ async function start(dataObj) {
 			startAsap(pair);
 		}
 	}
+
+	// Ensure deal tracker is removed
+	deleteDealTracker(dealIdMain);
 }
 
 
@@ -2128,7 +2133,7 @@ async function updateOrders(data) {
 }
 
 
-async function checkTracker() {
+async function checkTrackers() {
 
 	// Monitor existing deals if they weren't updated after n minutes to take potential action
 
@@ -2169,9 +2174,26 @@ async function checkTracker() {
 }
 
 
+async function checkStartDealTracker() {
+
+	// Remove start deal trackers that exceed n seconds
+
+	for (let id in startDealTracker) {
+
+		let diffSec = (new Date().getTime() - new Date(startDealTracker[id]['date']).getTime()) / 1000;
+
+		if (diffSec > 15) {
+
+			deleteStartDealTracker(id);
+		}
+	}
+}
+
+
 async function createDealTracker(data) {
 
 	const dealId = data['deal_id'];
+	const startId = data['start_id'];
 
 	dealTracker[dealId] = {};
 	dealTracker[dealId]['deal'] = {};
@@ -2179,6 +2201,9 @@ async function createDealTracker(data) {
 	dealTracker[dealId]['update'] = {};
 
 	dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(data['deal']));
+
+	// Confirm deal started by deleting start deal tracker
+	deleteStartDealTracker(startId);
 }
 
 
@@ -2253,8 +2278,21 @@ async function processDealTracker(dealId, msgErr, updateKey, dataKey) {
 
 async function deleteDealTracker(dealId) {
 
-	dealTracker[dealId] = null;
-	delete dealTracker[dealId];
+	if (dealId != undefined && dealId != null && dealId != '') {
+
+		dealTracker[dealId] = null;
+		delete dealTracker[dealId];
+	}
+}
+
+
+async function deleteStartDealTracker(id) {
+
+	if (id != undefined && id != null && id != '') {
+
+		startDealTracker[id] = null;
+		delete startDealTracker[id];
+	}
 }
 
 
@@ -2275,6 +2313,31 @@ async function getDealTracker(dealId) {
 		try {
 
 			dataObj = JSON.parse(JSON.stringify(dealTracker));
+		}
+		catch(e) {}
+	}
+
+	return dataObj;
+}
+
+
+async function getStartDealTracker(id) {
+
+	let dataObj;
+
+	if (id != undefined && id != null && id != '') {
+
+		try {
+
+			dataObj = JSON.parse(JSON.stringify(startDealTracker[id]));
+		}
+		catch(e) {}
+	}
+	else {
+
+		try {
+
+			dataObj = JSON.parse(JSON.stringify(startDealTracker));
 		}
 		catch(e) {}
 	}
@@ -2847,7 +2910,7 @@ async function createDeal(pair, pairMax, dealCount, dealMax, config, orders) {
 }
 
 
-async function startVerify(config) {
+async function startVerify(config, startId) {
 
 	// Verify bot is still enabled / active
 
@@ -2884,7 +2947,7 @@ async function startVerify(config) {
 					botConfigDb['botId'] = botId;
 					botConfigDb['dealCount'] = dealCount;
 
-					start({ 'create': true, 'config': botConfigDb });
+					start({ 'create': true, 'config': botConfigDb }, startId);
 				}
 			}
 		}
@@ -3293,6 +3356,11 @@ async function startDelay(dataObj) {
 	const config = data['config'];
 	const notify = data['notify'];
 
+	const startId = await Common.uuidv4();
+
+	startDealTracker[startId] = {};
+	startDealTracker[startId]['date'] = new Date();
+
 	// Start bot
 	setTimeout(() => {
 						if (notify) {
@@ -3302,10 +3370,12 @@ async function startDelay(dataObj) {
 							Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
 						}
 
-						startVerify(config);
+						startVerify(config, startId);
 						//start({ 'create': true, 'config': config });
 
 					 }, (1000 * (data['delay'])));
+
+	return startId;
 }
 
 
@@ -3313,9 +3383,17 @@ async function initApp() {
 
 	setInterval(() => {
 
-		checkTracker();
+		checkTrackers();
 
 	}, (60000 * 1));
+
+
+	setInterval(() => {
+
+		checkStartDealTracker();
+
+	}, 1500);
+
 
 	await resumeBots();
 
@@ -3345,6 +3423,7 @@ module.exports = {
 	getDeals,
 	getDealInfo,
 	getDealTracker,
+	getStartDealTracker,
 	getSymbol,
 	getSymbolsAll,
 	applyConfigData,
