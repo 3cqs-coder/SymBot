@@ -4,7 +4,7 @@
   "description": "SymBot",
   "main": "index.js",
   "scripts": {
-    "start": "node symbot.js",
+    "start": "nodemon symbot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "3CQS",
@@ -31,5 +31,8 @@
     "socket.io-client": "^4.7.2",
     "telegraf": "^4.15.0",
     "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }

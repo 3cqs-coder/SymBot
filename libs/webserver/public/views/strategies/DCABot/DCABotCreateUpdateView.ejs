@@ -201,7 +201,7 @@
 
 		const form = '#formBotsCreate';
 		const submitUrl = $(form).attr('action');
-
+		console.log("xsdf",submitUrl);
 		const createStep = $('#createStep').val();
 
 
@@ -211,6 +211,9 @@
 
 			showStartConditionsSub(val);
 		});
+
+		$('#orderType').val('<%- botData.firstOrderType %>');
+
 
 
 		$('#clearAll').on('click', function(e) {
@@ -295,7 +298,6 @@
 
 			let formDataSubmit = $(form).serialize();
 			const formData = formToJson(form);
-
 			if (formData.pair != undefined && formData.pair != null && formData.pair != '') {
 
 				if (typeof formData.pair == 'string' && !formData.pair.match(/\//)) {
@@ -355,8 +357,9 @@
 
 			$('#formSubmitPreview').hide();
 
+			console.log("formDataSubmit",formDataSubmit);
 			disableAll(true);
-
+			
 			$.ajax({
 						type: 'POST',
 						url: submitUrl,
@@ -801,7 +804,13 @@
 				</span></span>
 
 				</td> <td><input id="dealCoolDown" name="dealCoolDown" value="<%- botData.dealCoolDown %>" class="form-field"> Seconds</td></tr>
-
+				<td>Order Type:</td>
+				<td>
+				  <select id="orderType" name="orderType" class="form-field" style="width: 200px;">
+					<option value="MARKET" <%- botData.firstOrderType === 'MARKET' ? 'selected' : '' %>>MARKET</option>
+					<option value="LIMIT" <%- botData.firstOrderType === 'LIMIT' ? 'selected' : '' %>>LIMIT</option>
+				  </select>
+				</td>
 				<tr id="startConditionFirst"><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select>
 					<span id="infoBox" style="position: relative; display: flex; justify-content: left; padding-top: 5px;"></span>
 				</td></tr>

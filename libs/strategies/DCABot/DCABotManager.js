@@ -1,1486 +1,1431 @@
-'use strict';
+"use strict";
 
 let shareData;
 let queueStartDeal;
 let symbolList = {};
 
-
 async function viewCreateUpdateBot(req, res, botId) {
+  let maxMins = 60;
 
-	let maxMins = 60;
+  let errMsg;
+  let botData;
+  let botUpdate = false;
 
-	let errMsg;
-	let botData;
-	let botUpdate = false;
+  let formAction = "/api/bots/create";
 
-	let formAction = '/api/bots/create';
+  if (botId != undefined && botId != null && botId != "") {
+    const bot = await shareData.DCABot.getBots({ botId: botId });
 
-	if (botId != undefined && botId != null && botId != '') {
+    if (bot && bot.length > 0) {
+      botUpdate = true;
+      botData = bot[0]["config"];
 
-		const bot = await shareData.DCABot.getBots({ 'botId': botId });
+      botData.active = bot[0].active;
+      botData.botId = botId;
 
-		if (bot && bot.length > 0) {
+      formAction = "/api/bots/update";
+    }
+  }
 
-			botUpdate = true;
-			botData = bot[0]['config'];
+  const botConfig = await shareData.Common.getConfig("bot.json");
+  const exchangeName = botConfig.data.exchange;
 
-			botData.active = bot[0].active;
-			botData.botId = botId;
+  if (
+    symbolList[exchangeName] == undefined ||
+    symbolList[exchangeName] == null
+  ) {
+    symbolList[exchangeName] = {};
+    symbolList[exchangeName]["symbols"] = [];
+    symbolList[exchangeName]["updated"] = 0;
+  }
 
-			formAction = '/api/bots/update';
-		}
-	}
+  const diffSec =
+    (new Date().getTime() -
+      new Date(symbolList[exchangeName]["updated"]).getTime()) /
+    1000;
 
-	const botConfig = await shareData.Common.getConfig('bot.json');
+  // Get new list of symbols only after n minutes have passed
+  if (diffSec > 60 * maxMins) {
+    const exchange = await shareData.DCABot.connectExchange(botConfig.data);
 
-	const exchangeName = botConfig.data.exchange;
+    if (exchange) {
+      let symbolData;
+      let count = 0;
 
-	if (symbolList[exchangeName] == undefined || symbolList[exchangeName] == null) {
+      let success = false;
+      let finished = false;
 
-		symbolList[exchangeName] = {};
-		symbolList[exchangeName]['symbols'] = [];
-		symbolList[exchangeName]['updated'] = 0;
-	}
-	
-	const diffSec = (new Date().getTime() - new Date(symbolList[exchangeName]['updated']).getTime()) / 1000;
+      while (!finished) {
+        symbolData = await shareData.DCABot.getSymbolsAll(exchange);
 
-	// Get new list of symbols only after n minutes have passed
-	if (diffSec > (60 * maxMins)) {
+        if (symbolData.success) {
+          success = true;
+          finished = true;
+        } else if (count >= 5) {
+          // Timeout
+          errMsg = symbolData.msg;
 
-		const exchange = await shareData.DCABot.connectExchange(botConfig.data);
+          success = false;
+          finished = true;
+        } else {
+          await shareData.Common.delay(1000);
+        }
 
-		if (exchange) {
+        count++;
+      }
 
-			let symbolData;
-			let count = 0;
+      if (success) {
+        symbolList[exchangeName]["updated"] = new Date();
+        symbolList[exchangeName]["symbols"] = [];
+        symbolList[exchangeName]["symbols"] = symbolData.symbols;
+      }
+    } else {
+      errMsg = "Unable to connect to exchange";
+    }
+  }
 
-			let success = false;
-			let finished = false;
+  if (!botUpdate) {
+    botData = botConfig.data;
+  }
 
-			while (!finished) {
-
-				symbolData = await shareData.DCABot.getSymbolsAll(exchange);
-
-				if (symbolData.success) {
-
-					success = true;
-					finished = true;
-				}
-				else if (count >= 5) {
-
-					// Timeout
-					errMsg = symbolData.msg;
-
-					success = false;
-					finished = true;
-				}
-				else {
-
-					await shareData.Common.delay(1000);
-				}
-
-				count++;
-			}
-
-			if (success) {
-
-				symbolList[exchangeName]['updated'] = new Date();
-				symbolList[exchangeName]['symbols'] = [];
-				symbolList[exchangeName]['symbols'] = symbolData.symbols;
-			}
-		}
-		else {
-
-			errMsg = 'Unable to connect to exchange';
-		}
-	}
-
-	if (!botUpdate) {
-
-		botData = botConfig.data;
-	}
-
-	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'symbols': symbolList[exchangeName]['symbols'], 'botData': botData, 'errorData': errMsg } );
+  res.render("strategies/DCABot/DCABotCreateUpdateView", {
+    formAction: formAction,
+    appData: shareData.appData,
+    botUpdate: botUpdate,
+    symbols: symbolList[exchangeName]["symbols"],
+    botData: botData,
+    errorData: errMsg,
+  });
 }
-
 
 async function viewActiveDeals(req, res) {
-
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData } );
+  res.render("strategies/DCABot/DCABotDealsActiveView", {
+    appData: shareData.appData,
+  });
 }
-
 
 async function viewBots(req, res) {
+  let botsSort = [];
 
-	let botsSort = [];
+  const botsDb = await shareData.DCABot.getBots();
 
-	const botsDb = await shareData.DCABot.getBots();
+  if (botsDb.length > 0) {
+    const bots = JSON.parse(JSON.stringify(botsDb));
 
-	if (botsDb.length > 0) {
+    for (let i = 0; i < bots.length; i++) {
+      let bot = bots[i];
 
-		const bots = JSON.parse(JSON.stringify(botsDb));
+      const botId = bot.botId;
+      const botName = bot.botName;
 
-		for (let i = 0; i < bots.length; i++) {
+      bot = await removeDbKeys(bot);
+    }
 
-			let bot = bots[i];
+    botsSort = shareData.Common.sortByKey(bots, "date");
+    botsSort = botsSort.reverse();
+  }
 
-			const botId = bot.botId;
-			const botName = bot.botName;
-
-			bot = await removeDbKeys(bot);
-		}
-
-		botsSort = shareData.Common.sortByKey(bots, 'date');
-		botsSort = botsSort.reverse();
-	}
-
-	res.render( 'strategies/DCABot/DCABotsView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'bots': botsSort } );
+  res.render("strategies/DCABot/DCABotsView", {
+    appData: shareData.appData,
+    getDateParts: shareData.Common.getDateParts,
+    timeDiff: shareData.Common.timeDiff,
+    bots: botsSort,
+  });
 }
-
 
 async function viewHistoryDeals(req, res) {
-
-	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData } );
+  res.render("strategies/DCABot/DCABotDealsHistoryView", {
+    appData: shareData.appData,
+  });
 }
-
 
 async function apiGetMarkets(req, res) {
+  let pair = req.query.pair;
+  let exchangeName = req.query.exchange;
 
-	let pair = req.query.pair;
-	let exchangeName = req.query.exchange;
+  let success = true;
+  let data;
 
-	let success = true;
-	let data;
+  if (exchangeName == undefined || exchangeName == null || exchangeName == "") {
+    success = false;
+    data = "Exchange must be specified";
+  }
 
-	if (exchangeName == undefined || exchangeName == null || exchangeName == '') {
+  if (success) {
+    let config = { exchange: exchangeName.toLowerCase() };
 
-		success = false;
-		data = 'Exchange must be specified';
-	}
+    const exchange = await shareData.DCABot.connectExchange(config);
 
-	if (success) {
+    // Get all market symbols
+    if (pair == undefined || pair == null || pair == "") {
+      data = await shareData.DCABot.getSymbolsAll(exchange);
 
-		let config = { 'exchange': exchangeName.toLowerCase() };
+      if (!data["success"]) {
+        success = false;
+        data = data["msg"];
+      } else {
+        let symbols = data.symbols;
 
-		const exchange = await shareData.DCABot.connectExchange(config);
+        data = {};
+        data["exchange"] = exchangeName.toLowerCase();
+        data["symbols"] = symbols;
+      }
+    } else {
+      // Get pair information
+      pair = pair.replace(/[_-]/g, "/");
 
-		// Get all market symbols
-		if (pair == undefined || pair == null || pair == '') {
-		
-			data = await shareData.DCABot.getSymbolsAll(exchange);
+      data = await shareData.DCABot.getSymbol(exchange, pair.toUpperCase());
 
-			if (!data['success']) {
+      if (
+        data["invalid"] ||
+        (data["error"] != undefined &&
+          data["error"] != null &&
+          data["error"] != "")
+      ) {
+        success = false;
+        data = data["error"];
+      } else {
+        data = data["data"];
+      }
+    }
+  }
 
-				success = false;
-				data = data['msg'];
-			}
-			else {
-
-				let symbols = data.symbols;
-
-				data = {};
-				data['exchange'] = exchangeName.toLowerCase();
-				data['symbols'] = symbols;
-			}
-		}
-		else {
-
-			// Get pair information
-			pair = pair.replace(/[_-]/g, '/');
-
-			data = await shareData.DCABot.getSymbol(exchange, pair.toUpperCase());
-
-			if (data['invalid'] || (data['error'] != undefined && data['error'] != null && data['error'] != '')) {
-
-				success = false;
-				data = data['error'];
-			}
-			else {
-
-				data = data['data'];
-			}
-		}
-	}
-
-	res.send( { 'date': new Date(), 'success': success, 'data': data } );
+  res.send({ date: new Date(), success: success, data: data });
 }
-
 
 async function apiGetBots(req, res) {
+  let query = {};
+  let botsSort = [];
 
-	let query = {};
-	let botsSort = [];
+  let active = shareData.Common.convertBoolean(req.query.active);
 
-	let active = shareData.Common.convertBoolean(req.query.active);
+  if (active != undefined && active != null) {
+    query.active = active;
+  }
 
-	if (active != undefined && active != null) {
+  const botsDb = await shareData.DCABot.getBots(query);
 
-		query.active = active;
-	}
+  if (botsDb.length > 0) {
+    const bots = JSON.parse(JSON.stringify(botsDb));
 
-	const botsDb = await shareData.DCABot.getBots(query);
+    for (let i = 0; i < bots.length; i++) {
+      let bot = bots[i];
 
-	if (botsDb.length > 0) {
+      bot = await removeDbKeys(bot);
 
-		const bots = JSON.parse(JSON.stringify(botsDb));
+      const config = JSON.parse(JSON.stringify(bot.config));
 
-		for (let i = 0; i < bots.length; i++) {
+      delete bot.date;
+      delete bot.config;
 
-			let bot = bots[i];
+      const botData = Object.assign({}, bot, config);
 
-			bot = await removeDbKeys(bot);
+      bots[i] = botData;
+    }
 
-			const config = JSON.parse(JSON.stringify(bot.config));
+    botsSort = shareData.Common.sortByKey(bots, "createdAt");
+    botsSort = botsSort.reverse();
+  }
 
-			delete bot.date;
-			delete bot.config;
-
-			const botData = Object.assign({}, bot, config);
-
-			bots[i] = botData;
-		}
-
-		botsSort = shareData.Common.sortByKey(bots, 'createdAt');
-		botsSort = botsSort.reverse();
-	}
-
-	res.send( { 'date': new Date(), 'data': botsSort } );
+  res.send({ date: new Date(), data: botsSort });
 }
-
 
 async function apiGetDealsHistory(req, res, sendResponse) {
+  const days = 1;
+  const maxResults = 100;
 
-	const days = 1;
-	const maxResults = 100;
+  let dateTo;
+  let dateFrom;
+  let dealsArr = [];
 
-	let dateTo;
-	let dateFrom;
-	let dealsArr = [];
+  let fromDate = req.query.from;
+  let toDate = req.query.to;
+  const botId = req.query.botId;
 
-	let fromDate = req.query.from;
-	let toDate = req.query.to;
-	const botId = req.query.botId;
+  if (toDate == undefined || toDate == null || toDate == "") {
+    toDate = fromDate;
+  }
 
-	if (toDate == undefined || toDate == null || toDate == '') {
-		
-		toDate = fromDate;
-	}
+  const tzData = shareData.Common.getTimeZone();
 
-	const tzData = shareData.Common.getTimeZone();
+  const timeZoneOffset = tzData["offset"];
 
-	const timeZoneOffset = tzData['offset'];
+  let query = { sellData: { $exists: true }, status: 1 };
 
-	let	query = { 'sellData': { '$exists': true }, 'status': 1 };
+  let queryOptions = {
+    sort: { "sellData.date": -1 },
+  };
 
-	let queryOptions = {
-							'sort': { 'sellData.date': -1 }
-					   };
+  if (fromDate == undefined || fromDate == null || fromDate == "") {
+    queryOptions["limit"] = maxResults;
 
-	if (fromDate == undefined || fromDate == null || fromDate == '') {
+    //dateFrom = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
+    //dateTo = new Date(new Date(dateFrom).getTime() + (days * 24 * 60 * 60 * 1000));
+  } else {
+    dateFrom = new Date(fromDate + "T00:00:00" + timeZoneOffset);
+    dateTo = new Date(toDate + "T23:59:59" + timeZoneOffset);
 
-		queryOptions['limit'] = maxResults;
-		
-		//dateFrom = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
-		//dateTo = new Date(new Date(dateFrom).getTime() + (days * 24 * 60 * 60 * 1000));
-	}
-	else {
+    query["sellData.date"] = { $gte: dateFrom, $lte: dateTo };
+  }
 
-		dateFrom = new Date(fromDate + 'T00:00:00' + timeZoneOffset);
-		dateTo = new Date(toDate + 'T23:59:59' + timeZoneOffset);
+  if (botId && botId != "Default") {
+    query["botId"] = botId;
+  }
 
-		query['sellData.date'] = { '$gte': dateFrom, '$lte': dateTo };
-	}
+  const dealsHistory = await shareData.DCABot.getDeals(query, queryOptions);
 
-	if (botId && botId != 'Default') {
+  if (dealsHistory != undefined && dealsHistory != null && dealsHistory != "") {
+    for (let i = 0; i < dealsHistory.length; i++) {
+      const deal = dealsHistory[i];
+      const sellData = deal.sellData;
+      const orders = deal.orders;
 
-		query['botId'] = botId;
-	}
+      let orderCount = 0;
 
-	const dealsHistory = await shareData.DCABot.getDeals(query, queryOptions);
+      for (let x = 0; x < orders.length; x++) {
+        const order = orders[x];
 
-	if (dealsHistory != undefined && dealsHistory != null && dealsHistory != '') {
+        if (order["filled"]) {
+          orderCount++;
+        }
+      }
 
-		for (let i = 0; i < dealsHistory.length; i++) {
+      if (
+        orderCount > 0 &&
+        sellData.date != undefined &&
+        sellData.date != null
+      ) {
+        const profitPerc = Number(sellData.profit);
 
-			const deal = dealsHistory[i];
-			const sellData = deal.sellData;
-			const orders = deal.orders;
+        const profit = shareData.Common.roundAmount(
+          Number(Number(orders[orderCount - 1]["sum"]) * (profitPerc / 100))
+        );
 
-			let orderCount = 0;
+        const dataObj = {
+          bot_id: deal.botId,
+          bot_name: deal.botName,
+          deal_id: deal.dealId,
+          pair: deal.pair.toUpperCase(),
+          date_start: new Date(deal.date),
+          date_end: new Date(sellData.date),
+          profit: profit,
+          profit_percent: profitPerc,
+          safety_orders: orderCount - 1,
+        };
 
-			for (let x = 0; x < orders.length; x++) {
+        dealsArr.push(dataObj);
+      }
+    }
+  }
 
-				const order = orders[x];
+  dealsArr = shareData.Common.sortByKey(dealsArr, "date_end");
 
-				if (order['filled']) {
+  let obj = { date: new Date(), data: dealsArr.reverse() };
 
-					orderCount++;
-				}
-			}
-
-			if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
-
-				const profitPerc = Number(sellData.profit);
-
-				const profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
-
-				const dataObj = {
-									'bot_id': deal.botId,
-									'bot_name': deal.botName,
-									'deal_id': deal.dealId,
-									'pair': deal.pair.toUpperCase(),
-									'date_start': new Date(deal.date),
-									'date_end': new Date(sellData.date),
-									'profit': profit,
-									'profit_percent': profitPerc,
-									'safety_orders': orderCount - 1
-								};
-
-				dealsArr.push(dataObj);
-			}
-		}
-	}
-
-	dealsArr = shareData.Common.sortByKey(dealsArr, 'date_end');
-
-	let obj = { 'date': new Date(), 'data': dealsArr.reverse() };
-
-	if (sendResponse) {
-
-		res.send(obj);
-	}
-	else {
-
-		return obj;
-	}
+  if (sendResponse) {
+    res.send(obj);
+  } else {
+    return obj;
+  }
 }
-
 
 async function apiShowDeal(req, res, dealId) {
+  let content;
+  let priceLast;
 
-	let content;
-	let priceLast;
+  let active = true;
+  let success = true;
 
-	let active = true;
-	let success = true;
+  const data = await shareData.DCABot.getDeals({ dealId: dealId });
+  if (data && data.length > 0) {
+    let price;
 
-	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+    const dealDataDb = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
-	if (data && data.length > 0) {
+    const updated = dealDataDb["updatedAt"];
+    const sellData = dealDataDb["sellData"];
 
-		let price;
+    const dealTracker = await shareData.DCABot.getDealTracker();
+    // console.log("dealTracker",dealTracker);
+    if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+      priceLast = dealTracker[dealId]["info"]["price_last"];
+    }
 
-		const dealDataDb = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+    if (sellData != undefined && sellData != null) {
+      price = sellData["price"];
+    }
 
-		const updated = dealDataDb['updatedAt'];
-		const sellData = dealDataDb['sellData'];
+    // Use current price from deal tracker if sell price does not exist
+    if (price == undefined || price == null) {
+      price = priceLast;
+    }
 
-		const dealTracker = await shareData.DCABot.getDealTracker();
+    if (dealDataDb["status"]) {
+      active = false;
+    }
 
-		if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+    const dealData = await shareData.DCABot.getDealInfo({
+      updated: new Date(updated),
+      active: active,
+      deal_id: dealId,
+      price: price,
+      config: dealDataDb["config"],
+      orders: dealDataDb["orders"],
+    });
+    content = dealData;
+  } else {
+    success = false;
+    content = "Invalid Deal ID";
+  }
 
-			priceLast = dealTracker[dealId]['info']['price_last'];
-		}
-
-		if (sellData != undefined && sellData != null) {
-
-			price = sellData['price'];
-		}
-
-		// Use current price from deal tracker if sell price does not exist
-		if (price == undefined || price == null) {
-
-			price = priceLast;
-		}
-
-		if (dealDataDb['status']) {
-
-			active = false;
-		}
-
-		const dealData = await shareData.DCABot.getDealInfo({ 'updated': new Date(updated), 'active': active, 'deal_id': dealId, 'price': price, 'config': dealDataDb['config'], 'orders': dealDataDb['orders'] });
-
-		content = dealData;
-	}
-	else {
-
-		success = false;
-		content = 'Invalid Deal ID';
-	}
-
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+  res.send({ date: new Date(), success: success, data: content });
 }
-
 
 async function apiGetActiveDeals(req, res) {
+  let query = {};
+  let dealsArr = [];
+  let dealsSort = [];
 
-	let query = {};
-	let dealsArr = [];
-	let dealsSort = [];
+  let botsActiveObj = {};
 
-	let botsActiveObj = {};
+  const body = req.body;
 
-	const body = req.body;
+  let active = body.active;
+  if (active == undefined || active == null || active == "") {
+    active = true;
+  }
 
-	let active = body.active;
+  const bots = await shareData.DCABot.getBots({ active: active });
 
-	if (active == undefined || active == null || active == '') {
+  const dealTracker = await shareData.DCABot.getDealTracker();
 
-		active = true;
-	}
+  if (bots && bots.length > 0) {
+    for (let i = 0; i < bots.length; i++) {
+      let bot = bots[i];
 
-	const bots = await shareData.DCABot.getBots({ 'active': active });
+      const botId = bot.botId;
+      const botName = bot.botName;
 
-	const dealTracker = await shareData.DCABot.getDealTracker();
+      botsActiveObj[botId] = botName;
+    }
+  }
 
-	if (bots && bots.length > 0) {
+  // Remove sensitive data
+  for (let dealId in dealTracker) {
+    let botActive = true;
 
-		for (let i = 0; i < bots.length; i++) {
+    let obj = {};
 
-			let bot = bots[i];
+    let deal = dealTracker[dealId];
 
-			const botId = bot.botId;
-			const botName = bot.botName;
+    let botId = deal["deal"]["botId"];
+    let config = deal["deal"]["config"];
+    let info = JSON.parse(JSON.stringify(deal["info"]));
 
-			botsActiveObj[botId] = botName;
-		}
-	}
+    let dealRoot = deal["deal"];
 
-	// Remove sensitive data
-	for (let dealId in dealTracker) {
+    dealRoot = await removeDbKeys(dealRoot);
+    dealRoot["config"] = await shareData.DCABot.removeConfigData(config);
 
-		let botActive = true;
+    if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
+      botActive = false;
+    }
 
-		let obj = {};
+    obj = Object.assign({}, obj, dealRoot);
 
-		let deal = dealTracker[dealId];
+    obj["info"] = info;
+    obj["info"]["bot_active"] = botActive;
 
-		let botId = deal['deal']['botId'];
-		let config = deal['deal']['config'];
-		let info = JSON.parse(JSON.stringify(deal['info']));
+    dealsArr.push(obj);
+  }
 
-		let dealRoot = deal['deal'];
+  dealsSort = shareData.Common.sortByKey(dealsArr, "date");
+  dealsSort = dealsSort.reverse();
 
-		dealRoot = await removeDbKeys(dealRoot);
-		dealRoot['config'] = await shareData.DCABot.removeConfigData(config);
-
-		if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
-
-			botActive = false;
-		}
-
-		obj = Object.assign({}, obj, dealRoot);
-
-		obj['info'] = info;
-		obj['info']['bot_active'] = botActive;
-
-		dealsArr.push(obj);
-	}
-
-	dealsSort = shareData.Common.sortByKey(dealsArr, 'date');
-	dealsSort = dealsSort.reverse();
-
-	res.send( { 'date': new Date(), 'data': dealsSort } );
+  res.send({ date: new Date(), data: dealsSort });
 }
-
 
 async function apiUpdateDeal(req, res) {
+  let success = true;
+  let isUpdate = false;
+  let dealLastUpdate = false;
 
-	let success = true;
-	let isUpdate = false;
-	let dealLastUpdate = false;
+  let content;
 
-	let content;
+  const body = req.body;
+  const dealId = req.params.dealId;
 
-	const body = req.body;
-	const dealId = req.params.dealId;
+  let dealLast = body.dealLast;
+  const dcaMaxOrder = body.dcaMaxOrder;
+  const dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
-	let dealLast = body.dealLast;
-	const dcaMaxOrder = body.dcaMaxOrder;
-	const dcaTakeProfitPercent = body.dcaTakeProfitPercent;
+  const data = await shareData.DCABot.getDeals({ dealId: dealId });
 
-	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+  if (data && data.length > 0) {
+    let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
-	if (data && data.length > 0) {
+    const status = dealData["status"];
+    const filledOrders = dealData.orders.filter((item) => item.filled == 1);
+    const manualOrders = filledOrders.filter((item) => item.manual);
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+    if (status != 0) {
+      success = false;
+      content = "Deal ID " + dealId + " is not active";
+    } else {
+      content = "Deal ID " + dealId + " updated";
 
-		const status = dealData['status'];
-		const filledOrders = dealData.orders.filter(item => item.filled == 1);
-		const manualOrders = filledOrders.filter(item => item.manual);
+      let config = dealData["config"];
 
-		if (status != 0) {
+      const configOrig = JSON.parse(JSON.stringify(config));
 
-			success = false;
-			content = 'Deal ID ' + dealId + ' is not active';
-		}
-		else {
+      const botId = configOrig["botId"];
 
-			content = 'Deal ID ' + dealId + ' updated';
+      config["createStep"] = "getOrders";
+      config["pair"] = dealData["pair"];
 
-			let config = dealData['config'];
+      // Remove data to only calculate orders
+      delete config["botId"];
+      delete config["botName"];
 
-			const configOrig = JSON.parse(JSON.stringify(config));
+      const ordersOrig = dealData["orders"];
+      const price = ordersOrig[0]["price"];
 
-			const botId = configOrig['botId'];
+      // Set first start condition for calculate orders, then remove when updating
+      config["startCondition"] = config["startConditions"][0];
 
-			config['createStep'] = 'getOrders';
-			config['pair'] = dealData['pair'];
+      // Override price to recalculate from original starting price
+      config["firstOrderPrice"] = price;
 
-			// Remove data to only calculate orders
-			delete config['botId'];
-			delete config['botName'];
+      // Only set deal last flag if value exists and to not change current status
+      if (dealLast != undefined && dealLast != null) {
+        dealLast = shareData.Common.convertBoolean(dealLast, false);
 
-			const ordersOrig = dealData['orders'];
-			const price = ordersOrig[0]['price'];
+        if (dealLast) {
+          config["dealLast"] = true;
+        } else {
+          delete config["dealLast"];
+        }
 
-			// Set first start condition for calculate orders, then remove when updating
-			config['startCondition'] = config['startConditions'][0];
+        dealLastUpdate = true;
+      }
 
-			// Override price to recalculate from original starting price
-			config['firstOrderPrice'] = price;
+      // Override max safety orders if set
+      if (dcaMaxOrder != undefined && dcaMaxOrder != null) {
+        if (dcaMaxOrder != config["dcaMaxOrder"]) {
+          isUpdate = true;
+          config["dcaMaxOrder"] = dcaMaxOrder;
+        }
 
-			// Only set deal last flag if value exists and to not change current status
-			if (dealLast != undefined && dealLast != null) {
+        // Verify max orders
+        if (dcaMaxOrder < filledOrders.length - 1) {
+          success = false;
+          content =
+            "Max DCA orders of " +
+            dcaMaxOrder +
+            " is less than currently filled orders of " +
+            (filledOrders.length - 1);
+        }
+      }
 
-				dealLast = shareData.Common.convertBoolean(dealLast, false);
-				
-				if (dealLast) {
-					
-					config['dealLast'] = true;
-				}
-				else {
-					
-					delete config['dealLast'];
-				}
-				
-				dealLastUpdate = true;
-			}
+      // Override take profit if set
+      if (dcaTakeProfitPercent != undefined && dcaTakeProfitPercent != null) {
+        if (dcaTakeProfitPercent != config["dcaTakeProfitPercent"]) {
+          isUpdate = true;
+          config["dcaTakeProfitPercent"] = dcaTakeProfitPercent;
+        }
+      }
 
-			// Override max safety orders if set
-			if (dcaMaxOrder != undefined && dcaMaxOrder != null) {
+      // Block updating until refactoring calculations can be implemented
+      if (isUpdate && manualOrders.length > 0) {
+        success = false;
+        content =
+          "Take profit percentage or max safety orders cannot be changed when manual orders are placed";
+      }
 
-				if (dcaMaxOrder != config['dcaMaxOrder']) {
+      if (success) {
+        let data;
 
-					isUpdate = true;
-					config['dcaMaxOrder'] = dcaMaxOrder;
-				}
+        if (isUpdate) {
+          // Get newly calculated order steps if update required
+          data = await calculateOrders(config);
+        }
 
-				// Verify max orders
-				if (dcaMaxOrder < (filledOrders.length - 1)) {
+        // Remove and replace config data
+        delete config["createStep"];
+        delete config["startCondition"];
+        delete config["firstOrderPrice"];
 
-					success = false;
-					content = 'Max DCA orders of ' + dcaMaxOrder + ' is less than currently filled orders of ' + (filledOrders.length - 1);
-				}
-			}
+        config["botId"] = configOrig["botId"];
+        config["botName"] = configOrig["botName"];
 
-			// Override take profit if set
-			if (dcaTakeProfitPercent != undefined && dcaTakeProfitPercent != null) {
+        // Only calculate if orders or tp were set
+        if (data && data["orders"]["success"]) {
+          let orderHeaders = data["orders"]["data"]["orders"]["headers"];
+          let orderSteps = data["orders"]["data"]["orders"]["steps"];
+          let orderContent = data["orders"]["data"]["content"];
 
-				if (dcaTakeProfitPercent != config['dcaTakeProfitPercent']) {
+          let maxDeviationPercent = orderContent["max_deviation_percent"];
 
-					isUpdate = true;
-					config['dcaTakeProfitPercent'] = dcaTakeProfitPercent;
-				}
-			}
+          let ordersNew = await shareData.DCABot.updateOrders({
+            orig: [],
+            new: orderSteps,
+          });
+          let ordersValidate = await shareData.DCABot.ordersValid(
+            dealData["pair"],
+            ordersNew
+          );
 
-			// Block updating until refactoring calculations can be implemented
-			if (isUpdate && manualOrders.length > 0) {
+          // Verify new order step price averages
+          if (!ordersValidate["success"]) {
+            success = false;
+            content = ordersValidate["data"];
+          } else {
+            let stopData = await shareData.DCABot.stopDeal(dealId);
 
-				success = false;
-				content = 'Take profit percentage or max safety orders cannot be changed when manual orders are placed';
-			}
+            // Verify deal is stopped
+            if (stopData["success"]) {
+              // Apply new order calculations to deal, update db, then resume
+              let ordersNew = await shareData.DCABot.updateOrders({
+                orig: ordersOrig,
+                new: orderSteps,
+              });
 
-			if (success) {
+              // Update deal in database
+              let dataUpdate = await shareData.DCABot.updateDeal(
+                botId,
+                dealId,
+                { config: config, orders: ordersNew }
+              );
 
-				let data;
+              // Check for active deal and resume
+              let dealActive = await shareData.DCABot.getDeals({
+                status: 0,
+                dealId: dealId,
+              });
 
-				if (isUpdate) {
+              if (dealActive && dealActive.length > 0) {
+                let deal = dealActive[0];
 
-					// Get newly calculated order steps if update required
-					data = await calculateOrders(config);
-				}
+                await shareData.DCABot.resumeDeal(deal);
 
-				// Remove and replace config data
-				delete config['createStep'];
-				delete config['startCondition'];
-				delete config['firstOrderPrice'];
+                // DB update failed
+                if (!dataUpdate["success"]) {
+                  success = false;
+                  content = "Error updating deal in database";
+                }
+              }
+            } else {
+              success = false;
+              content = stopData["data"];
+            }
+          }
+        } else {
+          if (dealLastUpdate && !isUpdate) {
+            // Update last deal flag without stopping deal
+            let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, {
+              config: config,
+            });
 
-				config['botId'] = configOrig['botId'];
-				config['botName'] = configOrig['botName'];
+            // Notify deal tracker to update
+            let dataRefresh = await shareData.DCABot.refreshUpdateDeal({
+              deal_id: dealId,
+              config: config,
+            });
+          } else {
+            success = false;
+            content = "Unable to calculate orders";
+          }
+        }
+      }
+    }
+  } else {
+    success = false;
+    content = "Invalid Deal ID";
+  }
 
-				// Only calculate if orders or tp were set
-				if (data && data['orders']['success']) {
-
-					let orderHeaders = data['orders']['data']['orders']['headers'];
-					let orderSteps = data['orders']['data']['orders']['steps'];
-					let orderContent = data['orders']['data']['content'];
-
-					let maxDeviationPercent = orderContent['max_deviation_percent'];
-
-					let ordersNew = await shareData.DCABot.updateOrders({ 'orig': [], 'new': orderSteps });
-					let ordersValidate = await shareData.DCABot.ordersValid(dealData['pair'], ordersNew);
-
-					// Verify new order step price averages
-					if (!ordersValidate['success']) {
-
-						success = false;
-						content = ordersValidate['data'];
-					}
-					else {
-
-						let stopData = await shareData.DCABot.stopDeal(dealId);
-
-						// Verify deal is stopped
-						if (stopData['success']) {
-
-							// Apply new order calculations to deal, update db, then resume
-							let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps });
-
-							// Update deal in database
-							let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
-
-							// Check for active deal and resume
-							let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
-
-							if (dealActive && dealActive.length > 0) {
-
-								let deal = dealActive[0];
-
-								await shareData.DCABot.resumeDeal(deal);
-
-								// DB update failed
-								if (!dataUpdate['success']) {
-
-									success = false;
-									content = 'Error updating deal in database';
-								}
-							}
-						}
-						else {
-
-							success = false;
-							content = stopData['data'];
-						}
-					}
-				}
-				else {
-
-					if (dealLastUpdate && !isUpdate) {
-
-						// Update last deal flag without stopping deal
-						let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config });
-
-						// Notify deal tracker to update
-						let dataRefresh = await shareData.DCABot.refreshUpdateDeal({ 'deal_id': dealId, 'config': config });
-					}
-					else {
-
-						success = false;
-						content = 'Unable to calculate orders';
-					}
-				}
-			}
-		}
-	}
-	else {
-
-		success = false;
-		content = 'Invalid Deal ID';
-	}
-
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+  res.send({ date: new Date(), success: success, data: content });
 }
-
 
 async function apiPanicSellDeal(req, res) {
+  let success = true;
 
-	let success = true;
+  let content = "Success";
 
-	let content = 'Success';
+  const dealId = req.params.dealId;
 
-	const dealId = req.params.dealId;
+  const data = await shareData.DCABot.getDeals({ dealId: dealId });
 
-	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+  if (data && data.length > 0) {
+    let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
-	if (data && data.length > 0) {
+    const status = dealData["status"];
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+    if (status != 0) {
+      success = false;
+      content = "Deal ID " + dealId + " is not active";
+    } else {
+      const closeData = await shareData.DCABot.panicSellDeal(dealId);
 
-		const status = dealData['status'];
+      if (!closeData["success"]) {
+        success = false;
+        content = closeData["data"];
+      }
+    }
+  } else {
+    success = false;
+    content = "Invalid Deal ID";
+  }
 
-		if (status != 0) {
-
-			success = false;
-			content = 'Deal ID ' + dealId + ' is not active';
-		}
-		else {
-
-			const closeData = await shareData.DCABot.panicSellDeal(dealId);
-
-			if (!closeData['success']) {
-
-				success = false;
-				content = closeData['data'];
-			}
-		}
-	}
-	else {
-
-		success = false;
-		content = 'Invalid Deal ID';
-	}
-
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+  res.send({ date: new Date(), success: success, data: content });
 }
-
 
 async function apiCancelDeal(req, res) {
+  let success = true;
 
-	let success = true;
+  let content = "Success";
 
-	let content = 'Success';
+  const dealId = req.params.dealId;
 
-	const dealId = req.params.dealId;
+  const data = await shareData.DCABot.getDeals({ dealId: dealId });
 
-	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+  if (data && data.length > 0) {
+    let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
-	if (data && data.length > 0) {
+    const status = dealData["status"];
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+    if (status != 0) {
+      success = false;
+      content = "Deal ID " + dealId + " is not active";
+    } else {
+      const cancelData = await shareData.DCABot.cancelDeal(dealId);
 
-		const status = dealData['status'];
-		
-		if (status != 0) {
+      if (!cancelData["success"]) {
+        success = false;
+        content = cancelData["data"];
+      }
+    }
+  } else {
+    success = false;
+    content = "Invalid Deal ID";
+  }
 
-			success = false;
-			content = 'Deal ID ' + dealId + ' is not active';
-		}
-		else {
-
-			const cancelData = await shareData.DCABot.cancelDeal(dealId);
-
-			if (!cancelData['success']) {
-
-				success = false;
-				content = cancelData['data'];
-			}
-		}
-	}
-	else {
-
-		success = false;
-		content = 'Invalid Deal ID';
-	}
-
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+  res.send({ date: new Date(), success: success, data: content });
 }
-
 
 async function apiAddFundsDeal(req, res) {
+  let success = true;
+  let isValid = true;
 
-	let success = true;
-	let isValid = true;
+  let content = "Success";
 
-	let content = 'Success';
-	
-	const dealId = req.params.dealId;
-	const volume = parseFloat(req.body.volume);
-	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+  const dealId = req.params.dealId;
+  const volume = parseFloat(req.body.volume);
+  const data = await shareData.DCABot.getDeals({ dealId: dealId });
 
-	if (volume == undefined || volume == null || volume == 0) {
+  if (volume == undefined || volume == null || volume == 0) {
+    isValid = false;
+  }
 
-		isValid = false;
-	}
+  if (isValid && data && data.length > 0) {
+    let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
-	if (isValid && data && data.length > 0) {
+    const status = dealData["status"];
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+    if (status != 0) {
+      success = false;
+      content = "Deal ID " + dealId + " is not active";
+    } else {
+      const stopData = await shareData.DCABot.stopDeal(dealId);
 
-		const status = dealData['status'];
-		
-		if (status != 0) {
+      // Verify deal is stopped
+      if (stopData["success"]) {
+        const addData = await shareData.DCABot.addFundsDeal(dealId, volume);
 
-			success = false;
-			content = 'Deal ID ' + dealId + ' is not active';
-		}
-		else {
+        if (!addData["success"]) {
+          success = false;
+          content = addData["data"];
+        }
 
-			const stopData = await shareData.DCABot.stopDeal(dealId);
+        // Check for active deal and resume
+        let dealActive = await shareData.DCABot.getDeals({
+          status: 0,
+          dealId: dealId,
+        });
 
-			// Verify deal is stopped
-			if (stopData['success']) {
+        if (dealActive && dealActive.length > 0) {
+          let deal = dealActive[0];
 
-				const addData = await shareData.DCABot.addFundsDeal(dealId, volume);
+          await shareData.DCABot.resumeDeal(deal);
+        }
+      } else {
+        success = false;
+        content = stopData["data"];
+      }
+    }
+  } else {
+    success = false;
 
-				if (!addData['success']) {
+    if (!isValid) {
+      content = "Volume must be greater than zero";
+    } else {
+      content = "Invalid Deal ID";
+    }
+  }
 
-					success = false;
-					content = addData['data'];
-				}
-
-				// Check for active deal and resume
-				let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
-
-				if (dealActive && dealActive.length > 0) {
-
-					let deal = dealActive[0];
-				
-					await shareData.DCABot.resumeDeal(deal);
-				}
-			}
-			else {
-
-				success = false;
-				content = stopData['data'];
-			}
-		}
-	}
-	else {
-
-		success = false;
-
-		if (!isValid) {
-
-			content = 'Volume must be greater than zero';
-		}
-		else {
-
-			content = 'Invalid Deal ID';
-		}
-	}
-
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+  res.send({ date: new Date(), success: success, data: content });
 }
-
 
 async function apiCreateUpdateBot(req, res) {
-
-	let reqPath = req.path;
-
-	let botOrig;
-	let botIdMain;
-	let botNameMain;
-
-	let success = true;
-	let isUpdate = false;
-
-	let startCondition = 'asap';
-
-	if (reqPath.indexOf('update') > -1) {
-
-		isUpdate = true;
-	}
-
-	const body = req.body;
-
-	const botNamePassed = body.botName;
-	const createStep = body.createStep;
-
-	if (body.pair == undefined || body.pair == null || body.pair == '') {
-
-		success = false;
-		res.send( { 'date': new Date(), 'success': success, 'data': 'Invalid Pair' } );
-
-		return;
-	}
-
-	if (isUpdate) {
-
-		botOrig = await shareData.DCABot.getBots({ 'botId': body.botId });
-
-		if (botOrig && botOrig.length > 0) {
-
-			botNameMain = botOrig[0]['config']['botName'];
-		}
-	}
-
-	let data = await calculateOrders(body);
-
-	let active = data['active'];
-	let pairs = data['pairs'];
-	let orders = data['orders'];
-	let botData = data['botData'];
-
-	if (botData.startConditions != undefined && botData.startConditions != null) {
-
-		if (typeof botData.startConditions !== 'string' && botData.startConditions[0] != undefined && botData.startConditions[0] != null) {
-
-			startCondition = botData.startConditions[0].toLowerCase();
-		}
-	}
-
-	// Set pair to array
-	botData['pair'] = pairs;
-
-	if (!orders.success) {
-
-		success = false;
-	}
-	else {
-
-		if (createStep.toLowerCase() != 'getorders') {
-
-			if (!isUpdate) {
-
-				// Remove any bot id passed in
-				delete botData['botId'];
-
-				botData['active'] = active;
-
-				// Save initial bot configuration
-				const configObj = await shareData.DCABot.initBot({ 'create': true, 'config': botData });
-
-				botIdMain = configObj['botId'];
-
-				if (active && startCondition == 'asap') {
-
-					let pairCount = 0;
-					let notify = true;
-
-					let pairMax = configObj.pairMax;
-
-					if (pairMax == undefined || pairMax == null || pairMax == '') {
-
-						pairMax = 0;
-					}
-
-					// Start bot
-					for (let i = 0; i < pairs.length; i++) {
-
-						if (pairMax == 0 || pairCount < pairMax) {
-
-							let pair = pairs[i];
-
-							let config = JSON.parse(JSON.stringify(configObj));
-							config['pair'] = pair;
-
-							if (i > 0) {
-
-								notify = false;
-							}
-
-							pairCount++;
-
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': notify });
-						}
-					}
-				}
-			}
-			else {
-
-				const botId = botData.botId;
-				let botName = botData.botName;
-
-				botIdMain = botId;
-
-				// If bot name was not passed then use original
-				if (botNamePassed == undefined || botNamePassed == null || botNamePassed == '') {
-
-					botName = botNameMain;
-				}
-
-				botData['botName'] = botName;
-
-				if (botOrig && botOrig.length > 0) {
-
-					// Update config data
-					const configData = await shareData.DCABot.removeConfigData(botData);
-
-					let dataObj = {
-									'botName': botName,
-									'active': active,
-									'pair': pairs,
-									'config': configData
-								  };
-
-					const data = await shareData.DCABot.updateBot(botId, dataObj);
-
-					if (!data.success) {
-
-					  	success = false;
-					}
-
-					const bot = await shareData.DCABot.getBots({ 'botId': botId });
-
-					if (active != botOrig[0]['active']) {
-
-						const statusObj = await shareData.DCABot.sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
-					}
-
-					// Get total active pairs currently running on bot
-					let botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
-
-					let pairCount = botDealsActive.length;
-
-					for (let i = 0; i < pairs.length; i++) {
-
-						let pair = pairs[i];
-
-						let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
-
-						let config = bot[0]['config'];
-
-						let pairMax = config.pairMax;
-
-						if (pairMax == undefined || pairMax == null || pairMax == '') {
-
-							pairMax = 0;
-						}
-
-						config['pair'] = pair;
-						config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
-
-						// Start bot if active, no deals are currently running and start condition is now asap
-						if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && (pairMax == 0 || pairCount < pairMax) && startCondition == 'asap') {
-
-							pairCount++;
-
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
-						}
-					}
-				}
-				else {
-
-					// Invalid bot id
-					success = false;
-
-					orders.data.orders = '';
-					orders.data.content = 'Invalid Bot ID';
-				}
-			}
-
-			if (success) {
-
-				// Set bot id
-				orders.data.botId = botIdMain;
-			}
-		}
-		else {
-
-			// Remove bot id if only getting orders
-			orders.data.botId = '';
-		}
-	}
-
-	res.send( { 'date': new Date(), 'success': success, 'step': createStep, 'data': orders.data } );
+  let reqPath = req.path;
+
+  let botOrig;
+  let botIdMain;
+  let botNameMain;
+
+  let success = true;
+  let isUpdate = false;
+
+  let startCondition = "asap";
+
+  if (reqPath.indexOf("update") > -1) {
+    isUpdate = true;
+  }
+
+  const body = req.body;
+  console.log("boday",body);
+  const botNamePassed = body.botName;
+  const createStep = body.createStep;
+
+  if (body.pair == undefined || body.pair == null || body.pair == "") {
+    success = false;
+    res.send({ date: new Date(), success: success, data: "Invalid Pair" });
+
+    return;
+  }
+
+  if (isUpdate) {
+    botOrig = await shareData.DCABot.getBots({ botId: body.botId });
+
+    if (botOrig && botOrig.length > 0) {
+      botNameMain = botOrig[0]["config"]["botName"];
+    }
+  }
+
+  let data = await calculateOrders(body);
+  console.log("data",data);
+  let active = data["active"];
+  let pairs = data["pairs"];
+  let orders = data["orders"];
+  let botData = data["botData"];
+
+  if (botData.startConditions != undefined && botData.startConditions != null) {
+    if (
+      typeof botData.startConditions !== "string" &&
+      botData.startConditions[0] != undefined &&
+      botData.startConditions[0] != null
+    ) {
+      startCondition = botData.startConditions[0].toLowerCase();
+    }
+  }
+
+  // Set pair to array
+  botData["pair"] = pairs;
+
+  if (!orders.success) {
+    success = false;
+  } else {
+    if (createStep.toLowerCase() != "getorders") {
+      if (!isUpdate) {
+        // Remove any bot id passed in
+        delete botData["botId"];
+
+        botData["active"] = active;
+
+        // Save initial bot configuration
+        const configObj = await shareData.DCABot.initBot({
+          create: true,
+          config: botData,
+        });
+        console.log("configObj", configObj);
+
+        botIdMain = configObj["botId"];
+
+        if (active && startCondition == "asap") {
+          let pairCount = 0;
+          let notify = true;
+
+          let pairMax = configObj.pairMax;
+
+          if (pairMax == undefined || pairMax == null || pairMax == "") {
+            pairMax = 0;
+          }
+
+          // Start bot
+          for (let i = 0; i < pairs.length; i++) {
+            if (pairMax == 0 || pairCount < pairMax) {
+              let pair = pairs[i];
+
+              let config = JSON.parse(JSON.stringify(configObj));
+              config["pair"] = pair;
+
+              if (i > 0) {
+                notify = false;
+              }
+
+              pairCount++;
+
+              shareData.DCABot.startDelay({
+                config: config,
+                delay: i + 1,
+                notify: notify,
+              });
+            }
+          }
+        }
+      } else {
+        const botId = botData.botId;
+        let botName = botData.botName;
+
+        botIdMain = botId;
+
+        // If bot name was not passed then use original
+        if (
+          botNamePassed == undefined ||
+          botNamePassed == null ||
+          botNamePassed == ""
+        ) {
+          botName = botNameMain;
+        }
+
+        botData["botName"] = botName;
+
+        if (botOrig && botOrig.length > 0) {
+          // Update config data
+          const configData = await shareData.DCABot.removeConfigData(botData);
+          console.log("configData",configData);
+          let dataObj = {
+            botName: botName,
+            active: active,
+            pair: pairs,
+            config: configData,
+          };
+
+          const data = await shareData.DCABot.updateBot(botId, dataObj);
+
+          if (!data.success) {
+            success = false;
+          }
+
+          const bot = await shareData.DCABot.getBots({ botId: botId });
+
+          if (active != botOrig[0]["active"]) {
+            const statusObj = await shareData.DCABot.sendBotStatus({
+              bot_id: botId,
+              bot_name: botName,
+              active: active,
+              success: success,
+            });
+          }
+
+          // Get total active pairs currently running on bot
+          let botDealsActive = await shareData.DCABot.getDeals({
+            botId: botId,
+            status: 0,
+          });
+
+          let pairCount = botDealsActive.length;
+
+          for (let i = 0; i < pairs.length; i++) {
+            let pair = pairs[i];
+
+            let dealsActive = await shareData.DCABot.getDeals({
+              botId: botId,
+              pair: pair,
+              status: 0,
+            });
+
+            let config = bot[0]["config"];
+
+            let pairMax = config.pairMax;
+
+            if (pairMax == undefined || pairMax == null || pairMax == "") {
+              pairMax = 0;
+            }
+
+            config["pair"] = pair;
+            config = await shareData.DCABot.applyConfigData({
+              bot_id: botId,
+              bot_name: botName,
+              config: config,
+            });
+
+            // Start bot if active, no deals are currently running and start condition is now asap
+            if (
+              bot &&
+              bot.length > 0 &&
+              bot[0]["active"] &&
+              dealsActive.length == 0 &&
+              (pairMax == 0 || pairCount < pairMax) &&
+              startCondition == "asap"
+            ) {
+              pairCount++;
+
+              shareData.DCABot.startDelay({
+                config: config,
+                delay: i + 1,
+                notify: false,
+              });
+            }
+          }
+        } else {
+          // Invalid bot id
+          success = false;
+
+          orders.data.orders = "";
+          orders.data.content = "Invalid Bot ID";
+        }
+      }
+
+      if (success) {
+        // Set bot id
+        orders.data.botId = botIdMain;
+      }
+    } else {
+      // Remove bot id if only getting orders
+      orders.data.botId = "";
+    }
+  }
+
+  res.send({
+    date: new Date(),
+    success: success,
+    step: createStep,
+    data: orders.data,
+  });
 }
-
 
 async function apiEnableDisableBot(req, res) {
+  let msg;
+  let active;
+  let success = true;
 
-	let msg;
-	let active;
-	let success = true;
+  const body = req.body;
 
-	const body = req.body;
+  if (req.path.indexOf("enable") > -1) {
+    active = true;
+  } else {
+    active = false;
+  }
 
-	if (req.path.indexOf('enable') > -1) {
+  const botId = req.params.botId;
 
-		active = true;
-	}
-	else {
-	
-		active = false;
-	}
+  const bots = await shareData.DCABot.getBots({ botId: botId });
 
-	const botId = req.params.botId;
+  const data = await shareData.DCABot.updateBot(botId, { active: active });
 
-	const bots = await shareData.DCABot.getBots({ 'botId': botId });
+  if (!data.success) {
+    success = false;
+  }
 
-	const data = await shareData.DCABot.updateBot(botId, { 'active': active });
+  const bot = bots[0];
 
-	if (!data.success) {
+  if (bot) {
+    const botName = bot.botName;
 
-		success = false;
-	}
+    const statusObj = await shareData.DCABot.sendBotStatus({
+      bot_id: botId,
+      bot_name: botName,
+      active: active,
+      success: success,
+    });
 
-	const bot = bots[0];
+    msg = "Bot is now " + statusObj.status;
 
-	if (bot) {
+    if (active) {
+      let pairs = bot["config"]["pair"];
 
-		const botName = bot.botName;
+      // Get total active pairs currently running on bot
+      let botDealsActive = await shareData.DCABot.getDeals({
+        botId: botId,
+        status: 0,
+      });
+      let pairCount = botDealsActive.length;
+      for (let i = 0; i < pairs.length; i++) {
+        let pair = pairs[i];
+        let dealsActive = await shareData.DCABot.getDeals({
+          botId: botId,
+          pair: pair,
+          status: 0,
+        });
 
-		const statusObj = await shareData.DCABot.sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
+        let config = bot["config"];
 
-		msg = 'Bot is now ' + statusObj.status;
+        let pairMax = config.pairMax;
 
-		if (active) {
+        if (pairMax == undefined || pairMax == null || pairMax == "") {
+          pairMax = 0;
+        }
 
-			let pairs = bot['config']['pair'];
+        // Start bot if active and no deals currently running
+        if (dealsActive.length == 0) {
+          let startCondition;
 
-			// Get total active pairs currently running on bot
-			let botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
+          config["pair"] = pair;
+          config = await shareData.DCABot.applyConfigData({
+            bot_id: botId,
+            bot_name: botName,
+            config: config,
+          });
 
-			let pairCount = botDealsActive.length;
+          if (
+            config["startConditions"] != undefined &&
+            config["startConditions"] != null &&
+            config["startConditions"] != ""
+          ) {
+            startCondition = config["startConditions"][0].toLowerCase();
+          }
 
-			for (let i = 0; i < pairs.length; i++) {
+          // Only start bot if first condition is asap
+          if (
+            startCondition == undefined ||
+            startCondition == null ||
+            startCondition == "" ||
+            startCondition == "asap"
+          ) {
+            if (pairMax == 0 || pairCount < pairMax) {
+              pairCount++;
 
-				let pair = pairs[i];
-				let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+              shareData.DCABot.startDelay({
+                config: config,
+                delay: i + 1,
+                notify: false,
+              });
+            }
+          }
+        }
+      }
+    } else {
+      const botDealsActive = await shareData.DCABot.getDeals({
+        botId: botId,
+        status: 0,
+      });
 
-				let config = bot['config'];
+      if (botDealsActive && botDealsActive.length > 0) {
+        for (let i = 0; i < botDealsActive.length; i++) {
+          let startCondition;
 
-				let pairMax = config.pairMax;
+          const deal = botDealsActive[i];
+          const dealId = deal.dealId;
 
-				if (pairMax == undefined || pairMax == null || pairMax == '') {
+          let config = deal.config;
 
-					pairMax = 0;
-				}
+          if (
+            config["startConditions"] != undefined &&
+            config["startConditions"] != null &&
+            config["startConditions"] != ""
+          ) {
+            startCondition = config["startConditions"][0].toLowerCase();
+          }
 
-				// Start bot if active and no deals currently running
-				if (dealsActive.length == 0) {
+          if (startCondition != "asap") {
+            // Set last deal flag if not asap
+            config.dealLast = true;
 
-					let startCondition;
+            const data = await shareData.DCABot.updateDeal(botId, dealId, {
+              config: config,
+            });
+          }
+        }
+      }
+    }
+  } else {
+    msg = "Invalid Bot ID";
+  }
 
-					config['pair'] = pair;
-					config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
-
-					if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
-
-						startCondition = config['startConditions'][0].toLowerCase();
-					}
-
-					// Only start bot if first condition is asap
-					if (startCondition == undefined || startCondition == null || startCondition == '' || startCondition == 'asap') {
-
-						if (pairMax == 0 || pairCount < pairMax) {
-
-							pairCount++;
-
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
-						}
-					}
-				}
-			}
-		}
-		else {
-
-			const botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
-
-			if (botDealsActive && botDealsActive.length > 0) {
-
-				for (let i = 0; i < botDealsActive.length; i++) {
-
-					let startCondition;
-
-					const deal = botDealsActive[i];
-					const dealId = deal.dealId;
-
-					let config = deal.config;
-
-					if (config['startConditions'] != undefined && config['startConditions'] != null && config['startConditions'] != '') {
-
-						startCondition = config['startConditions'][0].toLowerCase();
-					}
-
-					if (startCondition != 'asap') {
-
-						// Set last deal flag if not asap	
-						config.dealLast = true;
-
-						const data = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config });
-					}
-				}
-			}
-		}
-	}
-	else {
-
-		msg = 'Invalid Bot ID';
-	}
-
-	res.send( { 'date': new Date(), 'success': success, 'data': msg } );
+  res.send({ date: new Date(), success: success, data: msg });
 }
-
 
 async function apiStartDeal(req, res) {
+  const taskObj = { req: req, res: res, name: "start_deal" };
 
-	const taskObj = { 'req': req, 'res': res, 'name': 'start_deal' };
-
-	queueStartDeal.add(taskObj, apiStartDealProcess);
+  queueStartDeal.add(taskObj, apiStartDealProcess);
 }
-
 
 async function apiStartDealProcess(req, res, taskObj) {
+  let msg;
+  let success = true;
+  let startDelay = 1;
 
-	let msg;
-	let success = true;
-	let startDelay = 1;
+  const body = req.body;
 
-	const body = req.body;
+  let pair = body.pair;
+  let signalId = body.signalId;
 
-	let pair = body.pair;
-	let signalId = body.signalId;
+  const botId = req.params.botId;
 
-	const botId = req.params.botId;
+  const bots = await shareData.DCABot.getBots({ botId: botId });
 
-	const bots = await shareData.DCABot.getBots({ 'botId': botId });
+  const bot = bots[0];
 
-	const bot = bots[0];
+  if (bot) {
+    let pairFound = false;
+    let pairPassed = false;
 
-	if (bot) {
+    const active = bot.active;
+    const pairs = bot.config.pair;
+    const botName = bot.botName;
 
-		let pairFound = false;
-		let pairPassed = false;
+    if (!active) {
+      success = false;
+      msg = "Bot is disabled";
+    } else {
+      if (pair != undefined && pair != null && pair != "") {
+        pairPassed = true;
 
-		const active = bot.active;
-		const pairs = bot.config.pair;
-		const botName = bot.botName;
+        for (let i = 0; i < pairs.length; i++) {
+          if (pair.toUpperCase() == pairs[i].toUpperCase()) {
+            pairFound = true;
+            break;
+          }
+        }
+      }
 
-		if (!active) {
+      if (!pairPassed && pairs.length == 1) {
+        pairFound = true;
+        pair = bot.config.pair[0];
+      }
 
-			success = false;
-			msg = 'Bot is disabled';
-		}
-		else {
+      if (!pairFound) {
+        success = false;
+        msg = "Pair is not in bot configuration";
+      }
 
-			if (pair != undefined && pair != null && pair != '') {
+      if (success) {
+        let dealsActive = await shareData.DCABot.getDeals({
+          botId: botId,
+          pair: pair,
+          status: 0,
+        });
 
-				pairPassed = true;
+        // Get total active pairs currently running on bot
+        let botDealsActive = await shareData.DCABot.getDeals({
+          botId: botId,
+          status: 0,
+        });
 
-				for (let i = 0; i < pairs.length; i++) {
+        let pairCount = botDealsActive.length;
 
-					if (pair.toUpperCase() == pairs[i].toUpperCase()) {
+        let config = bot["config"];
 
-						pairFound = true;
-						break;
-					}				
-				}
-			}
+        let pairMax = config.pairMax;
+        let pairDealsMax = config.pairDealsMax;
 
-			if (!pairPassed && pairs.length == 1) {
+        if (pairMax == undefined || pairMax == null || pairMax == "") {
+          pairMax = 0;
+        }
 
-				pairFound = true;
-				pair = bot.config.pair[0];
-			}
+        if (
+          pairDealsMax == undefined ||
+          pairDealsMax == null ||
+          pairDealsMax == ""
+        ) {
+          pairDealsMax = 0;
+        }
 
-			if (!pairFound) {
+        // Start bot if active and no deals currently running or pair deals is less than max set
+        if (dealsActive.length == 0 || dealsActive.length < pairDealsMax) {
+          if (pairMax == 0 || pairCount < pairMax) {
+            config["pair"] = pair;
+            config = await shareData.DCABot.applyConfigData({
+              signal_id: signalId,
+              bot_id: botId,
+              bot_name: botName,
+              config: config,
+            });
 
-				success = false;
-				msg = 'Pair is not in bot configuration';
-			}
+            shareData.DCABot.startDelay({
+              config: config,
+              delay: startDelay,
+              notify: false,
+            });
+          } else {
+            success = false;
+            msg = "Bot max " + pairMax + " pairs reached";
+          }
+        } else {
+          let displayMax = pairDealsMax;
 
-			if (success) {
+          if (displayMax < 2) {
+            displayMax = 1;
+          }
 
-				let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+          success = false;
+          msg = pair + " pair max " + displayMax + " deals already running";
+        }
+      }
+    }
+  } else {
+    success = false;
+    msg = "Invalid Bot ID";
+  }
 
-				// Get total active pairs currently running on bot
-				let botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
+  if (success) {
+    // Set short delay for any potential slow deal starts
+    await shareData.Common.delay(startDelay * 2 * 1000);
+  }
 
-				let pairCount = botDealsActive.length;
+  const resObj = { date: new Date(), success: success, data: msg };
 
-				let config = bot['config'];
-
-				let pairMax = config.pairMax;
-				let pairDealsMax = config.pairDealsMax;
-
-				if (pairMax == undefined || pairMax == null || pairMax == '') {
-
-					pairMax = 0;
-				}
-
-				if (pairDealsMax == undefined || pairDealsMax == null || pairDealsMax == '') {
-
-					pairDealsMax = 0;
-				}
-
-				// Start bot if active and no deals currently running or pair deals is less than max set
-				if (dealsActive.length == 0 || dealsActive.length < pairDealsMax) {
-
-					if (pairMax == 0 || pairCount < pairMax) {
-
-						config['pair'] = pair;
-						config = await shareData.DCABot.applyConfigData({ 'signal_id': signalId, 'bot_id': botId, 'bot_name': botName, 'config': config });
-
-						shareData.DCABot.startDelay({ 'config': config, 'delay': startDelay, 'notify': false });
-					}
-					else {
-
-						success = false;
-						msg = 'Bot max ' + pairMax + ' pairs reached';
-					}
-				}
-				else {
-
-					let displayMax = pairDealsMax;
-
-					if (displayMax < 2) {
-
-						displayMax = 1;
-					}
-
-					success = false;
-					msg = pair + ' pair max ' + displayMax + ' deals already running';
-				}
-			}
-		}
-	}
-	else {
-
-		success = false;
-		msg = 'Invalid Bot ID';
-	}
-
-	if (success) {
-
-		// Set short delay for any potential slow deal starts
-		await shareData.Common.delay((startDelay * 2) * 1000);
-	}
-
-	const resObj = { 'date': new Date(), 'success': success, 'data': msg };
-
-	queueStartDeal.callBack(res, resObj, taskObj);
+  queueStartDeal.callBack(res, resObj, taskObj);
 }
-
 
 async function removeDbKeys(bot) {
+  for (let key in bot) {
+    if (key.substr(0, 1) == "$" || key.substr(0, 1) == "_") {
+      delete bot[key];
+    }
+  }
 
-	for (let key in bot) {
-
-		if (key.substr(0, 1) == '$' || key.substr(0, 1) == '_') {
-
-			delete bot[key];
-		}
-	}
-	
-	return bot;
+  return bot;
 }
-
 
 async function calculateOrders(body) {
+  let pair;
+  let active;
 
-	let pair;
-	let active;
+  let pairs = body.pair;
+  const botConfig = await shareData.Common.getConfig("bot.json");
 
-	let pairs = body.pair;
-	const botConfig = await shareData.Common.getConfig('bot.json');
+  let botData = botConfig.data;
 
-	let botData = botConfig.data;
+  botData.startConditions = [];
 
-	botData.startConditions = [];
+  if (typeof pairs !== "string") {
+    pair = pairs[0];
+  } else {
+    pair = pairs;
 
-	if (typeof pairs !== 'string') {
+    pairs = [];
+    pairs.push(pair);
+  }
 
-		pair = pairs[0];
-	}
-	else {
+  if (
+    body.active == undefined ||
+    body.active == null ||
+    body.active == "" ||
+    body.active == "false" ||
+    !body.active
+  ) {
+    active = false;
+  } else {
+    active = true;
+  }
 
-		pair = pairs;
+  if (typeof body.startCondition == "string") {
+    botData.startConditions.push(body.startCondition);
+  } else {
+    botData.startConditions = body.startCondition;
+  }
 
-		pairs = [];
-		pairs.push(pair);
-	}
+  // Remove empty conditions
+  botData.startConditions = botData.startConditions.filter((a) => a);
 
-	if (body.active == undefined || body.active == null || body.active == '' || body.active == 'false' || !body.active) {
+  botData.pair = pair;
+  botData.dealMax = body.dealMax;
+  botData.dealCoolDown = body.dealCoolDown;
+  botData.pairMax = body.pairMax;
+  botData.pairDealsMax = body.pairDealsMax;
+  botData.volumeMin = body.volumeMin;
+  botData.firstOrderPrice = body.firstOrderPrice;
+  botData.firstOrderAmount = body.firstOrderAmount;
+  botData.dcaOrderAmount = body.dcaOrderAmount;
+  botData.dcaMaxOrder = body.dcaMaxOrder;
+  // botData.firstOrderType=body.firstOrderType;
+  botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
+  botData.dcaOrderStartDistance = body.dcaOrderStepPercent;
+  botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
+  botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
+  botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 
-		active = false;
-	}
-	else {
+  if (
+    botData.dealMax == undefined ||
+    botData.dealMax == null ||
+    botData.dealMax == ""
+  ) {
+    botData.dealMax = 0;
+  }
 
-		active = true;
-	}
+  if (
+    botData.dealCoolDown == undefined ||
+    botData.dealCoolDown == null ||
+    botData.dealCoolDown == ""
+  ) {
+    botData.dealCoolDown = 0;
+  }
 
-	if (typeof body.startCondition == 'string') {
+  if (
+    botData.pairMax == undefined ||
+    botData.pairMax == null ||
+    botData.pairMax == ""
+  ) {
+    botData.pairMax = 0;
+  }
 
-		botData.startConditions.push(body.startCondition);
-	}
-	else {
+  if (
+    botData.pairDealsMax == undefined ||
+    botData.pairDealsMax == null ||
+    botData.pairDealsMax == ""
+  ) {
+    botData.pairDealsMax = 0;
+  }
 
-		botData.startConditions = body.startCondition;
-	}
+  // Check for bot id passed in from body for update
+  if (body.botId != undefined && body.botId != null && body.botId != "") {
+    botData.botId = body.botId;
+  }
 
-	// Remove empty conditions
-	botData.startConditions = botData.startConditions.filter((a) => a);
+  // Set bot name
+  let botName = body.botName;
 
-	botData.pair = pair;
-	botData.dealMax = body.dealMax;
-	botData.dealCoolDown = body.dealCoolDown;
-	botData.pairMax = body.pairMax;
-	botData.pairDealsMax = body.pairDealsMax;
-	botData.volumeMin = body.volumeMin;
-	botData.firstOrderPrice = body.firstOrderPrice;
-	botData.firstOrderAmount = body.firstOrderAmount;
-	botData.dcaOrderAmount = body.dcaOrderAmount;
-	botData.dcaMaxOrder = body.dcaMaxOrder;
-	botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
-	botData.dcaOrderStartDistance = body.dcaOrderStepPercent;
-	botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
-	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
-	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
+  if (botName == undefined || botName == null || botName == "") {
+    botName = "DCA Bot " + botData.pair.toUpperCase();
+  }
 
-	if (botData.dealMax == undefined || botData.dealMax == null || botData.dealMax == '') {
+  botData.botName = botName;
+  botData.firstOrderType=body.orderType
 
-		botData.dealMax = 0;
-	}
+  console.log(botData);
+  // Only get orders, don't start bot
+  let orders = await shareData.DCABot.start({ create: false, config: botData });
 
-	if (botData.dealCoolDown == undefined || botData.dealCoolDown == null || botData.dealCoolDown == '') {
-
-		botData.dealCoolDown = 0;
-	}
-
-	if (botData.pairMax == undefined || botData.pairMax == null || botData.pairMax == '') {
-
-		botData.pairMax = 0;
-	}
-
-	if (botData.pairDealsMax == undefined || botData.pairDealsMax == null || botData.pairDealsMax == '') {
-
-		botData.pairDealsMax = 0;
-	}
-
-	// Check for bot id passed in from body for update
-	if (body.botId != undefined && body.botId != null && body.botId != '') {
-
-		botData.botId = body.botId;
-	}
-
-	// Set bot name
-	let botName = body.botName;
-
-	if (botName == undefined || botName == null || botName == '') {
-
-		botName = 'DCA Bot ' + botData.pair.toUpperCase();
-	}
-
-	botData.botName = botName;
-
-	// Only get orders, don't start bot
-	let orders = await shareData.DCABot.start({ 'create': false, 'config': botData });
-
-	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
+  return { active: active, pairs: pairs, orders: orders, botData: botData };
 }
-
 
 async function initApp() {
-
-	queueStartDeal = await shareData.Queue.create(1);
+  queueStartDeal = await shareData.Queue.create(1);
 }
-
 
 module.exports = {
+  apiStartDeal,
+  apiGetMarkets,
+  apiGetBots,
+  apiGetActiveDeals,
+  apiGetDealsHistory,
+  apiShowDeal,
+  apiCancelDeal,
+  apiUpdateDeal,
+  apiAddFundsDeal,
+  apiPanicSellDeal,
+  apiCreateUpdateBot,
+  apiEnableDisableBot,
+  viewBots,
+  viewCreateUpdateBot,
+  viewActiveDeals,
+  viewHistoryDeals,
 
-	apiStartDeal,
-	apiGetMarkets,
-	apiGetBots,
-	apiGetActiveDeals,
-	apiGetDealsHistory,
-	apiShowDeal,
-	apiCancelDeal,
-	apiUpdateDeal,
-	apiAddFundsDeal,
-	apiPanicSellDeal,
-	apiCreateUpdateBot,
-	apiEnableDisableBot,
-	viewBots,
-	viewCreateUpdateBot,
-	viewActiveDeals,
-	viewHistoryDeals,
+  init: function (obj) {
+    shareData = obj;
 
-	init: function(obj) {
-
-		shareData = obj;
-
-		initApp();
-    }
-}
+    initApp();
+  },
+};

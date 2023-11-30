@@ -117,7 +117,7 @@ function initRoutes(router) {
 	router.get('/bots/create', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
-
+	
 		if (req.session.loggedIn) {
 
 			shareData.DCABotManager.viewCreateUpdateBot(req, res);
