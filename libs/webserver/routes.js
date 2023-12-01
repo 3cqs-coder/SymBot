@@ -320,7 +320,7 @@ function initRoutes(router) {
 			shareData.DCABotManager.apiCreateUpdateBot(req, res);
 		}
 		else {
-
+			
 			res.redirect('/login');
 		}
 	});

@@ -29,58 +29,9 @@ let timerTracker = {};
 let shareData;
 
 let usdtBal;
-async function test () {
-  // exchange = new ccxt.pro[config.exchange]({
-  //
-  //   'enableRateLimit': true,
-  //   'apiKey': config.apiKey,
-  //   'secret': config.apiSecret,
-  //   'passphrase': config.apiPassphrase,
-  //   'password': config.apiPassword,
-  //   'options': options
-  // });
 
-  //console.log("in test");
-
-  let exe;
-
-  // binance = new ccxt.pro["binance"]({
-  //   'enableRateLimit' : true,
-  //   apiKey : '8oLoUNjrsNJruU2DFUGE0IcGZwePFLg68VgQuK7q0vWEleye0wTrgda00UzNEfzB',
-  //   secret : 'sGSTshe4HVm2ahbby1gIKMEwTkDJrW9ydVuUeetXIKDOp6RWIGBLCmDWj2HNjFWh'
-  // })
-
-
-  exe = new ccxt.pro["binance"]({
-    // 'enableRateLimit' : true,
-    // urls: {
-    //   api: 'https://testnet.binance.vision/api',
-    // },
-    urls: {
-      // api: 'https://api-public.sandbox.pro.coinbase.com',  // Coinbase Pro testnet URL
-    },
-    // apiKey : '9w4p7tAb6yek3Ml1wQUOGIDCE4QHQkCOd96AKLnFqWIxATTuJsctgg45yv5vpCu3',
-    // secret : 'g32WNKZcJXHctdf0d76eep0XhIWgoVSxlJRPjJvdFiEu95G4h4ZqL5vRm7RMVe6s'
-
-    apiKey : '1Oc2ZSZbo3xQ024LarevtgUuMrDU4ggExcIakc5BF4SJlzpCYYa56dAExKhyy0Ge',
-    secret : '1bAEL6RhZZrPGm1cMPWNZ5qGUuSef1ry6x0u5DLg6dXACq4dCDHqTHW1BUsyTIbx'
-  })
-
-  exe.setSandboxMode(true); //it will activate Test mode
-
-  await exe.loadMarkets();
-  let bala = await exe.fetchBalance();
-  usdtBal = bala.USDT
-
-  // //console.log("balance USDT", bala);
-
-  // ("balance is", await binance.fetchBalance());
-}
-
-test();
 
 async function start(dataObj) {
-  //console.log("in start1s");
 
   let startBot = dataObj["create"];
 
@@ -281,8 +232,6 @@ async function start(dataObj) {
       if (config.firstOrderType.toUpperCase() == "MARKET") {
         //first order market
 
-        //console.log("in the MARKET log");
-
         if (shareData.appData.verboseLog) {
           Common.logger(
             colors.bgGreen("Calculating orders for " + pair + "...")
@@ -317,8 +266,6 @@ async function start(dataObj) {
           );
 
           targetPrice = await filterPrice(exchange, pair, targetPrice);
-
-          //console.log("Here is first price as", targetPrice);
 
           orders.push({
             orderNo: 1,
@@ -580,9 +527,6 @@ async function start(dataObj) {
       else {
         //first order limit
 
-        //console.log(" in else body here");
-
-        // //console.log("exchange", exchange);
         if (shareData.appData.verboseLog) {
           Common.logger(colors.bgGreen("Calculating orders..."));
         }
@@ -592,8 +536,6 @@ async function start(dataObj) {
         //askPrice = config.firstOrderLimitPrice;
 
         let firstOrderSize = config.firstOrderAmount / askPrice;
-
-        //console.log("firstOrderSize", firstOrderSize);
 
         firstOrderSize = await filterAmount(exchange, pair, firstOrderSize);
 
@@ -1150,28 +1092,19 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 			if (deal.isStart == 0) {
 
-                //console.log("in deal start");
 
                 const baseOrder = deal.orders[0];
 				targetPrice = baseOrder.target;
 
               ("basOrder type", baseOrder.type);
-              //console.log("we got here", baseOrder.type);
 
               if (baseOrder.type == 'MARKET') {
 					//Send market order to exchange
 
-                    //console.log("in buy MARKET");
-
 					if (!config.sandBox) {
 
-                        // //console.log("sandbox is false here");
-
                         const priceFiltered = await filterPrice(exchange, pair, price);
-                        //console.log("priceFiltered", priceFiltered);
-
 						const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
-                        // //console.log(buy)
 						if (!buy.success) { 
 
 							let finished = false;
@@ -1229,7 +1162,6 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				else {
 					//send limit order
 
-                //console.log("try to limitorder")
 					if (price <= baseOrder.price) {
 
 						if (!config.sandBox) {
@@ -1239,11 +1171,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 							const buy = await buyLimitOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
 
 
-                            //console.log("buy 1st amount", buy);
-
                             if (!buy.success) {
 
-                                //console.log("!sucess");
 								let finished = false;
 
 								const statusObj = await orderError({ 'bot_id': config.botId, 'bot_name': config.botName, 'deal_id': dealId });
@@ -1340,15 +1269,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				for (let i = 0; i < orders.length; i++) {
 
 					const order = orders[i];
-					// //console.log(order);
+				
 					// Check if max safety orders used, otherwise sell order condition will not be checked
 					if (order.filled == 0 || maxSafetyOrdersUsed) {
-					//if (order.filled == 0) {
-						// if (order.type == LIMIT || order.type=='limit') {
-						// 	//console.log(order);
-						// }
-						
-						//console.log("order", order);
 						
 						if (price <= parseFloat(order.price) && order.filled == 0) {
 							//Buy DCA
@@ -1365,7 +1288,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								}
 							}else{
 								if (!config.sandBox) {
-
+								
 									const priceFiltered = await filterPrice(exchange, pair, order.price);
 	
 									const buy = await buyLimitOrder(exchange, dealId, pair, order.qty, priceFiltered);
@@ -1617,11 +1540,9 @@ const getSymbolsAll = async (exchange) => {
 	let symbols = [];
 	let success = true;
 	try {
-        //console.log("enter");
 		const markets = await exchange.loadMarkets();
-        // //console.log("markets",markets)
 		symbols = exchange.symbols;
-        // //console.log(symbols)
+   
 	}
 	catch(e) {
 
@@ -1667,7 +1588,6 @@ const getSymbol = async (exchange, pair) => {
 		try {
 
 			const symbol = await exchange.fetchTicker(pair);
-            // //console.log("symbol",symbol)
 			symbolData = symbol;
 
 			finished = true;
@@ -1854,89 +1774,20 @@ const getBalance = async (exchange, symbol) => {
 };
 
 
-let watchDogRunning = false;
-
-async function watchDog(orderId, price, pair, callback) {
-  try {
-    //console.log(`watchDog timer ${orderId} and ${price}`);
-    const delay = 1000; // 1 second
-
-    while (true) {
-      // Fetch the order information
-      const order = await exe.fetchOrder(orderId, pair);
-
-      //console.log("current limitPriceLess value", limitPriceLess);
-      // Log the order status
-
-      //console.log(`Order Status for Order ID ${orderId} & for the pair ${pair} at ${price}: ${order.status}`);
-
-      // Check if the order is closed or filled
-      if (order.status === 'closed' || order.status === 'filled') {
-        //console.log('Order is closed or filled.');
-        // //console.log("order", order);
-        callback(order); // Execute the callback with order information
-        break; // Exit the loop if the order is closed or filled
-      }
-
-      // Wait for the specified delay before checking again
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  } catch (error) {
-    console.error('Error tracking order status:', error.message);
-  } finally {
-    // Set the flag to false when the watchDog completes
-    watchDogRunning = false;
-  }
-}
-
-//new BuyOrder for limit order
-const buyOrder1 = async (exchange, dealId, pair, qty, price) => {
-  //console.log("in buy order here");
-
-  // Check if the watchDog is already running
-  if (watchDogRunning) {
-    //console.log('WatchDog is already running. Skipping buyOrder execution.');
-    return { success: false, message: 'WatchDog is already running.' };
-  }
-
-  try {
-    // Set the watchDog flag to true
-    watchDogRunning = true;
-
-    // Your buy order logic here
-    const buy = await exchange.createOrder(pair, 'limit', 'buy', qty, price);
-
-    if (buy.success) {
-      // Start the watchDog with orderId, price, pair, and a callback function
-      watchDog(buy.orderId, price, pair, (order) => {
-        // Callback function to handle the order information when the watchDog completes
-        //console.log('WatchDog completed. Order Information:', order);
-        // Additional logic based on the order information can be implemented here
-      });
-    }
-
-    return buy;
-  } catch (error) {
-    console.error('Error in buyOrder:', error.message);
-    return { success: false, message: 'Error in buyOrder.' };
-  }
-};
-
+// Fetch order status 
 async function openWatchDog(orderId, price, pair, exchange) {
   try {
-    //console.log("in watchDog timer");
-    const delay = 100; // 5 seconds
 
+    const delay = 100; // 5 seconds
     while (true) {
       let inc = 0;
 
       const order = await exchange.fetchOrder(orderId, pair);
-      //console.log(`Order Status ${inc} for Order ID ${orderId} & for the pair ${pair} at${price}: ${order.status}`);
+      // console.log(`Order Status ${inc} for Order ID ${orderId} & for the pair ${pair} at${price}: ${order.status}`);
 
       // Check if the order is closed or filled
       if (order.status === 'closed' || order.status === 'filled') {
-        //console.log('Order is closed or filled.');
-        //console.log("order", order);
+
         return { success : true, order: order };
       }
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -1945,7 +1796,7 @@ async function openWatchDog(orderId, price, pair, exchange) {
     console.error('Error tracking order status:', error.message);
   }
 }
-
+// BuyOrder function for market orders
 const buyOrder = async (exchange, dealId, pair, qty, price) => {
 	let msg;
 	let order;
@@ -1980,23 +1831,8 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 	return dataObj;
   };
 
+// buyLimitOrder function for market orders
 const buyLimitOrder = async (exchange, dealId, pair, qty, price) => {
-
-  //console.log("in buy order here");
-
-  let ticker = await exchange.fetchTicker(pair);
-  let lastPrice = ticker.last;
-
-  // //console.log("exe", exchange);
-  //console.log(`Current Price of ${pair}: ${lastPrice}`);
-
-  // //console.log("Current price of ETH/USDT is:", lastPrice);
-
-  //console.log("exchange is:", exchange.name);
-  //console.log("dealId", dealId);
-  //console.log("dealId", pair);
-  //console.log("dealId", qty);
-  //console.log("price", price);
 
   let msg;
   let order;
@@ -2005,33 +1841,21 @@ const buyLimitOrder = async (exchange, dealId, pair, qty, price) => {
 
   try {
 
-    // order = await exchange.createOrder(pair, 'market', 'buy', qty, price);
     order = await exchange.createOrder(pair, 'limit', 'buy', qty, price);
-    //console.log("after the order of", order);
-    //console.log(order.status);
-
+	
     if (order.status === 'open' || order.status === "OPEN") {
-      //console.log("in open order here");
-      //console.log("order id as", order.id, order.symbol)
+
       let result = await openWatchDog(order.id, order.price, order.symbol,exchange);
 
-      //console.log("result", result.success);
-      //console.log("order success", result.order);
-
-      // order = result.order;
-
       if (result.success) {
-        //console.log("if result status", result);
 
         success = true;
         msg = 'BUY SUCCESS';
-        //console.log("order pending", result.order)
 
         const dataObj = {
           'date': new Date(),
           'success': success,
           'data': result.order,
-          // 'data': order,
           'error': isErr,
           'message': msg,
           'deal_id': dealId,
@@ -2042,7 +1866,6 @@ const buyLimitOrder = async (exchange, dealId, pair, qty, price) => {
 
         Common.logger(dataObj);
 
-        //console.log("Passing the data after buy/fail", dataObj);
         return dataObj;
       }
 
@@ -2054,27 +1877,9 @@ const buyLimitOrder = async (exchange, dealId, pair, qty, price) => {
 
     msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
   }
-
-  // const dataObj = {
-  //   'date': new Date(),
-  //   'success': success,
-  //   'data': order,
-  //   'error': isErr,
-  //   'message': msg,
-  //   'deal_id': dealId,
-  //   'pair': pair,
-  //   'quantity': qty,
-  //   'price': price
-  // };
-  //
-  // Common.logger(dataObj);
-  //
-  // //console.log("Passing the data after buy/fail", dataObj);
-  // return dataObj;
 };
 
 const sellOrder = async (exchange, dealId, pair, qty, price) => {
-    //console.log("in sellOrder");
 	let msg;
 	let order;
 	let isErr;
@@ -2181,7 +1986,6 @@ const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj,
 
 
 async function connectExchange(configObj) {
-
 	const config = JSON.parse(JSON.stringify(configObj));
 
 	let exchange;
@@ -2199,56 +2003,30 @@ async function connectExchange(configObj) {
 			exchange = shareData.appData.exchanges[config.exchange];
 		}
 		else {
+	
+		  if(config.exchange=="binance" || config.exchange=="BINANCE"){
+			   exchange = new ccxt.pro[config.exchange]({
+				'enableRateLimit': true,
+				apiKey: config.apiKey,
+				secret: config.apiSecret,
+				'passphrase': config.apiPassphrase,
+				'password': config.apiPassword,
+				'options': options
+			  })
+			  exchange.setSandboxMode(true); //it will activate Test modes
+			  await exchange.loadMarkets();
 
-          // //console.log("exchange", config.exchange)
-          //console.log("in else")
-
-          // //console.log("ex ", config.exchanges)
-
-          // exchange = new ccxt.pro["binance"]({
-			// 	'enableRateLimit': true,
-			// 	'apiKey': config.apiKey,
-			// 	'secret': config.apiSecret,
-			// 	'passphrase': config.apiPassphrase,
-			// 	'password': config.apiPassword,
-			// 	'options': options
-			// });
-
-            // //console.log("exchange",exchange)
-            // ("exchange", exchange);
-
-          exchange = new ccxt.pro["binance"]({
-            // 'enableRateLimit' : true,
-            // urls: {
-            //   api: 'https://testnet.binance.vision/api',
-            // },
-            urls: {
-              // api: 'https://api-public.sandbox.pro.coinbase.com',  // Coinbase Pro testnet URL
-            },
-            // apiKey : "Z4Ygk7NqQTqqCMjpUot6VZWkh05pE9CNiT1NVg8kTdWafrgxpzaiWfwS2m3hJxCt",
-            // secret : "SLgxpBjoJAfG7QO6fBauXdL5z9eAIkzYc5KX17lCpODHwlisEs4uOVRQ8v9hG9jm"
-
-            // apiKey: 'EBSJ2bfWcjbrdbexFKIHbd3j0dzv3HjuhlghILyf6xpKBm00YKIbzXV01zUuDnpj',
-            // secret: '1CKnG1IWn59IDC7rU1jKh7jMpIl6wbz10u1pDGOydxYTIG1k2JOYABBi6y1XpC8n'
-
-            apiKey: "IcWnqRlQJkj3gLsllQIpSkNdptHwAs1JewOZoyA7gozfFOox8Qm6eWQMftBTEfxK",
-            secret: "e7LtFc7ixESTdQDxnbCoGYju6hd6SCB3UomzYKdhkaw5PZFqgREwW4aCQG5f3I2g"
-          })
-
-          exchange.setSandboxMode(true); //it will activate Test modes
-
-          await exchange.loadMarkets();
-          let bala = await exchange.fetchBalance();
-          usdtBal = bala.USDT
-          let ETH1 = bala.ETH;
-
-          //console.log("USDT log", usdtBal);
-          //console.log("ETH log", ETH1);
-
-          // if (exchange.binance) {
-          //   ("binance", exchange)
-          // }
-
+		  }
+		  else{
+			exchange = new ccxt.pro[config.exchange]({
+				'enableRateLimit': true,
+				'apiKey': config.apiKey,
+				'secret': config.apiSecret,
+				'passphrase': config.apiPassphrase,
+				'password': config.apiPassword,
+				'options': options
+			});
+		  }
           shareData.appData.exchanges[config.exchange] = exchange;
 		}
 	}
@@ -3351,7 +3129,6 @@ async function resumeDeal(dealObj) {
 	await createDealTracker({ 'deal_id': dealId, 'deal': deal });
 
 	Common.logger( colors.bgGreen.bold('Resuming Deal ID ' + dealId) );
-
 	start({ 'create': true, 'config': config });
 
 	await Common.delay(1000);
@@ -3567,7 +3344,7 @@ async function addFundsDeal(dealId, volume) {
 			}
 		}
 
-		//console.table(oldOrders);
+	
 
 		if (success) {
 

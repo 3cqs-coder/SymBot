@@ -346,7 +346,6 @@ async function apiShowDeal(req, res, dealId) {
     const sellData = dealDataDb["sellData"];
 
     const dealTracker = await shareData.DCABot.getDealTracker();
-    // console.log("dealTracker",dealTracker);
     if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
       priceLast = dealTracker[dealId]["info"]["price_last"];
     }
@@ -792,7 +791,6 @@ async function apiCreateUpdateBot(req, res) {
   }
 
   const body = req.body;
-  console.log("boday",body);
   const botNamePassed = body.botName;
   const createStep = body.createStep;
 
@@ -812,7 +810,6 @@ async function apiCreateUpdateBot(req, res) {
   }
 
   let data = await calculateOrders(body);
-  console.log("data",data);
   let active = data["active"];
   let pairs = data["pairs"];
   let orders = data["orders"];
@@ -846,7 +843,7 @@ async function apiCreateUpdateBot(req, res) {
           create: true,
           config: botData,
         });
-        console.log("configObj", configObj);
+
 
         botIdMain = configObj["botId"];
 
@@ -902,7 +899,6 @@ async function apiCreateUpdateBot(req, res) {
         if (botOrig && botOrig.length > 0) {
           // Update config data
           const configData = await shareData.DCABot.removeConfigData(botData);
-          console.log("configData",configData);
           let dataObj = {
             botName: botName,
             active: active,
@@ -1340,7 +1336,7 @@ async function calculateOrders(body) {
   botData.firstOrderAmount = body.firstOrderAmount;
   botData.dcaOrderAmount = body.dcaOrderAmount;
   botData.dcaMaxOrder = body.dcaMaxOrder;
-  // botData.firstOrderType=body.firstOrderType;
+  botData.firstOrderType = body.orderType;
   botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
   botData.dcaOrderStartDistance = body.dcaOrderStepPercent;
   botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
@@ -1392,9 +1388,7 @@ async function calculateOrders(body) {
   }
 
   botData.botName = botName;
-  botData.firstOrderType=body.orderType
 
-  console.log(botData);
   // Only get orders, don't start bot
   let orders = await shareData.DCABot.start({ create: false, config: botData });
 
