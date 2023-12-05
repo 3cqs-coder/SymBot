@@ -1,5 +1,5 @@
 ***This branch provides Docker Swarm Support for SymBot  
-Please see [README-Docker-Swarm.md](https://github.com/JackieTreeh0rn/SymBot/blob/docker-swarm/docs/README-Docker-Swarm.md) for details***<br/>  
+Please see [README-Docker-Swarm.md](/docs/README-Docker-Swarm.md) for details***<br/>  
 
 
 <br/>
