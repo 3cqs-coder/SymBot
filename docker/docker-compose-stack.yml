@@ -1,0 +1,162 @@
+version: '3.9'
+services:
+  database:
+    image: mongo:${MONGO_VERSION}
+    entrypoint: [ "/usr/bin/mongod", "--keyFile", "/run/secrets/mongo-keyfile", "--replSet", "${REPLICASET_NAME}", "--dbpath", "/data/db", "--bind_ip", "0.0.0.0"]
+    secrets:
+      - source: mongo-keyfile
+        mode: 0400
+    configs:
+      - mongo-healthcheck
+    volumes:
+      - mongodata:/data/db:rw
+      - mongoconfigdb:/data/configdb:rw
+    networks:
+      - backend
+    # ports:
+      # - "${MONGO_PORT:-27017}:27017" #not publishing port
+    healthcheck:
+      test: ["CMD", "bash", "/mongo-healthcheck"]
+      interval: 1m
+      timeout: 15s
+      retries: 3
+      start_period: 10s
+    deploy: 
+      mode: global
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 1m30s
+        monitor: 15s
+
+  dbcontroller:
+    image: jackietreehorn/mongo-replica-ctrl:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      OVERLAY_NETWORK_NAME: ${BACKEND_NETWORK_NAME}
+      MONGO_SERVICE_NAME: ${MONGO_SERVICE_URI}
+      REPLICASET_NAME: ${REPLICASET_NAME}
+      MONGO_PORT: ${MONGO_PORT:-27017}
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      INITDB_DATABASE: ${INITDB_DATABASE}
+      INITDB_USER: ${INITDB_USER}
+      INITDB_PASSWORD: ${INITDB_PASSWORD}
+      DEBUG: 0
+    entrypoint: python /src/db-replica_ctrl.py
+    networks:
+      - backend
+    depends_on:
+      - database
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.role==manager]
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 1m
+        monitor: 10s
+
+  web:
+    image: jackietreehorn/symbot:noconfig
+    environment:
+      SYMBOT_DB_USER: ${INITDB_USER}  # future use in app.json "mongo_db_url"
+      SYMBOT_DB_PASSWORD: ${INITDB_PASSWORD}  # future use in app.json "mongo_db_url"
+      SYMBOT_DB: ${INITDB_DATABASE}  # future use in app.json "mongo_db_url"
+      REPLICASET_NAME: ${REPLICASET_NAME}  # future use in app.json "mongo_db_url"
+      MONGODB_URI: mongodb://${INITDB_USER}:${INITDB_PASSWORD}@database/${INITDB_DATABASE}?replicaSet=${REPLICASET_NAME}
+    depends_on:
+      - database
+      - dbcontroller
+    volumes:
+      - weblogs:/usr/src/app/logs:rw
+      # - ../logs:/usr/src/app/logs:rw  #shared storage (glusterfs, etc)
+    networks:
+      - backend
+    ports:
+      - 3000:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000"]
+      interval: 1m
+      timeout: 30s
+      retries: 6
+      start_period: 45s
+    deploy: 
+      mode: replicated
+      restart_policy:
+        condition: on-failure
+      replicas: 1
+      placement:
+        max_replicas_per_node: 1
+      update_config:
+        parallelism: 1
+        delay: 1m
+        monitor: 15s
+
+  mongo-express:
+    image: mongo-express:latest
+    networks:
+      - backend   
+    ports:
+      - 3010:8081
+    environment:
+      ME_CONFIG_OPTIONS_EDITORTHEME: "ambiance"
+      ME_CONFIG_BASICAUTH: "true"
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_ROOT_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_ROOT_USERNAME}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_ROOT_PASSWORD}
+      # ME_CONFIG_MONGODB_SERVER: database
+      # ME_CONFIG_MONGODB_PORT: ${MONGO_PORT:-27017}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@database:${MONGO_PORT:-27017}?replicaSet=${REPLICASET_NAME}
+    depends_on:
+      - web
+    healthcheck:
+      test: wget -nv -t1 --spider 'http://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@127.0.0.1:8081' || exit 1
+      interval: 5m
+      timeout: 30s
+      retries: 6
+      start_period: 1m
+    deploy: 
+      mode: replicated
+      restart_policy:
+        condition: on-failure
+      replicas: 1
+      placement:
+        max_replicas_per_node: 1
+      update_config:
+        parallelism: 1
+        delay: 1m
+        monitor: 15s
+
+
+configs:
+  mongo-healthcheck:
+    file: mongo-healthcheck
+
+secrets:
+   mongo-keyfile:
+     external: true
+
+volumes:
+  # NOTE: Must use 'external' for db volumes so they're not recreated during redeployments
+  mongodata:
+    external: true
+    name: ${STACK_NAME}_mongodata
+  mongoconfigdb:
+    external: true
+    name: ${STACK_NAME}_mongoconfigdb
+  weblogs:
+    external: true
+    name: ${STACK_NAME}_weblogs
+
+networks:
+  backend:
+    name: ${BACKEND_NETWORK_NAME}
+    external: true
