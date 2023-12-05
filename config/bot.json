@@ -1,8 +1,8 @@
 {
-	"apiKey": "",
+	"apiKey": "dummykeyxxxxxxxxxxxxxx",
 	"apiPassphrase": null,
 	"apiPassword": null,
-	"apiSecret": "",
+	"apiSecret": "dummykeyxxxxxxxxxxxxxx",
 	"dcaMaxOrder": 46,
 	"dcaOrderAmount": 45,
 	"dcaOrderSizeMultiplier": 1.08,
