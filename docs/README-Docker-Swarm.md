@@ -2,7 +2,7 @@
 # SymBot on Docker Swarm w/MongoDB ReplicaSet Manager
 
 ## Introduction
-If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted or on the Cloud*) to provide higher availability | uptime across multiple nodes/VMs, this `docker-swarm` branch incorporates a `dbcontroller` tool and a SymBot docker compose `stack` recipe, along with deployment scripts, to facilitate a seamless, highly-available SymBot multi-node deployment. The included [**Mongo ReplicaSet Manager**](https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager) takes care of deploying, monitoring, and management of the SymBot database within a Docker Swarm environment. It ensures continuous operation, and adapts to changes within the Swarm network, ensuring high availability and consistency of your SymBot data.
+If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted or on the Cloud*) to provide higher availability | uptime across multiple nodes/VMs, this `docker-swarm` branch incorporates a `dbcontroller` service and a SymBot docker compose `stack` recipe, along with deployment scripts, to facilitate a seamless, highly-available SymBot multi-node deployment. The included [**Mongo ReplicaSet Manager**](https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager) takes care of deploying, monitoring, and management of the SymBot database within a Docker Swarm environment. It ensures continuous operation, and adapts to changes within the Swarm network, ensuring high availability and consistency of your SymBot data.
 
 
 ## Features
@@ -25,7 +25,7 @@ If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted
 ## Requirements
 * [x] **SymBot**: tested on latest version (`0.99.775-beta.0` as of this writing).
 * [x] **MongoDB**: version 6.0 and above (recipe uses `7.0.2`).
-* [x] **[jackietreehorn/mongo-replica-ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)**: PyMongo-based [MongoDB ReplicaSet Manager](https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager).  
+* [x] **[Mongo-Replica-Ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)**: PyMongo-based [MongoDB ReplicaSet Manager](https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager).  
 
 * [x] **Docker**: tested on 24.0.7.
 * [x] **Operating System**: tested on Ubuntu Linux 23.04 <br/>(**mongo-replica-ctrl** image supports:
@@ -33,22 +33,29 @@ If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted
 
 ## Prerequisites
 - A [Docker Swarm cluster](https://docs.docker.com/engine/swarm/swarm-tutorial/create-swarm/) (*locally or in the cloud as you prefer*) - tested on 6 node Swarm cluster.
-- Docker Stack recipe `docker-compose-stack.yml` located in `./docker` directory.
-- Environment variables `mongo-rs.env` located in `./docker` directory.
-- Deployment script `deploy.sh` located in `./docker` directory.
+- Docker Stack recipe [`docker-compose-stack.yml`](/docker/docker-compose-stack.yml) located in `/docker` directory.
+- Environment variables [`mongo-rs.env`](/docker/mongo-rs.env) located in `/docker` directory.
+- Deployment script [`deploy.sh`](/docker/deploy.sh) located in `/docker` directory.
 
 ## How to Use
+
+**TL;DR:**<br/>
+- `git clone https://github.com/JackieTreeh0rn/SymBot/tree/docker-swarm`
+- `cd docker`
+- `./deploy.sh`  
+<br/>  
+
 1. Ensure that all required environment variables are set in `mongo-rs.env` *(see environment variables below)* . For most use cases, you should only need to edit `STACK_NAME`<br/>
 
-2. The provided `docker-compose-stack.yml` is configured to use a pre-built SymBot image named [`symbot:noconfig`](https://hub.docker.com/r/jackietreehorn/symbot) just for ease of testing the stack's deployment in your swarm. This image contains 'dummy' API keys and will not connect to 3CQS signals or exchanges.  When building your own symbot docker image, you can use the included `./docker/build.sh` script.<br/>
+2. The provided `docker-compose-stack.yml` is configured to use a pre-built SymBot image named [`symbot:noconfig`](https://hub.docker.com/r/jackietreehorn/symbot) just for ease of testing the stack's deployment in your swarm. This image contains 'dummy' API keys and will not connect to 3CQS signals or exchanges.  When building your own symbot docker image, you can use the included [`/docker/build.sh`](/docker/build.sh) script.<br/>
 
-3. Modify SymBot's `./config/app.json` per its documentation, to reflect the proper `mongo_db_url`, with one caveat: 
+3. Modify SymBot's [`/config/app.json`](/config/app.json) per its documentation, to reflect the proper `mongo_db_url`, with one caveat: 
 
     MongoDB operating as a replicaSet requires the `?replicaSet=<replicasetname>` parameter in the URI connection string.  Although the docker compose stack yml makes use of environment variables to construct this, SymBot isn't setup to import environment variables into `app.json` (yet) so, for this reason, it must be defined explicitely. If using exising values in `mongo-rs.env`, the explicit entry would be `"mongo_db_url": "mongodb://symbot:symbot123@database/symbot?replicaSet=rs"` <br/>
     - Example connection string using .env variables:
     `mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@database:${MONGO_PORT:-27017}/?replicaSet=${REPLICASET_NAME}`
 
-4. Deploy SymBot in your swarm via the `./docker/deploy.sh` script - this will perform the following actions:<br/>
+4. Deploy SymBot in your swarm via the [`/docker/deploy.sh`](/docker/deploy.sh) script - this will perform the following actions:<br/>
     - Import ENVironment variables.
     - Create **backend** 'overlay' network with encryption enabled.
     - Generate a `keyfile` for the replicaSet and add it as a Docker "secret" for the stack to use.
@@ -57,7 +64,7 @@ If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted
 
 5. Monitor logs for the `dbcontroller` service for any potential errors or adjustments *(see troubleshooting section)* <br/>
 
-6. To remove, run `./docker/remove.sh` or delete the stack manually via `docker stack rm [stackname]`. <br/>
+6. To remove, run [`/docker/remove.sh`](/docker/remove.sh) or delete the stack manually via `docker stack rm [stackname]`. <br/>
 
     **Note:**  the `_backend` 'overlay' network created during initial deployment will not be removed automatically as it is considered external. If redeploying/updating, leave the existing network in place so as to retain the original network subnet betwee deployments.
 
@@ -81,7 +88,7 @@ The script requires the following environment variables, defined in `mongo-rs.en
 - Continuous monitoring allows the tool to adapt the replica set configuration in response to changes in the Swarm network, such as node additions or removals, reboots, shutdowns, etc.
 * The included `docker-compose-stack.yml` will use the latest version available on DockerHub via [jackietreehorn/mongo-replica-ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)  . Alternatively, you can use `docker pull jackietreehorn/mongo-replica-ctrl:latest` to pull the latest version and push it onto your own repo.  
 
-    Additionally, the included `./dbcontroller/build.sh` allows you to build the docker image locally as well - ensure you have the latest version if re-building via:  
+    Additionally, the included [`/dbcontroller/build.sh`](/dbcontroller/build.sh) script allows you to build the docker image locally as well - ensure you have the latest version if re-building via:  
 
     `git clone https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager`
 
@@ -109,7 +116,7 @@ If you do not use something like [Portainer](https://docs.portainer.io/start/ins
 
 - **Environment** - verify that all required environment variables are correctly set in `mongo-rs.env`. 
 
-* **YML** - ensure that the MongoDB service is correctly configured and accessible within the Docker Swarm - see compose file for standard configuration. The *dbcontroller* that maintains the status of the replica-set must be deployed in a single instance over a Swarm manager node (see `docker-compose-stack.yml`).  **Multiple instances of the Controller, may perform conflicting actions!**  Also, to ensure that the controller is restarted in case of error, there is a restart policy in the controller service definition.
+* **YML** - ensure that the MongoDB service is correctly configured and accessible within the Docker Swarm - see compose file for standard configuration. The *dbcontroller* that maintains the status of the replica-set must be deployed in a single instance over a Swarm manager node (see [`docker-compose-stack.yml`](/docker/docker-compose-stack.yml)).  **Multiple instances of the Controller, may perform conflicting actions!**  Also, to ensure that the controller is restarted in case of error, there is a restart policy in the controller service definition.
 
 - **Persistent Data** - to use data persistence, the *mongo* service needs to be deployed in **global mode** (`docker-compose-stack.yml`). This is to avoid more than one instance being deployed on the same node and prevent different instances from concurrently accessing the same MongoDB data space on the filesystem.  The volumes defined in the compose YML allow for each mongo repplica to use its own dedicated data store.  They are also set as external so that they aren't inadvertenly deleted or recreated between service redeployments.
 
@@ -119,7 +126,7 @@ If you do not use something like [Portainer](https://docs.portainer.io/start/ins
 
 * **Networking** - the `_backend` 'overlay' external network created during initial deployment, is assigned an address space (eg. ***10.0.x.1***) automatically by Docker. You can define your own network space by uncommenting the relevant section in `deploy.sh` and adjusting as needed, in the event of overlap with other subnets in your network. In addition, **DO NOT** remove this network if planning to redeploy or update your stack on top of a existing/working replicaSet configuration so as to avoid connectivity issues between re-deployments.
 
-- **MongoDB Configuration Check** - the Mongo `./dbcontroller/docker-mongodb_config-check.sh` script can be run from any docker node to locate and connect to a mongodb instance in the swarm and fetch configuration information.  It runs `rs.status()` and `rs.config()` and returns the output. This can help in validating/correlating the config's ***PRIMARY*** shown, against the **dbcontroller** logs, in addition to other relevant configuration information for your replicaSet.
+- **MongoDB Configuration Check** - the Mongo [`/dbcontroller/docker-mongodb_config-check.sh`](/dbcontroller/docker-mongodb_config-check.sh) script can be run from any docker node to locate and connect to a mongodb instance in the swarm and fetch configuration information.  It runs `rs.status()` and `rs.config()` and returns the output. This can help in validating/correlating the config's ***PRIMARY*** shown, against the **dbcontroller** logs, in addition to other relevant configuration information for your replicaSet.
 
     Example:
 
