@@ -6,7 +6,7 @@ set -o allexport
 # Docker node - local build
 sudo cp -rvf Dockerfile* .. && \
 cd .. && \
-docker build . -t ${STACK_NAME}:noconfig
+docker build . -t ${STACK_NAME}:latest
 
 # Dockerhub registry
 # docker login
