@@ -24,12 +24,11 @@ If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted
 
 ## Requirements
 * [x] **SymBot**: tested on latest version (`0.99.775-beta.0` as of this writing).
-* [x] **MongoDB**: version 6.0 and above (recipe uses `7.0.2`).
+* [x] **MongoDB**: version 6.0 and above (recipe uses `7.0.4`).
 * [x] **[Mongo-Replica-Ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)**: PyMongo-based [MongoDB ReplicaSet Manager](https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager).  
-
-* [x] **Docker**: tested on 24.0.7.
-* [x] **Operating System**: tested on Ubuntu Linux 23.04 <br/>(**mongo-replica-ctrl** image supports:
-    `linux/amd64`, `linux/arm/v7`, `linux/arm64`)
+* [x] **Docker**: tested on `24.0.7`.
+* [x] **Operating System**: **Operating System**: Linux (tested on `Ubuntu 23.04`)<br/>**mongo-replica-ctrl** image supports:
+    `linux/amd64`, `linux/arm/v7`, `linux/arm64`
 
 ## Prerequisites
 - A [Docker Swarm cluster](https://docs.docker.com/engine/swarm/swarm-tutorial/create-swarm/) (*locally or in the cloud as you prefer*) - tested on 6 node Swarm cluster.

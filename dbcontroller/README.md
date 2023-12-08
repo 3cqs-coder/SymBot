@@ -1,51 +1,60 @@
 
 # MongoDB ReplicaSet Manager for Docker Swarm
 
+`Version: 1.01`
+
 ## Introduction
 This tool automates the configuration, initiation, monitoring, and management of a MongoDB replica set within a Docker Swarm environment. It ensures continuous operation, and adapts to changes within the Swarm network, ensuring high availability and consistency of data.
 
 ## Features
-- ✅ **Automated Replica Set Initialization**: Configures and initiates MongoDB replica sets from scratch, determines the number of nodes in the MongoDB global service to wait for, taking into account 'down' nodes or nodes marked as 'unavailable' in the swarm.<br/>
+- ✅ **Automated ReplicaSet Initialization**: configures and initiates MongoDB replica set from scratch, determines the number of nodes in the MongoDB global service to wait for, taking into account 'down' nodes or nodes marked as 'unavailable' in the swarm.<br/>
 
-- ✅ **Primary Node tracking & Configuration for Mongo ReplicaSet**: automatic replicaset primary designation and tracking on new & existing deployments.<br/>
-- ✅ **Dynamic Replica Set Reconfiguration**: Adjusts the replica set as MongoDB instance IPs change within Docker Swarm. Checks if a replicaset is already configured or being redeployed and adjusts members accordingly.<br/>
-- ✅ **Resilience and Redundancy**: Ensures the replica set's stability and availability, even during node changes. In case the primary node is lost, it waits for a new election or forces reconfiguration when the replica-set is inconsistent.<br/>
-- ✅ **Admin and User Setup**: Automates the creation of MongoDB admin (root) account as well as an initial db user & associated collection/db insertion for your main application using mongo.<br/>
-- ✅ **Continuous Monitoring**: Watches for changes in the Docker Swarm topology. Continuously listens for changes in IP addresses or MongoDB instances removals and/or additions and adjusts the replica set accordingly. Tested againts a wide variety of potential outage edge cases to ensure reliability.<br/>
-- ✅ **Error Handling and Detailed Logging**: Provides comprehensive logging for efficient troubleshooting.<br/>
-- ✅ **Scalability**: Designed to work with multiple nodes in a Docker Swarm setup and scale the ReplicaSet automatically as additional MongoDB nodes are added/removed from the stack.
+- ✅ **Primary Node Tracking & Configuration for ReplicaSet**: automatic replicaset primary designation and tracking on new & existing deployments.<br/>
+- ✅ **Dynamic ReplicaSet Reconfiguration**: adjusts the replica set as MongoDB instance IPs change within Docker Swarm. Checks if a replicaset is already configured or being redeployed and adjusts members accordingly.<br/>
+- ✅ **Resilience and Redundancy**: ensures the replica set's stability and availability, even during node changes. In case the primary node is lost, it waits for a new election or forces reconfiguration when the replica-set is inconsistent.<br/>
+- ✅ **Mongo Admin and init User Setup**: automates the creation of MongoDB admin (root) account as well as an initial db user & associated collection/db insertion for your main application/service using mongo.<br/>
+- ✅ **Continuous Monitoring**: watches for changes in the Docker Swarm topology. Continuously listens for changes in IP addresses or MongoDB instances removals and/or additions and adjusts the replica set accordingly. Tested againts a wide variety of potential outage edge cases to ensure reliability.<br/>
+- ✅ **Error Handling and Detailed Logging**: provides comprehensive logging for efficient troubleshooting.<br/>
+- ✅ **Scalability**: Designed to work with multiple nodes in a Docker Swarm environment and scale the ReplicaSet automatically as additional MongoDB nodes are added/removed from the stack.
 
 ## Requirements
-* [x] **MongoDB Version**: 6.0 and above (tested on 7.0.2).
-* [x] **PyMongo Driver**: 4.5.0 and above - *included* (tested on 4.6.0).
-* [x] **Docker Version**: 24.0.7 (tested).
-* [x] **Operating System**: tested on Ubuntu Linux 23.04 - image supports:
+* [x] **MongoDB**: version 6.0 and above (recipe uses `7.0.4`).
+* [x] **PyMongo Driver**: 4.5.0 and above - *included* (image uses `4.6.1`).
+* [x] **Docker**: tested on `24.0.7`.
+* [x] **Operating System**: Linux (tested on `Ubuntu 23.04`). <br/>**[mongo-replica-ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)** image supports:
     `linux/amd64`, `linux/arm/v7`, `linux/arm64`
 
 ## Prerequisites
 - A [Docker Swarm cluster](https://docs.docker.com/engine/swarm/swarm-tutorial/create-swarm/) (*locally or in the cloud as you prefer*) - tested on 6 node Swarm cluster.
-- MongoDB service running within the Swarm stack  (see `docker-compose-stack.yml`).
-- Relevant environment variables set up as per the tool's requirements  (see `mongo-rs.env`).
+- Docker Stack recipe - see [`docker-compose-stack.yml`](./docker-compose-stack.yml)
+- Environment variables - see [`mongo-rs.env`](./mongo-rs.env)
+- Deployment script [`deploy.sh`](./deploy.sh)
 
 ## How to Use
-1. Ensure that all required environment variables are set in `mongo-rs.env` (description below). <br/>
+
+**TL;DR:**<br/>
+- `git clone https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager`
+- `./deploy.sh`  
+<br/> 
+1. Ensure that all required environment variables are set in `mongo-rs.env` (see environment variables below). <br/>
 
 2. Modify the `docker-compose-stack.yml` to add your main application making use of the mongo service.
 **Note** - set your application's MongoDB URI to use the following connection string when connecting to the replica set service:<br/>
 
-`mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@database:${MONGO_PORT:-27017}/?replicaSet=${REPLICASET_NAME}`
+    `mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@database:${MONGO_PORT:-27017}/?replicaSet=${REPLICASET_NAME}`
+    
 
-3. Deploy the compose stack on your Docker Swarm using the `deploy.sh` script via:
+3. Deploy the compose stack on your Docker Swarm using the [`deploy.sh`](/deploy.sh) script via:
 `sh deploy.sh` OR `./deploy.sh` - this will perform the following actions:<br/>
     - Import ENVironment variables.
     - Create **backend** 'overlay' network with encryption enabled.
-    - Generate a `keyfile` for the replicaset and add as a Docker "secret" for the swarm.
-    - Deploy the docker stack recipe.
+    - Generate a `keyfile` for the replicaSet and add it as a Docker "secret" for the stack to use.
+    - Spin-up the various docker stack services: mongo, dbcontroller, nosqlclient, your application or service.
     - The dbcontroller tool will run as a single instance per Swarm node (***global*** mode) as defined in the Compose YML. <br/>
 
 4. Monitor logs for the tool's output and any potential errors or adjustments *(see troubleshooting section)* <br/>
 
-5. To remove, run `./remove.sh` or delete the stack manually via `docker stack rm [stackname]`. 
+5. To remove, run [`./remove.sh`](/remove.sh) or delete the stack manually via `docker stack rm [stackname]`. 
 **Note:**  the `_backend` 'overlay' network created during initial deployment will not be removed automatically as it is considered external. If redeploying/updating, leave the existing network in place so as to retain the original network subnet.
 
 ## Environment Variables
@@ -67,7 +76,7 @@ The script requires the following environment variables, defined in `mongo-rs.en
 * It then either initializes a new MongoDB replica set or manages an existing one based on the current state.
 - Continuous monitoring allows the tool to adapt the replica set configuration in response to changes in the Swarm network, such as node additions or removals, reboots, shutdowns, etc.
 * The [nosqlclient](https://www.nosqlclient.com/) service included in the recipe can be used to access and manage the db - upon launching the nosqlclient front end, click connect to select a database to view/manage.
-- The included compose YML will use the latest version available on DockerHub via [jackietreehorn/mongo-replica-ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)  . Alternatively, you can use `docker pull jackietreehorn/mongo-replica-ctrl:latest` to pull the latest version and push it onto your own repo.  Additionally, the included `build.sh` allows you to build the docker image locally as well.
+- The included compose YML will use the latest version available on DockerHub via [jackietreehorn/mongo-replica-ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)  . Alternatively, you can use `docker pull jackietreehorn/mongo-replica-ctrl:latest` to pull the latest version and push it onto your own repo.  Additionally, the included [`./build.sh`](/build.sh) allows you to build the docker image locally as well.
 
 ## Troubleshooting
 * **Logs** - check the Docker service logs for the mongo controller service for details about its operation (enable `DEBUG:1` in compose YML if you want more detail).  
@@ -93,9 +102,9 @@ If you do not use something like [Portainer](https://docs.portainer.io/start/ins
 
 - **Environment** - verify that all required environment variables are correctly set in `mongo-rs.env`. 
 
-* **YML** - ensure that the MongoDB service is correctly configured and accessible within the Docker Swarm - see compose file for standard configuration. The *controller* that maintains the status of the replica-set must be deployed in a single instance over a Swarm manager node (see `docker-compose-stack.yml`).  **Multiple instances of the Controller, may perform conflicting actions!**  Also, to ensure that the controller is restarted in case of error, there is a restart policy in the controller service definition.
+* **YML** - ensure that the MongoDB service is correctly configured and accessible within the Docker Swarm - see compose file for standard configuration. The *dbcontroller* that maintains the status of the replica-set must be deployed in a single instance over a Swarm manager node (see [`docker-compose-stack.yml`](./docker-compose-stack.yml)).  **Multiple instances of the Controller, may perform conflicting actions!**  Also, to ensure that the controller is restarted in case of error, there is a restart policy in the controller service definition.
 
-- **Volumes** - to use data persistence, the *mongo* service needs to be deployed in **global mode** (`docker-compose-stack.yml`). This is to avoid more than one instance being deployed on the same node and prevent different instances from concurrently accessing the same MongoDB data space on the filesystem.  The volumes defined in the compose YML allow for each mongo repplica to use its own dedicated data store.  They are also set as external so that they aren't inadvertenly deleted or recreated between service redeployments.
+- **Persistent Data** - to use data persistence, the *mongo* service needs to be deployed in **global mode** (`docker-compose-stack.yml`). This is to avoid more than one instance being deployed on the same node and prevent different instances from concurrently accessing the same MongoDB data space on the filesystem.  The volumes defined in the compose YML allow for each mongo repplica to use its own dedicated data store.  They are also set as external so that they aren't inadvertenly deleted or recreated between service redeployments.
 
 * **Swarm Nodes** - for HA purposes, your Swarm cluster should have more than one manager. This allows the *controller* to start/restart on different nodes in case of issues.
 
@@ -103,7 +112,8 @@ If you do not use something like [Portainer](https://docs.portainer.io/start/ins
 
 * **Networking** - the `_backend` 'overlay' external network created during initial deployment, is assigned an address space (eg. ***10.0.x.1***) automatically by Docker. You can define your own network space by uncommenting the relevant section in `deploy.sh` and adjusting as needed, in the event of overlap with other subnets in your network. In addition, **DO NOT** remove this network if planning to redeploy or update your stack on top of a existing/working replicaSet configuration so as to avoid connectivity issues between re-deployments.
 
-- **MongoDB Configuration Check** - the Mongo `docker-mongodb_config-check.sh` script can be run from any docker node to locate and connect to a mongodb instance in the swarm and fetch configuration information.  It runs `rs.status()` and `rs.config()` and returns the output. This can help in validating/correlating the config's ***PRIMARY*** shown, against the **dbcontroller** logs, in addition to other relevant configuration information for your replicaSet.
+- **MongoDB Configuration Check** - the Mongo [`/dbcontroller/docker-mongodb_config-check.sh`](./docker-mongodb_config-check.sh) script can be run from any docker node to locate and connect to a mongodb instance in the swarm and fetch configuration information.  It runs `rs.status()` and `rs.config()` and returns the output. This can help in validating/correlating the config's ***PRIMARY*** shown, against the **dbcontroller** logs, in addition to other relevant configuration information for your replicaSet.
+
 
     Example:
 
@@ -164,7 +174,7 @@ If you do not use something like [Portainer](https://docs.portainer.io/start/ins
         }
     ``````
 
-- **Start-up**  - please note that depending on the number of nodes in your swarm and your connection speed, it might take some time for images to download, for the mongodb instances to spin up, and the replica manager to configure the replica-set.  Any services in the compose YML recipe that depend on the mongo database to be operational might fail/restart at first (*particularly upon initial deployment*) before showing as **READY**  - This is normal - MongoDB operating in replicaset mode will not become available for use until the replicaset configuration is finalized and a primary instance is elected.
+- **Start-up Issues**  - please note that depending on the number of nodes in your swarm and your connection speed, it might take some time for images to download, for the mongodb instances to spin up, and the replica manager to configure the replica-set. Services in the compose stack YML recipe, such as `MongoExpress` and `SymBot` itself, that depend on the mongo database to be operational, might fail/restart at first (*particularly upon an initial/blank-slate deployment*) before showing as **READY**  - this **is** normal for initial deployments and services will attempt to connect to mongo again upon restarts - MongoDB operating in replicaset mode will not become available for use until the replicaset configuration is finalized and a primary instance is elected.
 
 ## Contact
 - Røb

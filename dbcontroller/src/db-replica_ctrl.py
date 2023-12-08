@@ -8,7 +8,7 @@ NAME:
     MongoDB ReplicaSet Manager for Docker Swarm
 
 VERSION: 
-    1.0
+    1.01
 
 DESCRIPTION:
     This script is used to configure, initiate, monitor, and maintain a MongoDB replicaset on a Docker Swarm
