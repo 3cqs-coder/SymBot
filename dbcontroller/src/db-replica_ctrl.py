@@ -14,8 +14,8 @@ DESCRIPTION:
     This script is used to configure, initiate, monitor, and maintain a MongoDB replicaset on a Docker Swarm
 
 REQUIREMENTS:
-    - MongoDB >= 6.0 - tested on 7.0.2
-    - PyMongo Driver >= 4.5.0 - tested on 4.6.0
+    - MongoDB >= 6.0 - using 7.0.4
+    - PyMongo Driver >= 4.5.0 - using 4.6.1
     - ENV variables
 
 IMPORTANT: 
