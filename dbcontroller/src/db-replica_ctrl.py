@@ -1,6 +1,6 @@
 """
 AUTHOR: 
-    R0b
+    Røb
     jackietreehorn01@protonmail.com
     https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager
 
@@ -8,7 +8,7 @@ NAME:
     MongoDB ReplicaSet Manager for Docker Swarm
 
 VERSION: 
-    1.01
+    1.02
 
 DESCRIPTION:
     This script is used to configure, initiate, monitor, and maintain a MongoDB replicaset on a Docker Swarm
@@ -173,9 +173,11 @@ def get_tasks_ips(tasks, overlay_network_name):
 def setup_initial_database(current_member_ips, mongo_port, mongo_root_username, mongo_root_password, initdb_database, initdb_user, initdb_password):
     """
     Sets up the initial database with a user and an entry in the users collection.
-    
-    :param primary_ip: The container object of the primary MongoDB instance.
+
+    :param current_member_ips: list of replica members.
     :param mongo_port: Port on which MongoDB is running.
+    :mongo_root_username: root user.
+    :mongo_root_password: root password.
     :param initdb_database: The name of the database to use or create.
     :param initdb_user: The username for the new user.
     :param initdb_password: The password for the new user.
@@ -233,7 +235,7 @@ def init_replica(mongo_tasks, mongo_tasks_ips, replicaset_name, mongo_port, mong
     """
     logger = logging.getLogger(__name__)
 
-    # Initial checks for MongoDB task IDs or IPs
+    # Initial checks for MongoDB task IDs | IPs
     for attempt in range(retry_attempts):
         if not mongo_tasks or not mongo_tasks_ips:
             logger.warning(f"No MongoDB task IDs or IPs found. Retry attempt {attempt + 1}/{retry_attempts}.")
@@ -255,9 +257,8 @@ def init_replica(mongo_tasks, mongo_tasks_ips, replicaset_name, mongo_port, mong
     config_str = json.dumps(config)  # Serialize config to json formatted string
     logger.debug("Initial config Built: {}".format(config))
 
-    primary_ip = list(mongo_tasks_ips)[0]
-
     # Choose a primary and configure replicaset (picking first IP | first docker container)
+    primary_ip = list(mongo_tasks_ips)[0]
     time.sleep(15)
     try:
         with docker_client() as dc:
@@ -267,7 +268,7 @@ def init_replica(mongo_tasks, mongo_tasks_ips, replicaset_name, mongo_port, mong
                 logger.error("No MongoDB containers found in the Docker swarm.")
                 return
             
-            # Initialize replica set on localhost using docker
+            # Initialize replica set on localhost using docker container
             initCommand = f"rs.initiate({config_str});"
             clusterCreateExecRes = mongoContainer.exec_run(f"mongosh --quiet --eval '{initCommand}'")
             if clusterCreateExecRes.exit_code != 0:
@@ -280,23 +281,39 @@ def init_replica(mongo_tasks, mongo_tasks_ips, replicaset_name, mongo_port, mong
                 logger.info("Re-deployment detected - forcing re-configuration...")
                 reconfigure_replica_set(primary_ip, mongo_port, mongo_root_username, mongo_root_password, config, logger)
             elif "No primary detected" in error_message or "Invalid replica set" in error_message:
-                logger.error(f"Replica set error: {error_message}")
+                logger.error(f"ReplicaSet initiation error: {error_message}")
                 # Optional: Implement logic to recover from this state
             else:
                 logger.error(f"Failed to initiate replica set: {error_message}")
 
 
-    # TODO: switch initiation to pyMongo method (in work)
-    # primary = pm.MongoClient(host=primary_ip, port=mongo_port, username=mongo_root_username, password=mongo_root_password, directConnection=True) #added direcConnection per pymongo doc
+    #NOTE: PyMongo replica set initiation approach is unworkable when using a keyfile on Mongo's deployment, as it implies authentication that does not yet exist (documented issue) -  tabling this approach in favor of docker container method above
+    # time.sleep(15)
+    # primary_ip = list(mongo_tasks_ips)[0]
+    # primaryNoAuth = pm.MongoClient(
+    #     host=primary_ip,
+    #     port=mongo_port,
+    #     directConnection=True,
+    #     serverSelectionTimeoutMS=15000,  # 15 seconds timeout server selection
+    #     connectTimeoutMS=30000,  # 30 seconds connection timeout
+    #     socketTimeoutMS=30000    # 30 seconds socket operation timeout
+    # )
     # try:
-    #     res = primary.admin.command("replSetInitiate", config)
-    # except OperationFailure as e:
-    #     logger.debug("replSetInitiate already configured, forcing configuration ({})".format(e))
-    #     res = primary.admin.command("replSetReconfig", config, force=True)
+    #     res = primaryNoAuth.admin.command("replSetInitiate", config)
+    # except PyMongoError as e:
+    #     error_message = str(e)
+    #     if "replSetInitiate requires authentication" in error_message:
+    #         logger.debug("replSetInitiate error output: ({})".format(e))
+    #         # Handle re-deployment scenario
+    #         logger.info("Re-deployment detected - forcing re-configuration...")
+    #         reconfigure_replica_set(primary_ip, mongo_port, mongo_root_username, mongo_root_password, config, logger)
+    #     elif "No primary detected" in error_message or "Invalid replica set" in error_message:
+    #         logger.error(f"ReplicaSet initiation error: {error_message}")
+    #         # Optional: Implement logic to recover from this state
+    #     else:
+    #         logger.error(f"Failed to initiate replica set: {error_message}")
     # finally:
-    #     # added change stream as per recommendation for MongoDB > 6 - not using
-    #     set_change_stream_options(primary, expire_after_seconds=100)  # set expireAfterSeconds to 100 seconds
-    #     primary.close()
+    #     primaryNoAuth.close()
     # logger.info("replSetInitiate: {}".format(res))
 
 
@@ -309,7 +326,7 @@ def reconfigure_replica_set(primary_ip, mongo_port, mongo_root_username, mongo_r
     Reconfigure the MongoDB replica set in case of re-deployment.
     """
 
-    # LEGACY method via containers - (deprecating)
+    # LEGACY method via containers - (deprecating in favor of PyMongo)
     # Re-deployment detected, using rs.reconfig to reconfigure replicaset
     # authCommand = f"db.getSiblingDB('admin').auth('{mongo_root_username}', '{mongo_root_password}');"
     # reconfigCommand = f"rs.reconfig({config}, {{force: true}});"
@@ -342,34 +359,44 @@ def initialize_mongodb_admin(mongo_tasks, primary_ip, mongo_port, mongo_root_use
     """
 
     logger.info("Configuring mongodb admin...")
-    time.sleep(35)  # Wait for config reconciliation & proper docker container identification
-    try:
-        primaryNoAuth = pm.MongoClient(
-            host=primary_ip,
-            port=mongo_port,
-            directConnection=True,  # Mongo > 4 defaults to 'false' which forces discovery instead of direct interrogation - this always returns writeablePrimary=true on all 
-            serverSelectionTimeoutMS=15000, # 15 seconds timeout server selection
-            connectTimeoutMS=30000,  # 30 seconds connection timeout
-            socketTimeoutMS=30000  # 30 seconds socket operation timeout
-        )
-        replicaSetTopology = primaryNoAuth.admin.command('hello')  # 'hello' command pulls topology
-        logger.debug("ReplicaSet Topology: {}".format(replicaSetTopology))
 
-        primaryIp = replicaSetTopology["primary"].split(':')[0] if replicaSetTopology["primary"] else None
-        if primaryIp is None:
-            logger.error("Initializing Admin - Primary IP not found in replica set topology")
-            return
-    except Exception as e:
-        logger.error(f"Error while getting primary IP from Topology: {e} - could not complete replicaset admin initilization!")
-        return
-    finally:
-        primaryNoAuth.close()
+    retry_attempts = 6
+    retry_delay = 10
 
-    containerId = next((c["Status"]["ContainerStatus"]["ContainerID"] for c in mongo_tasks if c["NetworksAttachments"][0]["Addresses"][0].split('/')[0] == primaryIp), None)
-    if containerId:
-        create_mongodb_root_user(containerId, mongo_root_username, mongo_root_password, logger, dc, primaryIp)
-    else:
-        logger.error("No container found for the primary IP: {}".format(primaryIp))
+    for attempt in range(retry_attempts):
+        try:
+            # Wait for config reconciliation & proper docker container identification
+            logger.info(f"Attempt {attempt+1}/{retry_attempts}: Waiting for configuration reconciliation...")
+            time.sleep(retry_delay)
+
+            primaryNoAuth = pm.MongoClient(
+                host=primary_ip,
+                port=mongo_port,
+                directConnection=True,  #NOTE: Mongo > 4 defaults to 'false' which forces discovery instead of direct interrogation - this always returns writeablePrimary=true on all members (multiple primaries issue)
+                serverSelectionTimeoutMS=15000, # 15 seconds timeout server selection
+                connectTimeoutMS=30000,  # 30 seconds connection timeout
+                socketTimeoutMS=30000  # 30 seconds socket operation timeout
+            )
+            replicaSetTopology = primaryNoAuth.admin.command('hello')  #'hello' command pulls topology
+            logger.debug("ReplicaSet Topology: {}".format(replicaSetTopology))
+
+            primaryIp = replicaSetTopology["primary"].split(':')[0] if replicaSetTopology["primary"] else None
+            primaryNoAuth.close()
+
+            if primaryIp:
+                containerId = next((c["Status"]["ContainerStatus"]["ContainerID"] for c in mongo_tasks if c["NetworksAttachments"][0]["Addresses"][0].split('/')[0] == primaryIp), None)
+                if containerId:
+                    create_mongodb_root_user(containerId, mongo_root_username, mongo_root_password, logger, dc, primaryIp)
+                    return
+                else:
+                    logger.warning(f"Attempt {attempt+1}/{retry_attempts}: No container found for primary IP: {primaryIp} - Retrying...")
+            else:
+                logger.warning(f"Attempt {attempt+1}/{retry_attempts}: Primary IP not found in replica set topology - Retrying...")
+
+        except Exception as e:
+            logger.error(f"Attempt {attempt+1}/{retry_attempts}: Error while initializing MongoDB admin, still pulling: {e} from topology - Retrying...")
+
+    logger.error("Failed to initialize MongoDB admin after multiple retries.")
 
 
 def create_mongodb_root_user(containerId, mongo_root_username, mongo_root_password, logger, dc, primaryIp):
@@ -425,7 +452,7 @@ def gather_configured_members_ips(mongo_tasks_ips, mongo_port, mongo_root_userna
         mc = pm.MongoClient(
             host=t, 
             port=mongo_port,
-            directConnection=True, # Mongo > 4 defaults to 'false' which forces discovery instead of direct interrogation - this always returns writeablePrimary=true on all 
+            directConnection=True, #NOTE: Mongo > 4 defaults to 'false' which forces discovery instead of direct interrogation - this always returns writeablePrimary=true on all members (multiple primaries issue)
             username=mongo_root_username, 
             password=mongo_root_password, 
             authSource='admin', 
@@ -443,12 +470,12 @@ def gather_configured_members_ips(mongo_tasks_ips, mongo_port, mongo_root_userna
         except pm.errors.ServerSelectionTimeoutError as ssete:
             logger.debug(f"No pre-existing replicaSet configuration found in node {t} -- (Possible NEW build - please wait...) - ({ssete})")
         except pm.errors.OperationFailure as of:
-            logger.debug(f"Operation failed on node {t} ({of})")
+            logger.debug(f"New Node - [expected] authentication failure {t} during initial config gathering (disregard this): ({of})")
         finally:
             mc.close()
 
     if not config_found:
-        logger.info("No pre-existing configuration found across all nodes")
+        logger.info("No pre-existing configuration found across all nodes - proceeding with new setup!")
         return current_ips # Return the empty set of IPs
 
     logger.debug(f"Current replicaSet members in mongo configuration: {current_ips}")
@@ -466,7 +493,7 @@ def get_primary_ip(tasks_ips, mongo_port, mongo_root_username, mongo_root_passwo
             username=mongo_root_username, 
             password=mongo_root_password,
             authSource='admin',
-            directConnection=True, # Mongo > 4 defaults to 'false' which forces discovery instead of direct interrogation - this always returns writeablePrimary=true on all members (multiple primaries issue)
+            directConnection=True, #NOTE: Mongo > 4 defaults to 'false' which forces discovery instead of direct interrogation - this always returns writeablePrimary=true on all members (multiple primaries issue)
             serverSelectionTimeoutMS=15000,  # 15 seconds timeout for server selection
             connectTimeoutMS=30000,  # 30 seconds connection timeout
             socketTimeoutMS=30000    # 30 seconds socket operation timeout
@@ -476,7 +503,7 @@ def get_primary_ip(tasks_ips, mongo_port, mongo_root_username, mongo_root_passwo
             if mc.is_primary:
                 primary_ips.append(t)
         except ServerSelectionTimeoutError as ssete:
-            logger.debug("Cannot connect to {} to check for primary: ({})".format(t,ssete))
+            logger.debug("Cannot connect to {} to check for primary (disregard this for redeployments!): ({})".format(t,ssete))
         except OperationFailure as of:
             logger.debug("No replicaSet primary IP configuration found in node {} : ({})".format(t,of))
         finally:
@@ -492,7 +519,7 @@ def get_primary_ip(tasks_ips, mongo_port, mongo_root_username, mongo_root_passwo
         return primary_ips[0]
 
 
-# NOTE: alternate get_primary_ip method - not using
+# NOTE: alternate get_primary_ip method - boiler plate rn / in testing...
 # def get_primary_ip(tasks_ips, mongo_port, mongo_root_username, mongo_root_password):
 #     logger = logging.getLogger(__name__)
 #     primary_ip = None
@@ -593,7 +620,7 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
                     'host': "{}:{}".format(ip, mongo_port, mongo_root_username, mongo_root_password)
                 })
 
-        # Incrementing 'version' - 'term' automatically incremented by mongo
+        # Incrementing 'version' (not incrementing 'term' as mongo handles it automatically
         config['version'] += 1
         
         logger.debug("Config Update - Built Updated config: {}".format(config))
@@ -617,7 +644,7 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
         cli.close()
 
 
-# NOTE: tentative method for stepping down primaries, not needed or using so far
+# NOTE: method for stepping down primaries (not needed so far)
 # def step_down_primary(primary_ip, mongo_port, mongo_root_username, mongo_root_password):
 #     logger = logging.getLogger(__name__)
 #     with pm.MongoClient(host=primary_ip, port=mongo_port, username=mongo_root_username, password=mongo_root_password) as primary:
@@ -628,7 +655,7 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
 #             logger.error(f"Failed to step down primary ({primary_ip}): {str(e)}")
 
 
-# NOTE: method to add changeStreamOptions, per Mongo > 6 recommendation - not using (defaults work)
+# NOTE: method to reconfig changeStreamOptions (mongo > 6) -  not using, mongo defaults work
 # def set_change_stream_options(client, expire_after_seconds=None):
 #     """
 #     Set the changeStreamOptions parameter on the MongoDB cluster.
@@ -651,7 +678,7 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
 #         logging.error(f'Failed to set changeStreamOptions: {str(e)}')
 
 
-# NOTE: method to adjust election timeout - not using (defaults work)
+# NOTE: method to adjust election timeout and heartbeats - not using (defaults work)
 # def adjust_election_timeout(primary_ip, mongo_port, mongo_root_username, mongo_root_password):
 #     """
 #     Adjust the election timeout and heartbeat settings.
@@ -660,8 +687,8 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
 #     with pm.MongoClient(host=primary_ip, port=mongo_port, username=mongo_root_username, password=mongo_root_password) as client:
 #         try:
 #             config = client.admin.command("replSetGetConfig")
-#             config['config']['settings'] = {'electionTimeoutMillis': 10000,  # Adjust as needed
-#                                             'heartbeatTimeoutSecs': 10}  # Adjust as needed
+#             config['config']['settings'] = {'electionTimeoutMillis': 10000,
+#                                             'heartbeatTimeoutSecs': 10}
 #             client.admin.command("replSetReconfig", config['config'])
 #         except Exception as e:
 #             logger.error(f"Failed to adjust election timeout: {str(e)}")
@@ -669,11 +696,11 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
 
 def manage_replica(mongo_service, overlay_network_name, replicaset_name, mongo_port, mongo_root_username, mongo_root_password, initdb_database, initdb_user, initdb_password):
     """
-    To manage the replica is to:
+    To manage the replica:
     - Configure replicaset
         If there was no replica before, create one from scratch.
-        If there was a replica (e.g, this script was restarted), that replicaset could be either fine or broken.
-            If the replicaset was healthy, move on to the "watching" phase.
+        If there was a replica (e.g, this script or docker stack was restarted), the replicaset could be either fine or broken.
+            If the replicaset is healthy, move on to the "monitoring" phase.
             Else, force a reconfiguration.
     - Watch for changes in tasks ips
         When IP changes are detected, the replica will break, so we must fix it on the fly.
@@ -682,6 +709,8 @@ def manage_replica(mongo_service, overlay_network_name, replicaset_name, mongo_p
     :param overlay_network_name:
     :param replicaset_name:
     :param mongo_port:
+    :initdb_user:
+    :initdb_password:
     :return:
     """
     logger = logging.getLogger(__name__)
