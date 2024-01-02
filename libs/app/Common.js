@@ -465,6 +465,11 @@ async function logger(data, consoleLog) {
 
 	let logData = `${dateNow} ${data}`;
 
+	if(process.argv[2] && process.argv[2].toLowerCase() == 'clglite') {
+		console.log(logData);
+		return;
+	}
+
 	if (consoleLog || shareData.appData.console_log) {
 
 		console.log(logData);
