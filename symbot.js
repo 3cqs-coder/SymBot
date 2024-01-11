@@ -70,6 +70,11 @@ async function init() {
 		consoleLog = true;
 	}
 
+	if(process.argv[2] && process.argv[2].toLowerCase() == 'clglite') {
+		Common.logger('Lite mode enabled. All logs for this session will be written to console only.');
+	}
+
+
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'reset') {
 
 		isReset = true;

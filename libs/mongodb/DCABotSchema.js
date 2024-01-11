@@ -37,6 +37,11 @@ const DealSchema = new Schema({
 });
 
 
+//DealSchema.index({ 'sellData.date': 1 });
+//DealSchema.index({ 'sellData.date': 1, 'status': 1 });
+//DealSchema.index({ 'sellData.date': -1, 'status': 1 });
+
+
 module.exports = {
 
 	'Bots': mongoose.model('Bots', BotSchema),
