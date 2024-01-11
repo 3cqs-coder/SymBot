@@ -1331,7 +1331,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 									sellErrorCount = dealTracker[dealId]['update']['deal_sell_error']['count'];
 
-									addFee = (0.005 * sellErrorCount);
+									addFee = (0.025 * sellErrorCount);
 								}
 								catch(e) {}
 
@@ -1865,7 +1865,10 @@ const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj,
 		addFee = 0;
 	}
 
-	const exchangeFeeSum = await filterPrice(exchange, pair, (dcaOrderSum / 100) * (Number(config.exchangeFee) + Number(addFee)));
+	let exchangeFeeSum = (dcaOrderSum / 100) * (Number(config.exchangeFee) + Number(addFee));
+	exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 2));
+
+	exchangeFeeSum = await filterPrice(exchange, pair, exchangeFeeSum);
 
 	let exchangeFeeQtySum = exchangeFeeSum / priceFiltered;
 
@@ -2425,6 +2428,9 @@ async function initConfigData(config) {
 			configObj[key] = botConfig.data[key];
 		}
 	}
+
+	// Set current exchange fee
+	configObj['exchangeFee'] = botConfig.data['exchangeFee'];
 
 	// Set bot id
 	if (configObj['botId'] == undefined || configObj['botId'] == null || configObj['botId'] == '') {
