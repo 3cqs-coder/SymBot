@@ -31,7 +31,7 @@
 	"signals": {
 				 	"3CQS": {
 					 			"enabled": true,
-					 			"api_key": "dummykeyxxxxxxxxxxxxxx"
+					 			"api_key": ""
 				 			}
 			   },
 	"verbose_log": true

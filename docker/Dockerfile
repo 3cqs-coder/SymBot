@@ -21,5 +21,5 @@ EXPOSE 3000
 # Mongo Express
 EXPOSE 3010
 
-# Wait 100 seconds for the MongoDB ReplicaSet build & connection
+# Wait 90 seconds for the MongoDB ReplicaSet build & connection
 CMD echo "Warming up" && sleep 90 && npm start
