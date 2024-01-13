@@ -579,7 +579,7 @@
 			contentArr.push('<td>$' + deal['info']['price_last'] + '</td>');
 			contentArr.push('<td>$' + deal['info']['price_target'] + '</td>');
 			contentArr.push('<td>$' + dealVolume.toFixed(2) + '</td>')
-			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit + '</td>');
+			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit.toFixed(3) + '</td>');
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '%</td>');
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
