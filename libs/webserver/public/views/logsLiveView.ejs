@@ -5,7 +5,7 @@
 		$(document).ready(function() {
 
 			const maxRows = 1000;
-			const offsetBottom = -225;
+			const offsetBottom = -225;		
 
 			$(window).resize(function() {
 
@@ -98,8 +98,18 @@
 		<div class="contentHeaderBox" style="text-align: center; width: 100%;">
 			<b class="contentHeader"><%- appData.name %> Realtime Logs</b>
 		</div>
-
+		<% if (isLiteLog) { %>
+			<div class="flex-container">
+				<div class="lite-log">
+					<h3>Lite Logging Enabled</h3>
+					<p>All logs will be written to console.</p>
+					<p>To store logs, restart SymBot without params</p>
+				</div>
+			</div>
+		<% } 
+		else { %> 
 		<div id="dataBox" class="botsDealsBox" style="width: 100%;"></div>
+		<% } %>
 	</div>
 
 </main>
