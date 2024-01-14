@@ -12,11 +12,6 @@
 				resizeBotsDeals(offsetBottom);
 			});
 
-			// Break early in Lite Log and do not init socket
-			if(<%- isLiteLog %>) {
-				return;
-			}
-
 			const socket = io('/', {
 
 				query: { 'room': 'logs' },
