@@ -8,25 +8,25 @@ NAME:
     MongoDB ReplicaSet Manager for Docker Swarm
 
 VERSION: 
-    1.02
+    1.03
 
 DESCRIPTION:
     This script is used to configure, initiate, monitor, and maintain a MongoDB replicaset on a Docker Swarm
 
 REQUIREMENTS:
-    - MongoDB >= 6.0 - using 7.0.4
+    - MongoDB >= 6.0 - using 7.0.5
     - PyMongo Driver >= 4.5.0 - using 4.6.1
     - ENV variables
 
 IMPORTANT: 
-    1. It is intended to be used with a docker-stack-compose.yml with a mongodb replica recipe.
-    2. There should not be more than one process running this script in the swarm -  1 db controller instance per Stack.
-    2. There should be maximum of one replica of MongoDB per swarm node. This is achieved using "global" deployment mode in composer YML for mongo.
+    1. It is intended to be used with a docker-stack-compose.yml with a mongodb replica recipe
+    2. There should not be more than one process running this script in the swarm -  1 db controller instance per Stack
+    2. There should be maximum of one replica of MongoDB per swarm node. This is achieved using "global" deployment mode in composer YML for mongo
 
 HOW IT WORKS / FEATURES:
-    1. Scans running mongod instances in the swarm, 
-        - Determines # of nodes in the mongo global service to wait for
-        - Takes into account 'down' nodes or nodes marked as 'unvailable'/'drain'
+    1. Scans running mongod instances in the swarm
+        - Determines # of nodes in the mongo global service for which to wait
+        - Takes into account 'down' nodes or nodes marked as 'unvailable'/'drain' as well as assigment 'constrains' such as labels, etc
     2. Checks if a replicaset is already configured
     3. If configured:
         - Searches and loads replicaset configuration
@@ -46,7 +46,7 @@ INPUT:
     via environment variables. See get_required_env_variables.
     
 USAGE: 
-    1. Use build.sh to build controller image OR use provided docker image jackietreehorn/db-replica-ctrl:latest
+    1. Use ./build.sh to build controller image OR use provided docker image jackietreehorn/db-replica-ctrl:latest
     2. Deploy your composer YML stack via deploy.sh to import .env variables and deploy your application YML 
 """
 
@@ -112,42 +112,58 @@ def get_mongo_service(dc, mongo_service_name):
 
     if not mongo_services:
         raise RuntimeError(f"Error: Could not find mongo service with name {mongo_service_name}. "
-                           "Did you correctly deploy the stack with the right service?")
+                           "Did you correctly deploy the stack with the right service name, env variables, etc?")
 
     return mongo_services[0]
 
 
-def is_service_up(mongo_service):
+def get_assigned_nodes(mongo_service):
     """
-    Check if the MongoDB service is up and running.
-
-    This function will compare the number of running tasks with the expected number of replicas.
-    It will return True if all replicas are running, False otherwise.
-    It will take into account swarm nodes that are unavailable (drain) as well as (down) nodes.
+    Retrieve nodes assigned to the MongoDB service considering Docker assignment constraints.
+    This function does not check node states or availability.
 
     :param mongo_service: The MongoDB service object.
-    :return: Boolean indicating whether the service is fully up and running.
+    :return: set of node IDs assigned to the service.
     """
+    with docker_client() as dc:
+        service_tasks = mongo_service.tasks()
+        assigned_nodes = set()
+        for task in service_tasks:
+            node_id = task['NodeID']
+            assigned_nodes.add(node_id)
+        return assigned_nodes
+    
+    
+def is_service_up(mongo_service):
+    """
+    Check if the MongoDB service is up and running with all expected replicas.
+    This function considers the number of running tasks, node availability, and state.
+    It ensures that the service runs on nodes that are active and not down.
 
+    :param mongo_service: The MongoDB service object.
+    :return: Boolean indicating whether the service is fully up.
+    """
     if mongo_service is None:
         return False
 
     running_tasks_count = len(get_running_tasks(mongo_service))
+    assigned_nodes = get_assigned_nodes(mongo_service)
 
-    # Get the expected number of replicas from the service mode
+    with docker_client() as dc:
+        active_nodes = {node.id for node in dc.nodes.list() if node.attrs['Spec']['Availability'] == 'active' and node.attrs['Status']['State'] != 'down'}
+
+    # Filtering assigned nodes to include only those that are active
+    assigned_active_nodes = active_nodes.intersection(assigned_nodes)
+
     mode = mongo_service.attrs['Spec']['Mode']
     if 'Replicated' in mode:
         expected_replicas = mode['Replicated']['Replicas']
     elif 'Global' in mode:
-        # For 'Global' mode, count the number of ready and active active nodes in swarm
-        dc = docker.from_env()
-        nodes = dc.nodes.list()
-        active_nodes = [node for node in nodes if node.attrs['Spec']['Availability'] == 'active' and node.attrs['Status']['State'] != 'down']
-        expected_replicas = len(active_nodes)
-        logger.info("Expected number of mongodb nodes: {} | Remaining to start: {}".format({expected_replicas},{expected_replicas - running_tasks_count}))
+        expected_replicas = len(assigned_active_nodes)
+        logger.info("Expected number of mongodb nodes: {} | Remaining to start: {}".format({expected_replicas},{expected_replicas - running_tasks_count}))       
     else:
         return False
-    dc.close()
+
     return running_tasks_count == expected_replicas
 
 
@@ -229,7 +245,7 @@ def setup_initial_database(current_member_ips, mongo_port, mongo_root_username, 
         client.close()
 
 
-def init_replica(mongo_tasks, mongo_tasks_ips, replicaset_name, mongo_port, mongo_root_username, mongo_root_password, retry_attempts=4, retry_delay=10):
+def init_replica(mongo_tasks, mongo_tasks_ips, replicaset_name, mongo_port, mongo_root_username, mongo_root_password, retry_attempts=6, retry_delay=10):
     """
     Init a MongoDB replicaset from the scratch.
     """
@@ -360,7 +376,7 @@ def initialize_mongodb_admin(mongo_tasks, primary_ip, mongo_port, mongo_root_use
 
     logger.info("Configuring mongodb admin...")
 
-    retry_attempts = 6
+    retry_attempts = 8
     retry_delay = 10
 
     for attempt in range(retry_attempts):
@@ -394,7 +410,7 @@ def initialize_mongodb_admin(mongo_tasks, primary_ip, mongo_port, mongo_root_use
                 logger.warning(f"Attempt {attempt+1}/{retry_attempts}: Primary IP not found in replica set topology - Retrying...")
 
         except Exception as e:
-            logger.error(f"Attempt {attempt+1}/{retry_attempts}: Error while initializing MongoDB admin, still pulling: {e} from topology - Retrying...")
+            logger.error(f"Attempt {attempt+1}/{retry_attempts}: Error while initializing MongoDB admin, still polling: {e} from topology - retrying...")
 
     logger.error("Failed to initialize MongoDB admin after multiple retries.")
 
@@ -447,7 +463,7 @@ def gather_configured_members_ips(mongo_tasks_ips, mongo_port, mongo_root_userna
     current_ips = set()
     config_found = False
 
-    logger.info("Inspecting Mongo nodes for pre-existing replicaset - this might take a few moments, please be patient...")
+    logger.info("Inspecting Mongo nodes for pre-existing replicaset - this might take a few moments, please wait...")
     for t in mongo_tasks_ips:
         mc = pm.MongoClient(
             host=t, 
@@ -503,7 +519,7 @@ def get_primary_ip(tasks_ips, mongo_port, mongo_root_username, mongo_root_passwo
             if mc.is_primary:
                 primary_ips.append(t)
         except ServerSelectionTimeoutError as ssete:
-            logger.debug("Cannot connect to {} to check for primary (disregard this for redeployments!): ({})".format(t,ssete))
+            logger.debug("Cannot connect to {} to check for primary (disregard this for re-deployments!): ({})".format(t,ssete))
         except OperationFailure as of:
             logger.debug("No replicaSet primary IP configuration found in node {} : ({})".format(t,of))
         finally:
@@ -574,7 +590,7 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
         force = True
 
         # Let's see if a new primary was elected
-        attempts = 3
+        attempts = 6
         primary_ip = None
         while attempts and not primary_ip:
             time.sleep(10)
@@ -600,10 +616,10 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
         )
     try:
         config = cli.admin.command("replSetGetConfig")['config']
-        logger.debug("Config Update - Old replica Members: {}".format(config['members']))
+        logger.debug("Config Update - Old Replica Members: {}".format(config['members']))
 
         if to_remove:
-            logger.info("Config Update - Replica members to remove: {}".format(to_remove))
+            logger.info("Config Update - Replica Members to remove: {}".format(to_remove))
             new_members = [m for m in config['members'] if m['host'].split(":")[0] not in to_remove]
             config['members'] = new_members
 
@@ -655,7 +671,7 @@ def update_config(primary_ip, current_ips, new_ips, mongo_port, mongo_root_usern
 #             logger.error(f"Failed to step down primary ({primary_ip}): {str(e)}")
 
 
-# NOTE: method to reconfig changeStreamOptions (mongo > 6) -  not using, mongo defaults work
+# NOTE: method to reconfig changeStreamOptions (mongo > 6) -  not using, (defaults work)
 # def set_change_stream_options(client, expire_after_seconds=None):
 #     """
 #     Set the changeStreamOptions parameter on the MongoDB cluster.
@@ -765,7 +781,7 @@ if __name__ == '__main__':
             logger.info('Waiting for mongo service ({}) tasks to start, please be patient...'.format(mongo_service_name))
 
             # Make sure Mongo is up and running
-            attempts = 30  # Total number of attempts to check if the service is up - increase for large # of nodes (tested on 6 nodes)
+            attempts = 40  # Total number of attempts to check if the service is up - increase for large # of nodes (tested on 7 nodes)
             mongo_service = None
             service_down = True
             while service_down and attempts > 0:
