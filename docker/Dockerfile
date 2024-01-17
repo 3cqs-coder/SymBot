@@ -1,5 +1,5 @@
 # Use Node.js as parent image
-FROM node:19.2
+FROM node:21.5
 
 ENV DOCKER_RUNNING=true
 
@@ -21,5 +21,5 @@ EXPOSE 3000
 # Mongo Express
 EXPOSE 3010
 
-# Wait 90 seconds for the MongoDB ReplicaSet build & connection
-CMD echo "Warming up" && sleep 90 && npm start
+# Wait 30 seconds for the MongoDB ReplicaSet build & connection
+CMD echo "Warming up" && sleep 30 && npm start

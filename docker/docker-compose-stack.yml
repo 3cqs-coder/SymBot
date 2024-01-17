@@ -1,4 +1,13 @@
 version: '3.9'
+
+x-logging:
+  &default-logging
+  driver: "local"
+  options:
+    max-size: "1m"
+    # max-file: "1"
+    # tag: "{{.Name}}"
+
 services:
   database:
     image: mongo:${MONGO_VERSION}
@@ -27,6 +36,7 @@ services:
         parallelism: 1
         delay: 1m30s
         monitor: 15s
+    logging: *default-logging
 
   dbcontroller:
     image: jackietreehorn/mongo-replica-ctrl:latest
@@ -59,6 +69,7 @@ services:
         parallelism: 1
         delay: 1m
         monitor: 10s
+    logging: *default-logging
 
   web:
     image: jackietreehorn/symbot:noconfig
@@ -95,6 +106,7 @@ services:
         parallelism: 1
         delay: 1m
         monitor: 15s
+    logging: *default-logging
 
   mongo-express:
     image: mongo-express:latest
@@ -132,6 +144,7 @@ services:
         parallelism: 1
         delay: 1m
         monitor: 15s
+    logging: *default-logging
 
 
 configs:
