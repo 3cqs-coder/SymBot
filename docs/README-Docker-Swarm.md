@@ -24,7 +24,7 @@ If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted
 
 ## Requirements
 * [x] **SymBot**: tested on latest version (`0.99.780-beta.0` as of this writing).
-* [x] **MongoDB**: version 6.0 and above (recipe uses `7.0.4`).
+* [x] **MongoDB**: version 6.0 and above (recipe uses `7.0.5`).
 * [x] **[Mongo-Replica-Ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)**: PyMongo-based [MongoDB ReplicaSet Manager](https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager).  
 * [x] **Docker**: tested on `24.0.7`.
 * [x] **Operating System**: **Operating System**: Linux (tested on `Ubuntu 23.04`)<br/>**mongo-replica-ctrl** image supports:
@@ -70,7 +70,7 @@ If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted
 ## Environment Variables
 The script requires the following environment variables, defined in `mongo-rs.env`:
 * `STACK_NAME`, the default value is `symbot`
-* `MONGO_VERSION`, the default value is `7.0.2`
+* `MONGO_VERSION`, the default value is `7.0.5`
 * `REPLICASET_NAME`, the default value is `rs`
 * `BACKEND_NETWORK_NAME`, the default value is `${STACK_NAME}_backend`
 * `MONGO_SERVICE_URI`, the default value is `${STACK_NAME:}_database`
