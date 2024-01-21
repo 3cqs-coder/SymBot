@@ -4,7 +4,7 @@
 /*
 
 	SymBot
-	Copyright © 2023 3CQS.com All Rights Reserved
+	Copyright © 2023 - 2024 3CQS.com All Rights Reserved
 	Licensed under Creative Commons Attribution-NonCommerical-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 */
@@ -224,6 +224,7 @@ async function init() {
 										'telegram_enabled': appConfig['data']['telegram']['enabled'],
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
+										'reset': isReset,
 										'started': new Date()
 								   },
 						'DB': DB,
