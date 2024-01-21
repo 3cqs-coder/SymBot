@@ -1,16 +1,15 @@
 # Use Node.js as parent image
-FROM node:19.2
-
-ENV DOCKER_RUNNING=true
+FROM node:21
 
 # Create an environment variable for MongoDB
-ENV MONGODB_URI='mongodb://localhost:27017/symbot'
+ENV DOCKER_RUNNING=true \
+    MONGODB_URI='mongodb://localhost:27017/symbot'
 
 # Set working directory to /usr/src/app
 WORKDIR /usr/src/app
 
 # Copy SymBot app contents into the working directory of docker image
-COPY . /usr/src/app/
+COPY . .
 
 # Install SymBot package dependencies
 RUN npm install
@@ -18,8 +17,5 @@ RUN npm install
 # SymBot
 EXPOSE 3000
 
-# Mongo Express
-EXPOSE 3010
-
-# Wait 5 seconds for the MongoDB connection
+# Wait 5 seconds for the MongoDB ReplicaSet build & connection
 CMD echo "Warming up" && sleep 5 && npm start
