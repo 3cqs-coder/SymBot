@@ -72,10 +72,10 @@ function initRoutes(router) {
 
 
 	router.get('/logs/live', (req, res) => {
-		res.set('Cache-Control', 'no-store');
-		const isLiteLog = process.argv[2] ? process.argv[2].toLowerCase() === 'clglite' : false;
 
-		res.render( 'logsLiveView', { 'appData': shareData.appData, isLiteLog } );
+		res.set('Cache-Control', 'no-store');
+
+		res.render( 'logsLiveView', { 'appData': shareData.appData } );
 	});
 
 
