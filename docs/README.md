@@ -6,6 +6,9 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 ![SymBot](https://user-images.githubusercontent.com/111208586/219070191-abe2ef94-ca5a-43a9-867c-2c2ff9609699.jpg)
 
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/7UwdwAgUZ9)
+
+
 ## Table of Contents
 
 - [Requirements](#requirements)
