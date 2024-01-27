@@ -1047,6 +1047,19 @@ async function goHome(req, res) {
 	res.render( 'homeView', { 'appData': shareData.appData } );
 }
 
+const stripNonNumeric =  (inputString) => inputString.replace(/[^0-9.]/g, '');
+
+async function getAppVersions(packageJson) {
+	try {
+		let req = await fetch('https://raw.githubusercontent.com/3cqs-coder/SymBot/main/package.json');
+		let { version } = await req.json();
+		return { remote: stripNonNumeric(version), local: stripNonNumeric(packageJson.version) };
+	} catch (err) {
+		logger('Failed to retrieve remote application version: ' + err)
+		return { remote: '0.0.0', local: '0.0.0'}
+	}
+}
+
 
 module.exports = {
 
@@ -1086,6 +1099,7 @@ module.exports = {
 	showTradingView,
 	fetchURL,
 	getProcessInfo,
+	getAppVersions,
 
 	init: function(obj) {
 
