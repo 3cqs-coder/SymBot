@@ -904,10 +904,14 @@ async function apiCreateUpdateBot(req, res) {
 	let dealMaxFunds = orders['data']['content']['max_funds'];
 	const pairMax = parseInt(botData['pairMax']);
 
-	const bot_maxFunds = pairMax < pairs.length ? Math.round(dealMaxFunds * pairMax) : Math.round(dealMaxFunds * pairs.length);
+	const bot_maxFunds = () => {
+		if(pairMax == 0) return Math.round(dealMaxFunds * pairs.length);
+		if(pairMax > pairs.length) return Math.round(dealMaxFunds * pairs.length);
+		return Math.round(dealMaxFunds * pairMax);
+	};
 
 	// Add property bot_max_funds to orders object by calculating deal max funds multiplied by numbers of pairs
-	orders['data']['content']['bot_max_funds'] = bot_maxFunds;
+	orders['data']['content']['bot_max_funds'] = bot_maxFunds();
 
 	if (botData.startConditions != undefined && botData.startConditions != null) {
 
