@@ -82,6 +82,7 @@ async function init() {
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
+	await checkAppVersion();
 	await checkDependencies();
 
 	let appConfig = await Common.getConfig('app.json');
@@ -394,6 +395,25 @@ async function checkDependencies() {
 
 		Common.logger(pref + 'Packages installed do not match package list. You may want to update using npm install or another method', true);
 	}
+}
+
+async function checkAppVersion() {
+	const { local, remote } = await Common.getAppVersions(packageJson);
+    const parseVersion = (version) => version.split('.').map(Number);
+
+    const localParts = parseVersion(local);
+    const remoteParts = parseVersion(remote);
+
+    for (let i = 0; i < Math.max(localParts.length, remoteParts.length); i++) {
+        const local_segment = i < localParts.length ? localParts[i] : 0;
+        const remote_segment = i < remoteParts.length ? remoteParts[i] : 0;
+
+        if (local_segment < remote_segment) {
+			Common.logger('WARNING: Your app version is outdated. Please update to the latest version.', true);
+			Common.logger('Current version: ' + local + ' Latest version: ' + remote, true);
+            return;
+        } 
+    }
 }
 
 
