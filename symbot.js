@@ -82,7 +82,7 @@ async function init() {
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
-	await checkAppVersion();
+	const { update_available } = await checkAppVersion();
 	await checkDependencies();
 
 	let appConfig = await Common.getConfig('app.json');
@@ -210,6 +210,7 @@ async function init() {
 						'appData': {
 										'name': packageJson.description,
 										'version': packageJson.version,
+										'update_available': update_available,
 										'server_id': '',
 										'app_filename': __filename,
 										'console_log': consoleLog,
@@ -411,9 +412,10 @@ async function checkAppVersion() {
         if (local_segment < remote_segment) {
 			Common.logger('WARNING: Your app version is outdated. Please update to the latest version.', true);
 			Common.logger('Current version: ' + local + ' Latest version: ' + remote, true);
-            return;
+            return { update_available: true };
         } 
     }
+	return { update_available: false };
 }
 
 
