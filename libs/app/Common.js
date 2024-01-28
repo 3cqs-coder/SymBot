@@ -1055,7 +1055,7 @@ async function getAppVersions(packageJson) {
 		let { version } = await req.json();
 		return { remote: stripNonNumeric(version), local: stripNonNumeric(packageJson.version) };
 	} catch (err) {
-		logger('Failed to retrieve remote application version: ' + err)
+		logger('Failed to retrieve remote application version', true);
 		return { remote: '0.0.0', local: '0.0.0'}
 	}
 }
