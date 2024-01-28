@@ -436,13 +436,17 @@ form textarea {
 
 	z-index: 9999;
 	position: fixed;
+	display: flex;
+	align-items: center;
 	cursor: pointer;
+	justify-content: space-between;
 	left: 0;
 	bottom: 0;
-	padding-bottom: 2px;
 	width: 100%;
-	height: auto;
+	height: 25px;
+	padding: 0 10px 0 10px;
 	background-color: #000000;
+	font-size: 0.95rem;
 }
 
 
