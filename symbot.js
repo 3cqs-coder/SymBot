@@ -82,7 +82,7 @@ async function init() {
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
-	const { update_available } = await checkAppVersion();
+	const { update_available } = await Common.validateAppVersion();
 	await checkDependencies();
 
 	let appConfig = await Common.getConfig('app.json');
@@ -316,6 +316,15 @@ async function init() {
 		Telegram.start(appConfig['data']['telegram']['token_id']);
 		WebServer.start(appConfig['data']['web_server']['port']);
 
+		const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
+		setInterval(async () => {
+			const { update_available } = await Common.validateAppVersion();
+			if(update_available && !shareData.appData.update_available) {
+				shareData.appData.update_available = true;
+			}
+		}, TWELVE_HOURS)
+
 		setTimeout(() => {
 
 			let msg = appDataConfig.name + ' v' + appDataConfig.version + ' started at ' + new Date(appDataConfig.started).toISOString();
@@ -398,25 +407,6 @@ async function checkDependencies() {
 	}
 }
 
-async function checkAppVersion() {
-	const { local, remote } = await Common.getAppVersions(packageJson);
-    const parseVersion = (version) => version.split('.').map(Number);
-
-    const localParts = parseVersion(local);
-    const remoteParts = parseVersion(remote);
-
-    for (let i = 0; i < Math.max(localParts.length, remoteParts.length); i++) {
-        const local_segment = i < localParts.length ? localParts[i] : 0;
-        const remote_segment = i < remoteParts.length ? remoteParts[i] : 0;
-
-        if (local_segment < remote_segment) {
-			Common.logger('WARNING: Your app version is outdated. Please update to the latest version.', true);
-			Common.logger('Current version: ' + local + ' Latest version: ' + remote, true);
-            return { update_available: true };
-        } 
-    }
-	return { update_available: false };
-}
 
 
 async function reset(serverIdError) {

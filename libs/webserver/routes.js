@@ -260,6 +260,18 @@ function initRoutes(router) {
 		}
 	});
 
+	router.get('/app-version', async (req, res) => {
+		res.set('Cache-Control', 'no-store');
+		const { update_available } = await shareData.Common.validateAppVersion();
+		
+		if(update_available && !shareData.appData.update_available) {
+			shareData.appData.update_available = true;
+		}
+
+		res.json({
+			update_available
+		})
+	});
 
 	router.post([ '/api/deals/:dealId/update_deal' ], (req, res) => {
 
