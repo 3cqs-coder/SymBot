@@ -151,6 +151,17 @@
 			$('#apitoken').html(window.atob(token));
 		});
 
+		$('#checkUpdates').on('click', async function() {
+			let msg = 'Update Available.';
+			try {
+				const req = await fetch('/app-version');
+				const { update_available } = await req.json();
+				update_available ? alert(msg) : alert(`No ${msg}`)
+			} catch (err) {
+				alert('Unable to check for update.');
+			}
+		})
+
 		$('#submitButton').on('click', function(e) {
 
 			e.preventDefault();
@@ -211,6 +222,10 @@
 			<div style="padding-top: 10px; padding-bottom: 5px;">
 				<input id="toggleTelegram" name="telegram" type=checkbox> Telegram Notifications
 			</div>
+
+			<button style="margin-top: 20px" type="button" id="checkUpdates" class="btn" style="cursor: pointer;">
+				Check for Updates
+			</button>
 
 			<div style="text-align: center; padding-top: 25px;">
 				<button type="submit" id="submitButton" class="btn" style="cursor: pointer;">

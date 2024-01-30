@@ -260,12 +260,7 @@ async function start(dataObj, startId) {
 
 					amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
-					let targetPrice = Percentage.addPerc(
-						price,
-						config.dcaTakeProfitPercent
-					);
-
-					targetPrice = await filterPrice(exchange, pair, targetPrice);
+					let targetPrice = await calculateTargetPrice(exchange, pair, price, config.dcaTakeProfitPercent, config.exchangeFee);
 
 					orders.push({
 						orderNo: 1,
@@ -323,12 +318,7 @@ async function start(dataObj, startId) {
 							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
 						);
 
-						let targetPrice = Percentage.addPerc(
-							average,
-							config.dcaTakeProfitPercent
-						);
-
-						targetPrice = await filterPrice(exchange, pair, targetPrice);
+						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
 
 						orders.push({
 							orderNo: i + 2,
@@ -382,12 +372,7 @@ async function start(dataObj, startId) {
 							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
 						);
 
-						let targetPrice = Percentage.addPerc(
-							average,
-							config.dcaTakeProfitPercent
-						);
-
-						targetPrice = await filterPrice(exchange, pair, targetPrice);
+						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
 
 						orders.push({
 							orderNo: i + 2,
@@ -557,12 +542,7 @@ async function start(dataObj, startId) {
 
 					amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
-					let targetPrice = Percentage.addPerc(
-						price,
-						config.dcaTakeProfitPercent
-					);
-
-					targetPrice = await filterPrice(exchange, pair, targetPrice);
+					let targetPrice = await calculateTargetPrice(exchange, pair, price, config.dcaTakeProfitPercent, config.exchangeFee);
 
 					orders.push({
 						orderNo: 1,
@@ -620,12 +600,7 @@ async function start(dataObj, startId) {
 							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
 						);
 
-						let targetPrice = Percentage.addPerc(
-							average,
-							config.dcaTakeProfitPercent
-						);
-
-						targetPrice = await filterPrice(exchange, pair, targetPrice);
+						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
 
 						orders.push({
 							orderNo: i + 2,
@@ -678,12 +653,7 @@ async function start(dataObj, startId) {
 							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
 						);
 
-						let targetPrice = Percentage.addPerc(
-							average,
-							config.dcaTakeProfitPercent
-						);
-
-						targetPrice = await filterPrice(exchange, pair, targetPrice);
+						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
 
 						orders.push({
 							orderNo: i + 2,
@@ -1228,12 +1198,10 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				const filledOrders = deal.orders.filter(item => item.filled == 1);
 				const currentOrder = filledOrders.pop();
 
-				let profit = await Percentage.subNumsAsPerc(
-					price,
-					currentOrder.average
-				);
+				const profitData = await calculateProfit(price, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee);
 
-				profit = Number(profit).toFixed(2);
+				let profit = profitData['profit_percentage'];
+
 				let profitPerc = profit;
 
 				profit =
@@ -1849,6 +1817,42 @@ const getDeviationDca = async (dcaOrderStepPercent, dcaOrderStepPercentMultiplie
 }
 
 
+const calculateProfit = async (price, orderAverage, orderSum, takeProfitPercent, exchangeFeePercent) => {
+
+	let profitPerc = await Percentage.subNumsAsPerc(
+		price,
+		orderAverage
+	);
+
+	profitPerc = profitPerc - Number(exchangeFeePercent);
+	profitPerc = Number(Number(profitPerc).toFixed(2));
+
+	const takeProfit = shareData.Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent)) / 100)));
+	const currentProfit = shareData.Common.roundAmount(Number((Number(orderSum) * (Number(profitPerc) / 100))));
+
+	const data = {
+					'profit': currentProfit,
+					'take_profit': takeProfit,
+					'profit_percentage': profitPerc
+				 };
+
+	return data;
+}
+
+
+const calculateTargetPrice = async (exchange, pair, price, takeProfitPercent, exchangeFeePercent) => {
+
+	let targetPrice = Percentage.addPerc(
+		price,
+		(Number(takeProfitPercent) + Number(exchangeFeePercent))
+	);
+
+	targetPrice = await filterPrice(exchange, pair, targetPrice);
+
+	return targetPrice;
+}
+
+
 const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj, addFee) => {
 
 	const config = JSON.parse(JSON.stringify(configObj));
@@ -1866,7 +1870,7 @@ const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj,
 	}
 
 	let exchangeFeeSum = (dcaOrderSum / 100) * (Number(config.exchangeFee) + Number(addFee));
-	exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 2));
+	//exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 2));
 
 	exchangeFeeSum = await filterPrice(exchange, pair, exchangeFeeSum);
 
@@ -2362,15 +2366,11 @@ async function getDealInfo(data) {
 	const filledOrders = orders.filter(item => item.filled == 1);
 	const currentOrder = filledOrders.pop();
 
-	let profitPerc = await Percentage.subNumsAsPerc(
-							price,
-							currentOrder.average
-						);
+	const profitData = await calculateProfit(price, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee);
 
-	profitPerc = Number(Number(profitPerc).toFixed(2));
-
-	const takeProfit = shareData.Common.roundAmount(Number(Number(currentOrder.sum) * (Number(config.dcaTakeProfitPercent) / 100)));
-	const currentProfit = shareData.Common.roundAmount(Number((Number(currentOrder.sum) * (Number(profitPerc) / 100))));
+	const profitPerc = profitData['profit_percentage'];
+	const takeProfit = profitData['take_profit'];
+	const currentProfit = profitData['profit'];
 
 	const dealInfo = {
 						'updated': updated,
@@ -3226,12 +3226,7 @@ async function addFundsDeal(dealId, volume) {
 
 				const avgPrice = await filterPrice(exchange, config.pair, (parseFloat(orderSum) / parseFloat(qtySum)));
 
-				let targetPrice = Percentage.addPerc(
-					(avgPrice),
-					(config.dcaTakeProfitPercent)
-				);
-
-				targetPrice = await filterPrice(exchange, config.pair, targetPrice);
+				let targetPrice = await calculateTargetPrice(exchange, config.pair, avgPrice, config.dcaTakeProfitPercent, config.exchangeFee);
 
 				if (targetPrice != undefined && targetPrice != null && targetPrice != false && targetPrice > 0) {
 
@@ -3287,12 +3282,7 @@ async function addFundsDeal(dealId, volume) {
 
 				const avgPrice = await filterPrice(exchange, config.pair, parseFloat(orderSum) / parseFloat(orderQtySum));
 
-				let targetPrice = Percentage.addPerc(
-					(avgPrice),
-					(config.dcaTakeProfitPercent)
-				);
-
-				targetPrice = await filterPrice(exchange, config.pair, targetPrice);
+				let targetPrice = await calculateTargetPrice(exchange, config.pair, avgPrice, config.dcaTakeProfitPercent, config.exchangeFee);
 
 				oldOrders[i].orderNo = oldOrders[i].orderNo + 1;
 				oldOrders[i].price = price;
@@ -3386,6 +3376,12 @@ async function startDelay(dataObj) {
 
 
 async function initApp() {
+
+	// Don't initialize if resetting database
+	if (shareData.appData.reset) {
+
+		return;
+	}
 
 	setInterval(() => {
 

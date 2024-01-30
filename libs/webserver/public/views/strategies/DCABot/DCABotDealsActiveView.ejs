@@ -6,6 +6,7 @@
 	let dealTracker = {};
 	let dealTrackerErrors = {};
 	let modalId = 'activeDealsView';
+	let activeBots = [];
 
 	function setReloadTimeout() {
 
@@ -451,8 +452,10 @@
 		const maxMins = 2;
 
 		let totalProfit = 0;
+		let activeDeals = 0;
 		let inDeals = 0;
 		let dealDataErrors = 0;
+		const selectedBot = $('#active-bot-filter').val();
 
 		let msgBoxColor = '#386ec2';
 		let profitTotalColor = '#1a9f00';
@@ -465,6 +468,17 @@
 		dealTracker = {};
 
 		for (let i = 0; i < deals.length; i++) {
+
+			if(!activeBots.includes(deals[i].botName)) {
+				activeBots.push(deals[i].botName);
+				$('#active-bot-filter').append('<option value="' + deals[i].botName + '">' + deals[i].botName + '</option>');
+			}
+
+			if(selectedBot != 'all' && deals[i].botName != selectedBot) {
+				continue;
+			}
+
+			activeDeals++;
 
 			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
 			let addFundsButton = '<span class="disableButton">$+</span>';
@@ -622,7 +636,7 @@
 		$('#totalProfit').html('$' + totalProfit.toFixed(2));
 
 		$('#inDeals').html('$' + inDeals.toFixed(2));
-		$('#totalDeals').html(deals.length);
+		$('#totalDeals').html(activeDeals);
 		
 		$('#botsDeals').tablesorter().trigger('update');
 
@@ -847,6 +861,10 @@
 			}
 		});
 
+		$('#active-bot-filter').change(() => {
+			getActiveDeals();
+		})
+		
 		getActiveDeals();
 
 	});
@@ -879,6 +897,12 @@
 					<p style="margin-top: 0; margin-bottom: 0;">Active P/L: <span id="totalProfit"></span></p>
 					<p style="margin-top: 0; margin-bottom: 0;">In Deals: <span id="inDeals"></span></p>
 					<p style="margin-top: 0; margin-bottom: 0;">Deals: <span id="totalDeals"></span></p>
+					<div class="active-filter" style="display: inline-flex; align-items: center; gap: 5px; height: 20px;">
+						<p>Bot: </p>
+						<select class="form-field" id="active-bot-filter">
+							<option value="all"></option>
+						</select>
+					</div>
 				</span>
 			</div>
 

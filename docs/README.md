@@ -11,6 +11,9 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 ![SymBot](https://user-images.githubusercontent.com/111208586/219070191-abe2ef94-ca5a-43a9-867c-2c2ff9609699.jpg)
 
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/m8TyEpBaCg)
+
+
 ## Table of Contents
 
 - [Requirements](#requirements)
@@ -809,6 +812,18 @@ If you want to reset the SymBot database for any reason, you can do so only from
 
 #### Can I run SymBot on my home network?
 - Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected scenarios, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
+
+#### Can I run multiple SymBot instances on the same server?
+- Yes, with a few simple steps:
+
+	1. Clone the SymBot code into a new directory and follow the same installation procedures
+	2.  Change your `mongo_db_url` to point to a different database, such as `mongodb://127.0.0.1:27017/SymBot2`
+	3.  Change your `web_server` port to any unused server port such as 3001
+
+- Additional things to consider:
+	- If you are using Telegram for notifications you will likely need to create a new bot since Telegram only allows one connection per account
+	- If you are using pm2 or some other process manager, be sure to add the new SymBot instance there
+	- If you are using the same exchange / account credentials this will impact any rate limiting, connections, etc. the exchange imposes for all SymBot instances
 
 #### Can I access SymBot from my mobile device?
 - Yes. If you set up SymBot on a home network and your mobile device is connected to the same wireless network, you should be able to open a web browser on your device and access SymBot just fine. Keep in mind that you need to use the IP address of the server that SymBot is running on, such as http://192.168.1.10:3000. However, being able to access it from other locations depends if your system is accessible to the public internet. This generally requires either opening ports on your router and system, or setting up a [Reverse Proxy](#reverse-proxy-setup).

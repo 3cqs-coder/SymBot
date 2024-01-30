@@ -115,12 +115,24 @@
 			"description": "SymSense Super Greed"
 		},
 		{
+			"id": 48,
+			"description": "SymSense Super Greed Range"
+		},
+		{
 			"id": 40,
 			"description": "SymSense Hyper Greed"
 		},
 		{
+			"id": 49,
+			"description": "SymSense Hyper Greed Range"
+		},
+		{
 			"id": 41,
 			"description": "SymSense Ultra Greed"
+		},
+		{
+			"id": 50,
+			"description": "SymSense Ultra Greed Range"
 		},
 		{
 			"id": 42,
@@ -135,12 +147,24 @@
 			"description": "SymSense Super Fear"
 		},
 		{
+			"id": 51,
+			"description": "SymSense Super Fear Range"
+		},
+		{
 			"id": 45,
 			"description": "SymSense Hyper Fear"
 		},
 		{
+			"id": 52,
+			"description": "SymSense Hyper Fear Range"
+		},
+		{
 			"id": 46,
 			"description": "SymSense Ultra Fear"
+		},
+		{
+			"id": 53,
+			"description": "SymSense Ultra Fear Range"
 		},
 		{
 			"id": 47,
