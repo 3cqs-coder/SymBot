@@ -82,6 +82,7 @@ async function init() {
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
+	const { update_available } = await Common.validateAppVersion();
 	await checkDependencies();
 
 	let appConfig = await Common.getConfig('app.json');
@@ -209,6 +210,7 @@ async function init() {
 						'appData': {
 										'name': packageJson.description,
 										'version': packageJson.version,
+										'update_available': update_available,
 										'server_id': '',
 										'app_filename': __filename,
 										'console_log': consoleLog,
@@ -314,6 +316,15 @@ async function init() {
 		Telegram.start(appConfig['data']['telegram']['token_id']);
 		WebServer.start(appConfig['data']['web_server']['port']);
 
+		const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
+		setInterval(async () => {
+			const { update_available } = await Common.validateAppVersion();
+			if(update_available && !shareData.appData.update_available) {
+				shareData.appData.update_available = true;
+			}
+		}, TWELVE_HOURS)
+
 		setTimeout(() => {
 
 			let msg = appDataConfig.name + ' v' + appDataConfig.version + ' started at ' + new Date(appDataConfig.started).toISOString();
@@ -395,6 +406,7 @@ async function checkDependencies() {
 		Common.logger(pref + 'Packages installed do not match package list. You may want to update using npm install or another method', true);
 	}
 }
+
 
 
 async function reset(serverIdError) {

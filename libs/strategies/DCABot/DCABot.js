@@ -1870,7 +1870,7 @@ const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj,
 	}
 
 	let exchangeFeeSum = (dcaOrderSum / 100) * (Number(config.exchangeFee) + Number(addFee));
-	exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 2));
+	//exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 2));
 
 	exchangeFeeSum = await filterPrice(exchange, pair, exchangeFeeSum);
 

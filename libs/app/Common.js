@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const Convert = require('ansi-to-html');
 const fetch = require('node-fetch-commonjs');
 const { v4: uuidv4 } = require('uuid');
+const packageJson = require(__dirname + '/../../package.json');
 
 const convertAnsi = new Convert();
 
@@ -1047,6 +1048,39 @@ async function goHome(req, res) {
 	res.render( 'homeView', { 'appData': shareData.appData } );
 }
 
+const stripNonNumeric =  (inputString) => inputString.replace(/[^0-9.]/g, '');
+
+async function getAppVersions() {
+	try {
+		let req = await fetch('https://raw.githubusercontent.com/3cqs-coder/SymBot/main/package.json');
+		let { version } = await req.json();
+		return { remote: stripNonNumeric(version), local: stripNonNumeric(packageJson.version) };
+	} catch (err) {
+		logger('Failed to retrieve remote application version', true);
+		return { remote: '0.0.0', local: '0.0.0'}
+	}
+}
+
+async function validateAppVersion() {
+	const { local, remote } = await getAppVersions();
+    const parseVersion = (version) => version.split('.').map(Number);
+
+    const localParts = parseVersion(local);
+    const remoteParts = parseVersion(remote);
+
+    for (let i = 0; i < Math.max(localParts.length, remoteParts.length); i++) {
+        const local_segment = i < localParts.length ? localParts[i] : 0;
+        const remote_segment = i < remoteParts.length ? remoteParts[i] : 0;
+
+        if (local_segment < remote_segment) {
+			logger('WARNING: Your app version is outdated. Please update to the latest version.', true);
+			logger('Current version: ' + local + ' Latest version: ' + remote, true);
+            return { update_available: true };
+        } 
+    }
+	return { update_available: false };
+}
+
 
 module.exports = {
 
@@ -1086,6 +1120,8 @@ module.exports = {
 	showTradingView,
 	fetchURL,
 	getProcessInfo,
+	getAppVersions,
+	validateAppVersion,
 
 	init: function(obj) {
 

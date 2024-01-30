@@ -1,8 +1,13 @@
 
 <div id="footerBox">
-	<span style="float: left; margin-left: 5px; font-size: 0.95rem; color: #b2b2b2;">
-		<a href="https://www.3cqs.com" style="color: #b2b2b2;" target=_blank><%- appData.name %> v<%- appData.version %> - 3CQS.com</a>
+	<span>
+		<a style="color: #b2b2b2;" href="https://www.3cqs.com" target=_blank><%- appData.name %> v<%- appData.version %> - 3CQS.com</a>
 	</span>
+	<% if (appData.update_available) { %>
+		<span>
+			<a style="color: #b2b2b2;" href="https://github.com/3cqs-coder/SymBot" target="_blank">Update Available</a>
+		</span>
+	<% } %>
 </div>
 
 </body>
