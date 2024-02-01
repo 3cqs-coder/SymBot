@@ -152,13 +152,19 @@
 		});
 
 		$('#checkUpdates').on('click', async function() {
+
 			let msg = 'Update Available.';
+
 			try {
+
 				const req = await fetch('/app-version');
 				const { update_available } = await req.json();
-				update_available ? alert(msg) : alert(`No ${msg}`)
+
+				update_available ? alertBox(msg, function() {}) : alertBox(`No ${msg}`, function() {});
+
 			} catch (err) {
-				alert('Unable to check for update.');
+
+				alertBox('Unable to check for update.', function() {});
 			}
 		})
 
@@ -185,7 +191,11 @@
 		<form autocomplete="off" action="/config" method="POST" id="formConfig">
 
 			<div style="padding-bottom: 5px;">
-				<label for="password">Current Password</label>
+				<label for="password">Current Password
+					<span class="toolTip">?<span class="toolTipText">
+						This is the password used to login to the <%- appData.name %> web interface.
+					</span></span>
+				</label>
 				<input type="password" name="password" id="password" class="form-field" style="width: 250px;" required> <span id="configChangePass" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Change</span>
 			</div>
 
@@ -200,22 +210,40 @@
 			</div>
 
 			<div style="padding-bottom: 5px;">
-				<label for="apikey">API Key <span style="font-size: 0.99rem;"><i>(Not displayed for security)</i></span></label>
+				<label for="apikey">API Key <span style="font-size: 0.99rem;"><i>(Not displayed for security)</i></span>
+					<span class="toolTip">?<span class="toolTipText">
+						This is the key used for <%- appData.name %> API access
+					</span></span>
+				</label>
 				<input name="apikey" id="apikey" class="form-field" style="width: 250px;" required> <span id="configApiKey" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Generate</span>
 			</div>
 
 			<div style="padding-bottom: 5px;">
-				<label for="apitoken">Webhook API Token <span style="font-size: 0.99rem;"></span><span id="configApiToken" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span></label>
+				<label for="apitoken">Webhook API Token
+					<span class="toolTip">?<span class="toolTipText">
+						This is the token used for <%- appData.name %> webhook access
+					</span></span>
+					<span style="font-size: 0.99rem;"></span><span id="configApiToken" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
+				</label>
 				<span id="apitoken" style="display: none; overflow-wrap: break-word;"></span>
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
-				<label for="pairbuttons">Pair Autofill Buttons</label>
+				<label for="pairbuttons">Pair Autofill Buttons
+					<span class="toolTip">?<span class="toolTipText">
+						These are buttons used to automatically fill in all pairs after clicking on one when creating or updating bots.
+					</span></span>
+				</label>
+
 				<select id="pairbuttons" name="pairbuttons" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
-				<label for="pairblacklist">Pair Autofill Blacklist</label>
+				<label for="pairblacklist">Pair Autofill Blacklist
+					<span class="toolTip">?<span class="toolTipText">
+						These are trading pairs that you do not want automatically filled in the pair selection box when creating or updating bots after clicking one of the stablecoin buttons such as USD or USDT. You can use full pairs such as BTC/USD or wildcards such as BTC/*. Updating this list will not modify existing bot pairs or block them from being used.
+					</span></span>
+				</label>
 				<select id="pairblacklist" name="pairblacklist" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>
 			</div>
 

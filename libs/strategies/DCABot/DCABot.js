@@ -22,6 +22,7 @@ const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA
 const maxMinsDeals = 2;
 const maxMinsVolume = 5;
 
+const exchangeTimeoutSec = 10;
 const maxSellErrorCount = 3;
 
 let dealTracker = {};
@@ -256,7 +257,7 @@ async function start(dataObj, startId) {
 					const price = await filterPrice(exchange, pair, askPrice);
 
 					let amount = price * firstOrderSize;
-					let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+					let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
 
 					amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
@@ -297,7 +298,7 @@ async function start(dataObj, startId) {
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let dcaOrderAmount = dcaOrderSize * price;
-						let exchangeFee = (dcaOrderAmount / 100) * Number(config.exchangeFee);
+						let exchangeFee = (dcaOrderAmount / 100) * (Number(config.exchangeFee) * 2);
 
 						dcaOrderAmount = await filterPrice(exchange, pair, (dcaOrderAmount + exchangeFee));
 
@@ -346,7 +347,7 @@ async function start(dataObj, startId) {
 						price = await filterPrice(exchange, pair, price);
 
 						let amount = lastDcaOrderAmount * config.dcaOrderSizeMultiplier;
-						let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+						let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
 
 						// Fee already applied previously
 						amount = await filterAmount(exchange, pair, amount);
@@ -538,7 +539,7 @@ async function start(dataObj, startId) {
 					const price = await filterPrice(exchange, pair, askPrice);
 
 					let amount = price * firstOrderSize;
-					let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+					let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
 
 					amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
@@ -579,7 +580,7 @@ async function start(dataObj, startId) {
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let dcaOrderAmount = dcaOrderSize * price;
-						let exchangeFee = (dcaOrderAmount  / 100) * Number(config.exchangeFee);
+						let exchangeFee = (dcaOrderAmount  / 100) * (Number(config.exchangeFee) * 2);
 
 						dcaOrderAmount = await filterPrice(exchange, pair, (dcaOrderAmount + exchangeFee));
 
@@ -631,7 +632,7 @@ async function start(dataObj, startId) {
 						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let amount = price * dcaOrderSize;
-						let exchangeFee = (amount / 100) * Number(config.exchangeFee);
+						let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
 
 						amount = await filterPrice(exchange, pair, (amount + exchangeFee));
 
@@ -1560,15 +1561,24 @@ const getSymbol = async (exchange, pair) => {
 				// Delay and try again
 				await Common.delay(1000 + (Math.random() * 100));
 			}
-			else if (e instanceof ccxt.ExchangeNotAvailable) {
-
-				finished = true;
-			}
 			else if (e instanceof ccxt.BadSymbol) {
 
 				symbolInvalid = true;
 
 				finished = true;
+			}
+			else if (e instanceof ccxt.NetworkError) {
+
+				finished = true;
+			}
+			else if (e instanceof ccxt.ExchangeNotAvailable) {
+
+				finished = true;
+			}
+			else if (e instanceof ccxt.ExchangeError  && count < maxTries) {
+
+				// Delay and try again
+				await Common.delay(1000 + (Math.random() * 100));
 			}
 			else {
 
@@ -1716,24 +1726,47 @@ const getBalance = async (exchange, symbol) => {
 
 const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
+	const maxTries = 5;
+
 	let msg;
 	let order;
 	let isErr;
 	let success;
 
-	try {
+	let finished = false;
 
-		success = true;
-		msg = 'BUY SUCCESS';
+	let count = 0;
 
-		order = await exchange.createOrder(pair, 'market', 'buy', qty, price);
-	}
-	catch (e) {
+	while (!finished) {
+	
+		try {
 
-		isErr = e;
-		success = false;
+			success = true;
+			msg = 'BUY SUCCESS';
 
-		msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
+			order = await exchange.createOrder(pair, 'market', 'buy', qty, price);
+
+			finished = true;
+		}
+		catch (e) {
+
+			isErr = e;
+			success = false;
+
+			msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
+
+			if (e instanceof ccxt.ExchangeError && count < maxTries) {
+
+				// Delay and try again
+				await Common.delay(500 + (Math.random() * 100));
+			}
+			else {
+
+				finished = true;
+			}
+
+			count++;
+		}
 	}
 
 	const dataObj = {
@@ -1756,24 +1789,47 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 const sellOrder = async (exchange, dealId, pair, qty, price) => {
 
+	const maxTries = 5;
+
 	let msg;
 	let order;
 	let isErr;
 	let success;
 
-	try {
+	let finished = false;
 
-		success = true;
-		msg = 'SELL SUCCESS';
+	let count = 0;
 
-		order = await exchange.createOrder(pair, 'market', 'sell', qty, price);
-	}
-	catch (e) {
+	while (!finished) {
 
-		isErr = e;
-		success = false;
+		try {
 
-		msg = 'SELL ERROR: ' + e.name + ' ' + e.message;
+			success = true;
+			msg = 'SELL SUCCESS';
+
+			order = await exchange.createOrder(pair, 'market', 'sell', qty, price);
+
+			finished = true;
+		}
+		catch (e) {
+
+			isErr = e;
+			success = false;
+
+			msg = 'SELL ERROR: ' + e.name + ' ' + e.message;
+
+			if (e instanceof ccxt.ExchangeError && count < maxTries) {
+
+				// Delay and try again
+				await Common.delay(500 + (Math.random() * 100));
+			}
+			else {
+
+				finished = true;
+			}
+
+			count++;
+		}
 	}
 
 	const dataObj = {
@@ -1870,6 +1926,8 @@ const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj,
 	}
 
 	let exchangeFeeSum = (dcaOrderSum / 100) * (Number(config.exchangeFee) + Number(addFee));
+
+	// Apply additional to account for sell fees
 	//exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 2));
 
 	exchangeFeeSum = await filterPrice(exchange, pair, exchangeFeeSum);
@@ -1922,6 +1980,7 @@ async function connectExchange(configObj) {
 
 			exchange = new ccxt.pro[config.exchange]({
 
+				'timeout': (exchangeTimeoutSec * 1000),
 				'enableRateLimit': true,
 				'apiKey': config.apiKey,
 				'secret': config.apiSecret,
@@ -1961,6 +2020,7 @@ async function orderError(data) {
 
 	if (!dataBot.success) {
 
+		// An error occurred updating bot so treat as unsuccessful
 		success = false;
 	}
 
@@ -2233,6 +2293,8 @@ async function updateDealTracker(data) {
 
 async function processDealTracker(dealId, msgErr, updateKey, dataKey) {
 
+	const maxCount = exchangeTimeoutSec * 5;
+
 	let finished = false;
 	let success = true;
 
@@ -2252,7 +2314,7 @@ async function processDealTracker(dealId, msgErr, updateKey, dataKey) {
 
 				finished = true;
 			}
-			else if (count >= 10) {
+			else if (count >= maxCount) {
 
 				// Timeout
 				success = false;
@@ -3198,7 +3260,7 @@ async function addFundsDeal(dealId, volume) {
 
 		const ex = await exchange.loadMarkets();
 
-		let exchangeFee = (volume / 100) * Number(config.exchangeFee);
+		let exchangeFee = (volume / 100) * (Number(config.exchangeFee) * 2);
 		volume = await filterPrice(exchange, config.pair, (volume + exchangeFee));
 
 		for (let i = 0; i < oldOrders.length; i++) {
