@@ -883,7 +883,7 @@ table#botsDeals tr:hover {
 	position: absolute;
 	font-size: 1.1rem;
 	width: 400px;
-	min-height: 50px;
+	min-height: 55px;
 	background-color: #525252;
 	border: 1px solid #525252;
 	color: #ffffff;
