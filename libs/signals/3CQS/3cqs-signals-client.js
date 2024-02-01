@@ -20,7 +20,7 @@ const Signals = Schema.Signals3CQSSchema;
 const providerId = signalsJson['metadata']['provider_id'];
 
 let fatalError = false;
-
+let verboseNotifications = false;
 
 let shareData;
 
@@ -345,15 +345,19 @@ async function processSignal(data) {
 							data = JSON.stringify(data);
 						}
 
-						let msg = '3CQS Signal Start Failed: ' + botName + ' (' + pairUse + '). Reason: ' + data;
+						if (verboseNotifications) {
 
-						sendNotification(msg, true);
+							let msg = '3CQS Signal Start Failed: ' + botName + ' (' + pairUse + '). Reason: ' + data;
+							sendNotification(msg, true);
+						}
 					}
 					else {
 
-						let msg = '3CQS Signal Start: ' + botName + ' (' + pairUse + ')';
+						if (verboseNotifications) {
 
-						sendNotification(msg, true);
+							let msg = '3CQS Signal Start: ' + botName + ' (' + pairUse + ')';
+							sendNotification(msg, true);
+						}
 					}
 				}
 				else {
@@ -409,9 +413,11 @@ async function processSignal(data) {
 															'body': body
 														 });
 
-				let msg = '3CQS Signal Stop: ' + botName + ' (' + pair + ')';
+				if (verboseNotifications) {
 
-				sendNotification(msg, false);
+					let msg = '3CQS Signal Stop: ' + botName + ' (' + pair + ')';
+					sendNotification(msg, false);
+				}
 			}
 		}
 	}

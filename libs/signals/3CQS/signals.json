@@ -71,6 +71,10 @@
 			"description": "SymScore X-Treme Bullish"
 		},
 		{
+			"id": 54,
+			"description": "SymScore Neutral"
+		},
+		{
 			"id": 17,
 			"description": "SymScore Super Bearish"
 		},
@@ -119,6 +123,10 @@
 			"description": "SymSense Super Greed Range"
 		},
 		{
+			"id": 55,
+			"description": "SymSense Super-Hyper Greed Range"
+		},
+		{
 			"id": 40,
 			"description": "SymSense Hyper Greed"
 		},
@@ -127,12 +135,20 @@
 			"description": "SymSense Hyper Greed Range"
 		},
 		{
+			"id": 56,
+			"description": "SymSense Hyper-Ultra Greed Range"
+		},
+		{
 			"id": 41,
 			"description": "SymSense Ultra Greed"
 		},
 		{
 			"id": 50,
 			"description": "SymSense Ultra Greed Range"
+		},
+		{
+			"id": 57,
+			"description": "SymSense Ultra-X-Treme Greed Range"
 		},
 		{
 			"id": 42,
@@ -151,6 +167,10 @@
 			"description": "SymSense Super Fear Range"
 		},
 		{
+			"id": 58,
+			"description": "SymSense Super-Hyper Fear Range"
+		},
+		{
 			"id": 45,
 			"description": "SymSense Hyper Fear"
 		},
@@ -159,12 +179,20 @@
 			"description": "SymSense Hyper Fear Range"
 		},
 		{
+			"id": 59,
+			"description": "SymSense Hyper-Ultra Fear Range"
+		},
+		{
 			"id": 46,
 			"description": "SymSense Ultra Fear"
 		},
 		{
 			"id": 53,
 			"description": "SymSense Ultra Fear Range"
+		},
+		{
+			"id": 60,
+			"description": "SymSense Ultra-X-Treme Fear Range"
 		},
 		{
 			"id": 47,

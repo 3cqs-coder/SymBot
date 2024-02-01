@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const Convert = require('ansi-to-html');
 const fetch = require('node-fetch-commonjs');
 const { v4: uuidv4 } = require('uuid');
-const packageJson = require(__dirname + '/../../package.json');
+const packageJson = require(pathRoot + '/package.json');
 
 const convertAnsi = new Convert();
 
