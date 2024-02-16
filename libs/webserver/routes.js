@@ -59,10 +59,10 @@ function initRoutes(router) {
 
 	router.get('/dashboard', async (req, res) => {
 		validateLoggedIn(req, res);
-		const { kpi, charts, isLoading } = await shareData.DCABotManager.getDashboardData();
+		const { kpi, charts, isLoading, period } = await shareData.DCABotManager.getDashboardData();
 
 		res.set('Cache-Control', 'no-store');
-		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, isLoading });
+		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, isLoading, period });
 	})
 
 	router.get('/logs', (req, res) => {

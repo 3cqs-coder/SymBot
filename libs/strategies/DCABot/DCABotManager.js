@@ -1492,13 +1492,18 @@ function insertValueToMap(map, key, value) {
 }
 
 async function getDashboardData() {
+	const { year, month, day } = shareData.Common.getDateParts(new Date());
+	const today = new Date(`${year}-${month}-${day}` + 'T23:59:59');
 	const THIRTY_DAYS_AGO = new Date();
 	THIRTY_DAYS_AGO.setDate(THIRTY_DAYS_AGO.getDate() - 30);
+	THIRTY_DAYS_AGO.setHours(0, 0, 0);
+
 	const { data } = await shareData.Common.getConfig('bot.json');
 
 	const active_deals = await shareData.DCABot.getDeals({ status: 0 });
-	const complete_deals = await shareData.DCABot.getDeals({ status: 1, createdAt: { $gte: THIRTY_DAYS_AGO, $lte: new Date() } });
+	const complete_deals = await shareData.DCABot.getDeals({ status: 1, "sellData.date": { $gte: THIRTY_DAYS_AGO, $lte: today } });
 	const deal_tracker = await shareData.DCABot.getDealTracker();
+	const period = `${THIRTY_DAYS_AGO.toLocaleDateString()} - ${today.toLocaleDateString()}`
 
 	const isLoading = active_deals.length != Object.keys(deal_tracker).length;
 
@@ -1519,9 +1524,27 @@ async function getDashboardData() {
 	})();
 
 	complete_deals.forEach((deal) => {
-		insertValueToMap(profit_by_bot_map, deal.botName, deal.sellData.profit);
-		insertValueToMap(profit_by_day_map, deal.sellData.date.toDateString(), deal.sellData.profit);
-		total_profit += Number(deal.sellData.profit) ?? 0;
+		let orderCount = 0;
+
+		const { sellData, orders} = deal;
+
+		for(let i=0; i<orders.length;i++) {
+			const order = orders[i];
+
+			if (order['filled']) {
+
+				orderCount++;
+			}
+		}
+
+		if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
+			const profitPer = Number(sellData.profit);
+			const deal_profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPer / 100))));
+			insertValueToMap(profit_by_bot_map, deal.botName, deal_profit);
+			insertValueToMap(profit_by_day_map, deal.sellData.date.toDateString(), deal_profit);
+			total_profit += Number(deal_profit ?? 0);
+		}
+		
 	})
 
 	// Sort the object by date
@@ -1562,7 +1585,8 @@ async function getDashboardData() {
 			active_pl_map,
 			adjusted_pl_map
 		},
-		isLoading
+		isLoading,
+		period
 	}
 }
 
