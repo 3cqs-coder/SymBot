@@ -1521,7 +1521,7 @@ async function getDashboardData() {
 	complete_deals.forEach((deal) => {
 		insertValueToMap(profit_by_bot_map, deal.botName, deal.sellData.profit);
 		insertValueToMap(profit_by_day_map, deal.sellData.date.toDateString(), deal.sellData.profit);
-		total_profit += deal.sellData.profit;
+		total_profit += Number(deal.sellData.profit) ?? 0;
 	})
 
 	// Sort the object by date
