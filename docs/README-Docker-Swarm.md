@@ -23,7 +23,7 @@ If you wish to deploy SymBot in a Docker Swarm environment (*whether self-hosted
 - ✅ **Scalability**: Designed to work with multiple SymBot nodes in a Docker Swarm setup and scale the replicaSet automatically as additional nodes are added/removed from the swarm.
 
 ## Requirements
-* [x] **SymBot**: tested on latest version (`0.99.780-beta.0` as of this writing).
+* [x] **SymBot**: tested on latest version (`0.99.1000-beta.0` as of this writing).
 * [x] **MongoDB**: version 6.0 and above (recipe uses `7.0.5`).
 * [x] **[Mongo-Replica-Ctrl](https://hub.docker.com/r/jackietreehorn/mongo-replica-ctrl)**: PyMongo-based [MongoDB ReplicaSet Manager](https://github.com/JackieTreeh0rn/MongoDB-ReplicaSet-Manager).  
 * [x] **Docker**: tested on `24.0.7`.
