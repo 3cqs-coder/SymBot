@@ -1041,13 +1041,14 @@ table#botsDeals tr:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 3px;
-	border: 1px solid #3d3d3d;
+	border: 1px solid var(--table-content-color);;
 	width: 150px;
 	height: 80px;
 	align-items: center;
 	justify-content: center;
 	border-radius: 20px;
-	background-color: #f5f5f5;
+	background-color: var(--content-box-background-color);
+	color: var(--table-content-color);
 }
 
 @media screen and (max-width: 768px) {
