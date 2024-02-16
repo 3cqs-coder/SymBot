@@ -1483,6 +1483,89 @@ async function calculateOrders(body) {
 	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
 }
 
+function insertValueToMap(map, key, value) {
+	if(!map[key]) {
+		map[key] = value;
+	} else {
+		map[key] += value;
+	}
+}
+
+async function getDashboardData() {
+	const THIRTY_DAYS_AGO = new Date();
+	THIRTY_DAYS_AGO.setDate(THIRTY_DAYS_AGO.getDate() - 30);
+	const { data } = await shareData.Common.getConfig('bot.json');
+
+	const active_deals = await shareData.DCABot.getDeals({ status: 0 });
+	const complete_deals = await shareData.DCABot.getDeals({ status: 1, createdAt: { $gte: THIRTY_DAYS_AGO, $lte: new Date() } });
+	const deal_tracker = await shareData.DCABot.getDealTracker();
+
+	const isLoading = active_deals.length != Object.keys(deal_tracker).length;
+
+	const profit_by_bot_map = {};
+	const active_pl_map = {};
+	let profit_by_day_map = {};
+	const adjusted_pl_map = {};
+	let total_profit = 0;
+	let total_in_deals = 0;
+
+	const available_balance = await (async () => {
+		if(data.sandBox) return Number(data.sandBoxWallet);
+
+		const exchange = await shareData.DCABot.connectExchange(data);
+		const { success, balance } = await shareData.DCABot.getBalance(exchange, 'USDT');
+		if(!success) return 0;
+		return Number(balance);
+	})();
+
+	complete_deals.forEach((deal) => {
+		insertValueToMap(profit_by_bot_map, deal.botName, deal.sellData.profit);
+		insertValueToMap(profit_by_day_map, deal.sellData.date.toDateString(), deal.sellData.profit);
+		total_profit += deal.sellData.profit;
+	})
+
+	// Sort the object by date
+	profit_by_day_map = Object.fromEntries(Object.entries(profit_by_day_map).sort((a, b) => new Date(a[0]) - new Date(b[0])));
+
+
+	for(const key in deal_tracker) {
+		const { deal: { botName }, info: { profit } } = deal_tracker[key];
+		if(!profit || !botName) { continue; };
+		insertValueToMap(active_pl_map, botName, profit);
+
+		const orders = deal_tracker[key].deal.orders;
+		let in_deal = 0;
+		for(let i=0; i < orders.length; i++) {
+			if(orders[i].filled) {
+				in_deal = Number(orders[i].sum);
+			} else {
+				break;
+			}
+		}
+		total_in_deals += in_deal;
+	}
+
+	for(const key in profit_by_bot_map) {
+		adjusted_pl_map[key] = profit_by_bot_map[key] + active_pl_map[key] ?? 0;
+	}
+
+	return {
+		kpi: {
+			active_deals: Object.keys(deal_tracker).length,
+			total_in_deals,
+			available_balance,
+			total_profit
+		},
+		charts: {
+			profit_by_bot_map,
+			profit_by_day_map,
+			active_pl_map,
+			adjusted_pl_map
+		},
+		isLoading
+	}
+}
+
 
 async function initApp() {
 
@@ -1508,6 +1591,7 @@ module.exports = {
 	viewCreateUpdateBot,
 	viewActiveDeals,
 	viewHistoryDeals,
+	getDashboardData,
 
 	init: function(obj) {
 

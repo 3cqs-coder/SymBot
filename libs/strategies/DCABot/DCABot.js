@@ -3493,6 +3493,7 @@ module.exports = {
 	applyConfigData,
 	startDelay,
 	resumeDeal,
+	getBalance,
 
 	init: function(obj) {
 
