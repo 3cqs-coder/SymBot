@@ -1,6 +1,7 @@
 {
 	"password": "",
 	"mongo_db_url": "",
+	"max_log_days": 10,
 	"web_server": {
 					"port": 3000
 				},

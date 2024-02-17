@@ -22,12 +22,22 @@ const insufficientFundsMsg = 'Your wallet does not have enough funds for all DCA
 const maxMinsDeals = 2;
 const maxMinsVolume = 5;
 
+// Exchange timeout in seconds
 const exchangeTimeoutSec = 10;
-const maxSellErrorCount = 3;
+
+// Max number of times a deal will attempt to sell when an error occurs and apply additional fees if there are insufficient funds
+const maxSellErrorCount = 8;
+
+// Max time in seconds sell errors will be counted before counter is reset
+const maxSellErrorResetSec = 300;
+
+// Additional fee that will be applied each time a sell error occurs for a deal
+const sellErrorAddFee = 0.055;
 
 let dealTracker = {};
 let timerTracker = {};
 let startDealTracker = {};
+let resumeDealTracker = {};
 
 let shareData;
 
@@ -164,6 +174,9 @@ async function start(dataObj, startId) {
 
 			return ( { 'success': false, 'data': JSON.stringify(symbolData.error) } );
 		}
+
+		// Remove from resumeDealTracker
+		await deleteResumeDealTracker(dealResumeId);
 
 		let askPrice = symbol.ask;
 
@@ -840,9 +853,10 @@ async function start(dataObj, startId) {
 
 	}
 
+
+	// Deactivate bot if max deals reached
 	if (dealCount >= dealMax && dealMax > 0) {
 
-		// Deactivate bot
 		const data = await updateBot(botIdMain, { 'active': false });
 		
 		if (shareData.appData.verboseLog) {
@@ -852,6 +866,21 @@ async function start(dataObj, startId) {
 
 		const statusObj = await sendBotStatus({ 'bot_id': botIdMain, 'bot_name': botNameMain, 'active': false, 'success': data.success });
 	}
+
+	// Check if deal stop was requested
+	try {
+
+		if (dealTracker[dealIdMain]['update']['deal_stop']) {
+
+			dealStop = true;
+		}
+	}
+	catch(e) {
+
+	}
+
+	// Check for any resuming deals before continuing
+	await processResumeDealTracker({ 'deal_id': dealIdMain });
 
 	// Get total active same pairs currently running on bot
 	let pairDealsActive = await getDeals({ 'botId': botIdMain, 'pair': pair, 'status': 0 });
@@ -883,19 +912,6 @@ async function start(dataObj, startId) {
 				dealLast = true;
 			}
 		}
-	}
-
-
-	// Check if deal stop was requested
-	try {
-
-		if (dealTracker[dealIdMain]['update']['deal_stop']) {
-
-			dealStop = true;
-		}
-	}
-	catch(e) {
-
 	}
 
 
@@ -1001,7 +1017,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 		let diffSec = (new Date().getTime() - new Date(dealTracker[dealId]['update']['deal_sell_error']['date']).getTime()) / 1000;
 
-		if (dealTracker[dealId]['update']['deal_sell_error']['count'] > maxSellErrorCount || diffSec > 30) {
+		if (dealTracker[dealId]['update']['deal_sell_error']['count'] > maxSellErrorCount || diffSec > maxSellErrorResetSec) {
 
 			delete dealTracker[dealId]['update']['deal_sell_error'];
 		}
@@ -1283,6 +1299,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 							if (dealTracker[dealId]['update']['deal_sell_error'] == undefined || dealTracker[dealId]['update']['deal_sell_error'] == null) {
 
 								dealTracker[dealId]['update']['deal_sell_error'] = {};
+								dealTracker[dealId]['update']['deal_sell_error']['nsf'] = false;
 								dealTracker[dealId]['update']['deal_sell_error']['count'] = 0;
 								dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
 							}
@@ -1292,6 +1309,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								let addFee;
 								let sellErrorCount;
 
+								let isNSF = false;
 								let canceled = false;
 								let panicSell = false;
 								let sellSuccess = true;
@@ -1300,7 +1318,21 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 									sellErrorCount = dealTracker[dealId]['update']['deal_sell_error']['count'];
 
-									addFee = (0.025 * sellErrorCount);
+									addFee = (sellErrorAddFee * sellErrorCount);
+
+									// Only apply additional fees if insufficient funds
+									// Not all exchanges return instance of insufficient funds, so commenting out for now
+
+									/*
+									if (dealTracker[dealId]['update']['deal_sell_error']['nsf']) {
+
+										addFee = (sellErrorAddFee * sellErrorCount);
+									}
+									else {
+
+										addFee = 0;
+									}
+									*/
 								}
 								catch(e) {}
 
@@ -1321,6 +1353,11 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								const qtySumSell = feeData['dcaOrderQtySumNet'];
 								const priceFiltered = feeData['priceFiltered'];
+								const exchangeFeePercent = feeData['exchangeFeePercent'];
+
+								// Calculate profit based on new exchange fee percent
+								//const profitData = await calculateProfit(price, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, exchangeFeePercent);
+								//const profitPercFinal = profitData['profit_percentage'];
 
 								if (dealTracker[dealId]['update']['deal_cancel']) {
 
@@ -1335,6 +1372,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								if (!config.sandBox && !canceled) {
 
 									const sell = await sellOrder(exchange, dealId, pair, qtySumSell, priceFiltered);
+
+									isNSF = sell.nsf;
 
 									if (!sell.success) {
 
@@ -1401,6 +1440,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								else {
 
 									// Sell failed
+									dealTracker[dealId]['update']['deal_sell_error']['nsf'] = isNSF;
 									dealTracker[dealId]['update']['deal_sell_error']['count']++;
 									dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
 
@@ -1567,6 +1607,10 @@ const getSymbol = async (exchange, pair) => {
 
 				finished = true;
 			}
+			else if (e instanceof ccxt.InsufficientFunds) {
+
+				finished = true;
+			}
 			else if (e instanceof ccxt.NetworkError) {
 
 				finished = true;
@@ -1575,7 +1619,7 @@ const getSymbol = async (exchange, pair) => {
 
 				finished = true;
 			}
-			else if (e instanceof ccxt.ExchangeError  && count < maxTries) {
+			else if (e instanceof ccxt.ExchangeError && count < maxTries) {
 
 				// Delay and try again
 				await Common.delay(1000 + (Math.random() * 100));
@@ -1734,6 +1778,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 	let success;
 
 	let finished = false;
+	let nsf = false;
 
 	let count = 0;
 
@@ -1755,7 +1800,19 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 			msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
 
-			if (e instanceof ccxt.ExchangeError && count < maxTries) {
+			if (e instanceof ccxt.InsufficientFunds) {
+
+				nsf = true;
+
+				finished = true;
+			}
+			else if (e instanceof ccxt.BadRequest && msg.toLowerCase().includes('insufficient')) {
+
+				nsf = true;
+
+				finished = true;
+			}
+			else if (e instanceof ccxt.ExchangeError && count < maxTries) {
 
 				// Delay and try again
 				await Common.delay(500 + (Math.random() * 100));
@@ -1774,6 +1831,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 						'success': success,
 						'data': order,
 						'error': isErr,
+						'nsf': nsf,
 						'message': msg,
 						'deal_id': dealId,
 						'pair': pair,
@@ -1797,6 +1855,7 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 	let success;
 
 	let finished = false;
+	let nsf = false;
 
 	let count = 0;
 
@@ -1818,7 +1877,19 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 
 			msg = 'SELL ERROR: ' + e.name + ' ' + e.message;
 
-			if (e instanceof ccxt.ExchangeError && count < maxTries) {
+			if (e instanceof ccxt.InsufficientFunds) {
+
+				nsf = true;
+
+				finished = true;
+			}
+			else if (e instanceof ccxt.BadRequest && msg.toLowerCase().includes('insufficient')) {
+
+				nsf = true;
+
+				finished = true;
+			}
+			else if (e instanceof ccxt.ExchangeError && count < maxTries) {
 
 				// Delay and try again
 				await Common.delay(500 + (Math.random() * 100));
@@ -1837,6 +1908,7 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 						'success': success,
 						'data': order,
 						'error': isErr,
+						'nsf': nsf,
 						'message': msg,
 						'deal_id': dealId,
 						'pair': pair,
@@ -1925,10 +1997,12 @@ const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj,
 		addFee = 0;
 	}
 
-	let exchangeFeeSum = (dcaOrderSum / 100) * (Number(config.exchangeFee) + Number(addFee));
+	const exchangeFeePercent = Number(config.exchangeFee) + Number(addFee);
+
+	let exchangeFeeSum = (dcaOrderSum / 100) * exchangeFeePercent;
 
 	// Apply additional to account for sell fees
-	//exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 2));
+	exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 4));
 
 	exchangeFeeSum = await filterPrice(exchange, pair, exchangeFeeSum);
 
@@ -1951,6 +2025,7 @@ const calculateExchangeFees = async (pair, price, exchange, configObj, orderObj,
 					'dcaOrderQtySumNet': dcaOrderQtySumNet,
 					'exchangeFeeSum': exchangeFeeSum,
 					'exchangeFeeQtySum': exchangeFeeQtySum,
+					'exchangeFeePercent': exchangeFeePercent,
 					'priceFiltered': priceFiltered
 				};
 
@@ -2257,6 +2332,30 @@ async function checkStartDealTracker() {
 }
 
 
+async function checkResumeDealTracker() {
+
+	// Remove resume deal trackers that exceed n seconds
+
+	const maxMins = 15;
+
+	for (let dealId in resumeDealTracker) {
+
+		let diffSec = (new Date().getTime() - new Date(resumeDealTracker[dealId]['date']).getTime()) / 1000;
+
+		if (diffSec > (60 * maxMins)) {
+
+			deleteResumeDealTracker(dealId);
+
+			let msg = 'WARNING: Resume deal tracker exceeds ' + maxMins + ' minutes and has been automatically removed for deal id: ' + dealId;
+
+			Common.logger( colors.bgCyan.bold(msg) );
+
+			Common.sendNotification({ 'message': msg, 'type': 'warning', 'telegram_id': shareData.appData.telegram_id });
+		}
+	}
+}
+
+
 async function createDealTracker(data) {
 
 	const dealId = data['deal_id'];
@@ -2365,6 +2464,30 @@ async function deleteStartDealTracker(id) {
 }
 
 
+async function createResumeDealTracker(dealId, botId) {
+
+	if (resumeDealTracker[dealId] == undefined || resumeDealTracker[dealId] == null) {
+
+		let obj = {
+					'date': new Date(),
+					'bot_id': botId
+				  };
+
+		resumeDealTracker[dealId] = obj;
+	}
+}
+
+
+async function deleteResumeDealTracker(dealId) {
+
+	if (dealId != undefined && dealId != null && dealId != '') {
+
+		resumeDealTracker[dealId] = null;
+		delete resumeDealTracker[dealId];
+	}
+}
+
+
 async function getDealTracker(dealId) {
 
 	let dataObj;
@@ -2412,6 +2535,102 @@ async function getStartDealTracker(id) {
 	}
 
 	return dataObj;
+}
+
+
+async function getResumeDealTracker(id) {
+
+	let dataObj;
+
+	if (id != undefined && id != null && id != '') {
+
+		try {
+
+			dataObj = JSON.parse(JSON.stringify(resumeDealTracker[id]));
+		}
+		catch(e) {}
+	}
+	else {
+
+		try {
+
+			dataObj = JSON.parse(JSON.stringify(resumeDealTracker));
+		}
+		catch(e) {}
+	}
+
+	return dataObj;
+}
+
+
+async function processResumeDealTracker(data) {
+
+	// Confirm no deals are resuming before allowing additional checks and new deals to start
+
+	if (data == undefined || data == null || typeof data != 'object') {
+
+		data = {};
+	}
+
+	const maxSec = 60;
+	const dateNow = new Date();
+
+	const dealId = data['deal_id'];
+
+	let success = false;
+	let finished = false;
+	let msgSent = false;
+	let msgSentWarn = false;
+
+	let msg = 'Waiting for resume deal tracker to finish before continuing to process new deals (' + dealId + ')';
+
+	while (!finished) {
+
+		let resumeDealsObj = await getResumeDealTracker();
+
+		if (resumeDealsObj == undefined || resumeDealsObj == null || resumeDealsObj == '') {
+		
+			resumeDealsObj = {};
+		}
+
+		if (Object.keys(resumeDealsObj).length == 0) {
+
+			success = true;
+			finished = true;
+		}
+		else {
+
+			if (!msgSent) {
+
+				msgSent = true;
+
+				if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold(msg) ); }
+			}
+
+			await Common.delay(500);
+		}
+
+		let diffSec = (new Date().getTime() - new Date(dateNow).getTime()) / 1000;
+
+		if (diffSec > maxSec) {
+
+			if (!msgSentWarn) {
+
+				let msgWarn = 'WARNING: Resume deal tracker exceeds ' + maxSec + ' seconds. Timed out.';
+
+				msgSentWarn = true;
+
+				Common.logger( colors.bgCyan.bold(msgWarn) );
+
+				Common.sendNotification({ 'message': msgWarn, 'type': 'warning', 'telegram_id': shareData.appData.telegram_id });
+			}
+
+			success = false;
+			finished = true;
+		}
+	}
+
+	return ({ 'success': success });
 }
 
 
@@ -3037,6 +3256,9 @@ async function startSignals() {
 
 async function startAsap(pairIgnore) {
 
+	// Check for any resuming deals before continuing
+	await processResumeDealTracker();
+
 	// Start any active asap bots that have no deals running
 	const botsActive = await getBots({ 'active': true, 'config.startConditions': { '$eq': 'asap' } });
 
@@ -3117,6 +3339,17 @@ async function resumeBots() {
 
 			let deal = dealsActive[i];
 
+			const botId = deal.botId;
+			const dealId = deal.dealId;
+
+			// Create all initial resuming deals ahead of time
+			await createResumeDealTracker(dealId, botId);
+		}
+
+		for (let i = 0; i < dealsActive.length; i++) {
+
+			let deal = dealsActive[i];
+
 			await resumeDeal(deal);
 		}
 	}
@@ -3140,6 +3373,9 @@ async function resumeDeal(dealObj) {
 	const dealCount = deal.dealCount;
 	const dealMax = deal.dealMax;
 	const signalId = config.signalId;
+
+	// Track resuming deals
+	await createResumeDealTracker(dealId, botId);
 
 	// Apply previous config data
 
@@ -3414,6 +3650,9 @@ async function startDelay(dataObj) {
 	const config = data['config'];
 	const notify = data['notify'];
 
+	// Check for any resuming deals before continuing
+	await processResumeDealTracker();
+
 	const startId = await Common.uuidv4();
 
 	startDealTracker[startId] = {};
@@ -3454,10 +3693,16 @@ async function initApp() {
 
 	setInterval(() => {
 
+		checkResumeDealTracker();
+
+	}, (60000 * 1));
+
+
+	setInterval(() => {
+
 		checkStartDealTracker();
 
 	}, 1500);
-
 
 	await resumeBots();
 
@@ -3488,6 +3733,7 @@ module.exports = {
 	getDealInfo,
 	getDealTracker,
 	getStartDealTracker,
+	getResumeDealTracker,
 	getSymbol,
 	getSymbolsAll,
 	applyConfigData,

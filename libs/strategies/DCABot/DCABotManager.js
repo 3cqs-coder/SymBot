@@ -689,7 +689,11 @@ async function apiUpdateDeal(req, res) {
 		content = 'Invalid Deal ID';
 	}
 
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+	const resObj = { 'date': new Date(), 'success': success, 'data': content };
+
+	shareData.Common.logger('API Update Deal: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
 }
 
 
@@ -731,7 +735,11 @@ async function apiPanicSellDeal(req, res) {
 		content = 'Invalid Deal ID';
 	}
 
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+	const resObj = { 'date': new Date(), 'success': success, 'data': content };
+
+	shareData.Common.logger('API Panic Sell Deal: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
 }
 
 
@@ -773,7 +781,11 @@ async function apiCancelDeal(req, res) {
 		content = 'Invalid Deal ID';
 	}
 
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+	const resObj = { 'date': new Date(), 'success': success, 'data': content };
+
+	shareData.Common.logger('API Cancel Deal: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
 }
 
 
@@ -850,7 +862,11 @@ async function apiAddFundsDeal(req, res) {
 		}
 	}
 
-	res.send({ 'date': new Date(), 'success': success, 'data': content });
+	const resObj = { 'date': new Date(), 'success': success, 'data': content };
+
+	shareData.Common.logger('API Add Funds: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
 }
 
 
@@ -864,6 +880,7 @@ async function apiCreateUpdateBot(req, res) {
 
 	let success = true;
 	let isUpdate = false;
+	let isPreview = false;
 
 	let startCondition = 'asap';
 
@@ -1071,12 +1088,29 @@ async function apiCreateUpdateBot(req, res) {
 		}
 		else {
 
+			isPreview = true;
+
 			// Remove bot id if only getting orders
 			orders.data.botId = '';
 		}
 	}
 
-	res.send( { 'date': new Date(), 'success': success, 'step': createStep, 'data': orders.data } );
+	const resObj = { 'date': new Date(), 'success': success, 'step': createStep, 'data': orders.data };
+
+	// Only log if creating or updating bot to conserve space
+	if (!isPreview) {
+
+		let isNewBot = false;
+
+		if (!isUpdate) {
+
+			isNewBot = true;
+		}
+
+		shareData.Common.logger('API Create / Update Bot (New Bot: ' + isNewBot + '): ' + JSON.stringify(resObj));
+	}
+
+	res.send(resObj);
 }
 
 
@@ -1203,7 +1237,11 @@ async function apiEnableDisableBot(req, res) {
 		msg = 'Invalid Bot ID';
 	}
 
-	res.send( { 'date': new Date(), 'success': success, 'data': msg } );
+	const resObj = { 'date': new Date(), 'success': success, 'data': msg };
+
+	shareData.Common.logger('API Enable / Disable Bot: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
 }
 
 
@@ -1361,6 +1399,8 @@ async function apiStartDealProcess(req, res, taskObj) {
 	}
 
 	const resObj = { 'date': new Date(), 'success': success, 'data': msg };
+
+	shareData.Common.logger('API Start Deal: ' + JSON.stringify(resObj));
 
 	queueStartDeal.callBack(res, resObj, taskObj);
 }
