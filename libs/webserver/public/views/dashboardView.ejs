@@ -3,7 +3,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-       <% const { active_deals, total_in_deals, available_balance, total_profit } = kpi; %>
+       <% const { active_deals, total_in_deals, available_balance, total_profit, total_pl } = kpi; %>
 
        const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map } = <%- JSON.stringify(charts) %>
 
@@ -48,7 +48,10 @@
                         x: {
                             ticks: {
                                 callback: function(value) {
-                                    return this.getLabelForValue(value).substring(0, 10) + "..";
+                                    if(window.matchMedia("only screen and (max-width: 768px)").matches) {
+                                        return this.getLabelForValue(value).substring(0, 10) + "..";
+                                    }
+                                    return this.getLabelForValue(value).substring(0, 20) + "..";
                                 }
                             }
                         }
@@ -94,6 +97,11 @@
             <div class="performance-kpi">
                 <span style="font-size: 11px">Profit</span>
                 <span style="font-size: 20px;">$<%- total_profit.toLocaleString() %></span>
+            </div>
+
+            <div class="performance-kpi">
+                <span style="font-size: 11px">Active P/L</span>
+                <span style="font-size: 20px;">$<%- total_pl.toLocaleString() %></span>
             </div>
         </div>
 

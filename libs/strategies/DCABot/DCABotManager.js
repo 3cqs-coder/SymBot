@@ -1553,6 +1553,7 @@ async function getDashboardData() {
 	const adjusted_pl_map = {};
 	let total_profit = 0;
 	let total_in_deals = 0;
+	let total_pl = 0;
 
 	const available_balance = await (async () => {
 		if(data.sandBox) return Number(data.sandBoxWallet);
@@ -1595,6 +1596,7 @@ async function getDashboardData() {
 		const { deal: { botName }, info: { profit } } = deal_tracker[key];
 		if(!profit || !botName) { continue; };
 		insertValueToMap(active_pl_map, botName, profit);
+		total_pl += profit;
 
 		const orders = deal_tracker[key].deal.orders;
 		let in_deal = 0;
@@ -1617,7 +1619,8 @@ async function getDashboardData() {
 			active_deals: Object.keys(deal_tracker).length,
 			total_in_deals,
 			available_balance,
-			total_profit
+			total_profit,
+			total_pl
 		},
 		charts: {
 			profit_by_bot_map,
