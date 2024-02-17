@@ -500,7 +500,12 @@ async function logger(data, consoleLog) {
 
 function logMonitor() {
 
-	const maxDays = 10;
+	let maxDays = shareData['appData']['max_log_days'];
+
+	if (maxDays == undefined || maxDays == null || maxDays < 1) {
+
+		maxDays = 10;
+	}
 
 	// Monitor and remove old logs
 	setInterval(() => {
@@ -874,7 +879,6 @@ function numFormatter(num) {
 	}
 	else if (num < 900) {
 
-		num = Number(roundNumber(num, 5));
 		return num;
 	}
 }
