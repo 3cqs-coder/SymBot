@@ -164,7 +164,7 @@ mongodb://localhost:27017/SymBot
 
 	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. You must have a 3CQS API key for these to work. You can get one by signing up for free at https://www.3CQS.com. Webhooks must also be enabled for these signals to work.
 
-	- `dashboard_period` determines the duration of deals to be pulled on the dashboard can be set to `month` or `week`. If your dashboard is loading slowly, change this to week.
+	- `dashboard_period` determines the duration of deals to be pulled on the dashboard and can be set to `month` or `week`. If your dashboard is loading slowly, change this to week.
 
 
 - **bot.json**
