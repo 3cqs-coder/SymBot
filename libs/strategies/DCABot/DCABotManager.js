@@ -1532,10 +1532,14 @@ function insertValueToMap(map, key, value) {
 }
 
 async function getDashboardData() {
+	const { dashboard_period } = await shareData.Common.getConfig('app.json');
+
+	const DEAL_DATA_PERIOD = dashboard_period == 'month' ? 30 : 7;
+
 	const { year, month, day } = shareData.Common.getDateParts(new Date());
 	const today = new Date(`${year}-${month}-${day}` + 'T23:59:59');
 	const THIRTY_DAYS_AGO = new Date();
-	THIRTY_DAYS_AGO.setDate(THIRTY_DAYS_AGO.getDate() - 30);
+	THIRTY_DAYS_AGO.setDate(THIRTY_DAYS_AGO.getDate() - DEAL_DATA_PERIOD);
 	THIRTY_DAYS_AGO.setHours(0, 0, 0);
 
 	const { data } = await shareData.Common.getConfig('bot.json');

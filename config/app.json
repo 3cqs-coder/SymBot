@@ -35,5 +35,6 @@
 					 			"api_key": ""
 				 			}
 			   },
-	"verbose_log": true
+	"verbose_log": true,
+    "dashboard_period": "month"
 }
