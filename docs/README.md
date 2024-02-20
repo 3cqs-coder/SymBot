@@ -132,6 +132,8 @@ These files are located in the `config` directory
 
 	- `password` is a hashed password used to login to the SymBot web interface. The default password is automatically set as "*admin*" the very first time SymBot is started. This is not a plain text password, but rather an encrypted form of it, so it should not be manually entered or you may not be able to login properly. It is strongly recommended to change the default password using the web interface configuration.
 
+	- `max_log_days` is the maximum number of previous days logs to keep. The default is 10 days.
+
 	- `web_server` contains settings for the SymBot web server. The default port is 3000.
 
 	- `api`
@@ -161,6 +163,8 @@ mongodb://localhost:27017/SymBot
 		- For better speed and security, running your own local database is recommended
 
 	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. You must have a 3CQS API key for these to work. You can get one by signing up for free at https://www.3CQS.com. Webhooks must also be enabled for these signals to work.
+
+	- `dashboard_period` determines the duration of deals to be pulled on the dashboard and can be set to `month` or `week`. If your dashboard is loading slowly, change this to week.
 
 
 - **bot.json**
