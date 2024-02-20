@@ -1539,7 +1539,7 @@ function insertValueToMap(map, key, value) {
 }
 
 async function getDashboardData() {
-	const { dashboard_period } = await shareData.Common.getConfig('app.json');
+	const { data: { dashboard_period } } = await shareData.Common.getConfig('app.json');
 
 	const DEAL_DATA_PERIOD = dashboard_period == 'month' ? 30 : 7;
 

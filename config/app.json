@@ -2,6 +2,7 @@
 	"password": "",
 	"mongo_db_url": "",
 	"max_log_days": 10,
+	"dashboard_period": "month",
 	"web_server": {
 					"port": 3000
 				},
@@ -35,6 +36,5 @@
 					 			"api_key": ""
 				 			}
 			   },
-	"verbose_log": true,
-    "dashboard_period": "month"
+	"verbose_log": true
 }
