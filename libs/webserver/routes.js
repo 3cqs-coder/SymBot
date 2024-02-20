@@ -57,6 +57,13 @@ function initRoutes(router) {
 		res.render( 'loginView', { 'appData': shareData.appData } );
 	});
 
+	router.get('/dashboard', async (req, res) => {
+		validateLoggedIn(req, res);
+		const { kpi, charts, isLoading, period } = await shareData.DCABotManager.getDashboardData();
+
+		res.set('Cache-Control', 'no-store');
+		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, isLoading, period });
+	})
 
 	router.get('/logs', (req, res) => {
 
@@ -435,6 +442,12 @@ async function processWebHook(req, res, next) {
 		errorObj['error'] = 'Invalid Token';
 
 		res.status(401).send(errorObj);
+	}
+}
+
+function validateLoggedIn(req, res) {
+	if (!req.session.loggedIn) {
+		res.redirect('/login');
 	}
 }
 

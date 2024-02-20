@@ -214,6 +214,7 @@ async function init() {
 										'server_id': '',
 										'app_filename': __filename,
 										'console_log': consoleLog,
+										'max_log_days': appConfig['data']['max_log_days'],
 										'mongo_db_url': appConfig['data']['mongo_db_url'],
 										'web_server_port': appConfig['data']['web_server']['port'],
 										'exchanges': {},
