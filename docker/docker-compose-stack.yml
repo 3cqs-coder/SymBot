@@ -94,7 +94,7 @@ services:
       interval: 1m
       timeout: 30s
       retries: 6
-      start_period: 45s
+      start_period: 10s
     deploy: 
       mode: replicated
       restart_policy:
