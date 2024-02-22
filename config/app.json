@@ -1,6 +1,6 @@
 {
 	"password": "",
-	"mongo_db_url": "mongodb://symbot:symbot123@database/symbot?replicaSet=rs",
+	"mongo_db_url": "",
 	"max_log_days": 10,
 	"dashboard_period": "month",
 	"web_server": {

@@ -17,5 +17,5 @@ RUN npm install
 # SymBot
 EXPOSE 3000
 
-# Wait 10 seconds for the MongoDB ReplicaSet build & connection
-CMD echo "Warming up" && sleep 10 && npm start
+# Wait 5 seconds for the MongoDB ReplicaSet build & connection
+CMD echo "Warming up" && sleep 5 && npm start

@@ -1,6 +1,4 @@
 **/.DS_Store
-*.log.*
-*.icloud
-.vscode
-__pycache__
 node_modules
+*.log
+.vscode

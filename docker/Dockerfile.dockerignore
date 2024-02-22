@@ -2,5 +2,3 @@
 .git/
 node_modules/
 config/server.json
-docs/
-dbcontroller/
