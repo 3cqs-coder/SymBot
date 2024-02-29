@@ -251,7 +251,7 @@ async function apiGetBots(req, res) {
 async function apiGetDealsHistory(req, res, sendResponse) {
 
 	const days = 1;
-	const maxResults = 100;
+	const maxResults = Infinity;
 
 	let dateTo;
 	let dateFrom;
@@ -1525,9 +1525,9 @@ async function calculateOrders(body) {
 
 function insertValueToMap(map, key, value) {
 	if(!map[key]) {
-		map[key] = value;
+		map[key] = Number(value);
 	} else {
-		map[key] += value;
+		map[key] += Number(value);
 	}
 }
 
@@ -1551,10 +1551,12 @@ async function getDashboardData() {
 
 	const isLoading = active_deals.length != Object.keys(deal_tracker).length;
 
-	const profit_by_bot_map = {};
-	const active_pl_map = {};
+	let profit_by_bot_map = {};
+	let active_pl_map = {};
 	let profit_by_day_map = {};
-	const adjusted_pl_map = {};
+	let adjusted_pl_map = {};
+	let bot_deal_duration_map = {};
+	let bot_funds_in_use_map = {};
 	let total_profit = 0;
 	let total_in_deals = 0;
 	let total_pl = 0;
@@ -1573,7 +1575,7 @@ async function getDashboardData() {
 
 		const { sellData, orders} = deal;
 
-		for(let i=0; i<orders.length;i++) {
+		for(let i = 0; i<orders.length;i++) {
 			const order = orders[i];
 
 			if (order['filled']) {
@@ -1583,14 +1585,30 @@ async function getDashboardData() {
 		}
 
 		if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
-			const profitPer = Number(sellData.profit);
-			const deal_profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPer / 100))));
-			insertValueToMap(profit_by_bot_map, deal.botName, deal_profit);
-			insertValueToMap(profit_by_day_map, deal.sellData.date.toDateString(), deal_profit);
-			total_profit += Number(deal_profit ?? 0);
+			if(sellData.profit && typeof sellData.profit == 'number') {
+				const profitPer = Number(sellData.profit);
+				const deal_profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPer / 100))));
+				insertValueToMap(profit_by_bot_map, deal.botName, deal_profit);
+				insertValueToMap(profit_by_day_map, deal.sellData.date.toDateString(), deal_profit);
+				total_profit += Number(deal_profit ?? 0);
+			}
 		}
-		
+
+		// Add to Deal Duration Obj
+		const { date: dateStarted, sellData: { date: dateEnd } } = deal;
+		const duration = shareData.Common.dealDurationMinutes(dateStarted, dateEnd);
+		if(!bot_deal_duration_map[deal.botName]) {
+			bot_deal_duration_map[deal.botName] = [duration];
+		} else {
+			bot_deal_duration_map[deal.botName].push(duration);
+		}
 	})
+
+	for (const key in bot_deal_duration_map) {
+		const durations = bot_deal_duration_map[key];
+		const average = durations.reduce((acc, curr) => acc + curr, 0) / durations.length;
+		bot_deal_duration_map[key] = Math.round(average);
+	}
 
 	// Sort the object by date
 	profit_by_day_map = Object.fromEntries(Object.entries(profit_by_day_map).sort((a, b) => new Date(a[0]) - new Date(b[0])));
@@ -1611,12 +1629,35 @@ async function getDashboardData() {
 				break;
 			}
 		}
+		insertValueToMap(bot_funds_in_use_map, botName, in_deal);
 		total_in_deals += in_deal;
 	}
 
 	for(const key in profit_by_bot_map) {
 		adjusted_pl_map[key] = profit_by_bot_map[key] + active_pl_map[key] ?? 0;
 	}
+
+	// -- Sort Maps -- //
+	const bot_profit_array = Object.entries(profit_by_bot_map);
+	bot_profit_array.sort((a,b) =>  b[1] - a[1]);
+	profit_by_bot_map = Object.fromEntries(bot_profit_array)
+
+	const active_profit_array = Object.entries(active_pl_map);
+	active_profit_array.sort((a,b) =>  a[1] - b[1] );
+	active_pl_map = Object.fromEntries(active_profit_array);
+
+	const adjusted_pl_array = Object.entries(adjusted_pl_map);
+	adjusted_pl_array.sort((a,b) =>  b[1] - a[1]);
+	adjusted_pl_map = Object.fromEntries(adjusted_pl_array);
+
+	const bot_deal_duration_array = Object.entries(bot_deal_duration_map);
+	bot_deal_duration_array.sort((a,b) =>  b[1] - a[1]);
+	bot_deal_duration_map = Object.fromEntries(bot_deal_duration_array);
+
+	const bot_funds_in_use_array = Object.entries(bot_funds_in_use_map);
+	bot_funds_in_use_array.sort((a,b) =>  b[1] - a[1]);
+	bot_funds_in_use_map = Object.fromEntries(bot_funds_in_use_array);
+
 
 	return {
 		kpi: {
@@ -1630,7 +1671,9 @@ async function getDashboardData() {
 			profit_by_bot_map,
 			profit_by_day_map,
 			active_pl_map,
-			adjusted_pl_map
+			adjusted_pl_map,
+			bot_deal_duration_map,
+			bot_funds_in_use_map
 		},
 		isLoading,
 		period

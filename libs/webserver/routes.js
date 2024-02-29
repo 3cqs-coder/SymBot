@@ -2,6 +2,7 @@
 
 
 let shareData;
+const os = require('os');
 
 
 function initRoutes(router) {
@@ -58,7 +59,7 @@ function initRoutes(router) {
 	});
 
 	router.get('/dashboard', async (req, res) => {
-		validateLoggedIn(req, res);
+		if (!isLoggedIn(req, res)) return;
 		const { kpi, charts, isLoading, period } = await shareData.DCABotManager.getDashboardData();
 
 		res.set('Cache-Control', 'no-store');
@@ -445,10 +446,12 @@ async function processWebHook(req, res, next) {
 	}
 }
 
-function validateLoggedIn(req, res) {
+function isLoggedIn(req, res) {
 	if (!req.session.loggedIn) {
 		res.redirect('/login');
+		return false;
 	}
+	return true;
 }
 
 
