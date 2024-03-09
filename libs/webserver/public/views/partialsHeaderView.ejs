@@ -583,7 +583,7 @@
 	}
 
 
-	function showOrderHistory(modalId, dealId, dealOrders) {
+	function showOrderHistory(modalId, dealId, active, dealOrders) {
 
 		let orders = JSON.parse(JSON.stringify(dealOrders)).reverse();
 		let ordersFilled = orders.filter(item => item.filled);
@@ -612,7 +612,10 @@
 			}
 			else {
 
-				dateFilled = 'Waiting';
+				if (active) {
+
+					dateFilled = 'Waiting';
+				}
 			}
 
 			if (data['manual']) {
@@ -628,7 +631,10 @@
 			row.append($('<td>' + data['qtySum'] + '</td>'));
 			row.append($('<td>$' + data['sum'] + '</td>'));
 
-			table.append(row);
+			if (dateFilled != '') {
+
+				table.append(row);
+			}
 
 			count++;
 		}

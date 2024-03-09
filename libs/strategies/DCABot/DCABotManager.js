@@ -919,6 +919,13 @@ async function apiCreateUpdateBot(req, res) {
 	let orders = data['orders'];
 	let botData = data['botData'];
 
+	if (!orders) {
+
+		orders = {};
+		orders.success = false;
+		orders.data = 'Unable to calculate orders. Pair may be invalid.';
+	}
+
 	// Only process max funds if orders were successful
 	if (orders.success) {
 
