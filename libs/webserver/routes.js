@@ -60,7 +60,10 @@ function initRoutes(router) {
 
 	router.get('/dashboard', async (req, res) => {
 		if (!isLoggedIn(req, res)) return;
-		const { kpi, charts, isLoading, period } = await shareData.DCABotManager.getDashboardData();
+
+		const { duration } = req.query;
+
+		const { kpi, charts, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7')});
 
 		res.set('Cache-Control', 'no-store');
 		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, isLoading, period });

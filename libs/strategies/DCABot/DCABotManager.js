@@ -251,7 +251,7 @@ async function apiGetBots(req, res) {
 async function apiGetDealsHistory(req, res, sendResponse) {
 
 	const days = 1;
-	const maxResults = Infinity;
+	const maxResults = 100;
 
 	let dateTo;
 	let dateFrom;
@@ -1538,23 +1538,19 @@ function insertValueToMap(map, key, value) {
 	}
 }
 
-async function getDashboardData() {
-	const { data: { dashboard_period } } = await shareData.Common.getConfig('app.json');
-
-	const DEAL_DATA_PERIOD = dashboard_period == 'month' ? 30 : 7;
-
+async function getDashboardData({ duration }) {
 	const { year, month, day } = shareData.Common.getDateParts(new Date());
 	const today = new Date(`${year}-${month}-${day}` + 'T23:59:59');
-	const THIRTY_DAYS_AGO = new Date();
-	THIRTY_DAYS_AGO.setDate(THIRTY_DAYS_AGO.getDate() - DEAL_DATA_PERIOD);
-	THIRTY_DAYS_AGO.setHours(0, 0, 0);
+	const X_DAYS_AGO = new Date();
+	X_DAYS_AGO.setDate(X_DAYS_AGO.getDate() - duration);
+	X_DAYS_AGO.setHours(0, 0, 0);
 
 	const { data } = await shareData.Common.getConfig('bot.json');
 
 	const active_deals = await shareData.DCABot.getDeals({ status: 0 });
-	const complete_deals = await shareData.DCABot.getDeals({ status: 1, "sellData.date": { $gte: THIRTY_DAYS_AGO, $lte: today } });
+	const complete_deals = await shareData.DCABot.getDeals({ status: 1, "sellData.date": { $gte: X_DAYS_AGO, $lte: today } });
 	const deal_tracker = await shareData.DCABot.getDealTracker();
-	const period = `${THIRTY_DAYS_AGO.toLocaleDateString()} - ${today.toLocaleDateString()}`
+	const period = `${X_DAYS_AGO.toLocaleDateString()} - ${today.toLocaleDateString()}`
 
 	const isLoading = active_deals.length != Object.keys(deal_tracker).length;
 
@@ -1641,7 +1637,10 @@ async function getDashboardData() {
 	}
 
 	for(const key in profit_by_bot_map) {
-		adjusted_pl_map[key] = profit_by_bot_map[key] + active_pl_map[key] ?? 0;
+		const total = profit_by_bot_map[key] + active_pl_map[key];
+		if(total) {
+			adjusted_pl_map[key] = total;
+		}
 	}
 
 	// -- Sort Maps -- //

@@ -26,6 +26,38 @@
                         ]
 
      $(document).ready(function () {
+        const period_map = {
+                'week': 7,
+                '2-weeks': 14,
+                'month': 30,
+            }
+
+        $('#period-select').change(function() {
+            const period = $(this).val();
+            window.location.href = `/dashboard?duration=${period_map[period]}`;
+        });
+
+
+    const period = new URLSearchParams(window.location.search).get('duration');
+    if (period) {
+        const keys = Object.keys(period_map);
+        let isCustom = true;
+        for (let i = 0; i < keys.length; i++) {
+            if (period_map[keys[i]] == period) {
+                $(`#period-select option[value=${keys[i]}]`).prop('selected', true);
+                isCustom = false;
+                break;
+            }
+        }
+        if (isCustom) {
+            $('#custom-date-range').css('display', 'block');
+            $('#period-select option[value=custom]').prop('selected', true);
+        }
+    } else {
+        $(`#period-select option[value=week]`).prop('selected', true);
+    }
+
+
         <% if (isLoading) { %>
             alertBox('Deals are being loaded. Please wait a few minutes and refresh the page.');
         <% } %>
@@ -78,8 +110,16 @@
 
 <main style="margin-top: 10px">  
     <div id="contentBox">
-        <span><%- period %></span>
-        <div style="padding: 20px 0 20px 0">
+        <div style="display: flex; flex-direction: column; justify-content: center; gap: 5px">
+            <select class="form-field" id="period-select" style="width: 100px" >
+                <option value="week">Week</option>
+                <option value="2-weeks">2 Weeks</option>
+                <option value="month" selected>Month</option>
+                <option value="custom" id="custom-date-range" style="display: none">Custom</option>
+            </select>
+            <span><b>Period:</b> <%- period %></span>
+        </div>
+        <div style="padding: 10px 0 20px 0">
         <!-- KPI -->
         <div class="kpi-container">
             <div class="performance-kpi">
