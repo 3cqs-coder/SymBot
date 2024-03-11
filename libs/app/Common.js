@@ -1047,7 +1047,7 @@ function validateApiKey(key) {
 	}
 	catch(e) {}
 
-	if (hash == hashData) {
+	if (hash === hashData) {
 
 		success = true;
 	}
