@@ -86,10 +86,18 @@ async function updateConfig(req, res) {
 
 		pairButtons = [];
 	}
+	else if (typeof pairButtons === 'string') {
+
+		pairButtons = [pairButtons];
+	}
 
 	if (pairBlacklist == undefined || pairBlacklist == null || pairBlacklist == '') {
 
 		pairBlacklist = [];
+	}
+	else if (typeof pairBlacklist === 'string') {
+
+		pairBlacklist = [pairBlacklist];
 	}
 
 	const pairButtonsUC = pairButtons.map(data => data.toUpperCase());

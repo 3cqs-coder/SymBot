@@ -1434,7 +1434,6 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						else if (price >= priceSellOrder || dealTracker[dealId]['update']['deal_cancel'] || dealTracker[dealId]['update']['deal_panic_sell']) {
 
 							//Sell order
-							await createSellErrorTracker(dealId);
 
 							if (deal.isStart == 1) {
 
@@ -2073,7 +2072,7 @@ const cancelOrder = async (exchange, orderId, pair, dealId) => {
 
 		try {
 
-			order = await exchange.cancelOrder(orderId, pair, {});
+			order = await exchange.cancelOrder(orderId, pair);
 
 			errMsg = null;
 			success = true;
@@ -2120,9 +2119,12 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 	let finished = false;
 	let timeOutOrder = false;
 	let timeOutVerify = false;
+	let orderInvalid = false;
 
 	let count = 0;
+	let orderCount = 0;
 	let cancelCount = 0;
+	let invalidCount = 0;
 
 	let order;
 	let msg;
@@ -2142,6 +2144,8 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 
 	while (!finished) {
 
+		orderCount++;
+
 		const orderData = await getOrder(exchange, orderId, pair, dealId);
 
 		// Set date for cancel order timeout
@@ -2151,17 +2155,32 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 		}
 
 		order = orderData.data;
+
 		timeOutOrder = orderData.timeout;
+		orderInvalid = orderData.invalid;
 
 		if (!orderData.success) {
 
 			// Some error occurred getting order
 			errMsg = orderData.error;
 
-			if (order.invalid) {
+			if (orderInvalid) {
 
-				success = false;
-				finished = true;
+				invalidCount++;
+
+				// Reduce count to allow more time for other error retries
+				count--;
+
+				if (invalidCount > maxTries) {
+
+					success = false;
+					finished = true;
+				}
+				else {
+
+					// Exchange may not be responding correctly, so delay and try again
+					await Common.delay(1000 + (Math.random() * 100));
+				}
 			}
 			else if (count < maxTries) {
 
@@ -2179,6 +2198,8 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 			count++;
 		}
 		else {
+
+			errMsg = null;
 
 			orderStatus = order.status;
 			orderStatus = orderStatus?.toLowerCase();
@@ -2205,6 +2226,11 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 					Common.logger(msg);
 
 					let cancelOrderData = await cancelOrder(exchange, orderId, pair, dealId);
+
+					// Cancel failed
+					if (!cancelOrderData.success) {
+
+					}
 
 					// Delay and let loop again to check if canceled to finish
 					await Common.delay(1000);
@@ -2240,6 +2266,8 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 						'message': msg,
 						'data': order,
 						'status': orderStatus,
+						'attempts': orderCount,
+						'invalid': orderInvalid,
 						'timeout_order': timeOutOrder,
 						'timeout_verify': timeOutVerify,
 						'error': errMsg
@@ -2543,12 +2571,15 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 	let sellErrorCountDupes;
 	let sellErrorHistory;
 
+	let success = true;
 	let finished = false;
 
 	let count = 0;
 
+	await createSellErrorTracker(dealId);
+
 	while (!finished) {
-	
+
 		try {
 
 			const dateNow = new Date();
@@ -2648,14 +2679,19 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 		catch(e) {
 
 			isError = e;
+
+			success = false;
+			finished = true;
 		}
 
 		count++;
 	}
 
 	const resObj = {
+						'success': success,
 						'count': count,
-						'fee_data': feeData
+						'fee_data': feeData,
+						'error': isError
 				   };
 
 	return resObj;
