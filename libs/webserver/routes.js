@@ -2,7 +2,6 @@
 
 
 let shareData;
-const os = require('os');
 
 
 function initRoutes(router) {
