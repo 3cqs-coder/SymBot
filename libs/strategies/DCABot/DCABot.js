@@ -26,7 +26,7 @@ const maxMinsVolume = 5;
 const exchangeTimeoutSec = 10;
 
 // Max number of times a deal will attempt to sell when an error occurs and apply additional fees if there are insufficient funds
-const maxSellErrorCount = 20;
+const maxSellErrorCount = 30;
 
 // Max time in seconds sell errors will be counted before counter is reset
 const maxSellErrorResetSec = 300;
@@ -58,7 +58,7 @@ async function start(dataObj, startId) {
 
 	const dealResumeId = data['dealResumeId'];
 	const firstOrderPrice = data['firstOrderPrice'];
-	const isPairData = data['pairData'];
+	const isPairData = (data['pairData'] === undefined || data['pairData'] === null) ? false : data['pairData'];
 
 	delete data['pairData'];
 	delete data['dealResumeId'];
@@ -260,7 +260,6 @@ async function start(dataObj, startId) {
 			if (config.firstOrderType.toUpperCase() == 'MARKET') {
 
 				//first order market
-				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + '...')); }
 
 				if (!isPairData) {
 
@@ -269,6 +268,8 @@ async function start(dataObj, startId) {
 					console.log(minMoveAmount)
 					console.log(pairData);
 				}
+
+				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + ' (Pair Data: ' + isPairData + ')')); }
 
 				await Common.delay(1000);
 
@@ -1759,6 +1760,8 @@ const filterMinMovement = async (amount, minMoveAmount) => {
 	// Set slightly higher than zero for precision
 	if (minMoveAmount == 0) {
 
+		incrementValue = 0;
+
 		//minMoveAmount = 0.00001;
 		minMoveAmount = 0.000001;
 	}
@@ -1917,40 +1920,74 @@ const getBots = async (query) => {
 
 const getBalance = async (exchange, symbol) => {
 
-	let success = true;
+	let limit = 100;
 
+	let success = true;
 	let balance;
-	let balanceObj;
 	let errMsg;
 
 	try {
 
-		balanceObj = await exchange.fetchBalance();
+		let allBalances = {};
+		let starting_after = null;
+
+		while (true) {
+
+			const partialResponse = await exchange.fetchBalance({
+				'limit': limit,
+				'starting_after': starting_after
+			});
+
+			const partialBalances = partialResponse.free;
+
+			Object.keys(partialBalances).forEach((key) => {
+
+				if (!allBalances[key]) {
+
+					allBalances[key] = parseFloat(partialBalances[key]);
+				}
+				else {
+
+					allBalances[key] += parseFloat(partialBalances[key]);
+				}
+			});
+
+			if (partialResponse.info.pagination.next_starting_after) {
+
+				starting_after = partialResponse.info.pagination.next_starting_after;
+
+				await Common.delay(500);
+
+			}
+			else {
+
+				break;
+			}
+		}
 
 		if (symbol != undefined && symbol != null && symbol != '') {
 
-			balance = parseFloat(balanceObj[symbol].free);
+			balance = allBalances[symbol] || 0;
 		}
 		else {
 
-			balance = balanceObj;
+			balance = allBalances;
 		}
-	}
-	catch (e) {
+
+	} catch (e) {
 
 		errMsg = e;
-		
+
 		if (typeof errMsg != 'string') {
 
 			errMsg = JSON.stringify(errMsg);
 		}
 
 		Common.logger(errMsg);
-
 		success = false;
 	}
 
-	return ( { 'success': success, 'balance': balance, 'error': errMsg } );
+	return { 'success': success, 'balance': balance, 'error': errMsg };
 };
 
 
