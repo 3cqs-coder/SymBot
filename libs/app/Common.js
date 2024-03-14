@@ -796,6 +796,16 @@ function timeDiff(dateStart, dateEnd) {
 	return diffString;
 }
 
+function dealDurationMinutes(dateStart, dateEnd) {
+
+	let diff = Math.abs(dateEnd - dateStart) / 1000;
+
+	let minutes = Math.floor(diff / 60);
+
+	return minutes;
+
+}
+
 
 function convertBoolean(param, defaultVal) {
 
@@ -1029,7 +1039,6 @@ function validateApiKey(key) {
 	let success = false;
 
 	try {
-
 		data = shareData.appData.api_key.split(':');
 	}
 	catch(e) {
@@ -1134,6 +1143,7 @@ module.exports = {
 	getProcessInfo,
 	getAppVersions,
 	validateAppVersion,
+	dealDurationMinutes,
 
 	init: function(obj) {
 

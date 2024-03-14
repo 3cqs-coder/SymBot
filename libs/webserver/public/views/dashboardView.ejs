@@ -5,7 +5,7 @@
 <script>
        <% const { active_deals, total_in_deals, available_balance, total_profit, total_pl } = kpi; %>
 
-       const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map } = <%- JSON.stringify(charts) %>
+       const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map } = <%- JSON.stringify(charts) %>
 
         const bgColors = [
                             'rgba(255, 99, 132, 0.2)',
@@ -26,6 +26,38 @@
                         ]
 
      $(document).ready(function () {
+        const period_map = {
+                'week': 7,
+                '2-weeks': 14,
+                'month': 30,
+            }
+
+        $('#period-select').change(function() {
+            const period = $(this).val();
+            window.location.href = `/dashboard?duration=${period_map[period]}`;
+        });
+
+
+    const period = new URLSearchParams(window.location.search).get('duration');
+    if (period) {
+        const keys = Object.keys(period_map);
+        let isCustom = true;
+        for (let i = 0; i < keys.length; i++) {
+            if (period_map[keys[i]] == period) {
+                $(`#period-select option[value=${keys[i]}]`).prop('selected', true);
+                isCustom = false;
+                break;
+            }
+        }
+        if (isCustom) {
+            $('#custom-date-range').css('display', 'block');
+            $('#period-select option[value=custom]').prop('selected', true);
+        }
+    } else {
+        $(`#period-select option[value=week]`).prop('selected', true);
+    }
+
+
         <% if (isLoading) { %>
             alertBox('Deals are being loaded. Please wait a few minutes and refresh the page.');
         <% } %>
@@ -64,18 +96,30 @@
         const activePL_chart = document.getElementById('activePLChart').getContext('2d');
         const adjustedPL_chart = document.getElementById('adjustedPLChart').getContext('2d');
         const profitPerDay_chart = document.getElementById('profitPerDayChart').getContext('2d');
+        const botDealDuration_chart = document.getElementById('botDealDurationChart').getContext('2d');
+        const botFundsInUse_chart = document.getElementById('fundsInUseChart').getContext('2d');
 
         createChart(profit_chart, 'Bot Profit', profit_by_bot_map);
         createChart(activePL_chart, 'Active P/L', active_pl_map);
         createChart(adjustedPL_chart, 'Adjusted P/L', adjusted_pl_map);
         createChart(profitPerDay_chart, 'Profit Per Day', profit_by_day_map);
+        createChart(botDealDuration_chart, 'Deal Duration (Minutes)', bot_deal_duration_map);
+        createChart(botFundsInUse_chart, 'Funds in Use', bot_funds_in_use_map);
     });
 </script>
 
 <main style="margin-top: 10px">  
     <div id="contentBox">
-        <span><%- period %></span>
-        <div style="padding: 20px 0 20px 0">
+        <div style="display: flex; flex-direction: column; justify-content: center; gap: 5px">
+            <select class="form-field" id="period-select" style="width: 100px" >
+                <option value="week">Week</option>
+                <option value="2-weeks">2 Weeks</option>
+                <option value="month" selected>Month</option>
+                <option value="custom" id="custom-date-range" style="display: none">Custom</option>
+            </select>
+            <span><b>Period:</b> <%- period %></span>
+        </div>
+        <div style="padding: 10px 0 20px 0">
         <!-- KPI -->
         <div class="kpi-container">
             <div class="performance-kpi">
@@ -124,6 +168,17 @@
             <!-- Profit Per Day -->
             <div class="chart-container" style="margin-top:40px">
                 <canvas id="profitPerDayChart"></canvas>
+            </div>
+        </div>
+
+        <div class="dashboard-container">
+            <!-- Deal Duration  -->
+            <div class="chart-container" style="margin-top:40px; width: 50%;">
+                <canvas  id="botDealDurationChart"></canvas>
+            </div>
+            <!-- Funds in Use  -->
+            <div class="chart-container" style="margin-top:40px; width: 50%;">
+                <canvas  id="fundsInUseChart"></canvas>
             </div>
         </div>
         
