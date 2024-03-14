@@ -58,8 +58,11 @@ function initRoutes(router) {
 	});
 
 	router.get('/dashboard', async (req, res) => {
-		validateLoggedIn(req, res);
-		const { kpi, charts, isLoading, period } = await shareData.DCABotManager.getDashboardData();
+		if (!isLoggedIn(req, res)) return;
+
+		const { duration } = req.query;
+
+		const { kpi, charts, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7')});
 
 		res.set('Cache-Control', 'no-store');
 		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, isLoading, period });
@@ -445,10 +448,12 @@ async function processWebHook(req, res, next) {
 	}
 }
 
-function validateLoggedIn(req, res) {
+function isLoggedIn(req, res) {
 	if (!req.session.loggedIn) {
 		res.redirect('/login');
+		return false;
 	}
+	return true;
 }
 
 
