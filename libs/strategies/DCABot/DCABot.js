@@ -31,14 +31,11 @@ const maxSellErrorCount = 30;
 // Max time in seconds sell errors will be counted before counter is reset
 const maxSellErrorResetSec = 300;
 
-// Additional percentage fee that will be applied each time a sell error occurs for a deal
+// Additional multiplier that will be applied each time a sell error occurs for a deal
 const sellErrorAddFeeMultiplier = 0.25;
 
 // Max additional percentage fee that will be applied if a sell error occurs for a deal
-const sellErrorAddFeeMaxPerc = 50.95;
-
-// Percentage to allow for slippage when placing orders
-const priceSlippagePercent = 1.35;
+const sellErrorAddFeeMaxPerc = 0.05;
 
 
 let dealTracker = {};
@@ -46,6 +43,7 @@ let timerTracker = {};
 let startDealTracker = {};
 let resumeDealTracker = {};
 let balanceTracker = {};
+let exchangeMarkets = {};
 
 let shareData;
 
@@ -133,6 +131,11 @@ async function start(dataObj, startId) {
 
 		pair = pair.toUpperCase();
 
+		const pairArr = pair.split('/');
+
+		const pairBase = pairArr[0];
+		const pairQuote = pairArr[1];
+ 
 		const isActive = await checkActiveDeal(botIdMain, pair);
 		const pairDealsActive = await getDeals({ 'botId': botIdMain, 'pair': pair, 'status': 0 });
 		const symbolData = await getSymbol(exchange, pair);
@@ -261,12 +264,23 @@ async function start(dataObj, startId) {
 
 				//first order market
 
+			/*
 				if (!isPairData) {
 
 					const pairData = await getPairData(pair);
 					minMoveAmount = pairData['pair_data']['minimum_movement_amount'];
-					console.log(minMoveAmount)
+
+					console.log(minMoveAmount);
 					console.log(pairData);
+				}
+			*/
+
+				try {
+
+					minMoveAmount = exchangeMarkets[config.exchange][pair]['precision']['amount'];
+				}
+				catch(e) {
+
 				}
 
 				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + ' (Pair Data: ' + isPairData + ')')); }
@@ -535,7 +549,7 @@ async function start(dataObj, startId) {
 				}
 				else {
 
-					balanceObj = await getBalance(exchange, 'USDT');
+					balanceObj = await getBalance(exchange, pairQuote);
 
 					const balance = balanceObj.balance;
 					wallet = balance;
@@ -819,7 +833,7 @@ async function start(dataObj, startId) {
 				}
 				else {
 
-					balanceObj = await getBalance(exchange, 'USDT');
+					balanceObj = await getBalance(exchange, pairQuote);
 
 					const balance = balanceObj.balance;
 					wallet = balance;
@@ -1074,25 +1088,16 @@ async function start(dataObj, startId) {
 
 const dcaFollow = async (configDataObj, exchange, dealId) => {
 
-	let configData = JSON.parse(JSON.stringify(configDataObj));
+	let success = true;
+	let finished = false;
+	let isDealCancel = false;
+	let isDealPanicSell = false;
+
+	let { priceSlippageBuyPercent, priceSlippageSellPercent } = await getSlippage();
 
 	if (shareData.appData.database_error != undefined && shareData.appData.database_error != null && shareData.appData.database_error != '') {
 
 		Common.logger(colors.red.bold(shareData.appData.database_error + ' - Not processing'));
-
-		return ( { 'success': false, 'finished': false } );
-	}
-
-	if (dealTracker[dealId]['update']['deal_stop']) {
-
-		Common.logger(colors.red.bold('Deal ID ' + dealId + ' stop requested. Not processing'));
-
-		return ( { 'success': false, 'finished': true } );
-	}
-
-	if (dealTracker[dealId]['update']['deal_pause']) {
-
-		Common.logger(colors.red.bold('Deal ID ' + dealId + ' pause requested. Not processing'));
 
 		return ( { 'success': false, 'finished': false } );
 	}
@@ -1104,37 +1109,57 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 		return ( { 'success': false, 'finished': false } );
 	}
 
-	// Refresh config without restarting deal
-	if (dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null && dealTracker[dealId]['update']['config']) {
+	if (dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null) {
 
-		const configRefresh = JSON.parse(JSON.stringify(dealTracker[dealId]['update']['config']));
+		if (dealTracker[dealId]['update']['deal_cancel']) {
 
-		delete configData['dealLast'];
+			isDealCancel = true;
+		}
+		
+		if (dealTracker[dealId]['update']['deal_panic_sell']) {
+
+			isDealPanicSell = true;
+		}
+
+		// Deal stop
+		if (dealTracker[dealId]['update']['deal_stop']) {
+
+			Common.logger(colors.red.bold('Deal ID ' + dealId + ' stop requested. Not processing'));
 	
-		if (configRefresh['dealLast']) {
-
-			configData['dealLast'] = true;
+			return ( { 'success': false, 'finished': true } );
 		}
 
-		delete dealTracker[dealId]['update']['config'];
+		// Deal pause
+		if (dealTracker[dealId]['update']['deal_pause']) {
+	
+			Common.logger(colors.red.bold('Deal ID ' + dealId + ' pause requested. Not processing'));
+	
+			return ( { 'success': false, 'finished': false } );
+		}
 
-		return ( { 'success': true, 'finished': false, 'config': configRefresh } );
-	}
+		// Refresh config without restarting deal
+		if (dealTracker[dealId]['update']['config']) {
 
-	if (dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null && dealTracker[dealId]['update']['deal_sell_error']) {
+			const configRefresh = JSON.parse(JSON.stringify(dealTracker[dealId]['update']['config']));
 
-		let diffSec = (new Date().getTime() - new Date(dealTracker[dealId]['update']['deal_sell_error']['date']).getTime()) / 1000;
+			delete dealTracker[dealId]['update']['config'];
 
-		if (dealTracker[dealId]['update']['deal_sell_error']['count'] > (maxSellErrorCount + 1) || diffSec > maxSellErrorResetSec) {
+			return ( { 'success': true, 'finished': false, 'config': configRefresh } );
+		}
 
-			delete dealTracker[dealId]['update']['deal_sell_error'];
+		// Deal sell error
+		if (dealTracker[dealId]['update']['deal_sell_error']) {
+
+			let diffSec = (new Date().getTime() - new Date(dealTracker[dealId]['update']['deal_sell_error']['date']).getTime()) / 1000;
+
+			if (dealTracker[dealId]['update']['deal_sell_error']['count'] > (maxSellErrorCount + 1) || diffSec > maxSellErrorResetSec) {
+	
+				delete dealTracker[dealId]['update']['deal_sell_error'];
+			}
 		}
 	}
 
-	const config = Object.freeze(JSON.parse(JSON.stringify(configData)));
-
-	let success = true;
-	let finished = false;
+	const config = Object.freeze(JSON.parse(JSON.stringify(configDataObj)));
 
 	try {
 
@@ -1366,18 +1391,16 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					if (order.filled == 0 || maxSafetyOrdersUsed) {
 					//if (order.filled == 0) {
 
-						// Allow for slippage
-						let priceSlippage = (priceSlippagePercent / 100);
-
 						if (config.sandBox) {
 
-							priceSlippage = 0;
+							priceSlippageBuyPercent = 0;
+							priceSlippageSellPercent = 0;
 						}
 
-						const priceBuyOrder = parseFloat(Number(order.price) - (Number(order.price) * priceSlippage));
-						const priceSellOrder = parseFloat(Number(currentOrder.target) + (Number(currentOrder.target) * (priceSlippage / 5)));
+						const priceBuyOrder = parseFloat(Number(order.price) - (Number(order.price) * priceSlippageBuyPercent));
+						const priceSellOrder = parseFloat(Number(currentOrder.target) + (Number(currentOrder.target) * priceSlippageSellPercent));
 
-						if (price <= priceBuyOrder && order.filled == 0) {
+						if ((price <= priceBuyOrder && order.filled == 0) && !isDealCancel && !isDealPanicSell) {
 							//Buy DCA
 
 							if (!config.sandBox) {
@@ -1432,7 +1455,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								orders: orders
 							});
 						}
-						else if (price >= priceSellOrder || dealTracker[dealId]['update']['deal_cancel'] || dealTracker[dealId]['update']['deal_panic_sell']) {
+						else if (price >= priceSellOrder || isDealCancel || isDealPanicSell) {
 
 							//Sell order
 
@@ -1440,8 +1463,6 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								let sellOrderId = '';
 								let isNSF = false;
-								let canceled = false;
-								let panicSell = false;
 								let sellSuccess = true;
 
 								const sellDataObj = await processSellData(pair, price, dealId, exchange, config, currentOrder, filledOrders);
@@ -1457,17 +1478,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								//const profitPercFinal = profitData['profit_percentage'];
 								const profitPercFinal = Number(Number(profitPerc - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
 
-								if (dealTracker[dealId]['update']['deal_cancel']) {
-
-									canceled = true;
-								}
-
-								if (dealTracker[dealId]['update']['deal_panic_sell']) {
-
-									panicSell = true;
-								}
-
-								if (!config.sandBox && !canceled) {
+								if (!config.sandBox && !isDealCancel) {
 
 									const sell = await sellOrder(exchange, dealId, pair, qtySumSell, priceFiltered);
 
@@ -1527,8 +1538,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										dealId: dealId
 									}, {
 										'sellData': sellData,
-										'panicSell': panicSell,
-										'canceled': canceled,
+										'panicSell': isDealPanicSell,
+										'canceled': isDealCancel,
 										'status': 1
 									});
 
@@ -1952,7 +1963,7 @@ const getBalance = async (exchange, symbol) => {
 				}
 			});
 
-			if (partialResponse.info.pagination.next_starting_after) {
+			if (partialResponse.info && partialResponse.info.pagination?.next_starting_after) {
 
 				starting_after = partialResponse.info.pagination.next_starting_after;
 
@@ -1962,6 +1973,14 @@ const getBalance = async (exchange, symbol) => {
 			else {
 
 				break;
+			}
+		}
+
+		for (let key in allBalances) {
+
+			if (allBalances[key] === null || allBalances[key] === 0) {
+
+				delete allBalances[key];
 			}
 		}
 
@@ -2549,6 +2568,31 @@ const getDeviationDca = async (dcaOrderStepPercent, dcaOrderStepPercentMultiplie
 }
 
 
+const getSlippage = async() => {
+
+	let priceSlippageBuyPercent = 0;
+	let priceSlippageSellPercent = 0;
+
+	if (shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
+
+		const exchangeObj = shareData.appData.bots['exchange'];
+
+		for (let exchangeName in exchangeObj) {
+
+			if (exchangeName.toLocaleLowerCase() == 'default') {
+
+				const exchangeSingleObj = exchangeObj[exchangeName];
+
+				priceSlippageBuyPercent = Number(exchangeSingleObj['orders']['buy']['slippage_percent']) / 100;
+				priceSlippageSellPercent = Number(exchangeSingleObj['orders']['sell']['slippage_percent']) / 100;
+			}
+		}
+	}
+
+	return { priceSlippageBuyPercent, priceSlippageSellPercent };
+}
+
+
 const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfitPercent, exchangeFeePercent) => {
 
 	let profitPerc = await Percentage.subNumsAsPerc(
@@ -2556,14 +2600,15 @@ const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfi
 		orderAverage
 	);
 
-	let priceSlippage = priceSlippagePercent;
+	let { priceSlippageBuyPercent, priceSlippageSellPercent } = await getSlippage();
 
 	if (sandBox) {
 
-		priceSlippage = 0;
+		priceSlippageBuyPercent = 0;
+		priceSlippageSellPercent = 0;
 	}
 
-	profitPerc = profitPerc - Number(exchangeFeePercent) - (Number(priceSlippage / 5));
+	profitPerc = profitPerc - Number(exchangeFeePercent) - (Number(priceSlippageSellPercent));
 	profitPerc = Number(Number(profitPerc).toFixed(2));
 
 	const takeProfit = shareData.Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent)) / 100)));
@@ -2662,6 +2707,7 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 			feeData = await calculateSellData(pair, price, exchange, config, addFee, currentOrder, filledOrders);
 
 			const dcaOrderQtySumNet = feeData['dcaOrderQtySumNet'];
+			const exchangeFeeQtySumDiffPercent = feeData['exchangeFeeQtySumDiffPercent'];
 
 			// Finish only if quantity is not equal to previous result
 			if (sellErrorLastQty != dcaOrderQtySumNet) {
@@ -2696,7 +2742,7 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 
 				finished = true;
 			}
-			else if (addFee > maxFee) {
+			else if (exchangeFeeQtySumDiffPercent > maxFee) {
 
 				// Max reached. Stop applying additional fees
 				finished = true;
@@ -2761,8 +2807,8 @@ const calculateAdjustments = async (exchange, pair, amount, orderSize, exchangeF
 
 		orderSizeNew = await filterAmount(exchange, pair, orderSizeNew);
 
-		// Filtering may remove decimals for some pairs
-		//amountNew = await filterPrice(exchange, pair, amount);
+		// Filtering may reduce amounts and remove decimals for some pairs
+		amountNew = await filterPrice(exchange, pair, amount);
 
 		amountNew = Math.round(amountNew * 100) / 100;
 
@@ -2778,7 +2824,6 @@ const calculateAdjustments = async (exchange, pair, amount, orderSize, exchangeF
 
 		if (exchangeFeePercent == 0 || exchangeFeeQtyFiltered > 0) {
 
-			//console.log(orderSize, orderSizeMin, exchangeFeeOrigQty, exchangeFeeFilteredQty, '$'+exchangeFeeAmount, '$'+exchangeFeeFilteredAmount )
 			finished = true;
 		}
 		else {
@@ -2883,7 +2928,13 @@ const calculateSellData = async (pair, price, exchange, configObj, addFee, curre
 	for (let i = 0; i < allOrders.length; i++) {
 
 		const order = allOrders[i];
-		const orderMetadata = order['orderMetadata'];
+
+		let orderMetadata = order['orderMetadata'];
+
+		if (orderMetadata == undefined || orderMetadata == null || orderMetadata == '') {
+
+			orderMetadata = {};
+		}
 
 		const exchangeFeeQty = orderMetadata['exchange_fee_qty'];
 		const exchangeFeeAmount = orderMetadata['exchange_fee_amount'];
@@ -2952,7 +3003,7 @@ const calculateSellData = async (pair, price, exchange, configObj, addFee, curre
 						'exchangeFeePercent': exchangeFeePercent,
 						'priceFiltered': priceFiltered
 				   };
-console.log(resObj);
+
 	return resObj;
 }
 
@@ -3079,14 +3130,113 @@ async function getPairData(pair) {
 }
 
 
+async function loadExchangeMarkets(exchangeObj) {
+
+	const maxTries = 5;
+
+	let isErr;
+	let success;
+	let exchanges;
+
+	if (exchangeObj == undefined || exchangeObj == null || exchangeObj == '') {
+
+		exchanges = shareData.appData.exchanges;
+	}
+	else {
+
+		// Only load markets for one exchange
+		exchanges = exchangeObj;
+	}
+
+	for (let exchangeId in exchanges) {
+
+		let count = 0;
+		let finished = false;
+
+		let exchange = exchanges[exchangeId];
+
+		while (!finished) {
+
+			try {
+
+				success = true;
+
+				const markets = await exchange.loadMarkets();
+
+				await processExchangeMarkets(exchangeId, markets);
+
+				finished = true;
+			}
+			catch(e) {
+
+				isErr = null;
+
+				if (count < maxTries) {
+	
+					// Delay and try again
+					await Common.delay(1000 + (Math.random() * 100));
+				}
+				else {
+
+					isErr = e;
+
+					success = false;
+					finished = true;
+				}
+			}
+
+			count++;
+		}
+	}
+
+	return { 'success': success, 'error': isErr };
+}
+
+
+async function processExchangeMarkets(exchangeId, markets) {
+
+	let marketData = {};
+
+	for (let pair in markets) {
+
+		let pairUpper = pair.toUpperCase();
+
+		let pairData = markets[pair];
+
+		let precision = pairData['precision'];
+
+		if (marketData[pairUpper] == undefined || marketData[pairUpper] == null || marketData[pairUpper] == '') {
+
+			marketData[pairUpper] = {};
+		}
+
+		marketData[pairUpper]['precision'] = precision;
+	}
+
+	if (exchangeMarkets[exchangeId] == undefined || exchangeMarkets[exchangeId] == null || exchangeMarkets[exchangeId] == '') {
+
+		exchangeMarkets[exchangeId] = {};
+	}
+
+	exchangeMarkets[exchangeId] = marketData;
+
+	return marketData;
+}
+
+
 async function connectExchange(configObj) {
 
 	const config = JSON.parse(JSON.stringify(configObj));
 
+	let success;
 	let exchange;
+	let isErr;
+	let isNew = false;
 	let options = { 'defaultType': 'spot' };
 
 	try {
+
+		success = true;
 
 		if (config.exchangeOptions != undefined && config.exchangeOptions != null && config.exchangeOptions != '') {
 
@@ -3098,6 +3248,8 @@ async function connectExchange(configObj) {
 			exchange = shareData.appData.exchanges[config.exchange];
 		}
 		else {
+
+			isNew = true;
 
 			exchange = new ccxt.pro[config.exchange]({
 
@@ -3115,7 +3267,27 @@ async function connectExchange(configObj) {
 	}
 	catch(e) {
 
-		let msg = 'Connect exchange error: ' + e;
+		isErr = e;
+		success = false;
+	}
+
+	// Load markets if newly connected
+	if (success && isNew) {
+
+		let exchangeObj = {};
+		exchangeObj[config.exchange] = exchange;
+
+		let loadData = await loadExchangeMarkets(exchangeObj);
+
+		success = loadData['success'];
+		isErr = loadData['error'];
+	}
+
+	if (isErr != undefined && isErr != null && isErr != '') {
+
+		success = false;
+
+		let msg = 'Connect exchange error: ' + isErr;
 
 		Common.logger(msg);
 
@@ -4835,11 +5007,20 @@ async function startDelay(dataObj) {
 
 async function initApp() {
 
+	const loadMarketHours = 4;
+
 	// Don't initialize if resetting database
 	if (shareData.appData.reset) {
 
 		return;
 	}
+
+	setInterval(() => {
+
+		loadExchangeMarkets();
+
+	}, (loadMarketHours * 60 * 60 * 1000));
+
 
 	setInterval(() => {
 
