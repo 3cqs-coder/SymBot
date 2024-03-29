@@ -1093,7 +1093,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 	let isDealCancel = false;
 	let isDealPanicSell = false;
 
-	let { priceSlippageBuyPercent, priceSlippageSellPercent } = await getSlippage();
+	let { priceSlippageBuyPercent, priceSlippageSellPercent } = await getSlippage(true);
 
 	if (shareData.appData.database_error != undefined && shareData.appData.database_error != null && shareData.appData.database_error != '') {
 
@@ -2568,10 +2568,17 @@ const getDeviationDca = async (dcaOrderStepPercent, dcaOrderStepPercentMultiplie
 }
 
 
-const getSlippage = async() => {
+const getSlippage = async(normalize) => {
 
 	let priceSlippageBuyPercent = 0;
 	let priceSlippageSellPercent = 0;
+
+	let divisor = 1;
+
+	if (normalize) {
+
+		divisor = 100;
+	}
 
 	if (shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
 
@@ -2579,12 +2586,12 @@ const getSlippage = async() => {
 
 		for (let exchangeName in exchangeObj) {
 
-			if (exchangeName.toLocaleLowerCase() == 'default') {
+			if (exchangeName.toLowerCase() == 'default') {
 
 				const exchangeSingleObj = exchangeObj[exchangeName];
 
-				priceSlippageBuyPercent = Number(exchangeSingleObj['orders']['buy']['slippage_percent']) / 100;
-				priceSlippageSellPercent = Number(exchangeSingleObj['orders']['sell']['slippage_percent']) / 100;
+				priceSlippageBuyPercent = Number(exchangeSingleObj['orders']['buy']['slippage_percent']) / divisor;
+				priceSlippageSellPercent = Number(exchangeSingleObj['orders']['sell']['slippage_percent']) / divisor;
 			}
 		}
 	}
@@ -2600,7 +2607,7 @@ const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfi
 		orderAverage
 	);
 
-	let { priceSlippageBuyPercent, priceSlippageSellPercent } = await getSlippage();
+	let { priceSlippageBuyPercent, priceSlippageSellPercent } = await getSlippage(false);
 
 	if (sandBox) {
 
@@ -2611,7 +2618,7 @@ const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfi
 	profitPerc = profitPerc - Number(exchangeFeePercent) - (Number(priceSlippageSellPercent));
 	profitPerc = Number(Number(profitPerc).toFixed(2));
 
-	const takeProfit = shareData.Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent)) / 100)));
+	const takeProfit = shareData.Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent) - priceSlippageSellPercent) / 100)));
 	const currentProfit = shareData.Common.roundAmount(Number((Number(orderSum) * (Number(profitPerc) / 100))));
 
 	const data = {
