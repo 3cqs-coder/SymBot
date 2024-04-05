@@ -26,7 +26,7 @@ const maxMinsVolume = 5;
 const exchangeTimeoutSec = 10;
 
 // Max number of times a deal will attempt to sell when an error occurs and apply additional fees if there are insufficient funds
-const maxSellErrorCount = 30;
+const maxSellErrorCount = 45;
 
 // Max time in seconds sell errors will be counted before counter is reset
 const maxSellErrorResetSec = 300;
@@ -289,18 +289,10 @@ async function start(dataObj, startId) {
 
 				let firstOrderSize = Number(config.firstOrderAmount) / askPrice;
 
-				//let exchangeFeeObj = await calculateExchangeFee(exchange, pair, (askPrice * firstOrderSize), firstOrderSize, config.exchangeFee, minMoveAmount);
-				//let exchangeFeeQty = exchangeFeeObj['qty'];
-
-				//firstOrderSize = exchangeFeeObj['order_qty'];
-
 				const adjustments = await calculateAdjustments(exchange, pair, Number(askPrice * firstOrderSize), firstOrderSize, config.exchangeFee, minMoveAmount);
 
 				firstOrderSize = adjustments['order_qty'];
 				let amount = adjustments['order_amount'];
-
-				//firstOrderSize = await filterMinMovement((Number(firstOrderSize) + Number(exchangeFeeQty )), minMoveAmount);
-				//firstOrderSize = await filterAmount(exchange, pair, firstOrderSize);
 
 				if (!firstOrderSize) {
 
@@ -316,26 +308,11 @@ async function start(dataObj, startId) {
 					const price = await filterPrice(exchange, pair, askPrice);
 
 					let amount = price * firstOrderSize;
-					let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
-
-					//let exchangeFeeObj = await calculateExchangeFee(exchange, pair, amount, firstOrderSize, config.exchangeFee, minMoveAmount);
-
 
 					const adjustments = await calculateAdjustments(exchange, pair, amount, firstOrderSize, config.exchangeFee, minMoveAmount);
 
 					firstOrderSize = adjustments['order_qty'];
 					amount = adjustments['order_amount'];
-
-					//let exchangeFeeQty = exchangeFeeObj['qty'];
-					//firstOrderSize = exchangeFeeObj['order_qty'];
-					//amount = exchangeFeeObj['order_amount'];
-
-					//firstOrderSize = await filterMinMovement((Number(firstOrderSize) + Number(exchangeFeeQty)), minMoveAmount);
-// Keep commented					//amount = await filterMinMovement((amount + exchangeFee), minMoveAmount);
-
-					//firstOrderSize = await filterAmount(exchange, pair, firstOrderSize);
-					//amount = await filterPrice(exchange, pair, amount);
-					//amount = Math.round(amount * 100) / 100;
 
 					let targetPrice = await calculateTargetPrice(exchange, pair, price, config.dcaTakeProfitPercent, config.exchangeFee);
 
@@ -373,25 +350,7 @@ async function start(dataObj, startId) {
 						price = await filterPrice(exchange, pair, price);
 
 						let dcaOrderSize = config.dcaOrderAmount / price;
-						//let exchangeFeeObj = await calculateExchangeFee(exchange, pair, config.dcaOrderAmount, dcaOrderSize, config.exchangeFee, minMoveAmount);
-//						let exchangeFeeQty = exchangeFeeObj['qty'];
-						//dcaOrderSize = exchangeFeeObj['order_qty'];
-
-						//dcaOrderSize = await filterMinMovement((dcaOrderSize + exchangeFeeQty), minMoveAmount);
-						//dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
-
 						let dcaOrderAmount = dcaOrderSize * price;
-//						let exchangeFee = (dcaOrderAmount / 100) * (Number(config.exchangeFee) * 2);
-
-// Keep commented						//dcaOrderAmount = await filterMinMovement((dcaOrderAmount + exchangeFee), minMoveAmount);
-
-						//const exchangeFeeAmount = (Number(dcaOrderSize) / 100) * (Number(config.exchangeFee) * 2);
-
-						//dcaOrderSize = await filterMinMovement((Number(dcaOrderSize) + Number(exchangeFeeAmount)), minMoveAmount);
-						//dcaOrderAmount = await filterMinMovement((Number((dcaOrderAmount)) + Number(exchangeFeeAmount)), minMoveAmount);
-
-						//dcaOrderAmount = await filterPrice(exchange, pair, dcaOrderAmount);
-						//dcaOrderAmount = Math.round(dcaOrderAmount * 100) / 100;
 
 						const adjustments = await calculateAdjustments(exchange, pair, dcaOrderAmount, dcaOrderSize, config.exchangeFee, minMoveAmount);
 
@@ -445,18 +404,6 @@ async function start(dataObj, startId) {
 						price = await filterPrice(exchange, pair, price);
 
 						let amount = lastDcaOrderAmount * config.dcaOrderSizeMultiplier;
-						let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
-						//let exchangeFeeObj = await calculateExchangeFee(exchange, pair, amount, lastDcaOrderSize, config.exchangeFee, minMoveAmount);
-
-						
-
-//						let exchangeFeeQty = exchangeFeeObj['qty'];
-
-						//amount = await filterMinMovement(amount, minMoveAmount);
-
-						// Fee already applied previously
-						//amount = await filterPrice(exchange, pair, amount);
-						//amount = Math.round(amount * 100) / 100;
 
 						let dcaOrderSize = amount / price;
 
@@ -477,13 +424,6 @@ async function start(dataObj, startId) {
 
 						dcaOrderSize = adjustments['order_qty'];
 						amount = adjustments['order_amount'];
-
-						//const exchangeFeeAmount = (Number(dcaOrderSize) / 100) * (Number(config.exchangeFee) * 2);
-						//dcaOrderSize = await filterMinMovement((Number(dcaOrderSize) + Number(exchangeFeeAmount)), minMoveAmount);
-						//amount = await filterMinMovement((Number((amount)) + Number(exchangeFeeAmount)), minMoveAmount);
-						
-						//dcaOrderSize = await filterMinMovement(dcaOrderSize, minMoveAmount);
-						//dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
 
 						let dcaOrderSum = parseFloat(amount) + parseFloat(lastDcaOrderSum);
 						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
@@ -536,6 +476,7 @@ async function start(dataObj, startId) {
 
 				let t = orderData['table'];
 				let maxDeviation = orderData['max_deviation'];
+				let ordersMetadata = orderData['metadata'];
 
 				//console.log(t.toString());
 				//Common.logger(t.toString());
@@ -588,6 +529,7 @@ async function start(dataObj, startId) {
 								'data': {
 											'pair': pair,
 											'orders': ordersTable,
+											'metadata': ordersMetadata,
 											'content': contentAdd,
 										}
 							});
@@ -646,284 +588,7 @@ async function start(dataObj, startId) {
 			}
 			else {
 
-				//first order limit
-
-				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders...')); }
-
-				//await Common.delay(1000);
-
-				//askPrice = config.firstOrderLimitPrice;
-
-				let firstOrderSize = Number(config.firstOrderAmount) / askPrice;
-				firstOrderSize = await filterAmount(exchange, pair, firstOrderSize);
-
-				if (!firstOrderSize) {
-
-					if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('First order amount not valid.')); }
-
-					return false;
-				}
-				else {
-
-					totalOrderSize = firstOrderSize;
-					totalAmount = config.firstOrderAmount;
-
-					const price = await filterPrice(exchange, pair, askPrice);
-
-					let amount = price * firstOrderSize;
-					let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
-
-					amount = await filterPrice(exchange, pair, (amount + exchangeFee));
-
-					let targetPrice = await calculateTargetPrice(exchange, pair, price, config.dcaTakeProfitPercent, config.exchangeFee);
-
-					orders.push({
-						orderNo: 1,
-						orderId: '',
-						price: price,
-						average: price,
-						target: targetPrice,
-						qty: firstOrderSize,
-						amount: amount,
-						qtySum: firstOrderSize,
-						sum: amount,
-						type: 'LIMIT',
-						filled: 0
-					});
-
-					lastDcaOrderAmount = amount;
-					lastDcaOrderSize = firstOrderSize;
-					lastDcaOrderSum = amount;
-					lastDcaOrderQtySum = firstOrderSize;
-					lastDcaOrderPrice = price;
-				}
-
-				for (let i = 0; i < config.dcaMaxOrder; i++) {
-
-					if (i == 0) {
-
-						let price = Percentage.subPerc(
-							lastDcaOrderPrice,
-							config.dcaOrderStartDistance
-						);
-
-						price = await filterPrice(exchange, pair, price);
-
-						let dcaOrderSize = config.dcaOrderAmount / price;
-						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
-
-						let dcaOrderAmount = dcaOrderSize * price;
-						let exchangeFee = (dcaOrderAmount  / 100) * (Number(config.exchangeFee) * 2);
-
-						dcaOrderAmount = await filterPrice(exchange, pair, (dcaOrderAmount + exchangeFee));
-
-						let dcaOrderSum = parseFloat(dcaOrderAmount) + parseFloat(lastDcaOrderAmount);
-						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
-
-						const dcaOrderQtySum = parseFloat(dcaOrderSize) + parseFloat(firstOrderSize);
-
-						lastDcaOrderAmount = dcaOrderAmount;
-						lastDcaOrderSize = dcaOrderSize;
-						lastDcaOrderSum = dcaOrderSum;
-						lastDcaOrderPrice = price;
-						lastDcaOrderQtySum = dcaOrderQtySum;
-
-						const average = await filterPrice(
-							exchange,
-							pair,
-							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
-						);
-
-						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
-
-						orders.push({
-							orderNo: i + 2,
-							orderId: '',
-							price: price,
-							average: average,
-							target: targetPrice,
-							qty: dcaOrderSize,
-							amount: dcaOrderAmount,
-							qtySum: dcaOrderQtySum,
-							sum: dcaOrderSum,
-							type: 'MARKET',
-							filled: 0
-						});
-					}
-					else {
-
-						const deviationPerc = await getDeviationDca(
-							config.dcaOrderStepPercent,
-							config.dcaOrderStepPercentMultiplier,
-							i + 1
-						);
-
-						let price = Percentage.subPerc(askPrice, deviationPerc);
-			  
-						price = await filterPrice(exchange, pair, price);
-
-						let dcaOrderSize = lastDcaOrderSize * config.dcaOrderSizeMultiplier;
-						dcaOrderSize = await filterAmount(exchange, pair, dcaOrderSize);
-
-						let amount = price * dcaOrderSize;
-						let exchangeFee = (amount / 100) * (Number(config.exchangeFee) * 2);
-
-						amount = await filterPrice(exchange, pair, (amount + exchangeFee));
-
-						let dcaOrderSum = parseFloat(amount) + parseFloat(lastDcaOrderSum);
-						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
-
-						let dcaOrderQtySum = parseFloat(dcaOrderSize) + parseFloat(lastDcaOrderQtySum);
-						dcaOrderQtySum = await filterAmount(exchange, pair, dcaOrderQtySum);
-
-						lastDcaOrderAmount = amount;
-						lastDcaOrderSize = dcaOrderSize;
-						lastDcaOrderSum = dcaOrderSum;
-						lastDcaOrderPrice = price;
-						lastDcaOrderQtySum = dcaOrderQtySum;
-
-						const average = await filterPrice(
-							exchange,
-							pair,
-							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
-						);
-
-						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
-
-						orders.push({
-							orderNo: i + 2,
-							orderId: '',
-							price: price,
-							average: average,
-							target: targetPrice,
-							qty: dcaOrderSize,
-							amount: amount,
-							qtySum: dcaOrderQtySum,
-							sum: dcaOrderSum,
-							type: 'MARKET',
-							filled: 0
-						});
-					}
-				}
-
-				if (orders.length > 1) {
-
-					let res = await ordersValid(pair, orders);
-
-					if (!res['success']) {
-
-						return ( { 'success': false, 'data': res['data'] } );
-					}
-				}
-
-				let orderData = await ordersCreateTable({ 'config': config, 'orders': orders });
-
-				let t = orderData['table'];
-				let maxDeviation = orderData['max_deviation'];
-
-				//console.log(t.toString());
-				//Common.logger(t.toString());
-
-				let balanceObj;
-				let wallet = 0;
-
-				if (config.sandBox) {
-
-					wallet = config.sandBoxWallet;
-				}
-				else {
-
-					balanceObj = await getBalance(exchange, pairQuote);
-
-					const balance = balanceObj.balance;
-					wallet = balance;
-				}
-
-				if (config.sandBox) {
-
-					if (shareData.appData.verboseLog) { Common.logger( colors.bgRed.bold('WARNING: Your bot work on SANDBOX MODE !') ); }
-				}
-				else {
-
-					if (shareData.appData.verboseLog) { Common.logger( colors.bgGreen.bold('WARNING: Your bot work on LIVE MODE !') ); }
-				}
-
-				if (shareData.appData.verboseLog) {
-				
-					Common.logger(colors.bgWhite('Your Balance: $' + wallet));
-					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
-				}
-
-				if (wallet < lastDcaOrderSum) {
-
-					if (shareData.appData.verboseLog) { Common.logger( colors.red.bold.italic(insufficientFundsMsg) ); }
-				}
-
-				let sendOrders;
-
-				if (startBot == undefined || startBot == null || startBot == false) {
-
-					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation, balanceObj);
-
-					let ordersTable = await ordersToData(t.toString());
-
-					return ({
-								'success': true,
-								'data': {
-											'pair': pair,
-											'orders': ordersTable,
-											'content': contentAdd
-										}
-							});
-				}
-
-				if (startBot) {
-
-					const dealObj = await createDeal(pair, pairMax, dealCount, dealMax, config, orders);
-
-					const deal = dealObj['deal'];
-					const dealId = dealObj['deal_id'];
-
-					dealIdMain = dealId;
-
-					await createDealTracker({ 'deal_id': dealId, 'deal': deal, 'start_id': startId });
-
-					let followSuccess = false;
-					let followFinished = false;
-					let followConfig = config;
-
-					while (!followFinished) {
-
-						let followRes = await dcaFollow(followConfig, exchange, dealId);
-
-						let followConfigRes = followRes['config'];
-
-						// Refresh config without stopping bot
-						if (followConfigRes != undefined && followConfigRes != null && followConfigRes != '') {
-		
-							followConfig = JSON.parse(JSON.stringify(followConfigRes));
-						}
-
-						followSuccess = followRes['success'];
-						followFinished = followRes['finished'];
-
-						if (!followSuccess) {
-
-							await Common.delay(1000);
-						}
-					}
-				}
-				else {
-
-/*
-					if (Object.keys(dealTracker).length == 0) {
-
-						Common.logger(colors.bgRed.bold(shareData.appData.name + ' is stopping... '));
-
-						process.exit(0);
-					}
-*/
-				}
+				// Limit order logic
 			}
 		}
 	}
@@ -1152,8 +817,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 			let diffSec = (new Date().getTime() - new Date(dealTracker[dealId]['update']['deal_sell_error']['date']).getTime()) / 1000;
 
-			if (dealTracker[dealId]['update']['deal_sell_error']['count'] > (maxSellErrorCount + 1) || diffSec > maxSellErrorResetSec) {
-	
+			if (dealTracker[dealId]['update']['deal_sell_error']['count'] > maxSellErrorCount || diffSec > maxSellErrorResetSec) {
+
 				delete dealTracker[dealId]['update']['deal_sell_error'];
 			}
 		}
@@ -1254,14 +919,6 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						);
 					}
 
-					let orderData = await ordersCreateTable({ 'config': config, 'orders': orders });
-
-					let t = orderData['table'];
-					let maxDeviation = orderData['max_deviation'];
-
-					//console.log(t.toString());
-					//Common.logger(t.toString());
-
 					await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
 
 					await Deals.updateOne({
@@ -1272,88 +929,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					});
 				}
 				else {
-					//send limit order
-					let buyOrderId = '';
 
-					if (price <= baseOrder.price) {
-
-						if (!config.sandBox) {
-
-							const priceFiltered = await filterPrice(exchange, pair, price);
-
-							const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
-
-							if (!buy.success) {
-
-								let finished = false;
-	
-								const statusObj = await orderError({ 'bot_id': config.botId, 'bot_name': config.botName, 'deal_id': dealId });
-	
-								if (statusObj['success']) {
-	
-									await deleteDeal(dealId);
-	
-									finished = true;
-								}
-	
-								return ( { 'success': false, 'finished': finished } );
-							}
-							else {
-
-								buyOrderId = buy['data']['id'];
-							}
-						}
-
-						orders[0].filled = 1;
-						orders[0].orderId = buyOrderId;
-						orders[0].dateFilled = new Date();
-
-						if (shareData.appData.verboseLog) {
-						
-							Common.logger(
-								colors.green.bold.italic(
-								'Pair: ' +
-								pair +
-								'\tQty: ' +
-								baseOrder.qty +
-								'\tPrice: ' +
-								baseOrder.price +
-								'\tAmount: ' +
-								baseOrder.amount +
-								'\tStatus: Filled'
-								)
-							);
-						}
-
-						let orderData = await ordersCreateTable({ 'config': config, 'orders': orders });
-
-						let t = orderData['table'];
-						let maxDeviation = orderData['max_deviation'];
-
-						//console.log(t.toString());
-						//Common.logger(t.toString());
-						await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
-
-						await Deals.updateOne({
-							dealId: dealId
-						}, {
-							isStart: 1,
-							orders: orders
-						});
-					}
-					else {
-
-						if (shareData.appData.verboseLog) {
-						
-							Common.logger(
-								'DCA BOT will start when price react ' +
-								baseOrder.price +
-								', now price is ' +
-								price +
-								''
-							);
-						}
-					}
+					// Limit order logic
 				}
 			}
 			else {
@@ -2305,7 +1882,7 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 			else {
 
 				// Some other error occurred
-				if (orderStatus === 'canceled') {
+				if (orderStatus.includes('cancel')) {
 
 				}
 
@@ -3457,6 +3034,7 @@ async function updateOrders(data) {
 
 	let ordersOrig = orderData['orig'];
 	let orderSteps = orderData['new'];
+	let orderMetadata = orderData['metadata'];
 
 	let ordersNew = [];
 
@@ -3488,7 +3066,8 @@ async function updateOrders(data) {
 								qtySum: orderSteps[i][7].replace(/[^0-9.]/g, ''),
 								sum: orderSteps[i][8].replace(/[^0-9.]/g, ''),
 								type: orderSteps[i][9],
-								filled: 0
+								filled: 0,
+								orderMetadata: orderMetadata[i]
 							};
 
 			orderNew = orderObj;
@@ -4156,6 +3735,7 @@ async function ordersCreateTable(data) {
 	let orders = data['orders'];
 
 	let ordersDeviation = [];
+	let ordersMetadata = [];
 
 	let t = new Table();
 
@@ -4171,7 +3751,9 @@ async function ordersCreateTable(data) {
 	}
 
 	orders.forEach(function (order) {
-	
+
+		ordersMetadata.push(order.orderMetadata);
+
 		t.cell('No', order.orderNo);
 		t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
 		t.cell('Price', '$' + order.price);
@@ -4189,7 +3771,7 @@ async function ordersCreateTable(data) {
 
 	let maxDeviation = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, orders.length - 1);
 
-	return ( { 'table': t, 'max_deviation': maxDeviation } );
+	return ( { 'table': t, 'max_deviation': maxDeviation, 'metadata': ordersMetadata } );
 }
 
 

@@ -1,4 +1,4 @@
-version: '3'
+version: '3.9'
 services:
   database:
     image: mongo
@@ -9,8 +9,6 @@ services:
       MONGO_INITDB_DATABASE: symbot
     volumes:
       - ./db-init.js:/docker-entrypoint-initdb.d/init.js:ro
-    ports:
-      - '27017-27019:27017-27019'
 
   mongo-express:
     image: mongo-express

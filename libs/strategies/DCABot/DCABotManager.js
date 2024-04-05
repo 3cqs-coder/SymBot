@@ -398,7 +398,10 @@ async function apiShowDeal(req, res, dealId) {
 			active = false;
 		}
 
-		const dealData = await shareData.DCABot.getDealInfo({ 'updated': new Date(updated), 'active': active, 'deal_id': dealId, 'price': price, 'config': dealDataDb['config'], 'orders': dealDataDb['orders'] });
+		const transformConfig = shareData.Common.convertStringToNumeric(dealDataDb['config']);
+		const transformOrders = shareData.Common.convertStringToNumeric(dealDataDb['orders']);
+
+		const dealData = await shareData.DCABot.getDealInfo({ 'updated': new Date(updated), 'active': active, 'deal_id': dealId, 'price': price, 'config': transformConfig, 'orders': transformOrders });
 
 		content = dealData;
 	}
@@ -473,6 +476,8 @@ async function apiGetActiveDeals(req, res) {
 
 		obj['info'] = info;
 		obj['info']['bot_active'] = botActive;
+
+		obj = shareData.Common.convertStringToNumeric(obj);
 
 		dealsArr.push(obj);
 	}
@@ -553,7 +558,7 @@ async function apiUpdateDeal(req, res) {
 					
 					delete config['dealLast'];
 				}
-				
+
 				dealLastUpdate = true;
 			}
 
@@ -615,10 +620,11 @@ async function apiUpdateDeal(req, res) {
 					let orderHeaders = data['orders']['data']['orders']['headers'];
 					let orderSteps = data['orders']['data']['orders']['steps'];
 					let orderContent = data['orders']['data']['content'];
+					let ordersMetadata = data['orders']['data']['metadata'];
 
 					let maxDeviationPercent = orderContent['max_deviation_percent'];
 
-					let ordersNew = await shareData.DCABot.updateOrders({ 'orig': [], 'new': orderSteps });
+					let ordersNew = await shareData.DCABot.updateOrders({ 'orig': [], 'new': orderSteps, 'metadata': ordersMetadata });
 					let ordersValidate = await shareData.DCABot.ordersValid(dealData['pair'], ordersNew);
 
 					// Verify new order step price averages
@@ -635,7 +641,7 @@ async function apiUpdateDeal(req, res) {
 						if (stopData['success']) {
 
 							// Apply new order calculations to deal, update db, then resume
-							let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps });
+							let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps, 'metadata': ordersMetadata });
 
 							// Update deal in database
 							let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
@@ -1536,6 +1542,7 @@ async function calculateOrders(body) {
 
 	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
 }
+
 
 function insertValueToMap(map, key, value) {
 	if(!map[key]) {
