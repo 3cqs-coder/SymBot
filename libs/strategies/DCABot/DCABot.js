@@ -1518,11 +1518,12 @@ const getBalance = async (exchange, symbol) => {
 
 		let allBalances = {};
 		let starting_after = null;
+		let starting_after_last = null;
 
 		while (true) {
 
 			const partialResponse = await exchange.fetchBalance({
-				'limit': limit,
+				//'limit': limit,
 				'starting_after': starting_after
 			});
 
@@ -1544,8 +1545,17 @@ const getBalance = async (exchange, symbol) => {
 
 				starting_after = partialResponse.info.pagination.next_starting_after;
 
-				await Common.delay(500);
+				// Same value found so break
+				if (starting_after == starting_after_last) {
 
+					break;
+				}
+				else {
+
+					starting_after_last = starting_after;
+				}
+
+				await Common.delay(500);
 			}
 			else {
 
