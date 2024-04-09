@@ -1522,10 +1522,16 @@ const getBalance = async (exchange, symbol) => {
 
 		while (true) {
 
-			const partialResponse = await exchange.fetchBalance({
-				//'limit': limit,
-				'starting_after': starting_after
-			});
+			let options = {};
+
+			//options['limit'] = limit;
+
+			if (starting_after != undefined && starting_after != undefined && starting_after != '') {
+
+				options['starting_after'] = starting_after;
+			}
+
+			const partialResponse = await exchange.fetchBalance(options);
 
 			const partialBalances = partialResponse.free;
 
