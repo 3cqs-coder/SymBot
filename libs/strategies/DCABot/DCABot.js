@@ -275,15 +275,10 @@ async function start(dataObj, startId) {
 				}
 			*/
 
-				try {
+				minMoveAmount = await getPairPrecision(exchange, config.exchange, pair);
 
-					minMoveAmount = exchangeMarkets[config.exchange][pair]['precision']['amount'];
-				}
-				catch(e) {
-
-				}
-
-				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + ' (Pair Data: ' + isPairData + ')')); }
+				//if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + ' (Pair Data: ' + isPairData + ')')); }
+				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair)); }
 
 				await Common.delay(1000);
 
@@ -1588,15 +1583,11 @@ const getBalance = async (exchange, symbol) => {
 
 	} catch (e) {
 
-		errMsg = e;
+		success = false;
 
-		if (typeof errMsg != 'string') {
-
-			errMsg = JSON.stringify(errMsg);
-		}
+		errMsg = 'BALANCE ERROR: ' + e.name + ' ' + e.message;
 
 		Common.logger(errMsg);
-		success = false;
 	}
 
 	return { 'success': success, 'balance': balance, 'error': errMsg };
@@ -2665,6 +2656,32 @@ async function calculatePairData(arr) {
 		'add_fee_percent': Number(addFeePercentage.toFixed(4)),
 		'minimum_movement_amount': Number(minAmount.toFixed(4))
 	};
+}
+
+
+async function getPairPrecision(exchange, exchangeName, pair) {
+
+	let minMoveAmount;
+
+	try {
+
+		minMoveAmount = exchangeMarkets[exchangeName][pair]['precision']['amount'];
+
+		// DECIMAL_PLACES = 2
+		// SIGNIFICANT_DIGITS = 3
+		// TICK_SIZE = 4
+
+		// If not TICK_SIZE then convert amount
+		if (exchange['precisionMode'] != 4) {
+
+			minMoveAmount = 1 / Math.pow(10, minMoveAmount);
+		}
+	}
+	catch(e) {
+
+	}
+
+	return minMoveAmount;
 }
 
 
