@@ -232,7 +232,6 @@ async function init() {
 										'webhook_enabled': appConfig['data']['webhook']['enabled'],
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
-										'splippage_percent': botConfigData['slippagePercent'], 
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
 										'telegram_enabled': appConfig['data']['telegram']['enabled'],
 										'verboseLog': appConfig.data.verbose_log,

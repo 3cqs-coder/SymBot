@@ -1579,10 +1579,33 @@ async function getDashboardData({ duration }) {
 	let total_pl = 0;
 
 	const available_balance = await (async () => {
-		if(data.sandBox) return Number(data.sandBoxWallet);
+
+		let currency = 'USDT';
+
+		if (data.sandBox) return Number(data.sandBoxWallet);
+
+		if (shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
+
+			const exchangeObj = shareData.appData.bots['exchange'];
+	
+			for (let exchangeName in exchangeObj) {
+	
+				if (exchangeName.toLowerCase() == 'default') {
+	
+					const exchangeSingleObj = exchangeObj[exchangeName];
+	
+					const currenciesArr = exchangeSingleObj['account_balance_currencies'];
+
+					if (typeof currenciesArr == 'object') {
+
+						currency = currenciesArr[0];
+					}
+				}
+			}
+		}
 
 		const exchange = await shareData.DCABot.connectExchange(data);
-		const { success, balance } = await shareData.DCABot.getBalance(exchange, 'USDT');
+		const { success, balance } = await shareData.DCABot.getBalance(exchange, currency.toUpperCase());
 		if(!success) return 0;
 		return Number(balance);
 	})();

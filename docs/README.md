@@ -149,6 +149,7 @@ These files are located in the `config` directory
 		-	`exchange` contains additional parameters that will apply to particular exchanges. Currently only the *default* exchange parameter is supported.
 			-	`orders` contains buy and sell parameters
 				-	`slippage_percent` is an additional percentage that is factored into the current price before another buy or sell order is placed on the exchange.  Sometimes orders will be executed at a different price than originally requested primarily with market orders. This helps to ensure orders are executed at or below the buy price and at or above the sell price requested. This can also potentially increase overall profit, but setting these values too high may cause further delays in closing your deals.
+			-	`account_balance_currencies` is an array of currencies that are used to show preferred exchange account balances in order of precedence.
 		- `pair_autofill_buttons` is an array of currencies that is used to automatically fill in pairs after clicking on one of these buttons when creating or updating bots.
 		-	`pair_autofill_blacklist` is an array of trading pairs that you don't want automatically filled in the pair selection box when creating or updating bots and clicking one of the stablecoin buttons such as USD or USDT. You can use full pairs such as BTC/USD or wildcards such as BTC/*. This can be useful to prevent bots from starting deals using stablecoin pairs such as USDT/USD as those will generally have little volatility in typical market conditions.
 

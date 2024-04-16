@@ -264,27 +264,23 @@ async function start(dataObj, startId) {
 
 				//first order market
 
-			/*
-				if (!isPairData) {
+				minMoveAmount = await getPairPrecision(exchange, config.exchange, pair, isPairData);
 
-					const pairData = await getPairData(pair);
-					minMoveAmount = pairData['pair_data']['minimum_movement_amount'];
-
-					console.log(minMoveAmount);
-					console.log(pairData);
-				}
-			*/
-
-				minMoveAmount = await getPairPrecision(exchange, config.exchange, pair);
-
-				//if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair + ' (Pair Data: ' + isPairData + ')')); }
 				if (shareData.appData.verboseLog) { Common.logger(colors.bgGreen('Calculating orders for ' + pair)); }
 
 				await Common.delay(1000);
 
 				let firstOrderSize = Number(config.firstOrderAmount) / askPrice;
 
-				const adjustments = await calculateAdjustments(exchange, pair, Number(askPrice * firstOrderSize), firstOrderSize, config.exchangeFee, minMoveAmount);
+				const adjustments = await calculateAdjustments({
+
+					'exchange': exchange,
+					'pair': pair,
+					'amount': Number(askPrice * firstOrderSize),
+					'orderSize': firstOrderSize,
+					'exchangeFee': config.exchangeFee,
+					'minMoveAmount': minMoveAmount
+				});
 
 				firstOrderSize = adjustments['order_qty'];
 				let amount = adjustments['order_amount'];
@@ -304,12 +300,27 @@ async function start(dataObj, startId) {
 
 					let amount = price * firstOrderSize;
 
-					const adjustments = await calculateAdjustments(exchange, pair, amount, firstOrderSize, config.exchangeFee, minMoveAmount);
+					const adjustments = await calculateAdjustments({
+
+						'exchange': exchange,
+						'pair': pair,
+						'amount': amount,
+						'orderSize': firstOrderSize,
+						'exchangeFee': config.exchangeFee,
+						'minMoveAmount': minMoveAmount
+					});
 
 					firstOrderSize = adjustments['order_qty'];
 					amount = adjustments['order_amount'];
 
-					let targetPrice = await calculateTargetPrice(exchange, pair, price, config.dcaTakeProfitPercent, config.exchangeFee);
+					let targetPrice = await calculateTargetPrice({
+
+						'exchange': exchange,
+						'pair': pair,
+						'price': price,
+						'takeProfit': config.dcaTakeProfitPercent,
+						'exchangeFee': config.exchangeFee
+					});
 
 					orders.push({
 						orderNo: 1,
@@ -347,7 +358,15 @@ async function start(dataObj, startId) {
 						let dcaOrderSize = config.dcaOrderAmount / price;
 						let dcaOrderAmount = dcaOrderSize * price;
 
-						const adjustments = await calculateAdjustments(exchange, pair, dcaOrderAmount, dcaOrderSize, config.exchangeFee, minMoveAmount);
+						const adjustments = await calculateAdjustments({
+
+							'exchange': exchange,
+							'pair': pair,
+							'amount': dcaOrderAmount,
+							'orderSize': dcaOrderSize,
+							'exchangeFee': config.exchangeFee,
+							'minMoveAmount': minMoveAmount
+						});
 
 						dcaOrderSize = adjustments['order_qty'];
 						dcaOrderAmount = adjustments['order_amount'];
@@ -355,7 +374,8 @@ async function start(dataObj, startId) {
 						let dcaOrderSum = parseFloat(dcaOrderAmount) + parseFloat(lastDcaOrderAmount);
 						dcaOrderSum = await filterPrice(exchange, pair, dcaOrderSum);
 
-						const dcaOrderQtySum = parseFloat(dcaOrderSize) + parseFloat(firstOrderSize);
+						let dcaOrderQtySum = parseFloat(dcaOrderSize) + parseFloat(firstOrderSize);
+						dcaOrderQtySum = await filterAmount(exchange, pair, dcaOrderQtySum);
 
 						lastDcaOrderAmount = dcaOrderAmount;
 						lastDcaOrderSize = dcaOrderSize;
@@ -369,7 +389,14 @@ async function start(dataObj, startId) {
 							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
 						);
 
-						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
+						let targetPrice = await calculateTargetPrice({
+
+							'exchange': exchange,
+							'pair': pair,
+							'price': average,
+							'takeProfit': config.dcaTakeProfitPercent,
+							'exchangeFee': config.exchangeFee
+						});
 
 						orders.push({
 							orderNo: i + 2,
@@ -403,10 +430,26 @@ async function start(dataObj, startId) {
 						let dcaOrderSize = amount / price;
 
 						// Get adjustments without exchange fee since already previously included
-						const adjustments = await calculateAdjustments(exchange, pair, amount, dcaOrderSize, 0, null);
+						const adjustments = await calculateAdjustments({
+
+							'exchange': exchange,
+							'pair': pair,
+							'amount': amount,
+							'orderSize': dcaOrderSize,
+							'exchangeFee': 0,
+							'minMoveAmount': null
+						});
 
 						// Call again to get fees
-						const adjustmentsFees = await calculateAdjustments(exchange, pair, amount, dcaOrderSize, config.exchangeFee, minMoveAmount);
+						const adjustmentsFees = await calculateAdjustments({
+
+							'exchange': exchange,
+							'pair': pair,
+							'amount': amount,
+							'orderSize': dcaOrderSize,
+							'exchangeFee': config.exchangeFee,
+							'minMoveAmount': minMoveAmount
+						});
 
 						// Set fees in original adjustments
 						for (let key in adjustments) {
@@ -438,7 +481,14 @@ async function start(dataObj, startId) {
 							parseFloat(lastDcaOrderSum) / parseFloat(lastDcaOrderQtySum)
 						);
 
-						let targetPrice = await calculateTargetPrice(exchange, pair, average, config.dcaTakeProfitPercent, config.exchangeFee);
+						let targetPrice = await calculateTargetPrice({
+
+							'exchange': exchange,
+							'pair': pair,
+							'price': average,
+							'takeProfit': config.dcaTakeProfitPercent,
+							'exchangeFee': config.exchangeFee
+						});
 
 						orders.push({
 							orderNo: i + 2,
@@ -858,7 +908,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 			if (deal.isStart == 0) {
 
+				let buyError;
 				let buyOrderId = '';
+				let buySuccess = true;
 
 				const baseOrder = deal.orders[0];
 				targetPrice = baseOrder.target;
@@ -874,18 +926,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						if (!buy.success) {
 
-							let finished = false;
-
-							const statusObj = await orderError({ 'bot_id': config.botId, 'bot_name': config.botName, 'deal_id': dealId });
-
-							if (statusObj['success']) {
-
-								await deleteDeal(dealId);
-
-								finished = true;
-							}
-
-							return ( { 'success': false, 'finished': finished } );
+							buySuccess = false;
+							buyError = buy.message;
 						}
 						else {
 
@@ -893,35 +935,55 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						}
 					}
 
-					orders[0].filled = 1;
-					orders[0].orderId = buyOrderId;
-					orders[0].dateFilled = new Date();
+					if (buySuccess) {
 
-					if (shareData.appData.verboseLog) {
+						orders[0].filled = 1;
+						orders[0].orderId = buyOrderId;
+						orders[0].dateFilled = new Date();
 
-						Common.logger(
-							colors.green.bold.italic(
-							'Pair: ' +
-							pair +
-							'\tQty: ' +
-							baseOrder.qty +
-							'\tPrice: ' +
-							baseOrder.price +
-							'\tAmount: ' +
-							baseOrder.amount +
-							'\tStatus: Filled'
-							)
-						);
+						if (shareData.appData.verboseLog) {
+
+							Common.logger(
+								colors.green.bold.italic(
+								'Pair: ' +
+								pair +
+								'\tQty: ' +
+								baseOrder.qty +
+								'\tPrice: ' +
+								baseOrder.price +
+								'\tAmount: ' +
+								baseOrder.amount +
+								'\tStatus: Filled'
+								)
+							);
+						}
+
+						await Deals.updateOne({
+							dealId: dealId
+						}, {
+							isStart: 1,
+							orders: orders
+						});
 					}
 
-					await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
+					await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders, 'error': buyError });
 
-					await Deals.updateOne({
-						dealId: dealId
-					}, {
-						isStart: 1,
-						orders: orders
-					});
+					if (!buySuccess) {
+
+						// Initial buy failed
+						let finished = false;
+
+						const statusObj = await orderError({ 'bot_id': config.botId, 'bot_name': config.botName, 'deal_id': dealId });
+
+						if (statusObj['success']) {
+
+							await deleteDeal(dealId);
+
+							finished = true;
+						}
+
+						return ( { 'success': false, 'finished': finished } );
+					}
 				}
 				else {
 
@@ -945,6 +1007,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					colors.red.bold(profit + '%');
 
 				let count = 0;
+				let buyError;
+				let buySuccess = true;
+				let isBuy = false;
 				let maxSafetyOrdersUsed = false;
 				let ordersFilledTotal = filledOrders.length;
 
@@ -961,7 +1026,6 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 					// Check if max safety orders used, otherwise sell order condition will not be checked
 					if (order.filled == 0 || maxSafetyOrdersUsed) {
-					//if (order.filled == 0) {
 
 						if (config.sandBox) {
 
@@ -975,6 +1039,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						if ((price <= priceBuyOrder && order.filled == 0) && !isDealCancel && !isDealPanicSell) {
 							//Buy DCA
 
+							isBuy = true;
+
 							if (!config.sandBox) {
 
 								const priceFiltered = await filterPrice(exchange, pair, price);
@@ -983,7 +1049,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								if (!buy.success) {
 
-									return ( { 'success': false, 'finished': false } );
+									buySuccess = false;
+									buyError = buy.message;
 								}
 								else {
 
@@ -991,41 +1058,50 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								}
 							}
 
-							if (shareData.appData.verboseLog) {
+							if (buySuccess) {
+
+								orders[i].filled = 1;
+								orders[i].orderId = buyOrderId;
+								orders[i].dateFilled = new Date();
+
+								if (shareData.appData.verboseLog) {
 		
-								Common.logger(
-									colors.blue.bold.italic(
-									'Pair: ' +
-									pair +
-									'\tQty: ' +
-									currentOrder.qtySum +
-									'\tLast Price: $' +
-									price +
-									'\tDCA Price: $' +
-									currentOrder.average +
-									'\tSell Price: $' +
-									currentOrder.target +
-									'\tStatus: ' +
-									colors.green('BUY') +
-									'' +
-									'\tProfit: ' +
-									profit +
-									''
-									)
-								);
+									Common.logger(
+										colors.blue.bold.italic(
+										'Pair: ' +
+										pair +
+										'\tQty: ' +
+										currentOrder.qtySum +
+										'\tLast Price: $' +
+										price +
+										'\tDCA Price: $' +
+										currentOrder.average +
+										'\tSell Price: $' +
+										currentOrder.target +
+										'\tStatus: ' +
+										colors.green('BUY') +
+										'' +
+										'\tProfit: ' +
+										profit +
+										''
+										)
+									);
+								}
+
+								await Deals.updateOne({
+									dealId: dealId
+								}, {
+									orders: orders
+								});
 							}
+							
+							await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders, 'error': buyError });
 
-							orders[i].filled = 1;
-							orders[i].orderId = buyOrderId;
-							orders[i].dateFilled = new Date();
+							if (!buySuccess) {
 
-							await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
-
-							await Deals.updateOne({
-								dealId: dealId
-							}, {
-								orders: orders
-							});
+								// DCA buy failed
+								return ( { 'success': false, 'finished': false } );
+							}
 						}
 						else if (price >= priceSellOrder || isDealCancel || isDealPanicSell) {
 
@@ -1168,8 +1244,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					}
 				}
 
-				//if (ordersFilledTotal >= config.dcaMaxOrder) {
-				if (maxSafetyOrdersUsed) {
+				if (maxSafetyOrdersUsed && isBuy) {
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold(pair + ' Max safety orders used.') + '\tLast Price: $' + price + '\tTarget: $' + currentOrder.target + '\tProfit: ' + profit); }
 					
@@ -2215,11 +2290,11 @@ const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfi
 }
 
 
-const calculateTargetPrice = async (exchange, pair, price, takeProfitPercent, exchangeFeePercent) => {
+const calculateTargetPrice = async ({ exchange, pair, price, takeProfit, exchangeFee }) => {
 
 	let targetPrice = Percentage.addPerc(
 		price,
-		(Number(takeProfitPercent) + Number(exchangeFeePercent))
+		(Number(takeProfit) + Number(exchangeFee))
 	);
 
 	targetPrice = await filterPrice(exchange, pair, targetPrice);
@@ -2372,13 +2447,13 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 }
 
 
-const calculateAdjustments = async (exchange, pair, amount, orderSize, exchangeFeePercent, minMoveAmount) => {
+const calculateAdjustments = async ({ exchange, pair, amount, orderSize, exchangeFee, minMoveAmount }) => {
 
 	let resObj;
 	let finished = false;
 
-	exchangeFeePercent = Number(exchangeFeePercent);
-	exchangeFeePercent = exchangeFeePercent * 2;
+	exchangeFee = Number(exchangeFee);
+	exchangeFee = exchangeFee * 2;
 
 	if (!amount || !orderSize) {
 
@@ -2387,8 +2462,8 @@ const calculateAdjustments = async (exchange, pair, amount, orderSize, exchangeF
 
 	while (!finished) {
 
-		const exchangeFeeQty = (Number(orderSize) / 100) * (Number(exchangeFeePercent));
-		const exchangeFeeAmount = (Number(amount) / 100) * (Number(exchangeFeePercent));
+		const exchangeFeeQty = (Number(orderSize) / 100) * (Number(exchangeFee));
+		const exchangeFeeAmount = (Number(amount) / 100) * (Number(exchangeFee));
 
 		const exchangeFeeQtyFiltered = await filterAmount(exchange, pair, Number(exchangeFeeQty));
 		const exchangeFeeAmountFiltered = await filterPrice(exchange, pair, Number(exchangeFeeAmount));
@@ -2399,7 +2474,7 @@ const calculateAdjustments = async (exchange, pair, amount, orderSize, exchangeF
 		orderSizeNew = await filterAmount(exchange, pair, orderSizeNew);
 
 		// Filtering may reduce amounts and remove decimals for some pairs
-		amountNew = await filterPrice(exchange, pair, amount);
+		amountNew = await filterPrice(exchange, pair, amountNew);
 
 		amountNew = Math.round(amountNew * 100) / 100;
 
@@ -2413,86 +2488,13 @@ const calculateAdjustments = async (exchange, pair, amount, orderSize, exchangeF
 					'minimum_movement_amount': minMoveAmount
 				 };
 
-		if (exchangeFeePercent == 0 || exchangeFeeQtyFiltered > 0) {
+		if (exchangeFee == 0 || exchangeFeeQtyFiltered > 0) {
 
 			finished = true;
 		}
 		else {
 		
-			exchangeFeePercent = exchangeFeePercent + (exchangeFeePercent * 0.25);
-		}
-	}
-
-	return resObj;
-}
-
-
-const calculateExchangeFee = async (exchange, pair, amount, orderSize, exchangeFeePercent, minMoveAmount) => {
-
-	let resObj;
-	let finished = false;
-
-	exchangeFeePercent = Number(exchangeFeePercent);
-	//minMoveAmount = Number(minMoveAmount);
-
-	exchangeFeePercent = exchangeFeePercent * 2;
-
-	if (!amount || !orderSize) {
-
-		return {};
-	}
-
-	while (!finished) {
-
-		let exchangeFeeAmount = (amount / 100) * exchangeFeePercent;
-
-		if (exchangeFeeAmount < minMoveAmount) {
-
-			//exchangeFeeAmount = minMoveAmount;
-		}
-
-//		let amountFinal1 = Math.round(orderSize / minMoveAmount) * minMoveAmount;
-
-		const exchangeFeeOrigQty = (Number(orderSize) / 100) * exchangeFeePercent;
-
-		const orderSizeMin = await filterMinMovement((Number(orderSize) + Number(exchangeFeeOrigQty)), minMoveAmount);
-		const amountMin = await filterMinMovement((Number(amount) + Number(exchangeFeeAmount)), minMoveAmount);
-
-		const exchangeFeeFilteredQty = orderSizeMin - orderSize;
-		const exchangeFeeFilteredAmount = amountMin - amount;
-
-		//console.log(orderSize, amountFinal1)
-
-		const exchangeFeeAmountFiltered = await filterAmount(exchange, pair, exchangeFeeAmount);
-
-		const exchangeFeeQty = (Number(orderSizeMin) / 100) * exchangeFeePercent;
-		const exchangeFeeQtyFiltered = await filterAmount(exchange, pair, exchangeFeeQty);
-
-		//let orderSizeFinal = orderSizeMin + exchangeFeeQty;
-		let orderSizeFinal = orderSizeMin;
-		orderSizeFinal = await filterAmount(exchange, pair, orderSizeFinal);
-
-		//let orderAmountFinal = await filterPrice(exchange, pair, amountMin + exchangeFeeAmount);
-		let orderAmountFinal = await filterPrice(exchange, pair, amountMin);
-		orderAmountFinal = Math.round(orderAmountFinal * 100) / 100;
-
-		resObj = {
-						'amount': Number(exchangeFeeAmount),
-						'amount_filtered': Number(exchangeFeeAmountFiltered),
-						'qty': Number(exchangeFeeQty),
-						'qty_filtered': Number(exchangeFeeQtyFiltered),
-						'order_amount': Number(orderAmountFinal),
-						'order_qty': Number(orderSizeFinal)
-				 };
-
-		if (exchangeFeePercent == 0 || exchangeFeeQtyFiltered > 0) {
-
-			//console.log(orderSize, orderSizeMin, exchangeFeeOrigQty, exchangeFeeFilteredQty, '$'+exchangeFeeAmount, '$'+exchangeFeeFilteredAmount )
-			finished = true;
-		}
-		else {
-
-			exchangeFeePercent = exchangeFeePercent + (exchangeFeePercent * 0.25);
+			exchangeFee = exchangeFee + (exchangeFee * 0.25);
 		}
 	}
 
@@ -2565,16 +2567,6 @@ const calculateSellData = async (pair, price, exchange, configObj, addFee, curre
 	}
 
 	const exchangeFeePercent = Number(config.exchangeFee) + Number(addFee);
-/*
-	let exchangeFeeSum = (dcaOrderSum / 100) * exchangeFeePercent;
-
-	// Apply additional to account for sell fees
-	exchangeFeeSum = exchangeFeeSum + (exchangeFeeSum * (Number(config.exchangeFee) / 4));
-
-	exchangeFeeSum = await filterPrice(exchange, pair, exchangeFeeSum);
-
-	let exchangeFeeQtySum = exchangeFeeSum / priceFiltered;
-*/
 
 	const dcaOrderSumNet = await filterPrice(exchange, pair, (dcaOrderSum - exchangeFeeAmountSumFinal));
 	const dcaOrderQtySumNet = await filterAmount(exchange, pair, (dcaOrderQtySum - exchangeFeeQtySumFinal));
@@ -2659,7 +2651,7 @@ async function calculatePairData(arr) {
 }
 
 
-async function getPairPrecision(exchange, exchangeName, pair) {
+async function getPairPrecision(exchange, exchangeName, pair, isPairData) {
 
 	let minMoveAmount;
 
@@ -2674,11 +2666,21 @@ async function getPairPrecision(exchange, exchangeName, pair) {
 		// If not TICK_SIZE then convert amount
 		if (exchange['precisionMode'] != 4) {
 
-			minMoveAmount = 1 / Math.pow(10, minMoveAmount);
+			if (minMoveAmount >= 0) {
+
+				minMoveAmount = 1 / Math.pow(10, minMoveAmount);
+			}
 		}
 	}
 	catch(e) {
 
+	}
+
+	// No precision found, so calculate initial movement
+	if (!isPairData && (minMoveAmount == undefined || minMoveAmount == null)) {
+
+		const pairData = await getPairData(pair);
+		minMoveAmount = pairData['pair_data']['minimum_movement_amount'];
 	}
 
 	return minMoveAmount;
@@ -3565,6 +3567,7 @@ async function getDealInfo(data) {
 	const dealId = data['deal_id'];
 	const active = data['active'];
 	const price = data['price'];
+	const error = data['error'];
 
 	const config = JSON.parse(JSON.stringify(data['config']));
 	const orders = JSON.parse(JSON.stringify(data['orders']));
@@ -3581,6 +3584,7 @@ async function getDealInfo(data) {
 	const dealInfo = {
 						'updated': updated,
 						'active': active,
+						'error': error,
 						'bot_id': config.botId,
 						'bot_name': config.botName,
 						'safety_orders_used': filledOrders.length,
@@ -4452,7 +4456,15 @@ async function addFundsDeal(dealId, volume) {
 				}
 				catch (e) {}
 
-				const adjustments = await calculateAdjustments(exchange, config.pair, amount, qty, config.exchangeFee, minMoveAmount);
+				const adjustments = await calculateAdjustments({
+
+					'exchange': exchange,
+					'pair': config.pair,
+					'amount': amount,
+					'orderSize': qty,
+					'exchangeFee': config.exchangeFee,
+					'minMoveAmount': minMoveAmount
+				});
 
 				qty = adjustments['order_qty'];
 				amount = adjustments['order_amount'];
@@ -4467,7 +4479,14 @@ async function addFundsDeal(dealId, volume) {
 
 				const avgPrice = await filterPrice(exchange, config.pair, (parseFloat(orderSum) / parseFloat(qtySum)));
 
-				let targetPrice = await calculateTargetPrice(exchange, config.pair, avgPrice, config.dcaTakeProfitPercent, config.exchangeFee);
+				let targetPrice = await calculateTargetPrice({
+
+					'exchange': exchange,
+					'pair': config.pair,
+					'price': avgPrice,
+					'takeProfit': config.dcaTakeProfitPercent,
+					'exchangeFee': config.exchangeFee
+				});
 
 				if (targetPrice != undefined && targetPrice != null && targetPrice != false && targetPrice > 0) {
 
@@ -4531,7 +4550,14 @@ async function addFundsDeal(dealId, volume) {
 
 				const avgPrice = await filterPrice(exchange, config.pair, parseFloat(orderSum) / parseFloat(orderQtySum));
 
-				let targetPrice = await calculateTargetPrice(exchange, config.pair, avgPrice, config.dcaTakeProfitPercent, config.exchangeFee);
+				let targetPrice = await calculateTargetPrice({
+
+					'exchange': exchange,
+					'pair': config.pair,
+					'price': avgPrice,
+					'takeProfit': config.dcaTakeProfitPercent,
+					'exchangeFee': config.exchangeFee
+				});
 
 				oldOrders[i].orderNo = oldOrders[i].orderNo + 1;
 				oldOrders[i].price = price;

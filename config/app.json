@@ -28,12 +28,13 @@
 									},
 				"exchange": {
 								"default": {
+											"account_balance_currencies": [ "USDT", "USD" ],
 											"orders": {
 														"buy": {
-																"slippage_percent": 1.35
+																"slippage_percent": 0
 														},
 														"sell": {
-																"slippage_percent": 0.27
+																"slippage_percent": 0
 														}
 													}
 											}
