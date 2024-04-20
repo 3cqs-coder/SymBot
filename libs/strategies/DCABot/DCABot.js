@@ -523,9 +523,6 @@ async function start(dataObj, startId) {
 				let maxDeviation = orderData['max_deviation'];
 				let ordersMetadata = orderData['metadata'];
 
-				//console.log(t.toString());
-				//Common.logger(t.toString());
-
 				let balanceObj;
 				let wallet = 0;
 
@@ -640,7 +637,6 @@ async function start(dataObj, startId) {
 	catch (e) {
 
 		Common.logger(e);
-		//console.log(e);
 	}
 
 
@@ -4430,8 +4426,6 @@ async function addFundsDeal(dealId, volume) {
 
 		const ex = await exchange.loadMarkets();
 
-		//let exchangeFee = (volume / 100) * (Number(config.exchangeFee) * 2);
-		//volume = await filterPrice(exchange, config.pair, (volume + exchangeFee));
 		volume = await filterPrice(exchange, config.pair, volume);
 
 		for (let i = 0; i < oldOrders.length; i++) {
