@@ -61,6 +61,9 @@ async function init() {
 	let apiKey;
 	let apiKeySet;
 	let apiKeyClear;
+
+	let botConfigData = {};
+
 	let isReset = false;
 	let consoleLog = false;
 	let serverIdError = false;
@@ -90,7 +93,13 @@ async function init() {
 
 	let signalConfigsData = signalConfigs.data;
 
+	const botConfig = await Common.getConfig('bot.json');
 	const serverConfig = await Common.getConfig('server.json');
+
+	if (botConfig.success) {
+
+		botConfigData = botConfig.data;
+	}
 
 	if (appConfig['data']['api']['key'] == undefined || appConfig['data']['api']['key'] == null || appConfig['data']['api']['key'] == '' || appConfig['data']['api']['key'].indexOf(':') == -1) {
 
@@ -335,7 +344,7 @@ async function init() {
 		}, 1000);
 	}
 
-	return({ 'success': success, 'app_config': appConfig });
+	return({ 'success': success, 'app_config': appDataConfig, 'bot_config': botConfig });
 }
 
 
@@ -495,7 +504,7 @@ async function start() {
 	if (initData.success) {
 
 		const appConfig = initData.app_config;
-		const botConfig = await Common.getConfig('bot.json');
+		const botConfig = initData.bot_config;
 
 		if (!botConfig.success) {
 

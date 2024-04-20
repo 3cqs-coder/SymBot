@@ -2,7 +2,6 @@
 	"password": "",
 	"mongo_db_url": "",
 	"max_log_days": 10,
-	"dashboard_period": "month",
 	"web_server": {
 					"port": 3000
 				},
@@ -27,6 +26,19 @@
 													"description": "Manually / API"
 										}
 									},
+				"exchange": {
+								"default": {
+											"account_balance_currencies": [ "USDT", "USD" ],
+											"orders": {
+														"buy": {
+																"slippage_percent": 0
+														},
+														"sell": {
+																"slippage_percent": 0
+														}
+													}
+											}
+				},
 				"pair_autofill_buttons": [ "USD", "USDT", "USDC", "BUSD" ],
 				"pair_autofill_blacklist": [ "BTC/*", "WBTC/*", "ETH/*", "CBETH/*", "UST/*", "USD/*", "USDC/*", "USDD/*", "USDT/*", "BUSD/*", "GUSD/*", "TUSD/*", "PYUSD/*", "DAI/*", "EUROC/*", "PAX/*" ]
 			},

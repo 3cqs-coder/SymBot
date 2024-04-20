@@ -86,10 +86,18 @@ async function updateConfig(req, res) {
 
 		pairButtons = [];
 	}
+	else if (typeof pairButtons === 'string') {
+
+		pairButtons = [pairButtons];
+	}
 
 	if (pairBlacklist == undefined || pairBlacklist == null || pairBlacklist == '') {
 
 		pairBlacklist = [];
+	}
+	else if (typeof pairBlacklist === 'string') {
+
+		pairBlacklist = [pairBlacklist];
 	}
 
 	const pairButtonsUC = pairButtons.map(data => data.toUpperCase());
@@ -826,6 +834,48 @@ function convertBoolean(param, defaultVal) {
 }
 
 
+function convertStringToNumeric(obj) {
+
+    if (typeof obj !== 'object' || obj === null) {
+
+        return obj;
+    }
+
+    if (Array.isArray(obj)) {
+
+        for (let i = 0; i < obj.length; i++) {
+
+			obj[i] = convertStringToNumeric(obj[i]);
+        }
+    }
+	else {
+
+        for (const key in obj) {
+
+			if (obj.hasOwnProperty(key)) {
+
+				if (typeof obj[key] === 'string' && isNumeric(obj[key])) {
+
+					obj[key] = parseFloat(obj[key]);
+
+                } else if (typeof obj[key] === 'object') {
+
+                    obj[key] = convertStringToNumeric(obj[key]);
+                }
+            }
+        }
+    }
+
+    return obj;
+}
+
+
+function isNumeric(str) {
+
+    return /^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(str);
+}
+
+
 function hashCode(str) {
 
 	let h;
@@ -1101,6 +1151,8 @@ module.exports = {
 	uuidv4,
 	makeDir,
 	convertBoolean,
+	convertStringToNumeric,
+	isNumeric,
 	sortByKey,
 	getConfig,
 	getSignalConfigs,

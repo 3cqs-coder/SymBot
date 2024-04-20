@@ -1,5 +1,6 @@
 
 
+
 ![SymBot Logo](https://user-images.githubusercontent.com/111208586/221390681-d13b9bce-dafb-4b55-a6f1-1bc5218cd204.png)
 
 SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser or with simple built-in APIs. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
@@ -30,7 +31,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 ## Requirements
 
 - Linux, MacOS, or Windows based system
-- [Node.js](https://nodejs.org) must be installed on your system
+- [Node.js](https://nodejs.org) v19+ must be installed on your system
 - [MongoDB](https://www.mongodb.com) installed or a cloud host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection
@@ -145,6 +146,10 @@ These files are located in the `config` directory
 
 	-	`bots`
 		-	`start_conditions` contains keys and descriptions such as `asap` and `api` for various start conditions that can be used to start bots and deals. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
+		-	`exchange` contains additional parameters that will apply to particular exchanges. Currently only the *default* exchange parameter is supported.
+			-	`orders` contains buy and sell parameters
+				-	`slippage_percent` is an additional percentage that is factored into the current price before another buy or sell order is placed on the exchange.  Sometimes orders will be executed at a different price than originally requested primarily with market orders. This helps to ensure orders are executed at or below the buy price and at or above the sell price requested. This can also potentially increase overall profit, but setting these values too high may cause further delays in closing your deals.
+			-	`account_balance_currencies` is an array of currencies that are used to show preferred exchange account balances in order of precedence.
 		- `pair_autofill_buttons` is an array of currencies that is used to automatically fill in pairs after clicking on one of these buttons when creating or updating bots.
 		-	`pair_autofill_blacklist` is an array of trading pairs that you don't want automatically filled in the pair selection box when creating or updating bots and clicking one of the stablecoin buttons such as USD or USDT. You can use full pairs such as BTC/USD or wildcards such as BTC/*. This can be useful to prevent bots from starting deals using stablecoin pairs such as USDT/USD as those will generally have little volatility in typical market conditions.
 
@@ -170,7 +175,9 @@ mongodb://localhost:27017/SymBot
 	- This contains all default settings for your bot and exchange. Depending on your exchange, the API credentials you enter here usually include some of the following such as your exchange API key, secret, passphrase, or password. For testing purposes, often you can leave all of them empty but always leave `sandBox: true`.
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the [CCXT](https://github.com/ccxt/ccxt)  library so if the exchange is supported, you should be able to connect to it
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web interface
-	- Set your exchange fee appropriately. Exchanges such as Binance often use BNB (Binance Coin) for transaction fees. If you are receiving an error, it's possible that you don't have enough BNB to cover the fees associated with the trade. Binance deducts fees from your BNB balance, and if it's insufficient, the trade may fail. If you encounter trading errors such as being unable to sell or take profit, you may want to consider disabling certain trading fee enhancements like BNB (if applicable) on your exchange, and also increasing the `exchangeFee` value. Changing this value will only take affect on new deals.
+	- Set your exchange fee appropriately:
+		- The `exchangeFee` is used for multiple purposes including buying more of an asset to ensure accurate profitability when selling, and having enough additional quantity of the asset to sell. If you encounter sell errors, such as insufficient funds, you may want to increase this value even higher than your exchange's said fees. You may end up with slightly more assets or crypto "dust", but it will help prevent sell errors especially when trading the asset through repeated deals. Changing this value will only take affect on new deals.
+		- Exchanges such as Binance often use BNB (Binance Coin) for transaction fees. If you are receiving an error, it's possible that you don't have enough BNB to cover the fees associated with the trade. Binance deducts fees from your BNB balance, and if it's insufficient, the trade may fail. If you encounter trading errors such as being unable to sell or take profit, you may want to consider disabling certain trading fee enhancements like BNB (if applicable) on your exchange, and also increasing the `exchangeFee` value.
 	- If you experience any issues with your bots or deals using a specific exchange, there is a special parameter that can pass options directly to the CCXT library by modifying `"exchangeOptions": { "defaultType": "spot" }`
 
 
@@ -866,6 +873,12 @@ If you want to reset the SymBot database for any reason, you can do so only from
 		- Ensure that you have properly configured API keys and that they have the necessary permissions for trading. Double-check that you are using the correct API key, secret, and passphrase if applicable.
 
 - It is recommended to monitor your deals frequently, check logs, and if your deals continue to be unable to buy or sell, you may want to consider canceling the deal and managing the trade manually on your exchange.
+
+#### Why do my orders in SymBot look different than on my exchange?
+- SymBot calculates all order steps ahead of time, considering the unique requirements and fees of different exchanges. Due to these variations, the order amounts and quantities in SymBot are essentially close estimates. The exchange fee set in the configuration also affects the process. Since exchanges often take a portion with each transaction due to rules and fees, it's rare for deals to sell the exact quantity desired. SymBot aims to sell as close to the maximum bought while still hitting the target profit percentage. If errors like insufficient funds occur, it adjusts the quantity accordingly. However, many deals will likely leave behind small amounts of crypto otherwise known as crypto "dust".
+
+#### Why did my bot get disabled?
+- A bot can be disabled several ways including manually through the web interface, programmatically using APIs or Webhooks, or even the usage of signals. SymBot also has some safety features built-in that may disable a bot automatically if an unknown error occurs as a precautionary measure to ensure there isn't something more problematic occurring. Sometimes it may just be the exchange does not allow a specific pair to be traded, so removing it from your bot is recommended. Since many errors are exchange specific, it is best to review the logs if you are unsure why your bot is disabled.
 
 #### Why is my system suddenly using more CPU or memory?
 - SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience. See also [Advanced Setup](#advanced-setup) for additional tips.

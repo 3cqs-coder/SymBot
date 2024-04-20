@@ -398,7 +398,10 @@ async function apiShowDeal(req, res, dealId) {
 			active = false;
 		}
 
-		const dealData = await shareData.DCABot.getDealInfo({ 'updated': new Date(updated), 'active': active, 'deal_id': dealId, 'price': price, 'config': dealDataDb['config'], 'orders': dealDataDb['orders'] });
+		const transformConfig = shareData.Common.convertStringToNumeric(dealDataDb['config']);
+		const transformOrders = shareData.Common.convertStringToNumeric(dealDataDb['orders']);
+
+		const dealData = await shareData.DCABot.getDealInfo({ 'updated': new Date(updated), 'active': active, 'deal_id': dealId, 'price': price, 'config': transformConfig, 'orders': transformOrders });
 
 		content = dealData;
 	}
@@ -473,6 +476,8 @@ async function apiGetActiveDeals(req, res) {
 
 		obj['info'] = info;
 		obj['info']['bot_active'] = botActive;
+
+		obj = shareData.Common.convertStringToNumeric(obj);
 
 		dealsArr.push(obj);
 	}
@@ -553,7 +558,7 @@ async function apiUpdateDeal(req, res) {
 					
 					delete config['dealLast'];
 				}
-				
+
 				dealLastUpdate = true;
 			}
 
@@ -615,10 +620,11 @@ async function apiUpdateDeal(req, res) {
 					let orderHeaders = data['orders']['data']['orders']['headers'];
 					let orderSteps = data['orders']['data']['orders']['steps'];
 					let orderContent = data['orders']['data']['content'];
+					let ordersMetadata = data['orders']['data']['metadata'];
 
 					let maxDeviationPercent = orderContent['max_deviation_percent'];
 
-					let ordersNew = await shareData.DCABot.updateOrders({ 'orig': [], 'new': orderSteps });
+					let ordersNew = await shareData.DCABot.updateOrders({ 'orig': [], 'new': orderSteps, 'metadata': ordersMetadata });
 					let ordersValidate = await shareData.DCABot.ordersValid(dealData['pair'], ordersNew);
 
 					// Verify new order step price averages
@@ -635,7 +641,7 @@ async function apiUpdateDeal(req, res) {
 						if (stopData['success']) {
 
 							// Apply new order calculations to deal, update db, then resume
-							let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps });
+							let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps, 'metadata': ordersMetadata });
 
 							// Update deal in database
 							let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
@@ -918,6 +924,13 @@ async function apiCreateUpdateBot(req, res) {
 	let pairs = data['pairs'];
 	let orders = data['orders'];
 	let botData = data['botData'];
+
+	if (!orders) {
+
+		orders = {};
+		orders.success = false;
+		orders.data = 'Unable to calculate orders. Pair may be invalid.';
+	}
 
 	// Only process max funds if orders were successful
 	if (orders.success) {
@@ -1530,6 +1543,7 @@ async function calculateOrders(body) {
 	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
 }
 
+
 function insertValueToMap(map, key, value) {
 	if(!map[key]) {
 		map[key] = Number(value);
@@ -1565,10 +1579,33 @@ async function getDashboardData({ duration }) {
 	let total_pl = 0;
 
 	const available_balance = await (async () => {
-		if(data.sandBox) return Number(data.sandBoxWallet);
+
+		let currency = 'USDT';
+
+		if (data.sandBox) return Number(data.sandBoxWallet);
+
+		if (shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
+
+			const exchangeObj = shareData.appData.bots['exchange'];
+	
+			for (let exchangeName in exchangeObj) {
+	
+				if (exchangeName.toLowerCase() == 'default') {
+	
+					const exchangeSingleObj = exchangeObj[exchangeName];
+	
+					const currenciesArr = exchangeSingleObj['account_balance_currencies'];
+
+					if (typeof currenciesArr == 'object') {
+
+						currency = currenciesArr[0];
+					}
+				}
+			}
+		}
 
 		const exchange = await shareData.DCABot.connectExchange(data);
-		const { success, balance } = await shareData.DCABot.getBalance(exchange, 'USDT');
+		const { success, balance } = await shareData.DCABot.getBalance(exchange, currency.toUpperCase());
 		if(!success) return 0;
 		return Number(balance);
 	})();

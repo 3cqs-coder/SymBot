@@ -500,6 +500,7 @@
 
 			const config = deal['config'];
 			const dealId = deal['dealId'];
+			const dealError = deal['info']['error'];
 			const lastUpdated = deal['info']['updated'];
 			const botActive = deal['info']['bot_active'];
 			const profit = deal['info']['profit'];
@@ -523,7 +524,7 @@
 			}
 
 			// Deal data issue
-			if (isNaN(deal['info']['deal_count'])) {
+			if (isNaN(deal['info']['deal_count']) || (dealError != undefined && dealError != null && dealError != '')) {
 
 				const maxSec = 30;
 
@@ -621,7 +622,7 @@
 
 		if (dealDataErrors > 0) {
 
-			msgBox += '<div style="display: block;"><b>WARNING:</b> ' + dealDataErrors + ' deals have invalid data</div>';
+			msgBox += '<div style="display: block;"><b>WARNING:</b> ' + dealDataErrors + ' deals have errors or invalid data</div>';
 		}
 
 		if (msgBox != '') {
@@ -857,7 +858,7 @@
 					return;
 				}
 
-				showOrderHistory(modalId, dealId, dealTracker[dealId]['orders']);
+				showOrderHistory(modalId, dealId, dealTracker[dealId]['info']['active'], dealTracker[dealId]['orders']);
 			}
 		});
 

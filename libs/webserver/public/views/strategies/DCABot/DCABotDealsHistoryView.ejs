@@ -49,7 +49,7 @@
 
 						$('#spinner-overlay').fadeOut(100);
 
-						showOrderHistory(modalId, dealId, data['orders']);
+						showOrderHistory(modalId, dealId, data['info']['active'], data['orders']);
 					},
 					error: function(data) {
 
