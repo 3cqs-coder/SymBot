@@ -3238,9 +3238,12 @@ async function updateDealTracker(data) {
 
 	const dealData = await getDealInfo(dataObj);
 
-	dealTracker[dealId]['info'] = dealData['info'];
-	dealTracker[dealId]['deal']['config'] = dealData['config'];
-	dealTracker[dealId]['deal']['orders'] = dealData['orders'];
+	if (dealData['success']) {
+
+		dealTracker[dealId]['info'] = dealData['info'];
+		dealTracker[dealId]['deal']['config'] = dealData['config'];
+		dealTracker[dealId]['deal']['orders'] = dealData['orders'];
+	}
 }
 
 
@@ -3571,31 +3574,38 @@ async function getDealInfo(data) {
 	const filledOrders = orders.filter(item => item.filled == 1);
 	const currentOrder = filledOrders.pop();
 
-	const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee);
+	if (currentOrder != undefined && currentOrder != null) {
 
-	const profitPerc = profitData['profit_percentage'];
-	const takeProfit = profitData['take_profit'];
-	const currentProfit = profitData['profit'];
+		const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee);
 
-	const dealInfo = {
-						'updated': updated,
-						'active': active,
-						'error': error,
-						'bot_id': config.botId,
-						'bot_name': config.botName,
-						'safety_orders_used': filledOrders.length,
-						'safety_orders_max': orders.length - 1,
-						'price_last': price,
-						'price_average': currentOrder.average,
-						'price_target': currentOrder.target,
-						'profit': currentProfit,
-						'profit_percentage': profitPerc,
-						'take_profit': takeProfit,
-						'deal_count': config.dealCount,
-						'deal_max': config.dealMax
-					 };
+		const profitPerc = profitData['profit_percentage'];
+		const takeProfit = profitData['take_profit'];
+		const currentProfit = profitData['profit'];
 
-	return ({ 'info': dealInfo, 'config': config, 'orders': orders });
+		const dealInfo = {
+							'updated': updated,
+							'active': active,
+							'error': error,
+							'bot_id': config.botId,
+							'bot_name': config.botName,
+							'safety_orders_used': filledOrders.length,
+							'safety_orders_max': orders.length - 1,
+							'price_last': price,
+							'price_average': currentOrder.average,
+							'price_target': currentOrder.target,
+							'profit': currentProfit,
+							'profit_percentage': profitPerc,
+							'take_profit': takeProfit,
+							'deal_count': config.dealCount,
+							'deal_max': config.dealMax
+						 };
+
+		return ({ 'success': true, 'info': dealInfo, 'config': config, 'orders': orders });
+	}
+	else {
+
+		return ({ 'success': false });
+	}
 }
 
 
