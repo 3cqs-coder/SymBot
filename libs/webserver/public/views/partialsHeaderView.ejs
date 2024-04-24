@@ -653,7 +653,10 @@
 		exchange = exchange.toUpperCase();
 
 		if (exchange.startsWith('COINBASE')) {
-
+			if (pair.includes('USDC')) {
+				// Replace "USDC" with "USD"
+				pair = pair.replace(/USDC/g, 'USD');
+			}
 			exchange = 'COINBASE';
 		}
 
