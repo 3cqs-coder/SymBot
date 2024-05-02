@@ -36,11 +36,15 @@
 	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
 	<script>
+	
+	const maxRows = 1000;
+	const offsetBottom = -225;
 
 	let dataTracker = {};
 	let modalTracker = {};
 	let pairBTC = 'BTC/USD';
 	let exchangeBTC = 'bitstamp';
+	let buffer = []; // buffer for incoming log data
 
 	$(document).ready(function() {
 
@@ -667,9 +671,36 @@
 		$('#' + divId).load(url);
 	}
 
+
+	function displayLog(data) {
+
+		let msg = '<div class="logRow">' + data + '</div>';
+
+		$('#dataBox').prepend(msg);
+
+		let currentRows = $('.logRow').length;
+
+		if (currentRows > maxRows) {
+
+			// $('.logRow').slice(0, currentRows - maxRows).remove();
+			$('.logRow').slice(maxRows).remove(); // better suited for prepending
+		}
+
+		resizeBotsDeals(offsetBottom);
+	}
+
+	
+    function flushBuffer() {
+
+    	// Prepend buffered data in order & flush buffer
+        buffer.forEach(displayLog); 
+        buffer = [];
+    }
+
 	</script>
 
 	<%- include('./partialsSocketView'); %>
+
 
 </head>
 

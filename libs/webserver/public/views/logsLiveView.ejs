@@ -1,115 +1,141 @@
 <%- include('./partialsHeaderView'); %>
 
-	<script>
+    <script>
 
-		$(document).ready(function() {
+        $(document).ready(function() {
 
-			const maxRows = 1000;
-			const offsetBottom = -225;		
+            $(window).resize(function() {
+              
+                resizeBotsDeals(offsetBottom);
+            });
 
-			$(window).resize(function() {
+            const socket = io('/', {
 
-				resizeBotsDeals(offsetBottom);
-			});
+                query: { 'room': 'logs' },
+                extraHeaders: {
 
-			const socket = io('/', {
-
-				query: { 'room': 'logs' },
-				extraHeaders: {
-
-					'user-agent': '<%- appData.name %>/<%- appData.version %>'
-				},
-				transports: ['websocket', 'polling'],
-				path: '/ws',
-				reconnection: true,
-				reconnectionDelay: 10000
-			});
+                  'user-agent': '<%- appData.name %>/<%- appData.version %>'
+                },
+                transports: ['websocket', 'polling'],
+                path: '/ws',
+                reconnection: true,
+                reconnectionDelay: 10000
+            });
 
 
-			socket.on('connect', (data) => {
+            socket.on('connect', (data) => {
 
-			});
+                // Initialize toggle switch after socket connection
+                $('#simple-switch').simpleSwitch();
+                $('#simple-switch').prop('disabled', false);
 
+                // Delay binding (ensures all plugins have init)
+                setTimeout(function() {
 
-			socket.on('connect_error', (data) => {
+                  $('#simple-switch').on('change.toggleSwitch', function() {
+                    
+                    if ($(this).prop('checked')) {
 
-				if (typeof data != 'string') {
+                        $('#dataBox').css('overflow-y', 'auto');
 
-					data = JSON.stringify(data);
-				}
+                        $('#status-text').text('Live');
 
-				alertBox('Connect Error: ' + data);
-			});
+                        flushBuffer(); // Flush log data collected during pause
 
+                    } else {
+                      
+                        $('#dataBox').css('overflow-y', 'auto');
 
-			socket.on('connect_failed', (data) => {
+                        $('#status-text').text('Paused');
+                    }
 
-				if (typeof data != 'string') {
-
-					data = JSON.stringify(data);
-				}
-
-				alertBox('Connect Failed: ' + data);
-			});
-
-
-			socket.on('error', (data) => {
-
-				if (typeof data != 'string') {
-
-					data = JSON.stringify(data);
-				}
-
-				alertBox('Error: ' + data);
-			});
+                  });
+                  
+                }, 500);
+            });
 
 
-			socket.on('disconnect', (data) => {
+            socket.on('connect_error', (data) => {
 
-			});
+                if (typeof data != 'string') {
+                  
+                    data = JSON.stringify(data);
+                }
+
+                alertBox('Connect Error: ' + data);
+            });
 
 
-			socket.on('data', (data) => {
+            socket.on('connect_failed', (data) => {
 
-				let msg = '<div class="logRow">' + data + '</div>';
+                if (typeof data != 'string') {
+                    
+                    data = JSON.stringify(data);
+                }
+                
+                alertBox('Connect Failed: ' + data);
+            });
 
-				$('#dataBox').prepend(msg);
 
-				let currentRows = $('.logRow').length;
+            socket.on('error', (data) => {
 
-				if (currentRows > maxRows) {
+                if (typeof data != 'string') {
 
-					$('.logRow').slice((maxRows - currentRows)).remove();
-				}
+                    data = JSON.stringify(data);
+                }
+              
+                alertBox('Error: ' + data);
+            });
 
-				resizeBotsDeals(offsetBottom);
-			});
 
-		});
+            socket.on('disconnect', (data) => {
+              
+            });
 
-	</script>
+            
+            socket.on('data', (data) => {
+
+                if ($('#simple-switch').prop('checked')) {
+
+                    displayLog(data);
+
+                } else {
+
+                    buffer.push(data); // buffer while paused
+                }
+                
+            });
+            
+        });
+
+    </script>
 
 
 <main>
 
-	<div id="contentBox">
+    <div id="contentBox">
 
-		<div class="contentHeaderBox" style="text-align: center; width: 100%;">
-			<b class="contentHeader"><%- appData.name %> Realtime Logs</b>
-		</div>
-		<% if (isLiteLog) { %>
-			<div class="flex-container">
-				<div class="lite-log">
-					<h3>Lite Logging Enabled</h3>
-					<p>All logs will be written to console.</p>
-					<p>To store logs, restart SymBot without params</p>
-				</div>
-			</div>
-		<% } 
-		else { %> 
-		<div id="dataBox" class="botsDealsBox" style="width: 100%;"></div>
-		<% } %>
-	</div>
+        <div class="contentHeaderBox" style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center;">
+                <input type="checkbox" id="simple-switch" checked>
+                <span id="status-text" style="margin-left: 10px; min-width: 60px; display: inline-block;">Live</span>
+            </div>
+                <b class="contentHeader" style="flex-grow: 1; text-align: center; margin: 0 20px;"><%- appData.name %> Realtime Logs</b>
+                <span style="visibility: hidden; flex-grow: 0;"><input type="checkbox" style="visibility: hidden;"></span>  <!-- Invisible element for balance -->
+        </div>
+        <% if (isLiteLog) { %>
+            <div class="flex-container">
+                <div class="lite-log">
+                    <h3>Lite Logging Enabled</h3>
+                    <p>All logs will be written to console.</p>
+                    <p>To store logs, restart SymBot without params</p>
+                </div>
+            </div>
+        <% } 
+        else { %> 
+        <div id="dataBox" class="botsDealsBox" style="width: 100%;"></div>
+        <% } %>
+    </div>
 
 </main>
 
