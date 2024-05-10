@@ -1578,11 +1578,9 @@ async function getDashboardData({ duration }) {
 	let total_in_deals = 0;
 	let total_pl = 0;
 
+	let currencies = [];
+
 	const available_balance = await (async () => {
-
-		let currency = 'USDT';
-
-		if (data.sandBox) return Number(data.sandBoxWallet);
 
 		if (shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
 
@@ -1598,16 +1596,30 @@ async function getDashboardData({ duration }) {
 
 					if (typeof currenciesArr == 'object') {
 
-						currency = currenciesArr[0];
+						currencies = currenciesArr;
 					}
 				}
 			}
 		}
 
+		if (data.sandBox) {
+
+			let resObj = {};
+
+			for (let i = 0; i < currencies.length; i++) {
+
+				let currency = currencies[i];
+
+				resObj[currency] = data.sandBoxWallet;
+			}
+
+			return resObj;
+		}
+
 		const exchange = await shareData.DCABot.connectExchange(data);
-		const { success, balance } = await shareData.DCABot.getBalance(exchange, currency.toUpperCase());
-		if(!success) return 0;
-		return Number(balance);
+		const { success, balance } = await shareData.DCABot.getBalance(exchange);
+		if(!success) return {};
+		return balance;
 	})();
 
 	complete_deals.forEach((deal) => {
@@ -1718,6 +1730,7 @@ async function getDashboardData({ duration }) {
 			bot_deal_duration_map,
 			bot_funds_in_use_map
 		},
+		currencies: currencies,
 		isLoading,
 		period
 	}

@@ -7,7 +7,11 @@
 
        const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map } = <%- JSON.stringify(charts) %>
 
-        const bgColors = [
+       const balances = <%- JSON.stringify(available_balance) %>;
+
+       const currencies = <%- '[' + currencies.map(currency => `'${currency}'`).join(',') + ']'; %>;
+
+       const bgColors = [
                             'rgba(255, 99, 132, 0.2)',
                             'rgba(54, 162, 235, 0.2)',
                             'rgba(255, 206, 86, 0.2)',
@@ -26,11 +30,37 @@
                         ]
 
      $(document).ready(function () {
+
+        function populateBalance(currency) {
+
+            let balance = Number(balances[currency]);
+
+            if (isNaN(balance)) {
+
+                balance = 0;
+            }
+
+            $('#balance').html('$' + balance.toString());
+        }
+
         const period_map = {
                 'week': 7,
                 '2-weeks': 14,
                 'month': 30,
             }
+
+        // Populate currencies
+        $.each(currencies, function(index, currency) {
+            $('#currencies').append($('<option></option>').val(currency).html(currency));
+        });
+
+        // Populate balance
+        populateBalance(currencies[0]);
+
+        $('#currencies').change(function() {
+            const currency = $(this).val();
+            populateBalance(currency);
+        });
 
         $('#period-select').change(function() {
             const period = $(this).val();
@@ -108,82 +138,86 @@
     });
 </script>
 
-<main style="margin-top: 10px">  
-    <div id="contentBox">
-        <div style="display: flex; flex-direction: column; justify-content: center; gap: 5px">
-            <select class="form-field" id="period-select" style="width: 100px" >
-                <option value="week">Week</option>
-                <option value="2-weeks">2 Weeks</option>
-                <option value="month" selected>Month</option>
-                <option value="custom" id="custom-date-range" style="display: none">Custom</option>
-            </select>
-            <span><b>Period:</b> <%- period %></span>
-        </div>
-        <div style="padding: 10px 0 20px 0">
-        <!-- KPI -->
-        <div class="kpi-container">
-            <div class="performance-kpi">
-                <span style="font-size: 11px">Active Deals</span>
-                <span style="font-size: 20px;"><%- active_deals %></span>
-            </div>
-
-            <div class="performance-kpi">
-                <span style="font-size: 11px">Total In Deals</span>
-                <span style="font-size: 20px;">$<%- total_in_deals.toLocaleString() %></span>
-            </div>
-
-
-            <div class="performance-kpi">
-                <span style="font-size: 11px">Available Funds</span>
-                <span style="font-size: 20px;">$<%- available_balance.toLocaleString() %></span>
-            </div>
-
-            <div class="performance-kpi">
-                <span style="font-size: 11px">Profit</span>
-                <span style="font-size: 20px;">$<%- total_profit.toLocaleString() %></span>
-            </div>
-
-            <div class="performance-kpi">
-                <span style="font-size: 11px">Active P/L</span>
-                <span style="font-size: 20px;">$<%- total_pl.toLocaleString() %></span>
+<main style="margin-top: 10px">
+	<div id="contentBox" style="display: flex; flex-wrap: wrap;">
+		<div style="flex: 1;">
+			<div style="display: flex; flex-direction: column; justify-content: center; gap: 5px;">
+				<select class="form-field" id="period-select" style="width: 100px;">
+					<option value="week">Week</option>
+					<option value="2-weeks">2 Weeks</option>
+					<option value="month" selected>Month</option>
+					<option value="custom" id="custom-date-range" style="display: none;">Custom</option>
+				</select>
+				<span><b>Period:</b> <%- period %></span>
+			</div>
+		</div>
+        <div style="flex: 1; display: flex; align-items: flex-start; justify-content: flex-end;">
+            <div id="rightBox" style="display: flex; align-items: center;">
+                <b>Balance:</b>
+                <select class="form-field" id="currencies" style="width: 100px; margin-left: 5px;">
+                </select>
             </div>
         </div>
-
-        <!-- Charts -->
-        <div class="dashboard-container">
-            <!-- Bot Profit -->
-            <div class="chart-container">
-                <canvas id="botProfitChart"></canvas>
-            </div>
-            <!-- Active P/L -->
-            <div class="chart-container">
-                <canvas  id="activePLChart"></canvas>
-            </div>
-        </div>
-        <div class="dashboard-container">
-            <!-- Adjusted P/L -->
-            <div class="chart-container" style="margin-top:40px">
-                <canvas  id="adjustedPLChart"></canvas>
-            </div>
-            <!-- Profit Per Day -->
-            <div class="chart-container" style="margin-top:40px">
-                <canvas id="profitPerDayChart"></canvas>
-            </div>
-        </div>
-
-        <div class="dashboard-container">
-            <!-- Deal Duration  -->
-            <div class="chart-container" style="margin-top:40px; width: 50%;">
-                <canvas  id="botDealDurationChart"></canvas>
-            </div>
-            <!-- Funds in Use  -->
-            <div class="chart-container" style="margin-top:40px; width: 50%;">
-                <canvas  id="fundsInUseChart"></canvas>
-            </div>
-        </div>
-        
-        </div>
-    </div>
+		<div id="belowContentBox" style="flex-basis: 100%; display: flex; justify-content: center; margin-top: 20px;">
+			<div id="innerContent" style="flex: 1;">
+				<!-- KPI -->
+				<div class="kpi-container">
+					<div class="performance-kpi">
+						<span style="font-size: 11px">Active Deals</span>
+						<span style="font-size: 20px;"><%- active_deals %></span>
+					</div>
+					<div class="performance-kpi">
+						<span style="font-size: 11px">Total In Deals</span>
+						<span style="font-size: 20px;">$<%- total_in_deals.toLocaleString() %></span>
+					</div>
+					<div class="performance-kpi">
+						<span style="font-size: 11px">Available Funds</span>
+						<span id="balance" style="font-size: 20px;"></span>
+					</div>
+					<div class="performance-kpi">
+						<span style="font-size: 11px">Profit</span>
+						<span style="font-size: 20px;">$<%- total_profit.toLocaleString() %></span>
+					</div>
+					<div class="performance-kpi">
+						<span style="font-size: 11px">Active P/L</span>
+						<span style="font-size: 20px;">$<%- total_pl.toLocaleString() %></span>
+					</div>
+				</div>
+				<!-- Charts -->
+				<div class="dashboard-container">
+					<!-- Bot Profit -->
+					<div class="chart-container">
+						<canvas id="botProfitChart"></canvas>
+					</div>
+					<!-- Active P/L -->
+					<div class="chart-container">
+						<canvas  id="activePLChart"></canvas>
+					</div>
+				</div>
+				<div class="dashboard-container">
+					<!-- Adjusted P/L -->
+					<div class="chart-container" style="margin-top:40px">
+						<canvas  id="adjustedPLChart"></canvas>
+					</div>
+					<!-- Profit Per Day -->
+					<div class="chart-container" style="margin-top:40px">
+						<canvas id="profitPerDayChart"></canvas>
+					</div>
+				</div>
+				<div class="dashboard-container">
+					<!-- Deal Duration  -->
+					<div class="chart-container" style="margin-top:40px; width: 50%;">
+						<canvas  id="botDealDurationChart"></canvas>
+					</div>
+					<!-- Funds in Use  -->
+					<div class="chart-container" style="margin-top:40px; width: 50%;">
+						<canvas  id="fundsInUseChart"></canvas>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
 </main>
+
 
 <%- include('./partialsFooterView'); %>
