@@ -1,127 +1,126 @@
 <%- include('./partialsHeaderView'); %>
 
-    <script>
+	<script>
 
-        $(document).ready(function() {
+		$(document).ready(function() {
 
-            $(window).resize(function() {
-              
-                resizeBotsDeals(offsetBottom);
-            });
+			$(window).resize(function() {
 
-            const socket = io('/', {
+				resizeBotsDeals(offsetBottom);
+			});
 
-                query: { 'room': 'logs' },
-                extraHeaders: {
+			const socket = io('/', {
 
-                  'user-agent': '<%- appData.name %>/<%- appData.version %>'
-                },
-                transports: ['websocket', 'polling'],
-                path: '/ws',
-                reconnection: true,
-                reconnectionDelay: 10000
-            });
+				query: { 'room': 'logs' },
+				extraHeaders: {
+
+					'user-agent': '<%- appData.name %>/<%- appData.version %>'
+				},
+				transports: ['websocket', 'polling'],
+				path: '/ws',
+				reconnection: true,
+				reconnectionDelay: 10000
+			});
 
 
-            socket.on('connect', (data) => {
+			socket.on('connect', (data) => {
 
-                // Initialize toggle switch after socket connection
+                // Init toggle after socket connect
                 $('#simple-switch').simpleSwitch();
                 $('#simple-switch').prop('disabled', false);
 
-                // Delay binding (ensures all plugins have init)
-                setTimeout(function() {
-
-                  $('#simple-switch').on('change.toggleSwitch', function() {
+                $('#simple-switch').on('change.toggleSwitch', function() {
                     
-                    if ($(this).prop('checked')) {
+                    if ($(this).parent().hasClass('checked')) {
 
                         $('#dataBox').css('overflow-y', 'auto');
 
                         $('#status-text').text('Live');
 
-                        flushBuffer(); // Flush log data collected during pause
+                        stopCountdown();
+
+                        flushBuffer();
 
                     } else {
                       
                         $('#dataBox').css('overflow-y', 'auto');
 
                         $('#status-text').text('Paused');
+                        
+                        startCountdown(60);
                     }
-
-                  });
-                  
-                }, 500);
-            });
+                });
+			});
 
 
-            socket.on('connect_error', (data) => {
+			socket.on('connect_error', (data) => {
 
-                if (typeof data != 'string') {
-                  
-                    data = JSON.stringify(data);
-                }
+				if (typeof data != 'string') {
 
-                alertBox('Connect Error: ' + data);
-            });
+					data = JSON.stringify(data);
+				}
 
-
-            socket.on('connect_failed', (data) => {
-
-                if (typeof data != 'string') {
-                    
-                    data = JSON.stringify(data);
-                }
-                
-                alertBox('Connect Failed: ' + data);
-            });
+				alertBox('Connect Error: ' + data);
+			});
 
 
-            socket.on('error', (data) => {
+			socket.on('connect_failed', (data) => {
 
-                if (typeof data != 'string') {
+				if (typeof data != 'string') {
 
-                    data = JSON.stringify(data);
-                }
-              
-                alertBox('Error: ' + data);
-            });
+					data = JSON.stringify(data);
+				}
+
+				alertBox('Connect Failed: ' + data);
+			});
 
 
-            socket.on('disconnect', (data) => {
-              
-            });
+			socket.on('error', (data) => {
 
-            
-            socket.on('data', (data) => {
+				if (typeof data != 'string') {
 
-                if ($('#simple-switch').prop('checked')) {
+					data = JSON.stringify(data);
+				}
+
+				alertBox('Error: ' + data);
+			});
+
+
+			socket.on('disconnect', (data) => {
+
+			});
+
+
+			socket.on('data', (data) => {
+
+                if ($('#simple-switch').parent().hasClass('checked')) {
 
                     displayLog(data);
 
                 } else {
 
-                    buffer.push(data); // buffer while paused
+                    buffer.push(data);
                 }
                 
             });
-            
-        });
 
-    </script>
+		});
+
+	</script>
 
 
 <main>
 
-    <div id="contentBox">
+	<div id="contentBox">
 
         <div class="contentHeaderBox" style="display: flex; align-items: center; justify-content: space-between;">
             <div style="display: flex; align-items: center;">
                 <input type="checkbox" id="simple-switch" checked>
                 <span id="status-text" style="margin-left: 10px; min-width: 60px; display: inline-block;">Live</span>
+                <span id="countdown" style="min-width: 50px; display: inline-block;"></span>
             </div>
                 <b class="contentHeader" style="flex-grow: 1; text-align: center; margin: 0 20px;"><%- appData.name %> Realtime Logs</b>
-                <span style="visibility: hidden; flex-grow: 0;"><input type="checkbox" style="visibility: hidden;"></span>  <!-- Invisible element for balance -->
+                <span style="visibility: hidden; flex-grow: 0;"><input type="checkbox" style="visibility: hidden;"></span>  <!-- balance -->
         </div>
         <% if (isLiteLog) { %>
             <div class="flex-container">

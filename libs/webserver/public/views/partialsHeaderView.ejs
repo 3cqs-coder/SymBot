@@ -36,7 +36,7 @@
 	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
 	<script>
-	
+
 	const maxRows = 1000;
 	const offsetBottom = -225;
 
@@ -44,7 +44,8 @@
 	let modalTracker = {};
 	let pairBTC = 'BTC/USD';
 	let exchangeBTC = 'bitstamp';
-	let buffer = []; // buffer for incoming log data
+	let buffer = []; // buffer - incoming log
+	let countdownTimer;
 
 	$(document).ready(function() {
 
@@ -672,6 +673,38 @@
 	}
 
 
+	function startCountdown(duration) {
+
+		let remaining = duration;
+
+		$('#countdown').text(`(${remaining}s)`);
+
+		countdownTimer = setInterval(() => {
+
+			remaining--;
+
+			$('#countdown').text(`(${remaining}s)`);
+
+			if (remaining <= 0) {
+
+				clearInterval(countdownTimer);
+
+				$('#countdown').text('');
+
+				setLiveState();
+			}
+		}, 1000);
+	}	
+
+
+	function stopCountdown() {
+
+    	clearInterval(countdownTimer);
+
+    	$('#countdown').text('');
+	}
+
+
 	function displayLog(data) {
 
 		let msg = '<div class="logRow">' + data + '</div>';
@@ -682,25 +715,39 @@
 
 		if (currentRows > maxRows) {
 
-			// $('.logRow').slice(0, currentRows - maxRows).remove();
 			$('.logRow').slice(maxRows).remove(); // better suited for prepending
 		}
 
 		resizeBotsDeals(offsetBottom);
 	}
 
-	
+
+	function setLiveState() {
+
+		$('#simple-switch').switchToggle(true);
+
+    	$('#dataBox').css('overflow-y', 'auto');
+
+    	$('#status-text').text('Live');
+
+    	flushBuffer();
+		
+    	stopCountdown();
+	}
+
+
     function flushBuffer() {
 
-    	// Prepend buffered data in order & flush buffer
-        buffer.forEach(displayLog); 
+    	// Prepend buffered entries in order & flush
+        buffer.forEach(displayLog);
+
         buffer = [];
     }
+
 
 	</script>
 
 	<%- include('./partialsSocketView'); %>
-
 
 </head>
 
