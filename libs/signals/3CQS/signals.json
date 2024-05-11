@@ -260,6 +260,10 @@
 			"description": "SymSense"
 		},
 		{
+			"id": "sym_senser",
+			"description": "SymSenser"
+		},
+		{
 			"id": "market_cap_rank",
 			"description": "Market Cap Rank"
 		},

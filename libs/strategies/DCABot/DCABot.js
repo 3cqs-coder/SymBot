@@ -1025,8 +1025,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						if (config.sandBox) {
 
-							priceSlippageBuyPercent = 0;
-							priceSlippageSellPercent = 0;
+							//priceSlippageBuyPercent = 0;
+							//priceSlippageSellPercent = 0;
 						}
 
 						const priceBuyOrder = parseFloat(Number(order.price) - (Number(order.price) * priceSlippageBuyPercent));
@@ -2266,8 +2266,8 @@ const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfi
 
 	if (sandBox) {
 
-		priceSlippageBuyPercent = 0;
-		priceSlippageSellPercent = 0;
+		//priceSlippageBuyPercent = 0;
+		//priceSlippageSellPercent = 0;
 	}
 
 	profitPerc = profitPerc - Number(exchangeFeePercent) - (Number(priceSlippageSellPercent));
@@ -2344,13 +2344,7 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 				sellErrorLastQty = sellErrorHistory[keyLast]['qty'];
 			}
 
-			addFee = (sellErrorAddFeeMultiplier * (sellErrorCount + sellErrorCountDupes));
-			//addFee = sellErrorAddFeeMultiplier * sellErrorCount;
-
 			// Only apply additional fees if insufficient funds
-			// Not all exchanges return instance of insufficient funds, so commenting out for now
-
-			/*
 			if (dealTracker[dealId]['update']['deal_sell_error']['nsf']) {
 
 				addFee = (sellErrorAddFeeMultiplier * (sellErrorCount + sellErrorCountDupes));
@@ -2359,7 +2353,6 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 
 				addFee = 0;
 			}
-			*/
 
 			if (addFee == undefined || addFee == null) {
 
@@ -3554,7 +3547,7 @@ async function getBalanceTracker() {
 		}
 	}
 
-	balanceTracker = resObj;
+	balanceTracker = JSON.parse(JSON.stringify(resObj));
 
 	return resObj;
 }
