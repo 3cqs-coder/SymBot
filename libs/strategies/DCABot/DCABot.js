@@ -276,6 +276,7 @@ async function start(dataObj, startId) {
 
 					'exchange': exchange,
 					'pair': pair,
+					'price': askPrice,
 					'amount': Number(askPrice * firstOrderSize),
 					'orderSize': firstOrderSize,
 					'exchangeFee': config.exchangeFee,
@@ -304,6 +305,7 @@ async function start(dataObj, startId) {
 
 						'exchange': exchange,
 						'pair': pair,
+						'price': price,
 						'amount': amount,
 						'orderSize': firstOrderSize,
 						'exchangeFee': config.exchangeFee,
@@ -362,6 +364,7 @@ async function start(dataObj, startId) {
 
 							'exchange': exchange,
 							'pair': pair,
+							'price': price,
 							'amount': dcaOrderAmount,
 							'orderSize': dcaOrderSize,
 							'exchangeFee': config.exchangeFee,
@@ -434,6 +437,7 @@ async function start(dataObj, startId) {
 
 							'exchange': exchange,
 							'pair': pair,
+							'price': price,
 							'amount': amount,
 							'orderSize': dcaOrderSize,
 							'exchangeFee': 0,
@@ -445,6 +449,7 @@ async function start(dataObj, startId) {
 
 							'exchange': exchange,
 							'pair': pair,
+							'price': price,
 							'amount': amount,
 							'orderSize': dcaOrderSize,
 							'exchangeFee': config.exchangeFee,
@@ -2436,7 +2441,7 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 }
 
 
-const calculateAdjustments = async ({ exchange, pair, amount, orderSize, exchangeFee, minMoveAmount }) => {
+const calculateAdjustments = async ({ exchange, pair, price, amount, orderSize, exchangeFee, minMoveAmount }) => {
 
 	let resObj;
 	let finished = false;
@@ -2458,9 +2463,10 @@ const calculateAdjustments = async ({ exchange, pair, amount, orderSize, exchang
 		const exchangeFeeAmountFiltered = await filterPrice(exchange, pair, Number(exchangeFeeAmount));
 
 		let orderSizeNew = await filterMinMovement((Number(orderSize) + Number(exchangeFeeQty)), minMoveAmount);
-		let amountNew = await filterMinMovement((Number((amount)) + Number(exchangeFeeAmount)), minMoveAmount);
 
 		orderSizeNew = await filterAmount(exchange, pair, orderSizeNew);
+
+		let	amountNew = price * orderSizeNew;
 
 		// Filtering may reduce amounts and remove decimals for some pairs
 		amountNew = await filterPrice(exchange, pair, amountNew);
@@ -4457,6 +4463,7 @@ async function addFundsDeal(dealId, volume) {
 
 					'exchange': exchange,
 					'pair': config.pair,
+					'price': price,
 					'amount': amount,
 					'orderSize': qty,
 					'exchangeFee': config.exchangeFee,
