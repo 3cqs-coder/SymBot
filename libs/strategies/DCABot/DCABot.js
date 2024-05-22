@@ -2852,20 +2852,24 @@ async function connectExchange(configObj) {
 
 		success = true;
 
+		let exchangeName = config.exchange;
+
+		exchangeName = await getExchangeAlias(exchangeName);
+
 		if (config.exchangeOptions != undefined && config.exchangeOptions != null && config.exchangeOptions != '') {
 
 			options = config.exchangeOptions;
 		}
 
-		if (shareData.appData.exchanges[config.exchange] != undefined && shareData.appData.exchanges[config.exchange] != null) {
+		if (shareData.appData.exchanges[exchangeName] != undefined && shareData.appData.exchanges[exchangeName] != null) {
 
-			exchange = shareData.appData.exchanges[config.exchange];
+			exchange = shareData.appData.exchanges[exchangeName];
 		}
 		else {
 
 			isNew = true;
 
-			exchange = new ccxt.pro[config.exchange]({
+			exchange = new ccxt.pro[exchangeName]({
 
 				'timeout': (exchangeTimeoutSec * 1000),
 				'enableRateLimit': true,
@@ -2876,7 +2880,7 @@ async function connectExchange(configObj) {
 				'options': options
 			});
 
-			shareData.appData.exchanges[config.exchange] = exchange;
+			shareData.appData.exchanges[exchangeName] = exchange;
 		}
 	}
 	catch(e) {
@@ -2911,6 +2915,22 @@ async function connectExchange(configObj) {
 	}
 
 	return exchange;
+}
+
+
+async function getExchangeAlias(exchangeName) {
+
+	// CCXT name changes
+
+	if (exchangeName != undefined && exchangeName != null && exchangeName != '') {
+
+		if (exchangeName.toLowerCase() == 'coinbasepro') {
+
+			exchangeName = 'coinbaseexchange';
+		}
+	}
+
+	return exchangeName;
 }
 
 
