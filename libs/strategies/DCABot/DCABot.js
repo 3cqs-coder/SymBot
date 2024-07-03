@@ -993,7 +993,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 			}
 			else {
 
-				const filledOrders = deal.orders.filter(item => item.filled == 1);
+				const filledOrders = orders.filter(item => item.filled == 1);
+				const unfilledOrders = orders.filter(item => item.filled != 1);
 				const currentOrder = filledOrders.pop();
 
 				const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee);
@@ -1219,6 +1220,19 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
 
+							//let nextOrder = currentOrder.price;
+							let nextOrder = unfilledOrders.find(order => Number(order.orderNo) == Number(currentOrder.orderNo) + 1) || null;
+
+							if (nextOrder == undefined || nextOrder == null) {
+							
+								nextOrder = 'N/A';
+							}
+							else {
+
+								nextOrder = nextOrder.price;
+								nextOrder = parseFloat(Number(nextOrder) - (Number(nextOrder) * priceSlippageBuyPercent));
+							}
+
 							if (shareData.appData.verboseLog) {
 							
 								Common.logger(
@@ -1231,7 +1245,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								'\t\tTarget: $' +
 								currentOrder.target +
 								'\t\tNext Order: $' +
-								order.price +
+								nextOrder +
 								'\tProfit: ' +
 								profit +
 								''
