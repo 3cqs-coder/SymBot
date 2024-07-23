@@ -223,6 +223,7 @@ async function processSignal(data) {
 	const symScore = data['sym_score'];
 	const symSense = data['sym_sense'];
 	const symSenser = data['sym_senser'];
+	const symSync = data['sym_sync'];
 	const volatilityScore = data['volatility_score'];
 	const priceActionScore = data['price_action_score'];
 	const marketCapRank = data['market_cap_rank'];

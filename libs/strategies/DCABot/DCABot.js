@@ -803,6 +803,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 	let finished = false;
 	let isDealCancel = false;
 	let isDealPanicSell = false;
+	let isDealPause = false;
+	let isDealPauseBuy = false;
+	let isDealPauseSell = false;
 
 	let { priceSlippageBuyPercent, priceSlippageSellPercent } = await getSlippage(true);
 
@@ -838,14 +841,6 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 			Common.logger(colors.red.bold('Deal ID ' + dealId + ' stop requested. Not processing'));
 	
 			return ( { 'success': false, 'finished': true } );
-		}
-
-		// Deal pause
-		if (dealTracker[dealId]['update']['deal_pause']) {
-	
-			Common.logger(colors.red.bold('Deal ID ' + dealId + ' pause requested. Not processing'));
-	
-			return ( { 'success': false, 'finished': false } );
 		}
 
 		// Refresh config without restarting deal
@@ -907,6 +902,10 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 			let orders = deal.orders;
 
+			isDealPause = Common.convertBoolean(deal.paused, false);
+			isDealPauseBuy = Common.convertBoolean(deal.pausedBuy, false);
+			isDealPauseSell = Common.convertBoolean(deal.pausedSell, false);
+
 			if (deal.isStart == 0) {
 
 				let buyError;
@@ -967,14 +966,23 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						});
 					}
 
-					await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders, 'error': buyError });
+					await updateDealTracker({ 
+												'deal_id': dealId,
+												'price': price,
+												'config': config,
+												'orders': orders,
+												'pause': isDealPause,
+												'pause_buy': isDealPauseBuy,
+												'pause_sell': isDealPauseSell,
+												'error': buyError
+											});
 
 					if (!buySuccess) {
 
 						// Initial buy failed
 						let finished = false;
 
-						const statusObj = await orderError({ 'bot_id': config.botId, 'bot_name': config.botName, 'deal_id': dealId });
+						const statusObj = await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
 
 						if (statusObj['success']) {
 
@@ -1023,6 +1031,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				for (let i = 0; i < orders.length; i++) {
 
 					let buyOrderId = '';
+					let buyNSF = false;
 
 					const order = orders[i];
 
@@ -1038,7 +1047,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						const priceBuyOrder = parseFloat(Number(order.price) - (Number(order.price) * priceSlippageBuyPercent));
 						const priceSellOrder = parseFloat(Number(currentOrder.target) + (Number(currentOrder.target) * priceSlippageSellPercent));
 
-						if ((price <= priceBuyOrder && order.filled == 0) && !isDealCancel && !isDealPanicSell) {
+						if ((price <= priceBuyOrder && order.filled == 0) && !isDealPause && !isDealPauseBuy && !isDealCancel && !isDealPanicSell) {
 							//Buy DCA
 
 							isBuy = true;
@@ -1053,6 +1062,17 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 									buySuccess = false;
 									buyError = buy.message;
+									buyNSF = buy.nsf;
+
+									// Insufficient funds to buy
+									if (buyNSF) {
+
+										let msg = 'Insufficient funds to buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
+
+										await sendDealError(msg);
+
+										const pauseData = await pauseDeal(config.botId, dealId, false, true, false);
+									}
 								}
 								else {
 
@@ -1097,7 +1117,16 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								});
 							}
 							
-							await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders, 'error': buyError });
+							await updateDealTracker({
+														'deal_id': dealId,
+														'price': price,
+														'config': config,
+														'orders': orders,
+														'pause': isDealPause,
+														'pause_buy': isDealPauseBuy,
+														'pause_sell': isDealPauseSell,
+														'error': buyError
+													});
 
 							if (!buySuccess) {
 
@@ -1105,14 +1134,14 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								return ( { 'success': false, 'finished': false } );
 							}
 						}
-						else if (price >= priceSellOrder || isDealCancel || isDealPanicSell) {
+						else if ((price >= priceSellOrder && !isDealPause && !isDealPauseSell) || isDealCancel || isDealPanicSell) {
 
 							//Sell order
 
 							if (deal.isStart == 1) {
 
 								let sellOrderId = '';
-								let isNSF = false;
+								let sellNSF = false;
 								let sellSuccess = true;
 
 								const sellDataObj = await processSellData(pair, price, dealId, exchange, config, currentOrder, filledOrders);
@@ -1132,7 +1161,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 									const sell = await sellOrder(exchange, dealId, pair, qtySumSell, priceFiltered);
 
-									isNSF = sell.nsf;
+									sellNSF = sell.nsf;
 
 									if (!sell.success) {
 
@@ -1146,7 +1175,15 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								if (sellSuccess) {
 
-									await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
+									await updateDealTracker({
+																'deal_id': dealId,
+																'price': price,
+																'config': config,
+																'orders': orders,
+																'pause': isDealPause,
+																'pause_buy': isDealPauseBuy,
+																'pause_sell': isDealPauseSell
+															});
 
 									if (shareData.appData.verboseLog) {
 
@@ -1204,7 +1241,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								else {
 
 									// Sell failed
-									dealTracker[dealId]['update']['deal_sell_error']['nsf'] = isNSF;
+									dealTracker[dealId]['update']['deal_sell_error']['nsf'] = sellNSF;
 									dealTracker[dealId]['update']['deal_sell_error']['count']++;
 									dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
 
@@ -1218,7 +1255,15 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						}
 						else {
 
-							await updateDealTracker({ 'deal_id': dealId, 'price': price, 'config': config, 'orders': orders });
+							await updateDealTracker({
+														'deal_id': dealId,
+														'price': price,
+														'config': config,
+														'orders': orders,
+														'pause': isDealPause,
+														'pause_buy': isDealPauseBuy,
+														'pause_sell': isDealPauseSell
+													});
 
 							//let nextOrder = currentOrder.price;
 							let nextOrder = unfilledOrders.find(order => Number(order.orderNo) == Number(currentOrder.orderNo) + 1) || null;
@@ -2948,14 +2993,22 @@ async function getExchangeAlias(exchangeName) {
 }
 
 
-async function orderError(data) {
+async function sendDealError(msg) {
+
+	Common.logger(colors.bgRed(msg));
+
+	await Common.sendNotification({ 'message': msg, 'type': 'deal_error', 'telegram_id': shareData.appData.telegram_id });
+}
+
+
+async function processOrderError(data) {
 
 	let active = false;
 	let success = true;
 
 	let botId = data['bot_id'];
-	let botName = data['bot_name'];
 	let dealId = data['deal_id'];
+	let botName = data['bot_name'];
 
 	const dataBot = await updateBot(botId, { 'active': active });
 
@@ -2969,7 +3022,7 @@ async function orderError(data) {
 
 		let msg = 'An error occurred starting deal ID ' + dealId + '. Disabling bot. Check the logs for details.';
 
-		await Common.sendNotification({ 'message': msg, 'type': 'deal_error', 'telegram_id': shareData.appData.telegram_id });
+		await sendDealError(msg);
 		const statusObj = await sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
 	}
 
@@ -3600,6 +3653,9 @@ async function getDealInfo(data) {
 	const active = data['active'];
 	const price = data['price'];
 	const error = data['error'];
+	const pause = data['pause'];
+	const pauseBuy = data['pause_buy'];
+	const pauseSell = data['pause_sell'];
 
 	const config = JSON.parse(JSON.stringify(data['config']));
 	const orders = JSON.parse(JSON.stringify(data['orders']));
@@ -3618,6 +3674,9 @@ async function getDealInfo(data) {
 		const dealInfo = {
 							'updated': updated,
 							'active': active,
+							'pause': pause,
+							'pause_buy': pauseBuy,
+							'pause_sell': pauseSell,
 							'error': error,
 							'bot_id': config.botId,
 							'bot_name': config.botName,
@@ -4366,32 +4425,65 @@ async function resumeDeal(dealObj) {
 }
 
 
-async function pauseDeal(dealId, pause) {
+async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell) {
 
-	let success = true;
-	let msg = 'Success';
-	let updateKey = 'deal_pause';
+	let status;
+	let success;
 
-	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+	pause = pause ?? false;
 
-		if (pause) {
+	Common.logger(colors.red.bold(`Deal ID ${dealId} pause update requested.`));
 
-			// Set deal_pause flag
-			dealTracker[dealId]['update'][updateKey] = true;
-		}
-		else {
+	if (pauseBuy && pauseSell) {
 
-			// Remove deal_pause flag
-			delete dealTracker[dealId]['update'][updateKey];
+		// Both pauseBuy and pauseSell are true
+		pause = true;
+		pauseBuy = false;
+		pauseSell = false;
+	}
+	else if (pauseBuy === false && pauseSell === false) {
+
+		// Both pauseBuy and pauseSell are false
+		// Preserve pause as it is (initially false or not)
+	}
+	else if (pauseBuy || pauseSell) {
+
+		// Either pauseBuy or pauseSell are true (but not both)
+		pause = false;
+	}
+
+	const dbParams = {
+		'paused': pause,
+		'pausedBuy': pauseBuy,
+		'pausedSell': pauseSell
+	};
+
+	// Update only if values are defined
+	for (const [dbKey, val] of Object.entries(dbParams)) {
+
+		if (val != null) {
+
+			const convertedVal = Common.convertBoolean(val, false);
+
+			const dataUpdate = await updateDeal(botId, dealId, {
+				[dbKey]: convertedVal
+			});
+
+			if (dataUpdate.success) {
+
+				success = true;
+				status = 'Pause status updated';
+			}
+			else {
+
+				success = false;
+				status = 'Pause update failed';
+				break;
+			}
 		}
 	}
-	else {
 
-		success = false;
-		msg = 'Deal ID not found';
-	}
-
-	return ( { 'success': success, 'data': msg } );
+	return ({ success, data: `Deal ID ${dealId} ${status}` });
 }
 
 
@@ -4534,7 +4626,7 @@ async function addFundsDeal(dealId, volume) {
 
 					if (!config.sandBox) {
 
-						const buy = await buyOrder(exchange, dealId, config.pair, qty, targetPrice);
+						const buy = await buyOrder(exchange, dealId, config.pair, qty, price);
 
 						if (!buy.success) {
 	

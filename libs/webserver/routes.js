@@ -309,6 +309,19 @@ function initRoutes(router) {
 	});
 
 
+	router.post([ '/api/deals/:dealId/pause' ], (req, res) => {
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiPauseDeal(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.post([ '/api/deals/:dealId/cancel' ], (req, res) => {
 
 		if (req.session.loggedIn || validApiKey(req)) {

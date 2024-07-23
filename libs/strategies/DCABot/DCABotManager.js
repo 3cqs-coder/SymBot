@@ -106,7 +106,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData } );
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
 }
 
 
@@ -744,6 +744,65 @@ async function apiPanicSellDeal(req, res) {
 	const resObj = { 'date': new Date(), 'success': success, 'data': content };
 
 	shareData.Common.logger('API Panic Sell Deal: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
+}
+
+
+async function apiPauseDeal(req, res) {
+
+	let success = true;
+
+	let content = 'Success';
+
+	const dealId = req.params.dealId;
+
+	let pause = shareData.Common.convertBoolean(req.body.pause);
+	let pauseBuy = shareData.Common.convertBoolean(req.body.pauseBuy);
+	let pauseSell = shareData.Common.convertBoolean(req.body.pauseSell);
+
+	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (data && data.length > 0) {
+
+		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+
+		const botId = dealData.botId;
+		const status = dealData['status'];
+		
+		if (status != 0) {
+
+			success = false;
+			content = 'Deal ID ' + dealId + ' is not active';
+		}
+		else {
+
+			if (pauseBuy && pauseSell) {
+
+				pause = true;
+
+				pauseBuy = false;
+				pauseSell = false;
+			}
+
+			const pauseData = await shareData.DCABot.pauseDeal(botId, dealId, pause, pauseBuy, pauseSell);
+
+			if (!pauseData['success']) {
+
+				success = false;
+				content = pauseData['data'];
+			}
+		}
+	}
+	else {
+
+		success = false;
+		content = 'Invalid Deal ID';
+	}
+
+	const resObj = { 'date': new Date(), 'success': success, 'data': content };
+
+	shareData.Common.logger('API Pause Deal: ' + JSON.stringify(resObj));
 
 	res.send(resObj);
 }
@@ -1751,6 +1810,7 @@ module.exports = {
 	apiGetActiveDeals,
 	apiGetDealsHistory,
 	apiShowDeal,
+	apiPauseDeal,
 	apiCancelDeal,
 	apiUpdateDeal,
 	apiAddFundsDeal,

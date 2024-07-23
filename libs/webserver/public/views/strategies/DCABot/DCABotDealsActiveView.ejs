@@ -8,6 +8,17 @@
 	let modalId = 'activeDealsView';
 	let activeBots = [];
 
+	const addFundsButton = '<span class="disableButton">$+</span>';
+	const editButton = '<span class="disableButton">&#9998;</span>';
+	const cancelButton = '<span class="disableButton">X</span>';
+	const pauseButton = '<span class="disableButton">&#8545;</span>';
+	const resumeButton = '<span class="disableButton">&#9658;</span>';
+	const stopButton = '<span class="disableButton">&#9726;</span>';
+	const panicButton = '<span class="disableButton" style="font-size: 1.0rem;">&#128176</span>';
+
+	const convertBoolean = new Function('return ' + `<%- convertBoolean %>`)();
+
+
 	function setReloadTimeout() {
 
 		timeOutId = setTimeout(() => { getActiveDeals(); }, 5000);
@@ -257,6 +268,125 @@
 	}
 
 
+	function pauseDeal(pair, dealId, pause, pauseBuy, pauseSell) {
+
+		let pairSplit = pair.split('/');
+		let quote = pairSplit[1];
+
+		$.confirm({
+			title: false,
+			boxWidth: "50%",
+			useBootstrap: false,
+	 		content: `<div style="font-size: 1.2rem; text-align: left;">Pause deal ${dealId}?<br><br>
+			<form action="" style="display: inline;">
+			This will pause or resume any further buying and / or selling for this deal
+			<br><br>
+
+			<input id="dealPauseBuy" name="dealPauseBuy" type=checkbox class="form-field"> &nbsp; <b>Pause Buy</b>
+			<br>
+			<input id="dealPauseSell" name="dealPauseSell" type=checkbox class="form-field"> &nbsp; <b>Pause Sell</b>
+
+			<br><br>
+			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">PAUSE</span> deal</b>
+			</form>
+			</div>`,
+			buttons: {
+				  formSubmit: {
+					  btnClass: 'btn-default',
+					  text: '<div style="color: #d80f08;">Pause Deal</div>',
+					  action: function() {
+
+						const inputValue = parseFloat($('#confirmNum').val());
+						const confirmBox = $('#confirmBox').prop('checked');
+
+						const pauseBuy = convertBoolean($('#dealPauseBuy').prop('checked'), false);
+						const pauseSell = convertBoolean($('#dealPauseSell').prop('checked'), false);
+
+						if (!confirmBox) {
+
+							alertBox('You must check the box to confirm pause deal', function() {});
+						}
+						else {
+
+							processPauseDeal(dealId, pauseBuy, pauseSell);
+				 		}
+			  		},
+				},
+		  		cancel: {
+			 		btnClass: 'btn-default',
+			  		text: '<div style="color: #000000;">Cancel</div>',
+			  		action: function() {},
+				},
+			},
+			onOpenBefore: function () {
+ 
+				// Set both buy and sell to true
+				if (pause) {
+
+					pauseBuy = true;
+					pauseSell = true;
+				}
+
+				$('#dealPauseBuy').simpleSwitch();
+				$('#dealPauseSell').simpleSwitch();
+
+				$('#dealPauseBuy').prop('checked', pauseBuy);
+				$('#dealPauseBuy').switchToggle(pauseBuy);
+
+				$('#dealPauseSell').prop('checked', pauseSell);
+				$('#dealPauseSell').switchToggle(pauseSell);
+			},
+	  		onContentReady: function() {
+
+				$('#confirmBox').prop('checked', false);
+
+				let jc = this;
+		  		this.$content.find("form").on("submit", function(e) {
+					e.preventDefault();
+			  		jc.$$formSubmit.trigger("click");
+		  		});
+	  		},
+  		});
+	}
+
+
+	function processPauseDeal(dealId, pauseBuy, pauseSell) {
+
+		const requestBody = {
+
+			pauseBuy: pauseBuy,
+			pauseSell: pauseSell
+		};
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+
+			type: 'POST',
+	  		url: '/api/deals/' + dealId + '/pause',
+	  		data: requestBody,
+	  		dataType: 'json',
+	  		success: function(data) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+				if (!data.success) {
+					alertBox('Unable to update pause status for deal: ' + data['data'], function() {});
+				}
+				else {
+					alertBox('Successfully updated pause status for deal: ' + dealId, function() {});
+				}
+			},
+			error: function(data) {
+				// Some error in ajax call
+				$('#spinner-overlay').fadeOut(100);
+
+				alertBox('Error: ' + JSON.stringify(data), function() {});
+			},
+		});
+	}
+
+
 	function cancelDeal(pair, dealId) {
 
 		let pairSplit = pair.split('/');
@@ -480,12 +610,13 @@
 
 			activeDeals++;
 
-			//let stopButton = '<span class="disableButton">&#x026AB;</span>';
-			let addFundsButton = '<span class="disableButton">$+</span>';
-			let editButton = '<span class="disableButton">&#9998;</span>';
-			let cancelButton = '<span class="disableButton">X</span>';
-			let stopButton = '<span class="disableButton">&#9726;</span>';
-			let panicButton = '<span class="disableButton" style="font-size: 1.0rem;">&#128176</span>';
+			let addFundsButtonDeal = addFundsButton;
+			let editButtonDeal = editButton;
+			let cancelButtonDeal = cancelButton;
+			let pauseButtonDeal = pauseButton;
+			let resumeButtonDeal = resumeButton;
+			let stopButtonDeal = stopButton;
+			let panicButtonDeal = panicButton;
 
 			let dealVolume = deals[i].orders.filter(order => order.filled).reduce((acc, order) => acc + Number(order.amount), 0);
 
@@ -500,6 +631,9 @@
 
 			const config = deal['config'];
 			const dealId = deal['dealId'];
+			const pause = deal['info']['pause'];
+			const pauseBuy = deal['info']['pause_buy'];
+			const pauseSell = deal['info']['pause_sell'];
 			const dealError = deal['info']['error'];
 			const lastUpdated = deal['info']['updated'];
 			const botActive = deal['info']['bot_active'];
@@ -510,7 +644,12 @@
 
 			if (!botActive) {
 
-				stopButton = '';
+				stopButtonDeal = '';
+			}
+
+			if (pause || pauseBuy || pauseSell) {
+
+				pauseButtonDeal = resumeButton;
 			}
 
 			if (profitPerc <= 0) {
@@ -599,11 +738,12 @@
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
 			contentArr.push('<td>' + dealCount + '</td>');
-			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButton + '</div></td>');
-			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButton + '</div></td>');
-			contentArr.push('<td style="text-align: center;"><div id="cancel' + dealId + i + '">' + cancelButton + '</div></td>');
-			contentArr.push('<td style="text-align: center;"><div id="add' + dealId + i + '">' + addFundsButton + '</div></td>');
-			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButton + '</div></td>');
+			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButtonDeal + '</div></td>');
+			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButtonDeal + '</div></td>');
+			contentArr.push('<td style="text-align: center;"><div id="add' + dealId + i + '">' + addFundsButtonDeal + '</div></td>');
+			contentArr.push('<td data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" style="text-align: center;"><div id="pause' + dealId + i + '">' + pauseButtonDeal + '</div></td>');
+			contentArr.push('<td style="text-align: center;"><div id="cancel' + dealId + i + '">' + cancelButtonDeal + '</div></td>');
+			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButtonDeal + '</div></td>');
 			contentArr.push('</tr>');
 		}
 
@@ -784,6 +924,7 @@
 
 			if (col == 2) {
 
+				// TradingView Chart
 				let pair = content;
 				let dealId = row.data('dealid');
 				let exchange = dealTracker[dealId]['config']['exchange'].toUpperCase();
@@ -792,7 +933,7 @@
 			}
 			else if (col == (colCount - 1) && content != '') {
 
-				// Stop bot
+				// Disable / Stop Bot
 				let data = { 'bot_id': '' };
 
 				let botId = $(this).data('botid');
@@ -807,16 +948,7 @@
 			}
 			else if (col == (colCount - 2)) {
 
-				let pair = row.data('pair');
-				let dealId = row.data('dealid');
-
-				if (dealId) {
-
-					showAddFunds(pair, dealId);	
-				}
-      		}
-			else if (col == (colCount - 3)) {
-
+				// Cancel Deal
 				let pair = row.data('pair');
 				let dealId = row.data('dealid');
 
@@ -824,10 +956,36 @@
 
 					cancelDeal(pair, dealId);	
 				}
+      		}
+			else if (col == (colCount - 3)) {
+
+				// Pause Deal
+				let pair = row.data('pair');
+				let dealId = row.data('dealid');
+
+				let pause = $(this).data('pause');
+				let pauseBuy = $(this).data('pausebuy');
+				let pauseSell = $(this).data('pausesell');
+
+				if (dealId) {
+
+					pauseDeal(pair, dealId, pause, pauseBuy, pauseSell);
+				}
 			}
 			else if (col == (colCount - 4)) {
 
-				// Panic sell
+				// Add Funds
+				let pair = row.data('pair');
+				let dealId = row.data('dealid');
+
+				if (dealId) {
+
+					showAddFunds(pair, dealId);	
+				}
+			}
+			else if (col == (colCount - 5)) {
+
+				// Panic Sell / Close Deal
 				let dealId = row.data('dealid');
 
 				if (dealId) {
@@ -835,9 +993,9 @@
 					panicSellConfirm(dealId);
 				}
 			}
-			else if (col == (colCount - 5)) {
+			else if (col == (colCount - 6)) {
 
-				// Edit deal
+				// Edit Deal
 				let data = { 'deal_id': '' };
 
 				let dealId = row.data('dealid');
@@ -851,6 +1009,7 @@
 			}
 			else {
 
+				// Order History
 				let dealId = row.data('dealid');
 
 				if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
@@ -863,6 +1022,7 @@
 		});
 
 		$('#active-bot-filter').change(() => {
+
 			getActiveDeals();
 		})
 		
@@ -915,7 +1075,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

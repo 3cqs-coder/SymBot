@@ -494,6 +494,17 @@ POST /api/deals/{dealId}/update_deal
 POST /api/deals/{dealId}/add_funds
 ```
 
+### Pause deal
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| pause    | boolean  | NO            | false                | Pause or resume both buy and sell orders |
+| pauseBuy | boolean  | NO            | false                | Pause or resume only buy orders |
+| pauseSell| boolean  | NO            | false                | Pause or resume only sell orders |
+
+```
+POST /api/deals/{dealId}/pause
+```
 
 ### Cancel deal
 
@@ -702,6 +713,20 @@ curl -i -X POST \
 		"volume": 25
 	}' \
 http://127.0.0.1:3000/api/deals/{dealId}/add_funds
+```
+
+#### Pause deal
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{
+		"pause": true,
+		"pauseBuy": false,
+		"pauseSell: false
+	}' \
+http://127.0.0.1:3000/api/deals/{dealId}/pause
 ```
 
 #### Cancel deal

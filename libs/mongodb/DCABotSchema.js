@@ -16,6 +16,9 @@ const BotSchema = new Schema({
 const DealSchema = new Schema({
 	active: Boolean,
 	canceled: Boolean,
+	paused: Boolean,
+	pausedBuy: Boolean,
+	pausedSell: Boolean,
 	panicSell: Boolean,
 	botId: String,
 	botName: String,

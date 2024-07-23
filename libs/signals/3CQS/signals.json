@@ -264,6 +264,10 @@
 			"description": "SymSenser"
 		},
 		{
+			"id": "sym_sync",
+			"description": "SymSync"
+		},
+		{
 			"id": "market_cap_rank",
 			"description": "Market Cap Rank"
 		},
