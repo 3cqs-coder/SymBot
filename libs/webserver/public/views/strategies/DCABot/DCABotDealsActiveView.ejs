@@ -5,16 +5,43 @@
 	let timeOutId;
 	let dealTracker = {};
 	let dealTrackerErrors = {};
-	let modalId = 'activeDealsView';
 	let activeBots = [];
+	let modalId = 'activeDealsView';
 
-	const addFundsButton = '<span class="disableButton">$+</span>';
-	const editButton = '<span class="disableButton">&#9998;</span>';
-	const cancelButton = '<span class="disableButton">X</span>';
-	const pauseButton = '<span class="disableButton">&#8545;</span>';
-	const resumeButton = '<span class="disableButton">&#9658;</span>';
-	const stopButton = '<span class="disableButton">&#9726;</span>';
-	const panicButton = '<span class="disableButton" style="font-size: 1.0rem;">&#128176</span>';
+	const tooltipDelayMs = 250;
+	const tooltipDisplayDelayMs = 1000;
+
+	const actionButtons = {
+							'add': {
+										'button': '<span class="disableButton">$+</span>',
+										'tooltip': 'Add funds to deal'
+									},
+							'cancel': {
+										'button': '<span class="disableButton">X</span>',
+										'tooltip': 'Cancel deal'
+									},
+							'edit': {
+										'button': '<span class="disableButton">&#9998;</span>',
+										'tooltip': 'Edit deal'
+									},
+							'panic': {
+										'button': '<span class="disableButton" style="font-size: 1.0rem;">&#128176</span>',
+										'tooltip': 'Close deal'
+									},
+							'pause': {
+										'button': '<span class="disableButton">&#8545;</span>',
+										'tooltip': 'Pause deal'
+									},
+							'resume': {
+										'button': '<span class="disableButton">&#9658;</span>',
+										'tooltip': 'Resume deal'
+									},
+							'stop': {
+										'button': '<span class="disableButton">&#9726;</span>',
+										'tooltip': 'Stop bot'
+									}
+						  };
+
 
 	const convertBoolean = new Function('return ' + `<%- convertBoolean %>`)();
 
@@ -277,7 +304,7 @@
 			title: false,
 			boxWidth: "50%",
 			useBootstrap: false,
-	 		content: `<div style="font-size: 1.2rem; text-align: left;">Pause deal ${dealId}?<br><br>
+	 		content: `<div style="font-size: 1.2rem; text-align: left;">Pause / Resume deal ${dealId}?<br><br>
 			<form action="" style="display: inline;">
 			This will pause or resume any further buying and / or selling for this deal
 			<br><br>
@@ -287,13 +314,13 @@
 			<input id="dealPauseSell" name="dealPauseSell" type=checkbox class="form-field"> &nbsp; <b>Pause Sell</b>
 
 			<br><br>
-			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">PAUSE</span> deal</b>
+			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">PAUSE / RESUME</span> deal</b>
 			</form>
 			</div>`,
 			buttons: {
 				  formSubmit: {
 					  btnClass: 'btn-default',
-					  text: '<div style="color: #d80f08;">Pause Deal</div>',
+					  text: '<div style="color: #d80f08;">Pause / Resume Deal</div>',
 					  action: function() {
 
 						const inputValue = parseFloat($('#confirmNum').val());
@@ -304,7 +331,7 @@
 
 						if (!confirmBox) {
 
-							alertBox('You must check the box to confirm pause deal', function() {});
+							alertBox('You must check the box to confirm pause / resume deal', function() {});
 						}
 						else {
 
@@ -610,13 +637,15 @@
 
 			activeDeals++;
 
-			let addFundsButtonDeal = addFundsButton;
-			let editButtonDeal = editButton;
-			let cancelButtonDeal = cancelButton;
-			let pauseButtonDeal = pauseButton;
-			let resumeButtonDeal = resumeButton;
-			let stopButtonDeal = stopButton;
-			let panicButtonDeal = panicButton;
+			let {
+					add: { button: addFundsButtonDeal },
+					edit: { button: editButtonDeal },
+					cancel: { button: cancelButtonDeal },
+					pause: { button: pauseButtonDeal },
+					resume: { button: resumeButtonDeal },
+					stop: { button: stopButtonDeal },
+					panic: { button: panicButtonDeal }
+			} = actionButtons;
 
 			let dealVolume = deals[i].orders.filter(order => order.filled).reduce((acc, order) => acc + Number(order.amount), 0);
 
@@ -624,6 +653,7 @@
 
 			let dealBackground = '';
 			let profitPercColor = '#1a9f00';
+			let pauseButtonId = 'pause';
 
 			let dealCount;
 
@@ -649,7 +679,8 @@
 
 			if (pause || pauseBuy || pauseSell) {
 
-				pauseButtonDeal = resumeButton;
+				pauseButtonId = 'resume';
+				pauseButtonDeal = resumeButtonDeal;
 			}
 
 			if (profitPerc <= 0) {
@@ -741,7 +772,7 @@
 			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButtonDeal + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButtonDeal + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="add' + dealId + i + '">' + addFundsButtonDeal + '</div></td>');
-			contentArr.push('<td data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" style="text-align: center;"><div id="pause' + dealId + i + '">' + pauseButtonDeal + '</div></td>');
+			contentArr.push('<td data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" style="text-align: center;"><div id="' + pauseButtonId + dealId + i + '">' + pauseButtonDeal + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="cancel' + dealId + i + '">' + cancelButtonDeal + '</div></td>');
 			contentArr.push('<td data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '" style="text-align: center;"><div id="stop' + deal['info']['bot_id'] + i + '">' + stopButtonDeal + '</div></td>');
 			contentArr.push('</tr>');
@@ -787,11 +818,64 @@
 
 	$(document).ready(function() {
  
- 		$('#dealLast').simpleSwitch();
+		let tooltipDisplayTime = {};
+
+		function getTooltipText(id) {
+
+			for (var key in actionButtons) {
+
+				if (id.startsWith(key)) {
+
+					return actionButtons[key]['tooltip'];
+				}
+			}
+
+			return null;
+		}
+
+
+		$(document).on('mouseenter', '[id]', function() {
+
+			let $this = $(this);
+			let tooltipText = getTooltipText($this.attr('id'));
+
+			if (tooltipText) {
+
+				let now = Date.now();
+				let lastDisplay = tooltipDisplayTime[$this.attr('id')];
+
+				if (!lastDisplay || now - lastDisplay >= tooltipDisplayDelayMs) {
+
+					$this.data('tooltipTimeout', setTimeout(function() {
+
+						let tooltip = $('<div class="toolTipButtons"></div>').appendTo('body');
+						
+						tooltip.text(tooltipText).css({
+														'top': $this.offset().top - tooltip.outerHeight() - 10,
+														'left': $this.offset().left + ($this.outerWidth() / 2) - (tooltip.outerWidth() / 2)
+													  }).fadeIn(200);
+
+						tooltipDisplayTime[$this.attr('id')] = now;
+
+					}, tooltipDelayMs));
+				}
+			}
+		});
+
+
+		$(document).on('mouseleave click', '[id]', function() {
+
+			clearTimeout($(this).data('tooltipTimeout'));
+
+			$('.toolTipButtons').fadeOut(200);
+		});
+
+
+		$('#dealLast').simpleSwitch();
  
 		$(window).resize(function() {
 
-			resizeBotsDeals();
+	 		resizeBotsDeals();
 		});
 
 

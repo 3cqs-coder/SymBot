@@ -263,7 +263,14 @@
 				const signalSource = data[1];
 				const signalId = data[2];
 
-				startCondition = appData['bots']['start_conditions'][startCondition]['description'];
+				try {
+
+					startCondition = appData['bots']['start_conditions'][startCondition]['description'];
+				}
+				catch(e) {
+
+					startCondition = ' INVALID START CONDITION: ' + signalSource + ' ID: ' + signalId;
+				}
 			}
 			else {
 

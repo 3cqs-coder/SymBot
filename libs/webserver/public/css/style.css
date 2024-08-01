@@ -913,6 +913,22 @@ table#botsDeals tr:hover {
 }
 
 
+.toolTipButtons {
+
+	z-index: 7000;
+	display: none;
+	position: absolute;
+	background-color: #525252;
+	border: 1px solid #525252;
+	color: #ffffff;
+	border-radius: 5px;
+	padding: 5px;
+	cursor: pointer;
+	font-size: 0.98rem;
+	white-space: nowrap;
+}
+
+
 #dealSelectorShow {
 
 	position: absolute;

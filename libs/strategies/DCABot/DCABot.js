@@ -4429,10 +4429,9 @@ async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell) {
 
 	let status;
 	let success;
+	let dataUpdated = {};
 
 	pause = pause ?? false;
-
-	Common.logger(colors.red.bold(`Deal ID ${dealId} pause update requested.`));
 
 	if (pauseBuy && pauseSell) {
 
@@ -4469,6 +4468,8 @@ async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell) {
 				[dbKey]: convertedVal
 			});
 
+			dataUpdated[dbKey] = convertedVal;
+
 			if (dataUpdate.success) {
 
 				success = true;
@@ -4483,7 +4484,18 @@ async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell) {
 		}
 	}
 
-	return ({ success, data: `Deal ID ${dealId} ${status}` });
+	const dataObj = {
+						'success': success,
+						'data': 'Deal ID ' + dealId + ' ' + status,
+						'data_updated': dataUpdated
+					};
+
+	if (shareData.appData.verboseLog) {
+
+		Common.logger(colors.red.bold(dataObj));
+	}
+
+	return dataObj;
 }
 
 
