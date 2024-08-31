@@ -6,8 +6,7 @@
 	let confirmStart = false;
 
 	let formAction = '<%- formAction %>';
-	let pairButtons = <%- '[' + appData.bots['pair_autofill_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
-	let pairBlackList = <%- '[' + appData.bots['pair_autofill_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
+	let pairButtons = <%- '[' + appData.bots['pair_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
 	let startConditionsMeta = <%- JSON.stringify(appData.bots['start_conditions_metadata']) %>;
 
 	function formToJson(form) {
@@ -121,25 +120,8 @@
 
 			if (pairs[1].toUpperCase() == quote.toUpperCase()) {
 
-				let pairValid = true;
-
-				for (let x = 0; x < pairBlackList.length; x++) {
-
-					let pairRegExp = wildCardToRegExp(pairBlackList[x]);
-
-					if (new RegExp(pairRegExp, 'i').test(optionVal)) {
-
-						pairValid = false;
-
-						break;
-					}
-				}
-
-				if (pairValid) {
-
-					allPairs.push(optionVal);
-					//$('#pair option[value="' + optionVal + '"]').attr('selected', true);
-				}
+				allPairs.push(optionVal);
+				//$('#pair option[value="' + optionVal + '"]').attr('selected', true);
 			}
 		}
 

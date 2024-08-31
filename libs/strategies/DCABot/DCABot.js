@@ -647,6 +647,8 @@ async function start(dataObj, startId) {
 
 	// Refresh bot config in case any settings changed
 
+	const isPairBlackListed = await Common.pairBlackListed(pair);
+
 	try {
 
 		const bot = await getBots({ 'botId': botIdMain });
@@ -747,9 +749,8 @@ async function start(dataObj, startId) {
 		}
 	}
 
-
-	// Start another bot deal if max deals and max pairs have not been reached
-	if (!pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
+	// Start another bot deal if max deals, max pairs have not been reached, and pair is not blacklisted
+	if (!isPairBlackListed && !pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
@@ -812,6 +813,13 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 	if (shareData.appData.database_error != undefined && shareData.appData.database_error != null && shareData.appData.database_error != '') {
 
 		Common.logger(colors.red.bold(shareData.appData.database_error + ' - Not processing'));
+
+		return ( { 'success': false, 'finished': false } );
+	}
+
+	if (shareData.appData.system_pause != undefined && shareData.appData.system_pause != null && shareData.appData.system_pause != '') {
+
+		Common.logger(colors.red.bold('System Paused: ' + shareData.appData.system_pause + ' - Not processing deal ' + dealId));
 
 		return ( { 'success': false, 'finished': false } );
 	}
@@ -3197,6 +3205,38 @@ async function updateOrders(data) {
 }
 
 
+async function convertDataToSandBox() {
+
+	let botData;
+	let dealData;
+	let success = true;
+
+	try {
+
+		botData = await Bots.updateMany({}, { '$set': { 'config.sandBox': true } });
+		dealData = await Deals.updateMany({}, { '$set': { 'config.sandBox': true } });
+	}
+	catch (e) {
+
+		success = false;
+
+		Common.logger(JSON.stringify(e));
+	}
+
+	if (botData == undefined || botData == null || botData['matchedCount'] < 1) {
+
+		success = false;
+	}
+
+	if (dealData == undefined || dealData == null || dealData['matchedCount'] < 1) {
+
+		success = false;
+	}
+
+	return( { 'success': success } );
+}
+
+
 async function checkTrackers() {
 
 	// Monitor existing deals if they weren't updated after n minutes to take potential action
@@ -4666,6 +4706,8 @@ async function addFundsDeal(dealId, volume) {
 					newOrder.dateFilled = new Date();
 
 					oldOrders.splice(i, 0, newOrder);
+
+					orderNo = newOrder.orderNo;
 				}
 
 			} else if (isUpdated) {
@@ -4797,6 +4839,8 @@ async function startDelay(dataObj) {
 
 async function initApp() {
 
+	shareData.appData.starting_dca = true;
+
 	const loadMarketHours = 4;
 
 	// Don't initialize if resetting database
@@ -4845,6 +4889,8 @@ async function initApp() {
 	//getBalanceTracker();
 
 	startSignals();
+
+	delete shareData.appData.starting_dca;
 }
 
 
@@ -4879,6 +4925,7 @@ module.exports = {
 	resumeDeal,
 	getBalance,
 	getPairData,
+	convertDataToSandBox,
 
 	init: function(obj) {
 

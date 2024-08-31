@@ -1,0 +1,389 @@
+<%- include('./partialsHeaderView'); %>
+
+<script>
+
+function shutDownSystem() {
+
+$.confirm({
+	  title: false,
+	  boxWidth: "50%",
+	  useBootstrap: false,
+	  content: `<div style="font-size: 1.2rem; text-align: left;">Shutdown <%- appData.name %>?<br><br>
+	<form action="" style="display: inline;">
+	<B>WARNING:</b>
+
+		<ul>
+			<li>This will shutdown <%- appData.name %>.
+			<li>All functionality will stop and will only resume after the system is back up.
+			<li>If you do not have a process manager to automatically restart  <%- appData.name %>, you will need to manually start it again.
+		</ul>
+
+	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">SHUTDOWN</span> <%- appData.name %></b>
+	</form>
+	</div>`,
+	  buttons: {
+		  formSubmit: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #d80f08;">Shutdown</div>',
+			  action: function() {
+
+				const inputValue = parseFloat($('#confirmNum').val());
+				const confirmBox = $('#confirmBox').prop('checked');
+
+				if (!confirmBox) {
+
+					alertBox('You must check the box to confirm shutdown', function() {});
+				}
+				else {
+
+					processShutDown();
+				 }
+			  },
+		  },
+		  cancel: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #000000;">Cancel</div>',
+			  action: function() {},
+		},
+	},
+	  onContentReady: function() {
+
+		$('#confirmBox').prop('checked', false);
+
+		let jc = this;
+		  this.$content.find("form").on("submit", function(e) {
+			e.preventDefault();
+			  jc.$$formSubmit.trigger("click");
+		  });
+	  },
+  });
+}
+
+
+function backupDb() {
+
+$.confirm({
+	  title: false,
+	  boxWidth: "50%",
+	  useBootstrap: false,
+	  content: `<div style="font-size: 1.2rem; text-align: left;">Backup <%- appData.name %> Database?<br><br>
+	<form autocomplete="off" action="" style="display: inline;">
+		<B>WARNING:</b>
+
+		<ul>
+			<li>This will create a realtime backup of the <%- appData.name %> database.
+			<li>This could cause delays in other functionality while processing and data may change during the backup process.
+			<li>Write your password down in a safe place. You will not be able to restore the database without it.
+		</ul>
+
+		<label for="file-input"><b>Choose file encryption password:</b></label>
+		<input class="form-field" type="password" style="width: 200px;" id="encryptPassword" name="encryptPassword" required>
+
+		<label for="file-input"><b>Confirm encryption password:</b></label>
+		<input class="form-field" type="password" style="width: 200px;" id="encryptPasswordConfirm" name="encryptPasswordConfirm" required>
+
+		<br><br>
+		<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">BACKUP</span> database</b>
+	</form>
+	</div>`,
+	  buttons: {
+		  formSubmit: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #d80f08;">Backup</div>',
+			  action: function() {
+
+				const inputValue = parseFloat($('#confirmNum').val());
+				const confirmBox = $('#confirmBox').prop('checked');
+				const password = $('#encryptPassword').val();
+				const passwordConfirm = $('#encryptPasswordConfirm').val();
+
+				if (!confirmBox) {
+
+					alertBox('You must check the box to confirm backup', function() {});
+				}
+				else if (password == undefined || password == null || password == '') {
+
+					alertBox('You must enter a password to encrypt the file with', function() {});
+				}
+				else if (password !== passwordConfirm) {
+
+					alertBox('Passwords do not match', function() {});
+				}
+				else {
+
+					processBackupDb(password);
+				 }
+			  },
+		  },
+		  cancel: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #000000;">Cancel</div>',
+			  action: function() {},
+		},
+	},
+	  onContentReady: function() {
+
+		$('#confirmBox').prop('checked', false);
+
+		let jc = this;
+		  this.$content.find("form").on("submit", function(e) {
+			e.preventDefault();
+			  jc.$$formSubmit.trigger("click");
+		  });
+	  },
+  });
+}
+
+
+function restoreDb() {
+
+$.confirm({
+	  title: false,
+	  boxWidth: "50%",
+	  useBootstrap: false,
+	  content: `<div style="font-size: 1.2rem; text-align: left;">Restore <%- appData.name %> Database?<br><br>
+	<form action="" style="display: inline;">
+		<B>WARNING:</b> 
+		
+		<ul>
+			<li>This will delete all existing data in the <%- appData.name %> database.
+			<li>All bots and functionality will resume at the same point the backup was created.
+			<li>Be aware of any assets or orders on your exchange that may have already been previously bought, sold, etc.
+			<li><%- appData.name %> will shutdown after the restore completes. You must start it manually if you do not have a process manager that does it automatically.
+		</ul>
+	
+	<form id="restore-form" autocomplete="off" onsubmit="event.preventDefault();">
+		<label for="file-input"><b>Select backup file:</b></label>
+		<input class="form-field" type="file" style="width: 100%; cursor: pointer; border: 0;" id="file-input" name="backupFile" accept=".zip,.enc" required>
+
+		<label for="file-input"><b>File decryption password:</b></label>
+		<input class="form-field" type="password" style="width: 200px;" id="decryptPassword" name="decryptPassword" required>
+
+		<br><br>
+		<input id="convertData" name="convertData" type=checkbox class="form-field"> &nbsp; <b>Convert all bots and deals to sandbox mode</b>
+	</form>
+
+	<br><br>
+	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">RESTORE</span> database</b>
+	</form>
+	</div>`,
+	  buttons: {
+		  formSubmit: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #d80f08;">Restore</div>',
+			  action: function() {
+
+				const inputValue = parseFloat($('#confirmNum').val());
+				const confirmBox = $('#confirmBox').prop('checked');
+				const convertData = $('#convertData').prop('checked');
+				const password = $('#decryptPassword').val();
+
+				if (!confirmBox) {
+
+					alertBox('You must check the box to confirm restore', function() {});
+				}
+				else if (password == undefined || password == null || password == '') {
+
+					alertBox('You must enter the file password', function() {});
+				}
+				else {
+
+					processRestoreDb(password, convertData);
+				 }
+			  },
+		  },
+		  cancel: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #000000;">Cancel</div>',
+			  action: function() {},
+		},
+	},
+	onOpenBefore: function () {
+ 
+ 		$('#convertData').simpleSwitch();
+		$('#convertData').prop('checked', false);
+	},
+	onContentReady: function() {
+
+		$('#confirmBox').prop('checked', false);
+
+		let jc = this;
+		  this.$content.find("form").on("submit", function(e) {
+			e.preventDefault();
+			  jc.$$formSubmit.trigger("click");
+		  });
+	},
+  });
+}
+
+
+function processShutDown() {
+
+    const requestBody = {};
+
+    $('#spinner-overlay').fadeIn(100);
+
+    $.ajax({
+        type: 'POST',
+        url: '/system/shutdown',
+        data: requestBody,
+        dataType: 'json',
+        success: function(data) {
+            $('#spinner-overlay').fadeOut(100);
+
+			window.location.reload();
+        },
+        error: function(data) {
+            $('#spinner-overlay').fadeOut(100);
+
+            window.location.reload();
+        },
+    });
+}
+
+
+function processBackupDb(password) {
+
+	const requestBody = new URLSearchParams();
+	requestBody.append('password', password);
+
+	$('#spinner-overlay').fadeIn(100);
+
+	fetch('/system/backup', {
+			method: 'POST',
+			body: requestBody,
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+			}
+		})
+		.then(response => {
+
+			if (response.ok) {
+
+				// Extract filename from Content-Disposition header
+				const disposition = response.headers.get('Content-Disposition');
+				let filename = 'backup-file'; // Default filename
+
+				if (disposition && disposition.includes('attachment')) {
+
+					const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+
+					if (matches != null && matches[1]) {
+						filename = matches[1].replace(/['"]/g, '');
+					}
+				}
+
+				return response.blob().then(blob => {
+
+					// Create a link element, set the download attribute, and trigger the download
+					const link = document.createElement('a');
+					const url = URL.createObjectURL(blob);
+					link.href = url;
+					link.download = filename; // Use the extracted filename
+					document.body.appendChild(link);
+					link.click();
+					URL.revokeObjectURL(url);
+					document.body.removeChild(link);
+					$('#spinner-overlay').fadeOut(100);
+					alertBox('Database backup ' + filename + ' successful! Your download should start automatically.', function() {});
+				});
+			}
+			else {
+
+				return response.text().then(text => {
+					throw new Error(text);
+				});
+			}
+		})
+		.catch(error => {
+
+			$('#spinner-overlay').fadeOut(100);
+
+			alertBox(error.message || 'Error occurred while trying to backup the database.', function() {});
+		});
+}
+
+
+function processRestoreDb(password, convertData) {
+
+	const fileInput = $('#file-input')[0]; // Assuming you have an input with id="file-input"
+	const file = fileInput.files[0];
+
+	if (!file) {
+
+		alertBox('Please select a file to upload.');
+		return;
+	}
+
+	const formData = new FormData();
+
+	formData.append('backupFile', file);
+	formData.append('convertData', convertData);
+	formData.append('password', password);
+
+	$('#spinner-overlay').fadeIn(100);
+
+	$.ajax({
+		type: 'POST',
+		url: '/system/restore',
+		data: formData,
+		contentType: false, // Prevent jQuery from overriding content type
+		processData: false, // Prevent jQuery from processing the data
+		success: function(data) {
+
+			$('#spinner-overlay').fadeOut(100);
+
+			alertBox('Database restore successful!', function() {});
+		},
+		error: function(data) {
+
+			$('#spinner-overlay').fadeOut(100);
+
+			let message = 'Error occurred during the restore process.';
+
+			const responseText = data.responseText || message;
+
+			try {
+
+				const parsedResponse = JSON.parse(responseText);
+				message = parsedResponse.message || responseText;
+			}
+			catch (e) {
+
+				message = responseText;
+			}
+
+			alertBox(message, function() {});
+		}
+	});
+}
+
+
+</script>
+
+<main>
+
+	<div id="contentBox" style="text-align: center; max-width: 400px; margin-top: 40px;">
+
+	<div style="display: inline-block; text-align: left; font-size: 1.3rem; width: 70%;">
+
+		<div class="mainMenuItem">
+			<a href="javascript:void(0);" onclick="backupDb();">Backup Database</a>
+		</div>
+
+		<div class="mainMenuItem">
+			<a href="javascript:void(0);" onclick="restoreDb();">Restore Database</a>
+		</div>
+
+		<div class="mainMenuItem" style="border-bottom: 0;">
+			<a href="javascript:void(0);" onclick="shutDownSystem();">Shutdown</a>
+		</div>
+
+	</div>
+
+	</div>
+
+</main>
+
+
+<%- include('./partialsFooterView'); %>

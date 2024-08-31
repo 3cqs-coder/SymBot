@@ -1061,17 +1061,22 @@ async function apiCreateUpdateBot(req, res) {
 
 							let pair = pairs[i];
 
-							let config = JSON.parse(JSON.stringify(configObj));
-							config['pair'] = pair;
+							const isPairBlackListed = await shareData.Common.pairBlackListed(pair);
 
-							if (i > 0) {
+							if (!isPairBlackListed) {
 
-								notify = false;
+								let config = JSON.parse(JSON.stringify(configObj));
+								config['pair'] = pair;
+
+								if (pairCount > 0) {
+
+									notify = false;
+								}
+
+								pairCount++;
+
+								shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': notify });
 							}
-
-							pairCount++;
-
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': notify });
 						}
 					}
 				}
@@ -1126,26 +1131,31 @@ async function apiCreateUpdateBot(req, res) {
 
 						let pair = pairs[i];
 
-						let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+						const isPairBlackListed = await shareData.Common.pairBlackListed(pair);
 
-						let config = bot[0]['config'];
+						if (!isPairBlackListed) {
 
-						let pairMax = config.pairMax;
+							let dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
-						if (pairMax == undefined || pairMax == null || pairMax == '') {
+							let config = bot[0]['config'];
 
-							pairMax = 0;
-						}
+							let pairMax = config.pairMax;
 
-						config['pair'] = pair;
-						config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
+							if (pairMax == undefined || pairMax == null || pairMax == '') {
 
-						// Start bot if active, no deals are currently running and start condition is now asap
-						if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && (pairMax == 0 || pairCount < pairMax) && startCondition == 'asap') {
+								pairMax = 0;
+							}
 
-							pairCount++;
+							config['pair'] = pair;
+							config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
+							// Start bot if active, no deals are currently running and start condition is now asap
+							if (bot && bot.length > 0 && bot[0]['active'] && dealsActive.length == 0 && (pairMax == 0 || pairCount < pairMax) && startCondition == 'asap') {
+
+								pairCount++;
+
+								shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
+							}
 						}
 					}
 				}
@@ -1254,8 +1264,10 @@ async function apiEnableDisableBot(req, res) {
 					pairMax = 0;
 				}
 
-				// Start bot if active and no deals currently running
-				if (dealsActive.length == 0) {
+				const isPairBlackListed = await shareData.Common.pairBlackListed(pair);
+
+				// Start bot if active and no deals currently running and not blacklisted
+				if (dealsActive.length == 0 && !isPairBlackListed) {
 
 					let startCondition;
 
@@ -1391,6 +1403,17 @@ async function apiStartDealProcess(req, res, taskObj) {
 
 				success = false;
 				msg = 'Pair is not in bot configuration';
+			}
+
+			if (pairFound) {
+
+				const isPairBlackListed = await shareData.Common.pairBlackListed(pair);
+
+				if (isPairBlackListed) {
+
+					success = false;
+					msg = 'Pair is blacklisted';
+				}
 			}
 
 			if (success) {

@@ -39,8 +39,8 @@
 													}
 											}
 				},
-				"pair_autofill_buttons": [ "USD", "USDT", "USDC", "BUSD" ],
-				"pair_autofill_blacklist": [ "BTC/*", "WBTC/*", "ETH/*", "CBETH/*", "UST/*", "USD/*", "USDC/*", "USDD/*", "USDT/*", "BUSD/*", "GUSD/*", "TUSD/*", "PYUSD/*", "DAI/*", "EURC/*", "EUROC/*", "PAX/*" ]
+				"pair_buttons": [ "USD", "USDT", "USDC", "BUSD" ],
+				"pair_blacklist": [ "BTC/*", "WBTC/*", "ETH/*", "CBETH/*", "UST/*", "USD/*", "USDC/*", "USDD/*", "USDT/*", "BUSD/*", "GUSD/*", "TUSD/*", "PYUSD/*", "DAI/*", "EURC/*", "EUROC/*", "PAX/*" ]
 			},
 	"signals": {
 				 	"3CQS": {

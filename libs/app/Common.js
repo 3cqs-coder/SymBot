@@ -145,11 +145,11 @@ async function updateConfig(req, res) {
 			telegramEnabled = true;
 		}
 
-		appConfig['bots']['pair_autofill_buttons'] = pairButtonsUC;
-		shareData['appData']['bots']['pair_autofill_buttons'] = pairButtonsUC;
+		appConfig['bots']['pair_buttons'] = pairButtonsUC;
+		shareData['appData']['bots']['pair_buttons'] = pairButtonsUC;
 
-		appConfig['bots']['pair_autofill_blacklist'] = pairBlacklistUC;
-		shareData['appData']['bots']['pair_autofill_blacklist'] = pairBlacklistUC;
+		appConfig['bots']['pair_blacklist'] = pairBlacklistUC;
+		shareData['appData']['bots']['pair_blacklist'] = pairBlacklistUC;
 
 		appConfig['telegram']['enabled'] = telegramEnabled;
 		shareData['appData']['telegram_enabled'] = telegramEnabled;
@@ -166,6 +166,38 @@ async function updateConfig(req, res) {
 		
 		res.send(obj);
 	}
+}
+
+
+async function pairBlackListed(pair) {
+
+    let pairInvalid = false;
+
+	const pairBlackList = shareData.appData.bots['pair_blacklist'];
+
+    function wildCardToRegExp(str) {
+
+		return new RegExp('^' + str.split(/\*+/).map(regExpEscape).join('.*') + '$');
+    }
+
+    function regExpEscape(str) {
+
+		return str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
+    }
+
+    for (let x = 0; x < pairBlackList.length; x++) {
+
+		let pairRegExp = wildCardToRegExp(pairBlackList[x]);
+
+        if (new RegExp(pairRegExp, 'i').test(pair)) {
+
+			pairInvalid = true;
+
+			break;
+        }
+    }
+
+    return pairInvalid;
 }
 
 
@@ -508,6 +540,8 @@ async function logger(data, consoleLog) {
 
 function logMonitor() {
 
+	const hoursInterval = 4;
+
 	let maxDays = shareData['appData']['max_log_days'];
 
 	if (maxDays == undefined || maxDays == null || maxDays < 1) {
@@ -515,10 +549,14 @@ function logMonitor() {
 		maxDays = 10;
 	}
 
-	// Monitor and remove old logs
+	// Monitor and remove old logs and backups
 	setInterval(() => {
+
 		delFiles(pathRoot + '/logs', maxDays);
-	}, 43200);
+		delFiles(pathRoot + '/backups', 1, true);
+		delFiles(pathRoot + '/uploads', 1, true);
+
+	}, (hoursInterval * (60 * 60 * 1000)));
 }
 
 
@@ -586,32 +624,71 @@ async function getSignalConfigs() {
 }
 
 
-function delFiles(path, days) {
+function delFiles(directory, days, deleteSubdirs) {
 
-	let dateNow = new Date();
+    const dateNow = new Date();
+    const secondsPerDay = 86400;
 
-	let files = fs.readdirSync(path);
+    function isDirectoryEmpty(dir) {
 
-	for (let i in files) {
-		let file = path + '/' + files[i];
+        return fs.readdirSync(dir).length === 0;
+    }
 
-		let stats = fs.statSync(file);
+    function getDirectoryModificationTime(dir) {
 
-		let created = stats.ctime;
-		let modified = stats.mtime;
+        try {
+            const stats = fs.statSync(dir);
+            return stats.mtime;
+        }
+		catch (err) {
 
-		let diffSec = (new Date(dateNow).getTime() - new Date(modified).getTime()) / 1000;
+			//console.error(`Error getting modification time for directory ${dir}:`, err);
+            return null;
+        }
+    }
 
-		if (diffSec >= 86400 * days) {
-		
-			if (!stats.isDirectory()) {
+    function deleteFilesInDir(dir, days) {
 
-				let diffDays = Math.round(diffSec / 86400);
+        let isDirEmpty = true;
+        let dirModifiedTime = getDirectoryModificationTime(dir);
 
-				fs.unlinkSync(file);
-			}
-		}
-	}
+        fs.readdirSync(dir).forEach(file => {
+
+            const filePath = path.join(dir, file);
+            const stats = fs.statSync(filePath);
+            const diffSec = (dateNow.getTime() - stats.mtime.getTime()) / 1000;
+
+            if (stats.isDirectory()) {
+                // Recursively process subdirectories
+                if (deleteSubdirs) {
+                    deleteFilesInDir(filePath, days);
+
+                    // Get the updated modification time after processing subdirectory
+                    dirModifiedTime = getDirectoryModificationTime(dir);
+
+                    // Remove empty subdirectory if it's not the main directory
+                    if (dir !== directory && isDirectoryEmpty(filePath)) {
+                        fs.rmdirSync(filePath);
+                    }
+                }
+                isDirEmpty = false; // A directory is not empty if it has files or subdirectories
+            } else if (diffSec >= secondsPerDay * days) {
+                fs.unlinkSync(filePath);
+                isDirEmpty = false;
+            }
+        });
+
+        // Remove directory if it's empty, deleteSubdirs is true, and it's not the main directory
+        if (deleteSubdirs && dir !== directory && isDirEmpty && isDirectoryEmpty(dir)) {
+            // Check if the directory modification time is old enough to be deleted
+            const dirAgeSec = (dateNow.getTime() - dirModifiedTime.getTime()) / 1000;
+            if (dirAgeSec >= secondsPerDay * days) {
+                fs.rmdirSync(dir);
+            }
+        }
+    }
+
+    deleteFilesInDir(directory, days);
 }
 
 
@@ -1065,7 +1142,7 @@ async function verifyLogin(req, res) {
 
 	if (success) {
 
-		goHome(req, res);
+		renderView('homeView', req, res);
 	}
 	else {
 
@@ -1106,9 +1183,9 @@ function validateApiKey(key) {
 }
 
 
-async function goHome(req, res) {
+async function renderView(view, req, res) {
 
-	res.render( 'homeView', { 'appData': shareData.appData } );
+	res.render( view, { 'appData': shareData.appData } );
 }
 
 
@@ -1193,6 +1270,7 @@ module.exports = {
 	getSignalConfigs,
 	saveConfig,
 	updateConfig,
+	pairBlackListed,
 	getData,
 	saveData,
 	getDateParts,
@@ -1209,7 +1287,7 @@ module.exports = {
 	verifyPasswordHash,
 	verifyLogin,
 	validateApiKey,
-	goHome,
+	renderView,
 	timeDiff,
 	logger,
 	logMonitor,

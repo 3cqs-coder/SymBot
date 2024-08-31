@@ -17,6 +17,7 @@ const DCABotManager = require(__dirname + '/libs/strategies/DCABot/DCABotManager
 const Signals3CQS = require(__dirname + '/libs/signals/3CQS/3cqs-signals-client.js');
 const Common = require(__dirname + '/libs/app/Common.js');
 const Queue = require(__dirname + '/libs/app/Queue.js');
+const System = require(__dirname + '/libs/app/System.js');
 const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const packageJson = require(__dirname + '/package.json');
@@ -52,7 +53,6 @@ process.on('uncaughtException', function(err) {
 
 	Common.logger(logData, true);
 });
-
 
 
 
@@ -245,6 +245,7 @@ async function init() {
 						'DCABotManager': DCABotManager,
 						'Common': Common,
 						'Queue': Queue,
+						'System': System,
 						'Telegram': Telegram,
 						'WebServer': WebServer
 					};
@@ -254,6 +255,7 @@ async function init() {
 	Common.init(shareData);
 	Queue.init(shareData);
 	DB.init(shareData);
+	System.init(shareData, shutDown);
 	Signals3CQS.init(shareData);
 	DCABot.init(shareData);
 	DCABotManager.init(shareData);
@@ -281,13 +283,17 @@ async function init() {
 
 	if (success) {
 
-		let dbStarted =	await DB.start(appConfig.data.mongo_db_url);
+		const dbUrl = appConfig.data.mongo_db_url;
+
+		let dbStarted =	await DB.start(dbUrl);
 
 		if (!dbStarted) {
 
 			success = false;
 		}
 		else {
+
+			await System.start(dbUrl);
 
 			let res = await verifyServerId(serverConfig);
 			
@@ -479,6 +485,8 @@ async function start() {
 
 	let initData;
 
+	await Common.makeDir('backups');
+	await Common.makeDir('uploads');
 	await Common.makeDir('logs');
 	await Common.makeDir('logs/services');
 	await Common.makeDir('logs/services/notifications');

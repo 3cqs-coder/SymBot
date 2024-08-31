@@ -4,8 +4,8 @@
 
 	const token = '<%= token %>';
 	const telegram = '<%= appData['telegram_enabled'] %>';
-	const pairButtons = <%- '[' + appData.bots['pair_autofill_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
-	const pairBlackList = <%- '[' + appData.bots['pair_autofill_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
+	const pairButtons = <%- '[' + appData.bots['pair_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
+	const pairBlackList = <%- '[' + appData.bots['pair_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
 
 	function convertBoolean(param) {
 
@@ -229,7 +229,7 @@
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
-				<label for="pairbuttons">Pair Autofill Buttons
+				<label for="pairbuttons">Pair Buttons
 					<span class="toolTip">?<span class="toolTipText">
 						These are buttons used to automatically fill in all pairs after clicking on one when creating or updating bots.
 					</span></span>
@@ -239,9 +239,9 @@
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
-				<label for="pairblacklist">Pair Autofill Blacklist
+				<label for="pairblacklist">Pair Blacklist
 					<span class="toolTip">?<span class="toolTipText">
-						These are trading pairs that you do not want automatically filled in the pair selection box when creating or updating bots after clicking one of the stablecoin buttons such as USD or USDT. You can use full pairs such as BTC/USD or wildcards such as BTC/*. Updating this list will not modify existing bot pairs or block them from being used.
+						These are pairs that you do not want to trade. You can use full pairs such as BTC/USD or wildcards such as BTC/*.
 					</span></span>
 				</label>
 				<select id="pairblacklist" name="pairblacklist" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>

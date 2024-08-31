@@ -10,6 +10,7 @@ const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const express = require('express');
 const session = require('express-session');
+const multer = require('multer');
 const MongoDBStore = require('connect-mongodb-session')(session);
 const app = express();
 const router = express.Router();
@@ -81,14 +82,13 @@ function initApp() {
 		req.setTimeout((timeOut - (1000 * 5)));
 		res.append('Server', shareData.appData.name + ' v' + shareData.appData.version);
 
-		if (shareData.appData.database_error != undefined && shareData.appData.database_error != null && shareData.appData.database_error != '') {
+		if (shareData.appData.database_error || shareData.appData.system_pause) {
 
 			let obj = {
-
 				'date': new Date(),
-				'error': shareData.appData.database_error
+				'error': shareData.appData.database_error || shareData.appData.system_pause
 			};
-
+		
 			res.status(503).send(obj);
 		}
 		else {
@@ -109,12 +109,17 @@ function initApp() {
 	app.use('/css', express.static(pathRoot + '/webserver/public/css'));
 	app.use('/data', express.static(pathRoot + '/webserver/public/data'));
 	app.use('/images', express.static(pathRoot + '/webserver/public/images'));
-
+	
 	app.use(sessionMiddleware);
 
 	app.use(express.json());
 
 	app.use(cookieParser());
+
+	const upload = multer({
+		dest: 'uploads/',
+		limits: { fileSize: 100000000 }
+	});
 
 	app.use(bodyParser.json({
 
@@ -133,7 +138,7 @@ function initApp() {
 
 	app.use('/', router);
 
-	return sessionMiddleware;
+	return { sessionMiddleware, upload };
 }
 
 
@@ -217,7 +222,7 @@ function start(port) {
 
 	let isError;
 
-	const sessionMiddleware = initApp();
+	const { sessionMiddleware, upload } = initApp();
 
 	let server = app.listen(port, () => {
 
@@ -253,7 +258,7 @@ function start(port) {
 
 		initSocket(sessionMiddleware, server);
 
-		Routes.start(router);
+		Routes.start(router, upload);
 	}
 }
 

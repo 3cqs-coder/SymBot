@@ -4,7 +4,7 @@
 let shareData;
 
 
-function initRoutes(router) {
+function initRoutes(router, upload) {
 
 	router.post([ '/webhook/api/*' ], (req, res, next) => {
 
@@ -18,7 +18,71 @@ function initRoutes(router) {
 
 		if (req.session.loggedIn) {
 
-			shareData.Common.goHome(req, res);
+			shareData.Common.renderView('homeView', req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get('/system', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.Common.renderView('systemView', req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/system/backup', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.System.routeBackupDb(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/system/restore', upload.single('backupFile'), (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.System.routeRestoreDb(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/system/shutdown', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.Common.logger('System shutdown requested.');
+
+			shareData.System.shutDown();
+
+			res.redirect('/logout');
 		}
 		else {
 
@@ -57,7 +121,9 @@ function initRoutes(router) {
 		res.render( 'loginView', { 'appData': shareData.appData } );
 	});
 
+
 	router.get('/dashboard', async (req, res) => {
+
 		if (!isLoggedIn(req, res)) return;
 
 		const { duration } = req.query;
@@ -65,8 +131,10 @@ function initRoutes(router) {
 		const { kpi, charts, currencies, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7')});
 
 		res.set('Cache-Control', 'no-store');
+
 		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, currencies, isLoading, period });
 	})
+
 
 	router.get('/logs', (req, res) => {
 
@@ -82,7 +150,9 @@ function initRoutes(router) {
 
 
 	router.get('/logs/live', (req, res) => {
+
 		res.set('Cache-Control', 'no-store');
+
 		const isLiteLog = process.argv[2] ? process.argv[2].toLowerCase() === 'clglite' : false;
 
 		res.render( 'logsLiveView', { 'appData': shareData.appData, isLiteLog } );
@@ -271,7 +341,9 @@ function initRoutes(router) {
 	});
 
 	router.get('/app-version', async (req, res) => {
+
 		res.set('Cache-Control', 'no-store');
+
 		const { update_available } = await shareData.Common.validateAppVersion();
 		
 		if(update_available && !shareData.appData.update_available) {
@@ -282,6 +354,7 @@ function initRoutes(router) {
 			update_available
 		})
 	});
+
 
 	router.post([ '/api/deals/:dealId/update_deal' ], (req, res) => {
 
@@ -461,11 +534,15 @@ async function processWebHook(req, res, next) {
 	}
 }
 
+
 function isLoggedIn(req, res) {
+
 	if (!req.session.loggedIn) {
+
 		res.redirect('/login');
 		return false;
 	}
+
 	return true;
 }
 
@@ -517,9 +594,9 @@ function validApiKey(req) {
 }
 
 
-function start(router) {
+function start(router, upload) {
 
-	initRoutes(router);
+	initRoutes(router, upload);
 }
 
 
