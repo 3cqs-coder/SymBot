@@ -4706,8 +4706,6 @@ async function addFundsDeal(dealId, volume) {
 					newOrder.dateFilled = new Date();
 
 					oldOrders.splice(i, 0, newOrder);
-
-					orderNo = newOrder.orderNo;
 				}
 
 			} else if (isUpdated) {
