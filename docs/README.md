@@ -24,6 +24,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
 - [Webhooks](#webhooks)
+- [Backup and Restore Features](#backup-and-restore-features)
 - [Resetting SymBot](#resetting-symbot)
 - [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
 - [Disclaimer](#disclaimer)
@@ -822,14 +823,40 @@ From this example you can see there are only three differences from SymBot APIs:
 
 Remember if you ever change your API key or alter your server id, your token will also change automatically. You can get your token from the SymBot web interface configuration section.
 
+## Backup and Restore Features
+
+SymBot offers built-in backup and restore capabilities that focus on safeguarding your database. These features can be accessed directly through the web interface, ensuring that your trading data is securely stored and easily recoverable.
+
+#### Backup Capabilities
+
+You can manually create encrypted backups of SymBot's database through the web interface. This ensures that all trading data, including bot configurations and trade history, is securely stored and protected from unauthorized access.
+
+#### Restore Capabilities
+
+To restore a backup, you must enter the encryption password used during the backup process. This security measure ensures that only authorized users can restore and access the database. The web interface makes it easy to restore your database to a previous state quickly and securely.
+
+#### Importance of Regular Backups
+
+Regular backups of your database are vital for protecting your trading data and ensuring the continuity of your strategies. It's essential to backup your database regularly, particularly before making significant changes to your settings or deploying new strategies. Always remember to securely store your encryption password, as it is required to restore your database.
+
+
 ## Resetting SymBot
 
-##### *** CAUTION *** This will purge all data from the SymBot database!
+There are two ways to reset SymBot. You can reset the entire database, or just the server ID if you want to migrate an existing SymBot database to a different server or instance.
 
-If you want to reset the SymBot database for any reason, you can do so only from the command line. It will first ask to confirm, then display a reset code you must enter, and confirm again.
+If you want to reset the SymBot database or server ID for any reason, you can do so only from the command line. It will first ask to confirm, then display a reset code you must enter, and confirm again.
+
+#### Reset database
+##### *** CAUTION *** This will purge all data from the SymBot database!
 
 1. Stop any running instances of SymBot
 2. Type: `npm start reset` (or `node ./symbot.js reset`)
+
+#### Reset server ID only
+
+1. Stop any running instances of SymBot
+2. Type: `npm start reset serverid` (or `node ./symbot.js reset serverid`)
+
 
 ## Frequently Asked Questions (FAQ)
 

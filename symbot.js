@@ -65,6 +65,7 @@ async function init() {
 	let botConfigData = {};
 
 	let isReset = false;
+	let resetServerId = false;
 	let consoleLog = false;
 	let serverIdError = false;
 
@@ -77,10 +78,14 @@ async function init() {
 		Common.logger('Lite mode enabled. All logs for this session will be written to console only.');
 	}
 
-
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'reset') {
 
 		isReset = true;
+
+		if (process.argv[3] && process.argv[3].toLowerCase() == 'serverid') {
+
+			resetServerId = true;
+		}
 	}
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
@@ -312,7 +317,7 @@ async function init() {
 
 	if (isReset && (success || serverIdError)) {
 
-		reset(serverIdError);
+		reset(serverIdError, resetServerId);
 
 		return({ 'nostart': true });
 	}
@@ -425,7 +430,7 @@ async function checkDependencies() {
 
 
 
-async function reset(serverIdError) {
+async function reset(serverIdError, resetServerId) {
 
 	// Reset database from command line
 
@@ -434,7 +439,20 @@ async function reset(serverIdError) {
 	let confirm;
 	let resetCode = Math.floor(Math.random() * 1000000000);
 
-	console.log('\n*** CAUTION *** You are about to reset ' + appDataConfig.name + ' database!\n');
+	let warnMsg = '\n*** CAUTION *** You are about to reset ' + appDataConfig.name + ' ';
+
+	if (resetServerId) {
+
+		warnMsg += 'server ID!'
+	}
+	else {
+
+		warnMsg += 'database!';
+	}
+
+	warnMsg += '\n';
+
+	console.log(warnMsg);
 
 	if (serverIdError) {
 
@@ -447,8 +465,8 @@ async function reset(serverIdError) {
 
 		console.log('\nReset code: ' + resetCode);
 
-		confirm = prompt('Enter the reset code above to reset ' + appDataConfig.name + ' database: ');
-			
+		confirm = prompt('Enter the reset code above to reset ' + appDataConfig.name + ': ');
+
 		if (confirm == resetCode) {
 
 			confirm = prompt('Final warning before reset. Do you want to continue? (Y/n): ');
@@ -457,11 +475,22 @@ async function reset(serverIdError) {
 
 				success = true;
 
-				let collectionBots = await DB.mongoose.connection.db.dropCollection('bots').catch(e => {});
-				let collectionDeals = await DB.mongoose.connection.db.dropCollection('deals').catch(e => {});
+				if (resetServerId) {
 
-				console.log('Bots reset: ' + collectionBots);
-				console.log('Deals reset: ' + collectionDeals);
+					let collectionServer = await DB.mongoose.connection.db.dropCollection('server').catch(e => {});
+
+					await Common.saveConfig('server.json', { 'server_id': ''});
+
+					console.log('Server reset: ' + collectionServer);
+				}
+				else {
+
+					let collectionBots = await DB.mongoose.connection.db.dropCollection('bots').catch(e => {});
+					let collectionDeals = await DB.mongoose.connection.db.dropCollection('deals').catch(e => {});
+
+					console.log('Bots reset: ' + collectionBots);
+					console.log('Deals reset: ' + collectionDeals);
+				}
 
 				console.log('\nReset finished.');
 			}

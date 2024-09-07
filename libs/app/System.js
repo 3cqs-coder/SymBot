@@ -246,7 +246,7 @@ async function routeBackupDb(req, res) {
 		const manifestFile = dir + '/.manifest.json';
 
 		// Create manifest
-		await logManifest(dir, manifestFile);
+		await logManifest(shareData.appData.version, dir, manifestFile);
 
 		shareData.Common.logger('Compressing: ' + fileName);
 
@@ -428,10 +428,11 @@ async function generateChecksum(filePath) {
 }
 
 
-async function logManifest(directory, manifestFile) {
+async function logManifest(version, directory, manifestFile) {
 
 	const manifest = {
 		date: new Date().toISOString(),
+		version: version,
 		files: []
 	};
 
