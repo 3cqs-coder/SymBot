@@ -187,14 +187,41 @@
 
 		$('#botsDeals').tablesorter({
 
-			widgets: [ 'saveSort', 'stickyHeaders', 'uitheme' ],
+			widgets: [ 'saveSort', 'stickyHeaders', 'uitheme', 'columnSelector' ],
 			widgetOptions: {
 				saveSort: true,
 				stickyHeaders_attachTo: '',
-				columnSelector_mediaqueryHidden: true
+				columnSelector_mediaqueryHidden: true,
+				columnSelector_mediaqueryName: 'Show Default',
+				columnSelector_container: $('#botDealSelector')
 			},
 			durationLength : 4,
-			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)'
+			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
+			textExtraction: {
+				8: function(node) {
+
+					if (node.innerHTML.indexOf('%') != -1) {
+
+						let val = stripHtml(node.innerHTML);
+						return val.replace('%', '');
+					}
+
+					return node.innerHTML;
+				}
+			}
+		});
+
+
+		$('#botDealSelectorShow').click(function() {
+
+			if ($('.botDealSelectorWrapper').is(':visible')) {
+
+				$('.botDealSelectorWrapper').fadeOut(300);
+			}
+			else {
+
+				$('.botDealSelectorWrapper').fadeIn(300);
+			}
 		});
 
 
@@ -213,13 +240,23 @@
 <center>
 <main>
 
+	<div class="botDealSelectorWrapper">
+		<div id="botDealSelector" class="botDealSelector">
+		  <!-- this div is where the column selector is added -->
+		</div>
+	  
+		<div class="botDealSelectorHidden">
+			<div id="popover-botdeals"></div>
+		</div>
+	</div>
+
 	<div id="contentBox">
 
 		<div style="position: relative;">
 
 			<div class="contentHeaderBox">
 				<b id="headerText" class="contentHeader">DCA Bots</b>
-
+				<span id="botDealSelectorShow">&#9881;</span>
 				<span style="display: flex; justify-content: center; font-size: 1.2rem; gap: 10px; margin-top: 10px; margin-bottom: 0;">
 					<input id="showActive" name="showActive" type=checkbox> Show Active
 				</span>
@@ -231,7 +268,7 @@
 
 					<thead style="position: sticky; top: 0; z-index: 1000;">
 						<tr class="tableHeader">
-							<th>Bot Name</th> <th>Pair</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP %</th> <th>Max Deals</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
+							<th>Bot Name</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
 						</tr>
 					</thead>
 
@@ -249,6 +286,7 @@
 
 			let active = bot['active'];
 			let dealMax = bot['config']['dealMax'];
+			let pairMax = bot['config']['pairMax'];
 			let sandBox = bot['config']['sandBox'];
 
 			if (bot['config']['startConditions'] != undefined && bot['config']['startConditions'] != null && bot['config']['startConditions'] != '') {
@@ -299,7 +337,12 @@
 
 				dealMax = '&#8734;';
 			}
-			
+
+			if (pairMax == 0) {
+
+				pairMax = '&#8734;';
+			}
+
 			if (typeof bot['config']['pair'] !== 'string') {
 
 				let pairs = bot['config']['pair'].slice(0, maxPairs);
@@ -326,8 +369,9 @@
 						<td><%- bot['config']['dcaOrderStepPercent'] %></td>
 						<td><%- bot['config']['dcaOrderSizeMultiplier'] %></td>
 						<td><%- bot['config']['dcaOrderStepPercentMultiplier'] %></td>
-						<td><%- bot['config']['dcaTakeProfitPercent'] %></td>
+						<td><%- bot['config']['dcaTakeProfitPercent'] %>%</td>
 						<td><%- dealMax %></td>
+						<td><%- pairMax %></td>
 						<td><%- startCondition %></td>
 						<td><%- sandBox %></td>
 						<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>

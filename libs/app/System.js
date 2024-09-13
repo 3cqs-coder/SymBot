@@ -9,6 +9,10 @@ const mongoose = require('mongoose');
 const archiver = require('archiver');
 const unzipper = require('unzipper');
 
+const prompt = require('prompt-sync')({
+	sigint: true
+});
+
 let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
 pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 
@@ -40,6 +44,53 @@ const connectDb = async () => {
 
 		throw err;
 	}
+};
+
+
+const resetDatabase = async (resetDb, resetServerId) => {
+
+	let success = true;
+
+	let isErr;
+	let collectionBots;
+	let collectionDeals;
+	let collectionServer;
+
+	try {
+
+		const dbConnection = await connectDb();
+		const db = dbConnection.db;
+
+		if (resetDb) {
+
+			collectionBots = await db.dropCollection('bots');
+			collectionDeals = await db.dropCollection('deals');
+		}
+
+		if (resetServerId) {
+
+			collectionServer = await db.dropCollection('server');
+
+			await shareData.Common.saveConfig('server.json', { 'server_id': ''});
+		}
+
+		await dbConnection.close();
+	}
+	catch(e) {
+
+		success = false;
+		isErr = e;
+	}
+
+	const resObj =  {
+						'success': success,
+						'error': isErr,
+						'collectionBots': collectionBots,
+						'collectionDeals': collectionDeals,
+						'collectionServer': collectionServer
+					};
+
+	return resObj;
 };
 
 
@@ -306,6 +357,7 @@ async function routeRestoreDb(req, res) {
 
 	let password = body.password;
 	let convertData = shareData.Common.convertBoolean(body.convertData, false);
+	let resetServerId = shareData.Common.convertBoolean(body.resetServerId, false);
 
 	try {
 
@@ -324,7 +376,7 @@ async function routeRestoreDb(req, res) {
 		}
 
 		// Process restore
-		await processRestoreDb(tempPath, targetPath, password, convertData);
+		await processRestoreDb(tempPath, targetPath, password, convertData, resetServerId);
 
 		// Send a success response
 		res.status(200).send('File uploaded and database restored successfully.');
@@ -338,7 +390,7 @@ async function routeRestoreDb(req, res) {
 }
 
 
-async function processRestoreDb(tempPath, targetPath, password, convertData) {
+async function processRestoreDb(tempPath, targetPath, password, convertData, resetServerId) {
 
 	await pause(true, 'Database Restore Processing');
 
@@ -402,6 +454,11 @@ async function processRestoreDb(tempPath, targetPath, password, convertData) {
 			if (convertData) {
 
 				await shareData.DCABot.convertDataToSandBox();
+			}
+
+			if (resetServerId) {
+
+				await resetDatabase(false, true);
 			}
 
 			// Shutdown
@@ -708,6 +765,101 @@ async function pause(bool, msg) {
 }
 
 
+async function resetConsole(serverIdError, resetServerId) {
+
+	// Reset database from command line
+
+	let success = false;
+
+	let isErr;
+	let confirm;
+	let resetCode = Math.floor(Math.random() * 1000000000);
+
+	let warnMsg = '\n*** CAUTION *** You are about to reset ' + shareData.appData.name + ' ';
+
+	if (resetServerId) {
+
+		warnMsg += 'server ID!'
+	}
+	else {
+
+		warnMsg += 'database!';
+	}
+
+	warnMsg += '\n';
+
+	console.log(warnMsg);
+
+	if (serverIdError) {
+
+		console.log('\n*** WARNING *** Your server ID does not match! Confirm you are connected to the correct database!\n');
+	}
+
+	confirm = prompt('Do you want to continue? (Y/n): ');
+
+	if (confirm == 'Y') {
+
+		console.log('\nReset code: ' + resetCode);
+
+		confirm = prompt('Enter the reset code above to reset ' + shareData.appData.name + ': ');
+
+		if (confirm == resetCode) {
+
+			confirm = prompt('Final warning before reset. Do you want to continue? (Y/n): ');
+
+			if (confirm == 'Y') {
+
+				success = true;
+
+				if (resetServerId) {
+
+					const resetData = await resetDatabase(false, true);
+
+					if (!resetData['success']) {
+
+						success = false;
+						isErr = resetData['error'];
+					}
+
+					console.log('Server reset: ' + resetData['collectionServer']);
+				}
+				else {
+
+					const resetData = await resetDatabase(true, false);
+
+					if (!resetData['success']) {
+
+						success = false;
+						isErr = resetData['error'];
+					}
+
+					console.log('Bots reset: ' + resetData['collectionBots']);
+					console.log('Deals reset: ' + resetData['collectionDeals']);
+				}
+
+				if (!success) {
+
+					console.log('Error occurred: ', isErr);
+				}
+
+				console.log('\nReset finished.');
+			}
+		}
+		else {
+
+			console.log('\nReset code incorrect.');
+		}
+	}
+
+	if (!success) {
+
+		console.log('\nReset aborted.');
+	}
+
+	process.exit(1);
+}
+
+
 async function start(url) {
 
 	dbUrl = url;
@@ -718,6 +870,8 @@ module.exports = {
 
 	start,
 	pause,
+	resetConsole,
+	resetDatabase,
 	backupDb,
 	restoreDb,
 	routeBackupDb,

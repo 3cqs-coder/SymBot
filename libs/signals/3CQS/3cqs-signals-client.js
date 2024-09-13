@@ -54,7 +54,7 @@ async function start(enabled, apiKey) {
 			'api-key': apiKey,
 			'user-agent': shareData.appData.name + '/' + shareData.appData.version
 		},
-		'forceNew': true,
+		'forceNew': false,
 		'transports': ['websocket', 'polling'],
 		'path': '/stream/v1/signals',
 		'reconnection': true,
@@ -210,6 +210,12 @@ function randomString(len) {
 
 
 async function processSignal(data) {
+
+	if (shareData.appData.system_pause != undefined && shareData.appData.system_pause != null && shareData.appData.system_pause != '') {
+
+		// System Paused - Don't process any signals
+		return;
+	}
 
 	const maxMins = 5;
 

@@ -24,11 +24,6 @@ const packageJson = require(__dirname + '/package.json');
 const Dependencies = require('check-dependencies').sync({ verbose: false });
 
 
-
-const prompt = require('prompt-sync')({
-	sigint: true
-});
-
 let appDataConfig;
 let gotSigInt = false;
 
@@ -75,6 +70,7 @@ async function init() {
 	}
 
 	if(process.argv[2] && process.argv[2].toLowerCase() == 'clglite') {
+
 		Common.logger('Lite mode enabled. All logs for this session will be written to console only.');
 	}
 
@@ -317,7 +313,7 @@ async function init() {
 
 	if (isReset && (success || serverIdError)) {
 
-		reset(serverIdError, resetServerId);
+		await System.resetConsole(serverIdError, resetServerId);
 
 		return({ 'nostart': true });
 	}
@@ -426,87 +422,6 @@ async function checkDependencies() {
 
 		Common.logger(pref + 'Packages installed do not match package list. You may want to update using npm install or another method', true);
 	}
-}
-
-
-
-async function reset(serverIdError, resetServerId) {
-
-	// Reset database from command line
-
-	let success = false;
-
-	let confirm;
-	let resetCode = Math.floor(Math.random() * 1000000000);
-
-	let warnMsg = '\n*** CAUTION *** You are about to reset ' + appDataConfig.name + ' ';
-
-	if (resetServerId) {
-
-		warnMsg += 'server ID!'
-	}
-	else {
-
-		warnMsg += 'database!';
-	}
-
-	warnMsg += '\n';
-
-	console.log(warnMsg);
-
-	if (serverIdError) {
-
-		console.log('\n*** WARNING *** Your server ID does not match! Confirm you are connected to the correct database!\n');
-	}
-
-	confirm = prompt('Do you want to continue? (Y/n): ');
-
-	if (confirm == 'Y') {
-
-		console.log('\nReset code: ' + resetCode);
-
-		confirm = prompt('Enter the reset code above to reset ' + appDataConfig.name + ': ');
-
-		if (confirm == resetCode) {
-
-			confirm = prompt('Final warning before reset. Do you want to continue? (Y/n): ');
-
-			if (confirm == 'Y') {
-
-				success = true;
-
-				if (resetServerId) {
-
-					let collectionServer = await DB.mongoose.connection.db.dropCollection('server').catch(e => {});
-
-					await Common.saveConfig('server.json', { 'server_id': ''});
-
-					console.log('Server reset: ' + collectionServer);
-				}
-				else {
-
-					let collectionBots = await DB.mongoose.connection.db.dropCollection('bots').catch(e => {});
-					let collectionDeals = await DB.mongoose.connection.db.dropCollection('deals').catch(e => {});
-
-					console.log('Bots reset: ' + collectionBots);
-					console.log('Deals reset: ' + collectionDeals);
-				}
-
-				console.log('\nReset finished.');
-			}
-		}
-		else {
-
-			console.log('\nReset code incorrect.');
-		}
-	}
-
-	if (!success) {
-
-		console.log('\nReset aborted.');
-	}
-
-	process.exit(1);
 }
 
 

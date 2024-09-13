@@ -936,7 +936,7 @@
 				stickyHeaders_attachTo: '',
 				columnSelector_mediaqueryHidden: true,
 				columnSelector_mediaqueryName: 'Show Default',
-				columnSelector_container: $('#dealSelector')
+				columnSelector_container: $('#botDealSelector')
 			},
 			durationLength : 4,
 			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
@@ -985,15 +985,15 @@
 		});
 
 
-		$('#dealSelectorShow').click(function() {
+		$('#botDealSelectorShow').click(function() {
 
-			if ($('.dealSelectorWrapper').is(':visible')) {
+			if ($('.botDealSelectorWrapper').is(':visible')) {
 
-				$('.dealSelectorWrapper').fadeOut(300);
+				$('.botDealSelectorWrapper').fadeOut(300);
 			}
 			else {
 
-				$('.dealSelectorWrapper').fadeIn(300);
+				$('.botDealSelectorWrapper').fadeIn(300);
 			}
 		});
 
@@ -1120,13 +1120,13 @@
 <center>
 <main>
 
-	<div class="dealSelectorWrapper">
-		<div id="dealSelector" class="dealSelector">
+	<div class="botDealSelectorWrapper">
+		<div id="botDealSelector" class="botDealSelector">
 		  <!-- this div is where the column selector is added -->
 		</div>
 	  
-		<div class="dealSelectorHidden">
-			<div id="popover-deals"></div>
+		<div class="botDealSelectorHidden">
+			<div id="popover-botdeals"></div>
 		</div>
 	</div>
 
@@ -1137,7 +1137,7 @@
 			<div class="contentHeaderBox">
 
 				<b class="contentHeader">Active DCA Bot Deals</b>
-				<span id="dealSelectorShow">&#9881;</span>
+				<span id="botDealSelectorShow">&#9881;</span>
 				<span style="display: flex; font-size: 1.2rem; justify-content: center; gap: 20px; margin-top: 10px;">
 					<p style="margin-top: 0; margin-bottom: 0;">Active P/L: <span id="totalProfit"></span></p>
 					<p style="margin-top: 0; margin-bottom: 0;">In Deals: <span id="inDeals"></span></p>

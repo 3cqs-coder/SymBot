@@ -929,7 +929,7 @@ table#botsDeals tr:hover {
 }
 
 
-#dealSelectorShow {
+#botDealSelectorShow {
 
 	position: absolute;
 	top: 0;
@@ -939,7 +939,7 @@ table#botsDeals tr:hover {
 }
 
 
-.dealSelectorWrapper {
+.botDealSelectorWrapper {
 
 	z-index: 6000;
 	position: fixed;
@@ -949,13 +949,13 @@ table#botsDeals tr:hover {
 }
 
 
-.dealSelector, .dealSelectorHidden {
+.botDealSelector, .botDealSelectorHidden {
 
 	display: block;
 }
 
 
-.dealSelector {
+.botDealSelector {
 
 	width: 150px;
 	text-align: left;
@@ -968,45 +968,45 @@ table#botsDeals tr:hover {
 }
 
 
-.dealSelector label {
+.botDealSelector label {
 
 	display: block;
 }
 
 
-.dealSelector label:nth-child(1) {
+.botDealSelector label:nth-child(1) {
 
 	border-bottom: #cccccc solid 1px;
 	margin-bottom: 5px;
 }
 
 
-.dealSelector input {
+.botDealSelector input {
 
 	margin-right: 5px;
 }
 
 
-.dealSelector .disabled {
+.botDealSelector .disabled {
 
 	color: #ddd;
 }
 
 
-#popover-deals label {
+#popover-botdeals label {
 
 	margin: 0 5px;
 	display: block;
 }
 
 
-#popover-deals input {
+#popover-botdeals input {
 
 	margin-right: 5px;
 }
 
 
-#popover-deals .disabled {
+#popover-botdeals .disabled {
 
 	color: #ddd;
 }

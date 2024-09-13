@@ -2068,6 +2068,10 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 	let msg;
 	let order;
+	let orderId;
+	let orderPrice;
+	let orderAmount;
+	let orderQty;
 	let isErr;
 	let success;
 
@@ -2127,7 +2131,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 	if (success) {
 
 		// Verify order on exchange
-		const orderId = order['id'];
+		orderId = order['id'];
 
 		if (orderId != undefined && orderId != null && orderId != '') {
 
@@ -2138,6 +2142,13 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 				if (orderVerify.success) {
 
 					// Verification successful
+
+					const orderVerifyData = orderVerify.data;
+
+					orderAmount = orderVerifyData.cost;
+					orderQty = orderVerifyData.filled ?? orderVerifyData.amount;
+					orderPrice = orderVerifyData.price;
+
 					successVerify = true;
 					finishedVerify = true;
 				}
@@ -2184,7 +2195,13 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 						'deal_id': dealId,
 						'pair': pair,
 						'quantity': qty,
-						'price': price
+						'price': price,
+						'data_order': {
+							'id': orderId,
+							'price': orderPrice,
+							'amount': orderAmount,
+							'quantity': orderQty
+						}
 					};
 
 	Common.logger(dataObj);

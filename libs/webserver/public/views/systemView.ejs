@@ -161,6 +161,8 @@ $.confirm({
 		<input class="form-field" type="password" style="width: 200px;" id="decryptPassword" name="decryptPassword" required>
 
 		<br><br>
+		<input id="resetServerId" name="resetServerId" type=checkbox class="form-field"> &nbsp; <b>Reset server ID</b>
+		<br>
 		<input id="convertData" name="convertData" type=checkbox class="form-field"> &nbsp; <b>Convert all bots and deals to sandbox mode</b>
 	</form>
 
@@ -177,6 +179,7 @@ $.confirm({
 				const inputValue = parseFloat($('#confirmNum').val());
 				const confirmBox = $('#confirmBox').prop('checked');
 				const convertData = $('#convertData').prop('checked');
+				const resetServerId = $('#resetServerId').prop('checked');
 				const password = $('#decryptPassword').val();
 
 				if (!confirmBox) {
@@ -189,7 +192,7 @@ $.confirm({
 				}
 				else {
 
-					processRestoreDb(password, convertData);
+					processRestoreDb(password, convertData, resetServerId);
 				 }
 			  },
 		  },
@@ -203,6 +206,9 @@ $.confirm({
  
  		$('#convertData').simpleSwitch();
 		$('#convertData').prop('checked', false);
+
+		$('#resetServerId').simpleSwitch();
+		$('#resetServerId').prop('checked', false);
 	},
 	onContentReady: function() {
 
@@ -305,7 +311,7 @@ function processBackupDb(password) {
 }
 
 
-function processRestoreDb(password, convertData) {
+function processRestoreDb(password, convertData, resetServerId) {
 
 	const fileInput = $('#file-input')[0]; // Assuming you have an input with id="file-input"
 	const file = fileInput.files[0];
@@ -320,6 +326,7 @@ function processRestoreDb(password, convertData) {
 
 	formData.append('backupFile', file);
 	formData.append('convertData', convertData);
+	formData.append('resetServerId', resetServerId);
 	formData.append('password', password);
 
 	$('#spinner-overlay').fadeIn(100);
