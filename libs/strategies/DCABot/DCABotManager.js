@@ -31,7 +31,8 @@ async function viewCreateUpdateBot(req, res, botId) {
 		}
 	}
 
-	const botConfig = await shareData.Common.getConfig('bot.json');
+	const botConfigFile = shareData.appData.bot_config;
+	const botConfig = await shareData.Common.getConfig(botConfigFile);
 
 	const exchangeName = botConfig.data.exchange;
 
@@ -1528,7 +1529,9 @@ async function calculateOrders(body) {
 	let active;
 
 	let pairs = body.pair;
-	const botConfig = await shareData.Common.getConfig('bot.json');
+
+	const botConfigFile = shareData.appData.bot_config;
+	const botConfig = await shareData.Common.getConfig(botConfigFile);
 
 	let botData = botConfig.data;
 
@@ -1641,7 +1644,8 @@ async function getDashboardData({ duration }) {
 	X_DAYS_AGO.setDate(X_DAYS_AGO.getDate() - duration);
 	X_DAYS_AGO.setHours(0, 0, 0);
 
-	const { data } = await shareData.Common.getConfig('bot.json');
+	const botConfigFile = shareData.appData.bot_config;
+	const { data } = await shareData.Common.getConfig(botConfigFile);
 
 	const active_deals = await shareData.DCABot.getDeals({ status: 0 });
 	const complete_deals = await shareData.DCABot.getDeals({ status: 1, "sellData.date": { $gte: X_DAYS_AGO, $lte: today } });

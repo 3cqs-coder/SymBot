@@ -14,7 +14,7 @@ const packageJson = require(pathRoot + '/package.json');
 
 const convertAnsi = new Convert();
 
-const logNotifications = pathRoot + '/logs/services/notifications/notifications.log';
+const logNotifications = pathRoot + '/logs/services/notifications/notifications{INSTANCE_NAME}.log';
 
 let shareData;
 
@@ -375,6 +375,17 @@ async function sendNotification(data) {
 	let maxNotifications = 500;
 	let fileName = logNotifications;
 
+	const instanceName = await getInstanceName();
+
+	if (instanceName && instanceName.trim() !== '') {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', `-${instanceName}`);
+	}
+	else {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', '');
+	}
+
 	let msg = data['message'];
 	let msgType = data['type'];
 	let telegramId = data['telegram_id'];
@@ -399,7 +410,12 @@ async function sendNotification(data) {
 	}
 
 	// Relay message to WebSocket notifications room
-	shareData.WebServer.sendSocketMsg(msg, 'notifications');
+	sendSocketMsg({
+
+		'room': 'notifications',
+		'type': 'notification',
+		'message': msg
+	});
 
 	// Save notifications
 	saveData(fileName, JSON.stringify(historyArr));
@@ -409,6 +425,17 @@ async function sendNotification(data) {
 async function getNotificationHistory(client, data) {
 
 	let fileName = logNotifications;
+
+	const instanceName = await getInstanceName();
+
+	if (instanceName && instanceName.trim() !== '') {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', `-${instanceName}`);
+	}
+	else {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', '');
+	}
 
 	let historyArr = [];
 
@@ -436,11 +463,23 @@ async function getNotificationHistory(client, data) {
 }
 
 
-async function showLogs(req, res) {
+async function showLogs(req, res, isHub) {
 
+	let filesFiltered;
+
+	const instanceName = await getInstanceName();
 	const files = await getLogs();
 
-	res.render( 'logsView', { 'appData': shareData.appData, 'files': files } );
+	if (instanceName != undefined && instanceName != null && instanceName != '') {
+
+		filesFiltered = files.filter(file => new RegExp(`${instanceName}\\.log$`).test(file.name));
+	}
+	else {
+
+		filesFiltered = files;
+	}
+
+	res.render( 'logsView', { 'appData': shareData.appData, 'files': filesFiltered, 'isHub': isHub } );
 }
 
 
@@ -498,6 +537,8 @@ async function downloadLog(file, req, res) {
 
 async function logger(data, consoleLog) {
 
+	const instanceName = await getInstanceName();
+
 	if (typeof data !== 'string') {
 		data = JSON.stringify(data);
 	}
@@ -518,7 +559,7 @@ async function logger(data, consoleLog) {
 
 	const dateObj = getDateParts(dateNow);
 
-	const fileName = pathRoot + '/logs/' + dateObj.date + '.log';
+	const fileName = pathRoot + '/logs/' + dateObj.date + (instanceName ? '-' + instanceName : '') + '.log';
 
 	const logDataOrig = logData;
 
@@ -533,7 +574,12 @@ async function logger(data, consoleLog) {
 
 	if (shareData && shareData.WebServer) {
 
-		shareData.WebServer.sendSocketMsg(convertAnsi.toHtml(logDataOrig));
+		sendSocketMsg({
+
+			'room': 'logs',
+			'type': 'log',
+			'message': convertAnsi.toHtml(logDataOrig)
+		});
 	}
 }
 
@@ -566,6 +612,23 @@ async function delay(msec) {
 
 		setTimeout(() => { resolve('') }, msec);
 	});
+}
+
+
+async function getInstanceName() {
+
+	let instanceName = '';
+
+	try {
+
+		if (shareData['appData']['worker_data'] && typeof shareData['appData']['worker_data'] === 'object') {
+
+			instanceName = shareData['appData']['worker_data']['name'];
+		}
+	}
+	catch(e) {}
+
+	return instanceName;
 }
 
 
@@ -1111,7 +1174,7 @@ async function verifyPasswordHash(dataObj) {
 }
 
 
-async function verifyLogin(req, res) {
+async function verifyLogin(req, res, isHub) {
 
 	let msg;
 
@@ -1137,12 +1200,22 @@ async function verifyLogin(req, res) {
 
 	msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;
 
-	logger(msg);
-	sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	if (!isHub) {
+
+		logger(msg);
+		sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	}
 
 	if (success) {
 
-		renderView('homeView', req, res);
+		if (isHub) {
+
+			renderView('hub/homeView', req, res, isHub);
+		}
+		else {
+
+			renderView('homeView', req, res);
+		}
 	}
 	else {
 
@@ -1183,9 +1256,38 @@ function validateApiKey(key) {
 }
 
 
-async function renderView(view, req, res) {
+async function sendSocketMsg(data) {
 
-	res.render( view, { 'appData': shareData.appData } );
+	const roomAuth = 'logs';
+
+	let room = data['room'];
+	let msg = data['message'];
+	let msgType = data['type'];
+
+	const socket = await shareData.WebServer.getSocket();
+
+	let sendRoom = roomAuth;
+
+	if (room != undefined && room != null && room != '') {
+
+		sendRoom = room;
+	}
+
+	if (msgType == undefined || msgType == null || msgType == '') {
+
+		msgType = sendRoom;
+	}
+
+	if (socket) {
+
+		socket.to(sendRoom).emit('data', { 'type': msgType, 'message': msg });
+	}
+}
+
+
+async function renderView(view, req, res, isHub) {
+
+	res.render( view, { 'isHub': isHub, 'appData': shareData.appData } );
 }
 
 
@@ -1271,6 +1373,7 @@ module.exports = {
 	saveConfig,
 	updateConfig,
 	pairBlackListed,
+	getInstanceName,
 	getData,
 	saveData,
 	getDateParts,
@@ -1301,6 +1404,7 @@ module.exports = {
 	getAppVersions,
 	validateAppVersion,
 	dealDurationMinutes,
+	sendSocketMsg,
 
 	init: function(obj) {
 

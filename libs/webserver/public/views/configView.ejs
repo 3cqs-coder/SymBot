@@ -3,7 +3,7 @@
 <script>
 
 	const token = '<%= token %>';
-	const telegram = '<%= appData['telegram_enabled'] %>';
+	const telegram = '<%= appData['telegram_enabled_config'] %>';
 	const pairButtons = <%- '[' + appData.bots['pair_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
 	const pairBlackList = <%- '[' + appData.bots['pair_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
 

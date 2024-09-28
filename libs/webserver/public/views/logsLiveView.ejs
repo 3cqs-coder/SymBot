@@ -1,112 +1,150 @@
 <%- include('./partialsHeaderView'); %>
 
-	<script>
+<script>
 
-		$(document).ready(function() {
+let bufferLogs = [];
+let countdownTimerLogs;
 
-			$(window).resize(function() {
+	$(document).ready(function() {
 
-				resizeBotsDeals(offsetBottom);
-			});
+		if (socketGlobal) {
 
-			const socket = io('/', {
-
-				query: { 'room': 'logs' },
-				extraHeaders: {
-
-					'user-agent': '<%- appData.name %>/<%- appData.version %>'
-				},
-				transports: ['websocket', 'polling'],
-				path: '/ws',
-				reconnection: true,
-				reconnectionDelay: 10000
-			});
-
+			const socket = socketGlobal;
 
 			socket.on('connect', (data) => {
 
-                // Init toggle after socket connect
-                $('#simple-switch').simpleSwitch();
-                $('#simple-switch').prop('disabled', false);
+				socket.emit('joinRooms', {
 
-                $('#simple-switch').on('change.toggleSwitch', function() {
-                    
-                    if ($(this).parent().hasClass('checked')) {
+					'rooms': ['notifications', 'logs']
+				});
+			});
 
-                        $('#dataBox').css('overflow-y', 'auto');
+            socket.on('data', (data) => {
 
-                        $('#status-text').text('Live');
+                // Realtime logs
+                if (data.type === 'log') {
 
-                        stopCountdown();
+                    if ($('#simple-switch').parent().hasClass('checked')) {
 
-                        flushBuffer();
-
-                    } else {
-                      
-                        $('#dataBox').css('overflow-y', 'auto');
-
-                        $('#status-text').text('Paused');
-                        
-                        startCountdown(60);
+                        displayLog(data.message);
                     }
-                });
-			});
+                    else {
 
-
-			socket.on('connect_error', (data) => {
-
-				if (typeof data != 'string') {
-
-					data = JSON.stringify(data);
-				}
-
-				alertBox('Connect Error: ' + data);
-			});
-
-
-			socket.on('connect_failed', (data) => {
-
-				if (typeof data != 'string') {
-
-					data = JSON.stringify(data);
-				}
-
-				alertBox('Connect Failed: ' + data);
-			});
-
-
-			socket.on('error', (data) => {
-
-				if (typeof data != 'string') {
-
-					data = JSON.stringify(data);
-				}
-
-				alertBox('Error: ' + data);
-			});
-
-
-			socket.on('disconnect', (data) => {
-
-			});
-
-
-			socket.on('data', (data) => {
-
-                if ($('#simple-switch').parent().hasClass('checked')) {
-
-                    displayLog(data);
-
-                } else {
-
-                    buffer.push(data);
+                        bufferLogs.push(data.message);
+                    }
                 }
-                
             });
 
+			window.addEventListener('beforeunload', () => {
+
+				socket.emit('leaveRoom', 'logs');
+			});
+		}
+
+		$(window).resize(function() {
+
+			resizeBotsDeals(offsetBottom);
 		});
 
-	</script>
+		$('#simple-switch').simpleSwitch();
+		$('#simple-switch').prop('disabled', false);
+
+		$('#simple-switch').on('change.toggleSwitch', function() {
+
+			if ($(this).parent().hasClass('checked')) {
+
+				$('#dataBox').css('overflow-y', 'auto');
+
+				$('#status-text').text('Live');
+
+				stopCountdown();
+
+				flushBuffer();
+
+			} else {
+
+				$('#dataBox').css('overflow-y', 'auto');
+
+				$('#status-text').text('Paused');
+
+				startCountdown(60);
+			}
+		});
+	});
+
+
+function startCountdown(duration) {
+
+	let remaining = duration;
+
+	$('#countdown').text(`(${remaining}s)`);
+
+	countdownTimerLogs = setInterval(() => {
+
+		remaining--;
+
+		$('#countdown').text(`(${remaining}s)`);
+
+		if (remaining <= 0) {
+
+			clearInterval(countdownTimerLogs);
+
+			$('#countdown').text('');
+
+			setLiveState();
+		}
+	}, 1000);
+}
+
+
+function stopCountdown() {
+
+	clearInterval(countdownTimerLogs);
+
+	$('#countdown').text('');
+}
+
+
+function displayLog(data) {
+
+	let msg = '<div class="logRow">' + data + '</div>';
+
+	$('#dataBox').prepend(msg);
+
+	let currentRows = $('.logRow').length;
+
+	if (currentRows > maxRows) {
+
+		$('.logRow').slice(maxRows).remove(); // better suited for prepending
+	}
+
+	resizeBotsDeals(offsetBottom);
+}
+
+
+function setLiveState() {
+
+	$('#simple-switch').switchToggle(true);
+
+	$('#dataBox').css('overflow-y', 'auto');
+
+	$('#status-text').text('Live');
+
+	flushBuffer();
+
+	stopCountdown();
+}
+
+
+function flushBuffer() {
+
+	// Prepend buffered entries in order & flush
+	bufferLogs.forEach(displayLog);
+
+	bufferLogs = [];
+}
+
+</script>
 
 
 <main>

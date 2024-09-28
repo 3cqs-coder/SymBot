@@ -20,7 +20,7 @@
 
 	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 
-	<script src="/js/vendor/socket.io/socket.io.min.js"></script>
+	<script src="/ws/socket.io.min.js"></script>
 	<script src="/js/vendor/jquery/jquery.min.js"></script>
 	<script src="/js/vendor/jquery-ui/jquery-ui.min.js"></script>
 	<script src="/js/vendor/jquery-confirm/jquery-confirm.min.js"></script>
@@ -44,10 +44,28 @@
 	let modalTracker = {};
 	let pairBTC = 'BTC/USD';
 	let exchangeBTC = 'bitstamp';
-	let buffer = []; // buffer - incoming log
-	let countdownTimer;
+
+	let isHub = <%- (typeof isHub !== 'undefined' && isHub !== '') ? isHub : false %>;
 
 	$(document).ready(function() {
+
+		if (isHub) {
+
+			const hubSuperscript = $('<sup>').text('HUB').addClass('hub-superscript');
+
+			$('#divLogo').css('position', 'relative');
+
+			$('#divLogo').append(hubSuperscript);
+
+			const hideElements = [ '#btcPrice', '#notifications', '#liveLogs' ];
+
+			for (let i = 0; i < hideElements.length; i++) {
+
+				let id = hideElements[i];
+
+				$(id).hide();
+			}
+		}
 
 		const modalTvId = '#modalTvSettings';
 
@@ -109,7 +127,10 @@
 			showTradingView('homeView', 'modal', false, false, pairBTC, exchangeBTC);
 		});
 
-		getPriceBTC();
+		if (!isHub) {
+
+			getPriceBTC();
+		}
 	});
 
 
@@ -673,79 +694,6 @@
 		$('#' + divId).load(url);
 	}
 
-
-	function startCountdown(duration) {
-
-		let remaining = duration;
-
-		$('#countdown').text(`(${remaining}s)`);
-
-		countdownTimer = setInterval(() => {
-
-			remaining--;
-
-			$('#countdown').text(`(${remaining}s)`);
-
-			if (remaining <= 0) {
-
-				clearInterval(countdownTimer);
-
-				$('#countdown').text('');
-
-				setLiveState();
-			}
-		}, 1000);
-	}	
-
-
-	function stopCountdown() {
-
-    	clearInterval(countdownTimer);
-
-    	$('#countdown').text('');
-	}
-
-
-	function displayLog(data) {
-
-		let msg = '<div class="logRow">' + data + '</div>';
-
-		$('#dataBox').prepend(msg);
-
-		let currentRows = $('.logRow').length;
-
-		if (currentRows > maxRows) {
-
-			$('.logRow').slice(maxRows).remove(); // better suited for prepending
-		}
-
-		resizeBotsDeals(offsetBottom);
-	}
-
-
-	function setLiveState() {
-
-		$('#simple-switch').switchToggle(true);
-
-    	$('#dataBox').css('overflow-y', 'auto');
-
-    	$('#status-text').text('Live');
-
-    	flushBuffer();
-		
-    	stopCountdown();
-	}
-
-
-    function flushBuffer() {
-
-    	// Prepend buffered entries in order & flush
-        buffer.forEach(displayLog);
-
-        buffer = [];
-    }
-
-
 	</script>
 
 	<%- include('./partialsSocketView'); %>
@@ -758,7 +706,7 @@
 
 	<div id="btcPrice"></div>
 
-	<div style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);">
+	<div id="divLogo" style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: inline-block;">
 		<img id="logo" src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
 

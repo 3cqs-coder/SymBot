@@ -17,7 +17,6 @@ const router = express.Router();
 const Routes = require(pathRoot + '/webserver/routes.js');
 
 const serverTimeoutMins = 3;
-const roomAuth = 'logs';
 
 let shareData;
 let socket;
@@ -40,6 +39,7 @@ function initApp() {
 
 	const sessionExpireMins = 60 * 24;
 	const sessionSecret = shareData.appData.server_id;
+	const sessionCookieName = 'SymBot' + shareData.appData.instance_name;
 
 	const store = new MongoDBStore({
 
@@ -57,6 +57,7 @@ function initApp() {
 	const sessionMiddleware = session({
 
 		'secret': sessionSecret,
+		'name': sessionCookieName,
 		'resave': false,
 		'saveUninitialized': false,
 		'store': store,
@@ -64,6 +65,8 @@ function initApp() {
 			'expires': (sessionExpireMins * 60) * 1000
 		}
 	});
+
+	app.use(sessionMiddleware);
 
 	// Compress all HTTP responses
 	app.use(compression({
@@ -109,8 +112,6 @@ function initApp() {
 	app.use('/css', express.static(pathRoot + '/webserver/public/css'));
 	app.use('/data', express.static(pathRoot + '/webserver/public/data'));
 	app.use('/images', express.static(pathRoot + '/webserver/public/images'));
-	
-	app.use(sessionMiddleware);
 
 	app.use(express.json());
 
@@ -152,7 +153,7 @@ function initSocket(sessionMiddleware, server) {
 				credentials: false
 		},
 		path: '/ws',
-		serveClient: false,
+		serveClient: true,
 		pingInterval: 10000,
 		pingTimeout: 5000,
 		maxHttpBufferSize: 1e6,
@@ -193,6 +194,21 @@ function initSocket(sessionMiddleware, server) {
 				client.join(query.room);
 			}
 
+			client.on('joinRooms', (data) => {
+
+				data.rooms.forEach(room => {
+					
+					client.join(room);
+					//console.log(`Client joined room: ${room}`);
+				});
+			});
+
+			client.on('leaveRoom', (room) => {
+
+				client.leave(room);
+				//console.log(`Client left room: ${room}`);
+			});
+
 			client.on('notifications_history', function (data) {
 
 				shareData.Common.getNotificationHistory(client, data);
@@ -202,19 +218,9 @@ function initSocket(sessionMiddleware, server) {
 }
 
 
-async function sendSocketMsg(msg, room) {
+async function getSocket() {
 
-	let sendRoom = roomAuth;
-
-	if (room != undefined && room != null && room != '') {
-
-		sendRoom = room;
-	}
-
-	if (socket) {
-
-		socket.to(sendRoom).emit('data', msg);
-	}
+	return socket;
 }
 
 
@@ -236,7 +242,7 @@ function start(port) {
 
 			shareData.Common.logger(`Port ${port} already in use`, true);
 
-			process.exit(1);
+			shareData.System.shutDown();
 		}
 		else {
 
@@ -267,7 +273,7 @@ module.exports = {
 
 	app,
 	start,
-	sendSocketMsg,
+	getSocket,
 
 	init: function(obj) {
 

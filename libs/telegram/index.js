@@ -117,9 +117,9 @@ function logError(err, data) {
 }
 
 
-function start(tokenId) {
+function start(tokenId, enabled) {
 
-	if (tokenId != undefined && tokenId != null && tokenId != '') {
+	if (enabled && (tokenId != undefined && tokenId != null && tokenId != '')) {
 
 		initApp(tokenId);
 	}

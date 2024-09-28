@@ -1,0 +1,1094 @@
+<%- include('../partialsHeaderView'); %>
+
+	<script>
+
+		const exchanges = <%- JSON.stringify(exchanges) %>;
+
+		const numFormatter = new Function('return ' + `<%- numFormatter %>`)();
+
+		$(document).ready(function () {
+
+			$('#exchange').empty();
+
+			$('#exchange').append($('<option>', {
+				
+				value: '',
+				text: ''
+			}));
+
+			exchanges.forEach(function(exchange) {
+
+				$('#exchange').append($('<option>', {
+
+					value: exchange,
+					text: exchange
+				}));
+			});
+
+			setNewPort();
+
+			if (socketGlobal) {
+
+				const socket = socketGlobal;
+				const instanceMap = new Map();
+				const TIMEOUT = 15000;
+
+				socket.on('connect', (data) => {
+
+					socket.emit('joinRooms', {
+
+						'rooms': ['notifications', 'memory']
+					});
+				});
+
+				function updateMemoryDisplay() {
+
+					let online = {};
+					let instances = [];
+					let displayData = '';
+
+					instanceMap.forEach((msg, instanceId) => {
+				
+						online[instanceId] = true;
+						instances.push({ instanceId: instanceId, instanceName: msg.data.instanceName, memoryUsage: msg.data.memoryUsage });
+					});
+
+					// Sort alphabetically
+					instances.sort((a, b) => a.instanceName.localeCompare(b.instanceName));
+
+					instances.forEach(instance => {
+
+						displayData += '<div style="text-align: left; padding: 5px;">';
+						displayData += '<b>' + instance.instanceName + '</b><br>';
+						displayData += 'RSS: ' + numFormatter(instance.memoryUsage.rss) + '<br>';
+						displayData += 'Heap Used: ' + numFormatter(instance.memoryUsage.heapUsed) + '<br>';
+						displayData += 'Heap Total: ' + numFormatter(instance.memoryUsage.heapTotal) + '<br>';
+						displayData += '</div>';
+					});
+
+					$('#botsDeals tbody tr').each(function() {
+
+						let instanceId = $(this).attr('data-instanceid');
+						$(this).find('.hub-instance-status-indicator').css('background-color', '');
+
+						if (online[instanceId]) {
+
+							$(this).find('.hub-instance-status-indicator').css('background-color', '#2ecc71');
+						}
+					});
+
+					if (displayData == '') {
+	
+						displayData = 'No Data';
+					}
+
+					$('#hub-memoryContent').html(displayData);
+				}
+
+				function cleanupInstances() {
+	
+					const now = Date.now();
+	
+					for (const [instanceId, value] of instanceMap.entries()) {
+	
+						if (now - value.timestamp > TIMEOUT) {
+	
+							instanceMap.delete(instanceId);
+						}
+					}
+	
+					updateMemoryDisplay();
+				}
+
+				setInterval(cleanupInstances, 5000);
+
+				socket.on('data', (data) => {
+
+					if (data.type === 'log_memory') {
+
+						const instanceId = data.message.instanceId;
+
+						instanceMap.set(instanceId, {
+
+							timestamp: Date.now(),
+							data: data.message
+						});
+
+						updateMemoryDisplay();
+					}
+				});
+
+				window.addEventListener('beforeunload', () => {
+
+					socket.emit('leaveRoom', 'memory');
+				});
+			}
+
+			$('#hub-showMemoryButton, #hub-closeMemoryButton').click(function() {
+
+				let effect = 'slide';
+				let duration = 500; 
+				let options = { 'direction': 'left' };
+
+				const id = $(this).attr('id');
+
+				$('#hub-memory-container').toggle(effect, options, duration);
+			});
+
+
+			$('#app_config').val('app.json');
+			$('#bot_config').val('bot.json');
+
+			$('[id="enabled"]').simpleSwitch();
+			$('[id="start_boot"]').simpleSwitch();
+
+			function setNewPort() {
+
+				let uniquePorts = new Set();
+
+				// Find all used ports and increment highest by 1 to set for new instance
+				$('#botsDeals tbody tr').each(function() {
+
+					let webServerPort = $(this).find('td[data-field="web_server_port"]').text().trim();
+					let webServerPortOverride = $(this).find('td[data-field="web_server_port_override"]').text().trim();
+
+					if (webServerPort !== '' && !isNaN(webServerPort)) {
+
+						uniquePorts.add(parseInt(webServerPort));
+					}
+
+					if (webServerPortOverride !== '' && !isNaN(webServerPortOverride)) {
+
+						uniquePorts.add(parseInt(webServerPortOverride));
+					}
+				});
+
+				let maxPort = uniquePorts.size > 0 ? Math.max(...Array.from(uniquePorts)) : 0;
+				let newPort = maxPort + 1;
+
+				// Set new port
+				$('#web_server_port').val(newPort);
+			}
+
+			function addInstance(dataObj) {
+
+				$('#spinner-overlay').fadeIn(100);
+
+				$.ajax({
+						url: '/addInstance',
+						method: 'POST',
+						contentType: 'application/json',
+						data: JSON.stringify(dataObj),
+						success: function (response) {
+
+							$('#spinner-overlay').fadeOut(100);
+
+							if (response.success) {
+
+								alertBox('Success!', function() {
+
+									window.location.reload(true);
+								});
+							}
+							else {
+
+								alertBox(response.message, function() {});
+							}
+						},
+						error: function (xhr, status, error) {
+
+							$('#spinner-overlay').fadeOut(100);
+
+							alertBox('Failed to add instance: ' + xhr.responseText);
+						}
+				});
+			}
+
+			function addInstanceConfirm(msg, dataObj) {
+
+				$.confirm({
+						title: false,
+						boxWidth: '50%',
+						useBootstrap: false,
+						content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>',
+						buttons: {
+
+									ok: {
+											btnClass: 'btn-default',
+											text: '<div style="color: #4aa602;">Add Instance</div>',
+											action: function () {
+							
+												addInstance(dataObj);
+											}
+									},
+									cancel: {
+
+							 				btnClass: 'btn-default',
+							 				text: '<div style="color: #000000;">Cancel</div>',	
+							 				action: function () {
+											}
+									}
+				 		}
+				});
+			}
+
+			function restartConfirm(instanceId, instanceName) {
+
+				$.confirm({
+						title: false,
+						boxWidth: '50%',
+						useBootstrap: false,
+						content: '<div style="font-size: 1.2rem; text-align: left;">Restart ' + instanceName + '?</div>',
+						buttons: {
+
+									ok: {
+											btnClass: 'btn-default',
+											text: '<div style="color: #4aa602;">Restart</div>',
+											action: function () {
+											
+												restartInstance(instanceId);
+											}
+										},
+										cancel: {
+
+									 		btnClass: 'btn-default',
+									 		text: '<div style="color: #000000;">Cancel</div>',	
+									 		action: function () {
+											}
+										}
+						}
+				});
+			}
+
+			function restartInstance(instanceId, isntanceName) {
+
+				// Perform the AJAX POST request
+				$.ajax({
+					url: '/startInstance',
+					method: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify({
+						id: instanceId
+					}),
+					success: function (response) {
+						// Show a success message
+						alertBox('Instance restarted!');
+
+						// Optionally: update the UI to reflect the stopped instance
+						// $(this).closest('tr').remove(); // If you want to remove the row after stopping
+					},
+					error: function (xhr, status, error) {
+						// Show an error message
+						alertBox('Failed to restart instance: ' + xhr.responseText);
+					}
+				});
+			}
+
+			$(document).on('click', 'td.editable', function () {
+				var $this = $(this);
+				if ($this.find('input').length === 0) {
+					var originalText = $this.text().trim(); // Store original value
+					var input = $('<input>', {
+						type: 'text',
+						value: originalText
+					});
+
+					// Replace the cell's content with the input element
+					$this.html(input);
+					input.focus();
+
+					// Handle Enter and Escape keys
+					input.on('keydown', function (e) {
+						if (e.key === 'Enter') {
+							var newValue = $(this).val().trim();
+							const fieldName = $this.data('field'); // Get the data-field attribute
+
+							// Only validate and append .json for app_config and bot_config fields
+							if (fieldName === 'app_config' || fieldName === 'bot_config' || fieldName === 'server_config') {
+								if (validateConfigField(newValue)) {
+									newValue = appendJsonExtension(newValue); // Append .json if valid
+								} else {
+									newValue = originalText; // Keep original if invalid
+								}
+							}
+
+							// Update the cell text
+							$this.text(newValue);
+
+							// Update matching ports only for web_server_port
+							if (fieldName === 'web_server_port') {
+								updateMatchingPorts(newValue, $this);
+							}
+						} else if (e.key === 'Escape') {
+							$this.text(originalText); // Reset to original value on Escape
+						}
+					});
+
+					// Handle blur event to validate
+					input.on('blur', function () {
+						var newValue = $(this).val().trim();
+						const fieldName = $this.data('field'); // Get the data-field attribute
+
+						// Only validate and append .json on blur for app_config and bot_config
+						if (fieldName === 'app_config' || fieldName === 'bot_config' || fieldName === 'server_config') {
+							if (validateConfigField(newValue)) {
+								newValue = appendJsonExtension(newValue); // Append .json if valid
+							} else {
+								newValue = originalText; // Reset to original value if invalid
+							}
+						}
+
+						$this.text(newValue); // Update text with final value
+
+						// Update matching ports if the updated field is web_server_port
+						if (fieldName === 'web_server_port') {
+							updateMatchingPorts(newValue, $this);
+						}
+					});
+				}
+			});
+
+			// Allow only digits and backspace for specific fields
+			$(document).on('keypress', 'td[data-field="web_server_port"], td[data-field="web_server_port_override"]', function (e) {
+				const char = String.fromCharCode(e.which);
+				if (!/^\d$/.test(char) && e.which !== 8) { // Allow only digits and backspace
+					e.preventDefault();
+				}
+			});
+
+			// Function to update matching web server ports
+			function updateMatchingPorts(newPort, $currentCell) {
+
+				const appConfigName = $currentCell.closest('tr').find('td[data-field="app_config"]').text().trim();
+
+				$('tr[data-instance]').each(function () {
+					const $row = $(this);
+					const rowAppConfigName = $row.find('td[data-field="app_config"]').text().trim();
+					const currentPort = $row.find('td[data-field="web_server_port"]').text().trim();
+
+					// Update matching ports
+					if (rowAppConfigName === appConfigName && currentPort !== newPort) {
+						$row.find('td[data-field="web_server_port"]').text(newPort);
+					}
+				});
+			}
+
+			$('#botsDeals').tablesorter({
+
+				widgets: ['saveSort', 'stickyHeaders', 'uitheme', 'columnSelector'],
+				widgetOptions: {
+					saveSort: true,
+					stickyHeaders_attachTo: '',
+					columnSelector_mediaqueryHidden: true,
+					columnSelector_mediaqueryName: 'Show Default',
+					columnSelector_container: $('#botDealSelector')
+				},
+				durationLength: 4,
+				durationLabels: '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
+				extExtraction: {}
+			});
+
+			$('#botDealSelectorShow').click(function() {
+
+				if ($('.botDealSelectorWrapper').is(':visible')) {
+
+					$('.botDealSelectorWrapper').fadeOut(300);
+				}
+				else {
+
+					$('.botDealSelectorWrapper').fadeIn(300);
+				}
+			});
+
+			// Handle inline editing of fields
+			$(document).on('click', 'td.editable', function () {
+				var $this = $(this);
+				if ($this.find('input').length === 0) {
+					var text = $this.text().trim();
+					var input = $('<input>', {
+						type: 'text',
+						value: text,
+						blur: function () {
+							var newValue = $(this).val();
+							$this.text(newValue);
+						}
+					});
+					$this.html(input);
+					input.focus();
+				}
+			});
+
+			// Handle opening instance in a new window
+			$(document).on('click', '.open-instance-btn', function () {
+
+				var $row = $(this).closest('tr');
+				var port = $row.find('td[data-field="web_server_port"]').text().trim();
+				var portOverride = $row.find('td[data-field="web_server_port_override"]').text().trim();
+
+				// If both port and portOverride are not valid, show an error message
+				if (!port && !portOverride) {
+
+					alertBox('Port not found for this instance.');
+					return;
+				}
+
+				// Use portOverride if available, otherwise use the original port
+				var finalPort = portOverride ? portOverride : port;
+
+				if (finalPort) {
+
+					const baseUrl = window.location.origin;
+					const url = new URL(baseUrl);
+
+					url.port = finalPort;
+					url.pathname = '/';
+					url.search = '';
+
+					window.open(url.href, '_blank');
+
+				} else {
+
+					alertBox('Port not found for this instance.');
+				}
+			});
+
+			// Function to build the data object for instance operations
+			function buildDataObj({
+						enabled = false,
+						startBoot = false,
+						instanceId = '',
+						instanceName = '',
+						exchange = '',
+						appConfig = {},
+						botConfig = {},
+						serverConfig = {},
+						serverId = '',
+						mongoDbUrl = '',
+						webServerPort = null,
+						overrides = {}
+			}) {
+					return {
+								'id': instanceId,
+								'name': instanceName,
+								'app_config': appConfig,
+								'bot_config': botConfig,
+								'server_config': serverConfig,
+								'server_id': serverId,
+								'mongo_db_url': mongoDbUrl,
+								'web_server_port': webServerPort,
+								'enabled': enabled,
+								'start_boot': startBoot,
+								'exchange': exchange,
+								'overrides': {
+												'server_id': overrides.serverIdOverride || '',
+												'mongo_db_url': overrides.mongoDbUrlOverride || '',
+												'web_server_port': overrides.webServerPortOverride || null,
+												'telegram_enabled': overrides.telegramEnabledOverride,
+												'signals_3cqs_enabled': overrides.signals3CQSOverride
+											}
+							};
+			}
+
+			// Validation for instance name and web server port
+			function validateInstanceName(instanceName) {
+				const regex = /^[a-zA-Z0-9-]+$/;
+				return regex.test(instanceName);
+			}
+
+			function validateWebServerPort(port) {
+				const regex = /^[0-9]+$/;
+				return regex.test(port);
+			}
+
+			// Automatically update App Config and Bot Config based on Instance Name
+			$('#instance_name').on('input', function () {
+
+				const instanceName = $(this).val().trim();
+
+				if (validateInstanceName(instanceName)) {
+
+					$('#app_config').val(`app-${instanceName}.json`);
+					$('#bot_config').val(`bot-${instanceName}.json`);
+
+					$('#mongo_db_url').val(`mongodb://localhost:27017/SymBot-${instanceName}`);
+				}
+				else {
+
+					$('#app_config').val('');
+					$('#bot_config').val('');
+					$('#mongo_db_url').val('');
+				}
+			});
+
+			// Validation for instance name (only alphanumeric characters and dashes)
+			function validateInstanceNameChar(char) {
+				const regex = /^[a-zA-Z0-9-]$/;
+				return regex.test(char);
+			}
+
+			// Validation for web server port (only numbers)
+			function validateWebServerPortChar(char) {
+				const regex = /^[0-9]$/;
+				return regex.test(char);
+			}
+
+			// Automatically update App Config and Bot Config based on Instance Name
+			$('#instance_name').on('input', function () {
+				const instanceName = $(this).val().trim();
+
+				if (instanceName === '' || /^[a-zA-Z0-9-]+$/.test(instanceName)) {
+					$('#app_config').val(`app-${instanceName}.json`);
+					$('#bot_config').val(`bot-${instanceName}.json`);
+				} else {
+					$('#app_config').val('');
+					$('#bot_config').val('');
+				}
+			});
+
+			// Prevent invalid characters from being entered into Instance Name field
+			$('#instance_name').on('keypress', function (e) {
+				const char = String.fromCharCode(e.which);
+				if (!validateInstanceNameChar(char)) {
+					e.preventDefault();
+				}
+			});
+
+			// Prevent invalid characters from being entered into Web Server Port field
+			$('#web_server_port').on('keypress', function (e) {
+				const char = String.fromCharCode(e.which);
+				if (!validateWebServerPortChar(char)) {
+					e.preventDefault();
+				}
+			});
+
+			// Validate alphanumeric characters and dashes
+			function validateConfigField(value) {
+
+				const regex = /^[a-zA-Z0-9-.]+$/;
+				return regex.test(value);
+			}
+
+			// Append .json extension if not empty and doesn't already have it
+			function appendJsonExtension(value) {
+				
+				if (value) {
+
+					const decimalIndex = value.indexOf('.');
+
+					if (decimalIndex !== -1) {
+						
+						value = value.substring(0, decimalIndex);
+					}
+
+					if (!value.endsWith('.json')) {
+
+						return value + '.json';
+					}
+				}
+
+				return value;
+			}
+
+			// Automatically update and validate App Config and Bot Config fields in the "Add Instances" section
+			$('#app_config, #bot_config').on('blur', function () { // Changed to 'blur' event
+				let value = $(this).val().trim();
+
+				if (validateConfigField(value)) {
+					// Append .json extension if valid and not empty
+					$(this).val(appendJsonExtension(value));
+				} else {
+					// Clear field if invalid
+					$(this).val('');
+				}
+			});
+
+			// Automatically update and validate App Config and Bot Config fields in the "Existing Instances" section
+			$(document).on('blur', 'td[data-field="app_config"], td[data-field="bot_config"] td[data-field="server_config"] input', function () { // Changed to 'blur' event
+				let value = $(this).val().trim();
+
+				if (validateConfigField(value)) {
+					// Append .json extension if valid and not empty
+					$(this).val(appendJsonExtension(value));
+				} else {
+					// Clear field if invalid
+					$(this).val('');
+				}
+			});
+
+			// Prevent invalid characters from being entered in App Config and Bot Config fields
+			$('#app_config, #bot_config').on('keypress', function (e) {
+				const char = String.fromCharCode(e.which);
+				if (!/^[a-zA-Z0-9-]$/.test(char)) {
+					e.preventDefault();
+				}
+			});
+
+			// Prevent invalid characters in the existing instances fields
+			$(document).on('keypress', 'td[data-field="app_config"], td[data-field="bot_config"], td[data-field="server_config"] input', function (e) {
+				const char = String.fromCharCode(e.which);
+				if (!/^[a-zA-Z0-9-]$/.test(char)) {
+					e.preventDefault();
+				}
+			});
+
+			// Add new instance button click event with validation
+			$('#add-button').on('click', function () {
+
+				let botConfigMatches = [];
+
+				let instanceName = $('#instance_name').val().trim();
+				let webServerPort = $('#web_server_port').val().trim();
+				let appConfig = $('#app_config').val().trim();
+				let botConfig = $('#bot_config').val().trim();
+				let mongoDbUrl = $('#mongo_db_url').val().trim();
+				let exchange = $('#exchange').val().trim();
+
+				if (!/^[a-zA-Z0-9-]+$/.test(instanceName)) {
+
+					alertBox('Instance name can only contain alphanumeric characters and dashes.');
+					return;
+				}
+
+				if (webServerPort && !/^[0-9]+$/.test(webServerPort)) {
+
+					alertBox('Web Server Port can only contain numbers.');
+					return;
+				}
+
+				if (exchange == '') {
+
+					alertBox('Please select an exchange to use');
+					return;
+				}
+
+				// Append .json if necessary
+				appConfig = appendJsonExtension(appConfig);
+				botConfig = appendJsonExtension(botConfig);
+
+				// Loop through each existing instance row
+				$('#botsDeals tbody tr').each(function() {
+
+	    			let existingAppConfig = $(this).find('td[data-field="app_config"]').text().trim();
+					let existingBotConfig = $(this).find('td[data-field="bot_config"]').text().trim();
+
+//					if (existingAppConfig === appConfig || existingBotConfig === botConfig) {
+					if (existingBotConfig === botConfig) {
+
+						botConfigMatches.push({
+												'this': $(this),
+												'instance_id': $(this).data('instanceid')
+											  });
+
+						botConfigMatchFound = true;
+					}
+				});
+
+				//let dataObj = buildDataObj(false, false, '', instanceName, appConfig, botConfig, '', '', mongoDbUrl, webServerPort);
+				let dataObj = buildDataObj({
+							enabled: false,
+							startBoot: false,
+							instanceName: instanceName,
+							appConfig: appConfig,
+							botConfig: botConfig,
+							mongoDbUrl: mongoDbUrl,
+							webServerPort: webServerPort,
+							exchange: exchange,
+							overrides: {
+											telegramEnabledOverride: '',
+											signals3CQSOverride: false
+							}
+				});
+
+				if (instanceName && mongoDbUrl && webServerPort && appConfig && botConfig) {
+
+					if (botConfigMatches.length > 0) {
+
+						for (let i = 0; i < botConfigMatches.length; i++) {
+
+							const data = botConfigMatches[i];
+
+							data.this.css('background-color', '#B78225');
+
+							console.log('Bot config match found for instance: ' + data.instance_id);
+						}
+
+						let msg = '<b>WARNING:</b> You entered an existing bot configuration file name. Please confirm if you want to proceed with the same exchange, credentials, and settings (including sandbox mode), or choose a new configuration file.';
+
+						addInstanceConfirm(msg, dataObj);
+					}
+					else {
+
+						let msg = 'Add Instance?';
+
+						addInstanceConfirm(msg, dataObj);
+					}
+				}
+				else {
+
+					alertBox('Please fill in all fields.');
+				}
+			});
+
+			// Update existing instances
+			$('#update-button').on('click', function () {
+
+				let rows = [];
+				let updates = [];
+
+				$('tr[data-instance]').each(function () {
+
+					let $row = $(this);
+					let enabled = $row.find('input[data-field="enabled"]').prop('checked');
+					let startBoot = $row.find('input[data-field="start_boot"]').prop('checked');
+					let instanceId = $row.data('instanceid');
+					let instanceNameOrig = $row.data('instance');
+					let instanceName = $row.find('td[data-field="name"]').text().trim();
+					let telegramEnabledOverride = $row.find('select#telegram_select_override').val();
+					let signals3CQSSelectOverride = $row.find('select#signals_3cqs_select_override').val();
+					let serverId = $row.find('td[data-field="server_id"]').text().trim();
+					let webServerPort = $row.find('td[data-field="web_server_port"]').text().trim() ? Number($row.find('td[data-field="web_server_port"]').text().trim()) : null;
+					let mongoDbUrl = $row.find('td[data-field="mongo_db_url"]').text().trim();
+					let appConfig = $row.find('td[data-field="app_config"]').text().trim();
+					let botConfig = $row.find('td[data-field="bot_config"]').text().trim();
+					let serverConfig = $row.find('td[data-field="server_config"]').text().trim();
+					let serverIdOverride = $row.find('td[data-field="server_id_override"]').text().trim();
+					let mongoDbUrlOverride = $row.find('td[data-field="mongo_db_url_override"]').text().trim();
+					let webServerPortOverride = $row.find('td[data-field="web_server_port_override"]').text().trim() ? Number($row.find('td[data-field="web_server_port_override"]').text().trim()) : null;
+
+					if (instanceName && (mongoDbUrlOverride || webServerPort || botConfig || serverIdOverride)) {
+
+						/*
+						let dataObj = buildDataObj(enabled, startBoot, instanceId, instanceName, appConfig, botConfig, serverConfig, serverId, mongoDbUrl, webServerPort, telegram, {
+							serverIdOverride,
+							mongoDbUrlOverride,
+							webServerPortOverride
+						});
+						*/
+
+						let dataObj = buildDataObj({
+							
+							enabled: enabled,
+							startBoot: startBoot,
+							instanceId: instanceId,
+							instanceName: instanceName,
+							appConfig: appConfig,
+							botConfig: botConfig,
+							serverConfig: serverConfig,
+							serverId: serverId,
+							mongoDbUrl: mongoDbUrl,
+							webServerPort: webServerPort,
+							overrides: {
+								serverIdOverride: serverIdOverride,
+								mongoDbUrlOverride: mongoDbUrlOverride,
+								webServerPortOverride: webServerPortOverride,
+								telegramEnabledOverride: telegramEnabledOverride,
+								signals3CQSOverride: signals3CQSSelectOverride,
+							}
+						});
+
+						dataObj.name_orig = instanceNameOrig; // Add name_orig for updates
+						updates.push(dataObj);
+
+						const rowObj = {
+							'row': $row,
+							'name': instanceName
+						}
+
+						rows.push(rowObj);
+					}
+				});
+
+				if (updates.length > 0) {
+
+					$('#spinner-overlay').fadeIn(100);
+
+					$.ajax({
+						url: '/update-instances',
+						method: 'POST',
+						contentType: 'application/json',
+						data: JSON.stringify(updates),
+						success: function (response) {
+
+							$('#spinner-overlay').fadeOut(100);
+
+							// Update instance name to reflect changes
+							for (let i = 0; i < rows.length; i++) {
+
+								const rowData = rows[i];
+
+								let $row = rowData.row;
+								let instanceName = rowData.name;
+
+								$row.data('instance', instanceName);
+							}
+
+							let responseMsg = response.message;
+
+							if (!response.success) {
+
+								responseMsg = 'Failed to update instances: ' + responseMsg;
+							}
+
+							alertBox(responseMsg, function() {});
+						},
+						error: function (xhr, status, error) {
+
+							$('#spinner-overlay').fadeOut(100);
+
+							alertBox('Error: ' + xhr.responseText);
+						}
+					});
+				}
+			});
+
+			$(document).on('click', '#restartInstance', function () {
+			// Get the instance ID from the button's data attribute
+			let instanceId = $(this).data('instanceid');
+
+			if (!instanceId) {
+
+				alertBox('Instance ID not found.');
+				return;
+			}
+
+			// Get the instance name from the same row (tr)
+			let instanceName = $(this).closest('tr').find('td[data-field="name"]').text().trim();
+
+			if (!instanceName) {
+				
+				alertBox('Instance name not found.');
+				return;
+			}
+
+			restartConfirm(instanceId, instanceName);
+		});
+
+
+	});
+	</script>
+	<center>
+		<main>
+
+			<div class="botDealSelectorWrapper">
+				<div id="botDealSelector" class="botDealSelector">
+				  <!-- this div is where the column selector is added -->
+				</div>
+			  
+				<div class="botDealSelectorHidden">
+					<div id="popover-botdeals"></div>
+				</div>
+			</div>
+		
+			<div id="contentBox" style="width: 90%; margin: 20px auto;">
+				<!-- Header -->
+				<div class="contentHeaderBox">
+					<span id="botDealSelectorShow">&#9881;</span>
+					<b id="headerText" class="contentHeader">Hub Instance Manager</b>
+				</div>
+				<!-- Add New Instance Form -->
+				<div class="hub-add-instance-form" style="text-align: left; width: 100%; max-width: 600px; margin: 20px 0;">
+					<center>
+						<h3>Add New Instance Configuration</h3>
+					</center>
+					<form class="hub-form" action="" method="POST">
+						<div class="hub-form-group">
+							<label for="instanceName">Instance Name:
+								<span class="toolTip">?<span class="toolTipText">
+									This is a unique name used to easily identify this instance.
+								</span></span>
+							</label>
+							<input type="text" id="instance_name" name="instance_name" class="form-field" required>
+						</div>
+						<div class="hub-form-group">
+							<label for="mongo_db_url">Mongo DB URL:
+								<span class="toolTip">?<span class="toolTipText">
+									This is the MongoDB URL used for data storage. Each instance must have its own unique URL.
+								</span></span>
+							</label>
+							<input type="text" id="mongo_db_url" name="mongo_db_url" class="form-field">
+						</div>
+						<div class="hub-form-group">
+							<label for="web_server_port">Web Server Port:
+								<span class="toolTip">?<span class="toolTipText">
+									This is the port used to access the instance's web interface, APIs, and other services. Each instance must have a unique port.
+								</span></span>
+							</label>
+							<input type="number" id="web_server_port" name="web_server_port" class="form-field" style="max-width: 200px;">
+						</div>
+						<div class="hub-form-group">
+							<label for="app_config">App Config:
+								<span class="toolTip">?<span class="toolTipText">
+									This is the configuration file the instance will use. If shared across multiple instances, fields like the database URL and web server port will be overridden for each instance. While sharing a configuration file simplifies future updates, any changes made will apply to all instances using the same file.
+								</span></span>
+							</label>
+							<input type="text" id="app_config" name="app_config" value="" class="form-field" style="max-width: 200px;">
+						</div>
+						<div class="hub-form-group">
+							<label for="bot_config">Bot Config:
+								<span class="toolTip">?<span class="toolTipText">
+									This is the bot configuration file the instance will use. It is highly recommended to assign a unique configuration to each instance to prevent confusion, especially when managing different exchanges or distinguishing between sandbox and real trading environments.
+								</span></span>
+							</label>
+							<input type="text" id="bot_config" name="bot_config" value="" class="form-field" style="max-width: 200px;">
+						</div>
+						<div class="hub-form-group">
+							<label for="exchange">Exchange:
+								<span class="toolTip">?<span class="toolTipText">
+									This is the exchange that will be used for a newly created bot configuration file. All new configurations are automatically set to sandbox mode.
+								</span></span>
+							</label>
+							<select id="exchange" name="exchange" value="" class="form-field" style="width: 200px; cursor: pointer;"></select>
+						</div>
+						<!--
+					<div class="hub-form-group">
+						<label for="server_config">Server Config:</label>
+						<input type="text" id="server_config" name="server_config" value="server.json" class="form-field">
+					</div>
+
+					<center>
+						<h4>Overrides</h4>
+					</center>
+					<div class="hub-form-group">
+						<label for="server_id">Server ID:</label>
+						<input type="text" id="server_id_override" name="server_id_override" class="form-field">
+					</div>
+					<div class="hub-form-group">
+						<label for="mongo_db_url_override">Mongo DB URL:</label>
+						<input type="text" id="mongo_db_url_override" name="mongo_db_url_override" class="form-field">
+					</div>
+					<div class="hub-form-group">
+						<label for="web_server_port_override">Web Server Port:</label>
+						<input type="number" id="web_server_port_override" name="web_server_port_override" class="form-field">
+					</div>
+					-->
+
+						<br>
+						<br>
+						<center>
+							<button id="add-button" type="button" class="hub-primary-btn">Add Instance</button>
+						</center>
+					</form>
+				</div>
+
+				<div id="hub-memory-container">
+					<button id="hub-closeMemoryButton">&times;</button>
+					<div id="hub-memoryContent">No Data</div>
+				</div>
+
+				<!-- Existing Instances Table -->
+				<div class="hub-middle-container">
+					<h3 class="hub-middle-header">Existing Instances</h3>
+					<div class="hub-show-memorybutton-wrapper">
+						<span id="hub-showMemoryButton">Show Memory Usage</span>
+					</div>
+				</div>
+				
+				<div class="hub-table-container" style="overflow-x: auto;">
+					<table id="botsDeals" style="width: 100%;">
+						<thead>
+							<tr>
+								<th data-sorter="false" class="columnSelector-disable"></th>
+								<th>Instance</th>
+								<th>Server ID</th>
+								<th>Mongo DB URL</th>
+								<th>Web Server Port</th>
+								<th>App Config</th>
+								<th>Bot Config</th>
+								<th>Server Config</th>
+								<th>Server ID Override</th>
+								<th>Mongo DB URL Override</th>
+								<th>Web Server Port Override</th>
+								<th>Telegram Override</th>
+								<th>3CQS Signals Override</th>
+								<th data-sorter="false" class="columnSelector-disable"></th>
+							</tr>
+						</thead>
+						<tbody>
+							<% if (configs && configs.length > 0) { %>
+								<% configs.forEach(config => { %>
+									<tr data-instance="<%= config.name %>" data-instanceid="<%= config.id %>">
+										<td>
+											<div class="hub-instance-status-indicator" id="serverStatus"></div>
+										</td>
+										<td class="editable" data-field="name">
+											<%= config.name %>
+										</td>
+										<td class="editable" data-field="server_id">
+											<%= config.server_id %>
+										</td>
+										<td class="editable" data-field="mongo_db_url">
+											<%= config.mongo_db_url %>
+										</td>
+										<td class="editable" data-field="web_server_port">
+											<%= config.web_server_port %>
+										</td>
+										<td class="editable" data-field="app_config">
+											<%= config.app_config %>
+										</td>
+										<td class="editable" data-field="bot_config">
+											<%= config.bot_config %>
+										</td>
+										<td class="editable" data-field="server_config">
+											<%= config.server_config %>
+										</td>
+										<td class="editable" data-field="server_id_override">
+											<%= config.overrides?.server_id %>
+										</td>
+										<td class="editable" data-field="mongo_db_url_override">
+											<%= config.overrides?.mongo_db_url %>
+										</td>
+										<td class="editable" data-field="web_server_port_override">
+											<%= config.overrides?.web_server_port %>
+										</td>
+										<td>
+											<select id="telegram_select_override" class="form-field">
+												<option value=""></option>
+												<option value="true" <%= config.overrides?.telegram_enabled === true ? 'selected' : '' %>>Enabled</option>
+												<option value="false" <%= config.overrides?.telegram_enabled === false ? 'selected' : '' %>>Disabled</option>
+											</select>
+										</td>
+										<td>
+											<select id="signals_3cqs_select_override" class="form-field">
+												<option value=""></option>
+												<option value="true" <%= config.overrides?.signals_3cqs_enabled === true ? 'selected' : '' %>>Enabled</option>
+												<option value="false" <%= config.overrides?.signals_3cqs_enabled === false ? 'selected' : '' %>>Disabled</option>
+											</select>
+										</td>
+										<td nowrap>
+											<span style="display: inline-block; margin-right: 5px;">
+												<button class="open-instance-btn hub-primary-btn">Login</button>
+											</span>
+											
+											<span style="display: inline-block; margin-right: 5px;">
+												<button class="hub-stop-btn" id="restartInstance" data-instanceid="<%= config.id %>">Restart</button>
+											</span>
+											
+											<span style="display: inline-block; margin-right: 5px;">
+												Start Boot<br>
+												<input type="checkbox" id="start_boot" data-field="start_boot" value="" <%= config.start_boot ? 'checked' : '' %>>
+											</span>
+											
+											<span style="display: inline-block; margin-right: 5px;">
+												Enabled<br>
+												<input type="checkbox" id="enabled" data-field="enabled" value="" <%= config.enabled ? 'checked' : '' %>>
+											</span>
+											
+										</td>
+									</tr>
+									<% }) %>
+										<% } else { %>
+											<tr>
+												<td colspan="13">No instances found</td>
+											</tr>
+											<% } %>
+						</tbody>
+					</table>
+				</div>
+				<br>
+				<!-- Update Button -->
+				<button id="update-button" class="hub-primary-btn">Update</button>
+			</div>
+		</main>
+	</center>
+
+<%- include('../partialsFooterView'); %>

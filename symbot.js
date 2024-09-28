@@ -24,8 +24,11 @@ const packageJson = require(__dirname + '/package.json');
 const Dependencies = require('check-dependencies').sync({ verbose: false });
 
 
+
+let workerData;
 let appDataConfig;
 let gotSigInt = false;
+let shutdownTimeout = 2000;
 
 
 process.on('SIGINT', shutDown);
@@ -56,13 +59,19 @@ async function init() {
 	let apiKey;
 	let apiKeySet;
 	let apiKeyClear;
+	let instanceName = '';
 
+	let workerDataObj = {};
 	let botConfigData = {};
 
 	let isReset = false;
 	let resetServerId = false;
 	let consoleLog = false;
 	let serverIdError = false;
+
+	let appConfigFile = 'app.json';
+	let botConfigFile = 'bot.json';
+	let serverConfigFile = 'server.json';
 
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
 
@@ -84,18 +93,43 @@ async function init() {
 		}
 	}
 
+	if (workerData && typeof workerData === 'object') {
+
+		workerDataObj = workerData;
+
+		if (workerDataObj['name'] && workerDataObj['name'] != '') {
+
+			instanceName = workerDataObj['name'];
+		}
+
+		if (workerDataObj['app_config'] && workerDataObj['app_config'] != '') {
+
+			appConfigFile = workerDataObj['app_config'];
+		}
+
+		if (workerDataObj['bot_config'] && workerDataObj['bot_config'] != '') {
+
+			botConfigFile = workerDataObj['bot_config'];
+		}
+
+		if (workerDataObj['server_config'] && workerDataObj['server_config'] != '') {
+
+			serverConfigFile = workerDataObj['server_config'];
+		}
+	}
+
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
 	const { update_available } = await Common.validateAppVersion();
 	await checkDependencies();
 
-	let appConfig = await Common.getConfig('app.json');
+	let appConfig = await Common.getConfig(appConfigFile);
 	let signalConfigs = await Common.getSignalConfigs();
 
 	let signalConfigsData = signalConfigs.data;
 
-	const botConfig = await Common.getConfig('bot.json');
-	const serverConfig = await Common.getConfig('server.json');
+	const botConfig = await Common.getConfig(botConfigFile);
+	const serverConfig = await Common.getConfig(serverConfigFile);
 
 	if (botConfig.success) {
 
@@ -114,7 +148,7 @@ async function init() {
 
 		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
 
-		await Common.saveConfig('app.json', appConfigObj.data);
+		await Common.saveConfig(appConfigFile, appConfigObj.data);
 	}
 	else {
 
@@ -130,7 +164,7 @@ async function init() {
 
 		let appConfigObj = JSON.parse(JSON.stringify(appConfig));
 
-		await Common.saveConfig('app.json', appConfigObj.data);
+		await Common.saveConfig(appConfigFile, appConfigObj.data);
 	}
 
 	if (signalConfigs.success && Object.keys(signalConfigsData).length > 0) {
@@ -216,11 +250,17 @@ async function init() {
 		}
 	}
 
+	let telegramEnabled = appConfig['data']['telegram']['enabled'];
+
 	let shareData = {
 						'appData': {
-										'name': packageJson.description,
+										'name': packageJson.description + (instanceName ? '-' + instanceName : ''),
+										'instance_name': instanceName,
 										'version': packageJson.version,
 										'update_available': update_available,
+										'app_config': appConfigFile,
+										'bot_config': botConfigFile,
+										'server_config': serverConfigFile,
 										'server_id': '',
 										'app_filename': __filename,
 										'console_log': consoleLog,
@@ -234,10 +274,13 @@ async function init() {
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
 										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
-										'telegram_enabled': appConfig['data']['telegram']['enabled'],
+										'telegram_enabled': telegramEnabled,
+										'telegram_enabled_config': telegramEnabled,
+										'signals_3cqs_enabled': appConfig?.data?.signals?.['3CQS']?.enabled,
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
 										'reset': isReset,
+										'worker_data': workerData,
 										'started': new Date()
 								   },
 						'DB': DB,
@@ -250,6 +293,40 @@ async function init() {
 						'Telegram': Telegram,
 						'WebServer': WebServer
 					};
+
+	// Apply config overrides from hub
+	if (Object.keys(workerDataObj).length > 0 && typeof workerDataObj['overrides'] === 'object') {
+
+		const workerDataOverrides = workerDataObj['overrides'];
+
+		if (workerDataOverrides['server_id'] != undefined && workerDataOverrides['server_id'] != null && workerDataOverrides['server_id'] != '') {
+
+			const serverIdOverride = workerDataOverrides['server_id'];
+
+			serverConfig['data']['server_id'] = serverIdOverride;
+			serverConfig['data']['server_id_override'] = serverIdOverride;
+		}
+
+		if (workerDataOverrides['web_server_port'] != undefined && workerDataOverrides['web_server_port'] != null && workerDataOverrides['web_server_port'] != '') {
+
+			shareData.appData['web_server_port'] = workerDataOverrides['web_server_port'];
+		}
+
+		if (workerDataOverrides['mongo_db_url'] != undefined && workerDataOverrides['mongo_db_url'] != null && workerDataOverrides['mongo_db_url'] != '') {
+
+			shareData.appData['mongo_db_url'] = workerDataOverrides['mongo_db_url'];
+		}
+
+		if (workerDataOverrides['telegram_enabled'] !== undefined && workerDataOverrides['telegram_enabled'] !== null && workerDataOverrides['telegram_enabled'] !== '') {
+
+			shareData.appData['telegram_enabled'] = Common.convertBoolean(workerDataOverrides['telegram_enabled'], false);
+		}
+
+		if (workerDataOverrides['signals_3cqs_enabled'] !== undefined && workerDataOverrides['signals_3cqs_enabled'] !== null && workerDataOverrides['signals_3cqs_enabled'] !== '') {
+
+			shareData.appData['signals_3cqs_enabled'] = Common.convertBoolean(workerDataOverrides['signals_3cqs_enabled'], false);
+		}
+	}
 
 	appDataConfig = shareData.appData;
 
@@ -284,7 +361,7 @@ async function init() {
 
 	if (success) {
 
-		const dbUrl = appConfig.data.mongo_db_url;
+		const dbUrl = appDataConfig.mongo_db_url;
 
 		let dbStarted =	await DB.start(dbUrl);
 
@@ -296,7 +373,7 @@ async function init() {
 
 			await System.start(dbUrl);
 
-			let res = await verifyServerId(serverConfig);
+			let res = await verifyServerId(serverConfigFile, serverConfig);
 			
 			serverIdError = res['server_id_error'];
 
@@ -330,14 +407,17 @@ async function init() {
 
 		const processInfo = await Common.getProcessInfo();
 
-		Telegram.start(appConfig['data']['telegram']['token_id']);
-		WebServer.start(appConfig['data']['web_server']['port']);
+		Telegram.start(appConfig['data']['telegram']['token_id'], appDataConfig['telegram_enabled']);
+		WebServer.start(appDataConfig['web_server_port']);
 
 		const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
 		setInterval(async () => {
+
 			const { update_available } = await Common.validateAppVersion();
+
 			if(update_available && !shareData.appData.update_available) {
+
 				shareData.appData.update_available = true;
 			}
 		}, TWELVE_HOURS)
@@ -355,7 +435,7 @@ async function init() {
 }
 
 
-async function verifyServerId(serverConfig) {
+async function verifyServerId(serverConfigFile, serverConfig) {
 
 	let serverId;
 	let success = true;
@@ -365,7 +445,21 @@ async function verifyServerId(serverConfig) {
 
 	if (!serverData) {
 
-		serverId = Common.uuidv4();
+		// Server ID not found in database
+		let isOverride = false;
+
+		const serverIdOverride = serverConfig.data.server_id_override;
+
+		// Use override from Hub instead of generating new one
+		if (serverIdOverride != undefined && serverIdOverride != null && serverIdOverride != '') {
+
+			isOverride = true;
+			serverId = serverIdOverride;
+		}
+		else {
+
+			serverId = Common.uuidv4();
+		}
 
 		try {
 
@@ -377,7 +471,11 @@ async function verifyServerId(serverConfig) {
 
 				await data.save();
 
-				await Common.saveConfig('server.json', { 'server_id': serverId });
+				// Only save if not override
+				if (!isOverride) {
+
+					await Common.saveConfig(serverConfigFile, { 'server_id': serverId });
+				}
 			}
 			catch(e) {
 
@@ -421,6 +519,17 @@ async function checkDependencies() {
 		}
 
 		Common.logger(pref + 'Packages installed do not match package list. You may want to update using npm install or another method', true);
+	}
+}
+
+
+async function setInstanceConfig(config) {
+
+	if (config && config.shutdownTimeout) {
+
+		workerData = config;
+
+		shutdownTimeout = config.shutdownTimeout;
 	}
 }
 
@@ -497,9 +606,23 @@ function shutDown() {
 		setTimeout(() => {
 							process.exit(1);
 
-						 }, 2000);
+						 }, shutdownTimeout);
 	}
 }
 
 
-start();
+if (require.main === module) {
+
+	start();
+}
+
+
+module.exports = {
+
+	start,
+	shutDown,
+	setInstanceConfig,
+	get DCABot() {
+        return DCABot;
+    }
+}
