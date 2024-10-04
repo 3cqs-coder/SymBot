@@ -33,7 +33,7 @@
 
 		$.ajax({
 					type: 'POST',
-					url: '/api/bots/' + api,
+					url: './api/bots/' + api,
 					data: {},
 					dataType: 'json',
 					success: function(data) {
@@ -180,7 +180,7 @@
 			}
 			else if (botId) {
 
-				window.location.href = '/bots/' + botId;
+				window.location.href = './bots/' + botId;
 			}
 		});
 

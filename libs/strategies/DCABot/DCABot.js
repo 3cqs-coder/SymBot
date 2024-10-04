@@ -4685,7 +4685,7 @@ async function panicSellDeal(dealId) {
 
 async function addFundsDeal(dealId, volume) {
 
-	let success = true;
+	let success = false;
 	let isUpdated = false;
 	let msg = 'Success';
 
@@ -4756,23 +4756,23 @@ async function addFundsDeal(dealId, volume) {
 					let orderSum = (parseFloat(amount) + parseFloat(oldOrders[i - 1].sum));
 					orderSum = await filterPrice(exchange, config.pair, orderSum);
 
-					let sum = await filterPrice(exchange, config.pair, orderSum);
-
 					const avgPrice = await filterPrice(exchange, config.pair, (parseFloat(orderSum) / parseFloat(qtySum)));
 
-					let targetPrice = await calculateTargetPrice({
+					let targetObj = {
+										'exchange': exchange,
+										'pair': config.pair,
+										'price': avgPrice,
+										'takeProfit': config.dcaTakeProfitPercent,
+										'exchangeFee': config.exchangeFee
+									};
 
-						'exchange': exchange,
-						'pair': config.pair,
-						'price': avgPrice,
-						'takeProfit': config.dcaTakeProfitPercent,
-						'exchangeFee': config.exchangeFee
-					});
+					let targetPrice = await calculateTargetPrice(targetObj);
 
 					if (targetPrice != undefined && targetPrice != null && targetPrice != false && targetPrice > 0) {
 
 						let buyOrderId = '';
 
+						success = true;
 						isUpdated = true;
 
 						if (!config.sandBox) {
@@ -4806,8 +4806,17 @@ async function addFundsDeal(dealId, volume) {
 
 						oldOrders.splice(i, 0, newOrder);
 					}
+					else {
 
-				} else if (isUpdated) {
+						success = false;
+
+						const obj = targetObj;
+						delete obj['exchange'];
+
+						msg = 'Unable to calculate target price: ' + JSON.stringify(obj);
+					}
+				}
+				else if (isUpdated) {
 
 					let price = Percentage.subPerc(
 						(oldOrders[i - 1].price),
@@ -4840,7 +4849,7 @@ async function addFundsDeal(dealId, volume) {
 						'exchangeFee': config.exchangeFee
 					});
 
-					oldOrders[i].orderNo = oldOrders[i].orderNo + 1;
+					oldOrders[i].orderNo = Number(oldOrders[i].orderNo) + 1;
 					oldOrders[i].price = price;
 					oldOrders[i].average = avgPrice;
 					oldOrders[i].target = targetPrice;

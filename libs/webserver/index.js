@@ -152,8 +152,8 @@ function initSocket(sessionMiddleware, server) {
 				methods: ['PUT', 'GET', 'POST', 'DELETE', 'OPTIONS'],
 				credentials: false
 		},
-		path: '/ws',
-		serveClient: true,
+		path: '/' + shareData.appData['web_socket_path'],
+		serveClient: false,
 		pingInterval: 10000,
 		pingTimeout: 5000,
 		maxHttpBufferSize: 1e6,

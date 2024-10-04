@@ -227,35 +227,34 @@ async function processConfig(configsArr) {
 		}
 	}
 
-	return { 'success': validate.success, 'error': validate.error, 'configs': configs };
+	const webServerPorts = validate.configs['web_server_ports'];
+
+	return { 'success': validate.success, 'error': validate.error, 'configs': configs, 'web_server_ports': webServerPorts };
 }
 
 
 async function createConfigFiles(exchange, configs) {
 
-	for (let i = 0; i < configs.length; i++) {
+	const pathRootConfig = shareData.appData.path_root + '/config/';
 
-		let botFileExists = false;
+	for (let i = 0; i < configs.length; i++) {
 
 		const config = configs[i];
 
 		const appFile = config['app_config'];
 		const botFile = config['bot_config'];
 
-		const pathRootConfig = shareData.appData.path_root + '/config/';
-
 		const appFilePath = pathRootConfig + appFile;
 		const botFilePath = pathRootConfig + botFile;
 
-		if (fs.existsSync(botFilePath)) {
+		if (!fs.existsSync(appFilePath)) {
 
-			botFileExists = true;
+			await copyAndClearValues(pathRootConfig + 'app.json', appFilePath, false);
 		}
 
-		await copyAndClearValues('app.json', appFilePath, false);
-		await copyAndClearValues('bot.json', botFilePath, false);
+		if (!fs.existsSync(botFilePath)) {
 
-		if (!botFileExists) {
+			await copyAndClearValues(pathRootConfig + 'bot.json', botFilePath, false);
 
 			// New bot config file. Set exchange and sandbox mode
 			const botConfig = await shareData.Common.getConfig(botFile);
@@ -290,8 +289,10 @@ async function copyAndClearValues(dataFile, outputFile, clear) {
 	const outputFilePath = outputFile;
 
 	try {
+
 		// Check if the output file exists
 		await fsp.access(outputFilePath).catch(async () => {
+
 			// If outputFile does not exist, proceed with copying and clearing
 			const fileData = JSON.parse(await fsp.readFile(dataFilePath, 'utf8'));
 
@@ -485,11 +486,9 @@ async function routeAddInstance(req, res) {
 			*/
 
 			try {
-				await shareData.startWorker({
-					...configNew
-				});
+				await startInstance(configNew);
 
-				shareData.Hub.logger('info', `Successfully started worker for ${instanceName}`);
+				logger('info', `Successfully started worker for ${instanceName}`);
 
 				// Wait short delay for instance to come online
 				await shareData.Common.delay(5000);
@@ -502,7 +501,7 @@ async function routeAddInstance(req, res) {
 			}
 			catch (err) {
 
-				shareData.Hub.logger('error', `Error starting worker for ${instanceName}: ${err.message}`);
+				logger('error', `Error starting worker for ${instanceName}: ${err.message}`);
 			}
 
 			let count = 0;
@@ -551,8 +550,16 @@ async function routeAddInstance(req, res) {
 
 				let hubDataNew = hubData.data;
 				hubDataNew.instances = configs;
-	
+
 				await shareData.Common.saveConfig(shareData.appData.hub_config, hubDataNew);
+
+				const validate = await validateConfig(configs);
+
+				if (validate.success) {
+
+					await setProxyPorts(validate.configs['web_server_ports']);
+				}
+	
 			}
 			else {
 
@@ -587,6 +594,13 @@ async function genServerConfigName(appConfig) {
 }
 
 
+async function setProxyPorts(ports) {
+
+	// Set any port changes for proxy
+	shareData.appData['web_server_ports'] = ports;
+}
+
+
 async function routeUpdateInstances(req, res) {
 
 	let updatedAppConfigs = {};
@@ -617,6 +631,10 @@ async function routeUpdateInstances(req, res) {
 
 				success = false;
 				message = 'Invalid configuration provided. ' + JSON.stringify(validate.error);
+			}
+			else {
+
+				await setProxyPorts(validate.configs['web_server_ports']);
 			}
 
 			if (success) {
@@ -787,7 +805,6 @@ async function routeUpdateInstances(req, res) {
 									config: updatedConfig
 								});
 							}
-
 						}
 					}
 				}
@@ -798,41 +815,25 @@ async function routeUpdateInstances(req, res) {
 					for (const workerInstance of workersRestart) {
 
 						const {
+							id: instanceId,
 							name: instanceName,
 							name_orig: instanceNameOrig,
 							worker_id: workerId,
 							config
 						} = workerInstance;
 
-						const { worker } = shareData.workerMap.get(workerId) || {};
-
-						if (worker) {
-
-							try {
-
-								// Terminate the worker before starting a new one
-								await worker.terminate();
-								shareData.Hub.logger('info', `Successfully terminated worker for ${instanceNameOrig}`);
-							}
-							catch (err) {
-
-								shareData.Hub.logger('error', `Error terminating worker for ${instanceNameOrig}: ${err.message}`);
-								continue; // Move on to the next worker even if there's an error
-							}
-						}
+						await terminateInstance(instanceId);
 
 						// Start a new worker with updated config
 						try {
 
-							shareData.startWorker({
-								...config
-							});
+							await startInstance(config);
 
-							shareData.Hub.logger('info', `Successfully restarted worker for ${instanceName}`);
+							logger('info', `Successfully restarted worker for ${instanceName}`);
 						}
 						catch (err) {
 
-							shareData.Hub.logger('error', `Error restarting worker for ${instanceName}: ${err.message}`);
+							logger('error', `Error restarting worker for ${instanceName}: ${err.message}`);
 						}
 					}
 				}
@@ -855,7 +856,7 @@ async function routeUpdateInstances(req, res) {
 
 			success = false;
 
-			shareData.Hub.logger('error', `Error in routeUpdateInstances: ${error.message}`);
+			logger('error', `Error in routeUpdateInstances: ${error.message}`);
 			message = 'Error: ' + error.message;
 		}
 	}
@@ -889,6 +890,14 @@ async function getInstance(instanceId) {
 }
 
 
+async function startInstance(instanceConfig) {
+
+	shareData.startWorker({
+		...instanceConfig
+	});
+}
+
+
 async function terminateInstance(instanceId) {
 
 	try {
@@ -902,16 +911,40 @@ async function terminateInstance(instanceId) {
 
 			if (worker) {
 
-				try {
+				// Wait until shutdown_received is received from worker and delay has passed
+				await new Promise((resolve, reject) => {
 
-					await worker.terminate();
+					worker.on('message', async (message) => {
 
-					//console.log(`Instance ID ${instanceId} terminated successfully.`);
-				}
-				catch (e) {
+						if (message.type === 'shutdown_received') {
 
-					//console.error(`Failed to terminate instance ID ${instanceId}:`, e);
-				}
+							try {
+
+								// Wait additional delay to ensure graceful shutdown
+								await shareData.Common.delay(shareData.appData['shutdown_timeout'] + 3000);
+
+								// Terminate the worker after the delay
+								await worker.terminate();
+
+								logger('info', `Worker ${workerId} terminated.`);
+
+								resolve();
+							}
+							catch (err) {
+							
+								logger('error', `Error terminating instance: ${err}`);
+							
+								reject(err);
+							}
+						}
+					});
+
+					// Send a "shutdown" message to the worker
+					worker.postMessage({
+
+						type: 'shutdown'
+					});
+				});
 			}
 		}
 	}
@@ -924,44 +957,47 @@ async function terminateInstance(instanceId) {
 
 async function routeStartWorker(req, res) {
 
-    try {
-        let configs;
-        const hubData = await shareData.Common.getConfig(shareData.appData.hub_config);
+	try {
 
-        if (hubData.success) {
-            configs = hubData.data.instances;
-        } else {
-            return res.status(500).send('Failed to retrieve hub configuration.');
-        }
+		let configs;
 
-        const { id: instanceId } = req.body;
+		const hubData = await shareData.Common.getConfig(shareData.appData.hub_config);
 
-        // Find the instance config
-        const instanceConfig = configs.find(c => c.id === instanceId);
+		if (hubData.success) {
 
-        if (!instanceConfig) {
-            return res.status(404).send('Instance config not found');
-        }
+			configs = hubData.data.instances;
+		}
+		else {
+
+			return res.status(500).send('Failed to retrieve hub configuration.');
+		}
+
+		const { id: instanceId } = req.body;
+
+		// Find the instance config
+		const instanceConfig = configs.find(c => c.id === instanceId);
+
+		if (!instanceConfig) {
+
+			return res.status(404).send('Instance config not found');
+		}
 
 		if (instanceConfig.enabled) {
 
-	        // Use getInstance to check if the instance is already running
-			const { success, worker, worker_id: workerId } = await getInstance(instanceId);
+			// Check if the instance is already running
+			const {
+				success,
+				worker,
+				worker_id: workerId
+			} = await getInstance(instanceId);
 
 			if (success && worker) {
 
-				// Terminate the worker if it's already running
-				worker.terminate().catch(err => {
-					
-					shareData.Hub.logger('error', `Error terminating instance: ${err}`);
-					return res.status(500).send(`Error terminating instance: ${err.message}`);
-				});
+				await terminateInstance(instanceId);
 			}
 
-			// Start the worker with the new instance
-			shareData.startWorker({
-				...instanceConfig
-			});
+			// Start worker with the new instance
+			await startInstance(instanceConfig);
 
 			res.redirect('/');
 		}
@@ -969,12 +1005,13 @@ async function routeStartWorker(req, res) {
 
 			res.status(500).send('Instance is disabled');
 		}
-    }
+	}
 	catch (error) {
 
 		console.error('Error in routeStartWorker:', error);
+
 		res.status(500).send('Server error: ' + error.message);
-    }
+	}
 }
 
 
@@ -1097,6 +1134,7 @@ module.exports = {
 	processConfig,
 	validateConfig,
 	getExchanges,
+	setProxyPorts,
 
 	init: function(obj) {
 

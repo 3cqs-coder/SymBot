@@ -20,7 +20,7 @@
 
 	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 
-	<script src="/ws/socket.io.min.js"></script>
+	<script src="/js/vendor/socket.io/socket.io.min.js"></script>
 	<script src="/js/vendor/jquery/jquery.min.js"></script>
 	<script src="/js/vendor/jquery-ui/jquery-ui.min.js"></script>
 	<script src="/js/vendor/jquery-confirm/jquery-confirm.min.js"></script>
@@ -40,6 +40,7 @@
 	const maxRows = 1000;
 	const offsetBottom = -225;
 
+	let basePath;
 	let dataTracker = {};
 	let modalTracker = {};
 	let pairBTC = 'BTC/USD';
@@ -48,6 +49,8 @@
 	let isHub = <%- (typeof isHub !== 'undefined' && isHub !== '') ? isHub : false %>;
 
 	$(document).ready(function() {
+
+		basePath = setBasePath();
 
 		if (isHub) {
 
@@ -119,7 +122,7 @@
 
 		$('#logo').on('click', function() {
 
-			window.location.href = '/';
+			window.location.href = './';
 		});
 
 		$('#btcPrice').on('click', function() {
@@ -132,6 +135,27 @@
 			getPriceBTC();
 		}
 	});
+
+
+	function setBasePath() {
+
+		let basePath = '/';
+
+	    const currentUrl = window.location.href; // Get the full current URL
+
+		const url = new URL(currentUrl);
+    
+		const segments = url.pathname.split('/').filter(segment => segment);
+
+		if (segments.length >= 2 && segments[0] === 'instance') {
+
+			basePath = '/instance/' + segments[1] + '/';
+		}
+
+		$('head').append('<base href="' + url.origin + basePath + '">');
+
+		return basePath;
+	}
 
 
 	function changeMode(mode) {
@@ -157,7 +181,7 @@
 
 	function getTradingViewData() {
 
-		fetch('/data/tradingViewData.json')
+		fetch('./data/tradingViewData.json')
 		.then(response => response.json())
 		.then(function(json) {
 
@@ -529,7 +553,7 @@
 			res = await $.ajax({
 		
 						type: 'GET',
-						url: '/api/markets',
+						url: './api/markets',
 						data: { 'exchange': exchange, 'pair': pair },
 						dataType: 'json',
 						success: function(data) {
@@ -687,7 +711,7 @@
 			exchange = 'COINBASE';
 		}
 
-		let url = '/api/tradingview?jquery=' + jquery + '&script=' + script + '&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
+		let url = './api/tradingview?jquery=' + jquery + '&script=' + script + '&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
 
 		openModal(modalId, '#' + divId, '<span id="tradingViewSettings">&#9881;</span> TradingView Chart ' + pair, 'Loading...');
 

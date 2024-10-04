@@ -56,6 +56,7 @@ If you would rather run SymBot using Docker then skip this section and go to the
 6. Type: `npm start`. You can also use `npm start consolelog` to display all logging to the console for testing purposes. The same information is also logged to files in the `logs` directory
 7. Open a web browser and type: http://127.0.0.1:3000
 
+<a id="pm2-id"></a>
 ### Recommended additional steps (optional)
 
 To have SymBot run in the background it is recommended to use the Node.js process manager called **pm2**. Here's how to use it:
@@ -112,22 +113,35 @@ Mongo Express is also installed which can be used to access MongoDB visually by 
 
 ## SymBot Hub
 
-SymBot Hub simplifies running multiple SymBot instances from a single installed codebase. Whether you're testing strategies across multiple exchanges, managing separate real and sandbox (paper) trading instances, or handling other scenarios, you can easily do it with just a click.
+SymBot Hub makes it easy to manage multiple SymBot instances from a single codebase. Whether you're testing strategies on different exchanges, running real and paper (sandbox) trading, or managing other setups, you can control everything with just a click.
 
-SymBot Hub provides a user-friendly web interface for managing instances—allowing you to add, update, restart, or disable them effortlessly. Additionally, SymBot Hub provides an intuitive way to monitor system resources like memory usage, making instance management both simple and efficient.
+With SymBot Hub's simple web interface, you can easily add, update, restart, or disable any instance. It also combines all instances into one system using an internal proxy server, so you only need one port to access everything. Plus, SymBot Hub helps you monitor system resources like memory usage, making instance management straightforward and efficient.
 
 ### Starting SymBot Hub
 
-1. Before starting SymBot Hub ensure you have set up your first SymBot configuration and everything is working as expected. Your initial instance will be created automatically based on your default configuration files.
-3. Open a command line terminal
-4. Change directory to where SymBot files are located
-5. If you have any SymBot instances running, stop them now
-6. Type: node symbot-hub.js
-7. Open a web browser and type: http://127.0.0.1:3100
+Before starting SymBot Hub, make sure your first SymBot configuration is set up and working as expected. The initial instance will be created automatically using your default configuration files.
+
+To get started:
+
+1.  Open a command line terminal.
+2.  If any SymBot instances are running, stop them.
+3.  Navigate to the directory where your SymBot files are located.
+4.  Run the command: `node symbot-hub.js`
+5.  Open a web browser and go to: http://127.0.0.1:3100
+
+Your SymBot instances are now all accessible through SymBot Hub. For example, if you have two SymBot instances running on ports 3000 and 3001, you can access them by visiting:
+
+-   http://127.0.0.1:3100/instance/3000
+-   http://127.0.0.1:3100/instance/3001
+
+This setup also makes it easier to use a domain name to access your SymBot instances. By pointing your domain to SymBot Hub, you can access them at:
+
+-   http://your-domain.com/instance/3000
+-   http://your-domain.com/instance/3001
 
 Once SymBot Hub is running, it is recommended to update your process manager to automatically start SymBot Hub instead of individual SymBot instances. This ensures that SymBot Hub takes over the management of all SymBot instances, while your process manager continues to handle the automatic startup of SymBot Hub itself.
 
-If your process manager, such as **pm2**, has maximum memory restart parameters configured, you may need to increase the limit, as SymBot Hub will consume more resources as the number of instances grows.
+If your process manager, such as [pm2](#pm2-id), has maximum memory restart parameters configured, you may need to increase the limit, as SymBot Hub will consume more resources as the number of instances grows.
 
 Lastly, be aware that exchanges often impose connection limits, and if you’re using services like Telegram, 3CQS signals, or other providers requiring API keys, there may also be restrictions on the number of connections allowed per IP address or API key. To stay within these limits, you may need to disable certain services on specific instances.
 

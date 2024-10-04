@@ -175,6 +175,7 @@ async function processWorkerTaskMessage(SymBot, message) {
 		const memoryUsage = process.memoryUsage();
 
 		parentPort.postMessage({
+
 			type: 'memory',
 			data: memoryUsage
 		});
@@ -188,12 +189,19 @@ async function processWorkerTaskMessage(SymBot, message) {
 		const msg = 'Active Deals: ' + Object.keys(dealTracker).length;
 
 		parentPort.postMessage({
+
 			type: 'deals_active',
 			data: msg
 		});
 	}
 
+	// Shutdown received for SymBot worker
 	if (message.type === 'shutdown') {
+
+		parentPort.postMessage({
+
+			type: 'shutdown_received'
+		});
 
 		SymBot.shutDown();
 	}
@@ -344,14 +352,18 @@ async function start() {
 
 		shareData = {
 						'appData': {
-						'name': packageJson.description + ' Hub',
-						'version': packageJson.version,
-						'password': hubData['data']['password'],
-						'path_root': __dirname,
-						'hub_config': hubConfigFile,
-						'sig_int': false,
-						'started': new Date()
-					},
+						
+							'name': packageJson.description + ' Hub',
+							'version': packageJson.version,
+							'password': hubData['data']['password'],
+							'path_root': __dirname,
+							'web_server_ports': undefined,
+							'web_socket_path': 'wsHub_',
+							'hub_config': hubConfigFile,
+							'shutdown_timeout': shutdownTimeout,
+							'sig_int': false,
+							'started': new Date()
+						},
 					'Common': Common,
 					'WebServer': WebServer,
 					'Hub': Hub,
@@ -372,6 +384,8 @@ async function start() {
 			Hub.logger('error', JSON.stringify(processData.error));
 		}
 		else {
+
+			await Hub.setProxyPorts(processData['web_server_ports']);
 
 			let foundMissing = false;
 
@@ -441,33 +455,83 @@ async function shutDown() {
 		gotSigInt = true;
 
 		Hub.logger('info', 'Received kill signal. Shutting down gracefully.');
-
 		Hub.logger('info', 'Cleaning up instances...');
 
 		const terminationPromises = [];
 
+		// Set timer to force shutdown if cleanup takes too long
+		let timeOutShutdown = setTimeout(() => {
+
+			Hub.logger('info', `Cleanup timed out. Forcing shutdown.`);
+
+			process.exit(1);
+		
+		}, (shutdownTimeout + 20000));
+
 		for (const [workerId, { worker, instance }] of workerMap.entries()) {
 
 			const dateStart = instance.dateStart;
-
 			const upTime = Common.timeDiff(new Date(dateStart), new Date());
 
-			Hub.logger('info', `Terminating Worker ID: ${workerId} (${upTime})`);
+			// Create a promise to track the worker shutdown process
+			const shutdownPromise = new Promise((resolve, reject) => {
 
-			const terminationPromise = worker.terminate().catch(err => {
+				// Wait for the worker to handle the shutdown
+				worker.on('message', async (message) => {
 
-				Hub.logger('error', `Error terminating instance: ${err}`);
+					if (message.type === 'shutdown_received') {
+
+						// Wait additional short delay to ensure worker shutdown gracefully
+						await Common.delay(shutdownTimeout + 3000);
+
+						// Once shutdown is complete, terminate the worker
+						try {
+
+							await worker.terminate();
+
+							Hub.logger('info', `Worker ${workerId} terminated after ${upTime}.`);
+
+							resolve();
+						}
+						catch (err) {
+
+							Hub.logger('error', `Error terminating instance: ${err}`);
+
+							reject(err);
+						}
+					}
+				});
+
+				// Send a "shutdown" message to the worker
+				worker.postMessage({
+
+					type: 'shutdown'
+				});
 			});
 
-			terminationPromises.push(terminationPromise);
+			terminationPromises.push(shutdownPromise);
 		}
 
-		await Promise.all(terminationPromises);
+		// Wait for all workers to finish before starting the shutdown timeout
+		try {
 
-		setTimeout(() => {
+			await Promise.all(terminationPromises);
 
-			process.exit(1);
+			clearTimeout(timeOutShutdown);
 
-		}, shutdownTimeout);
+			Hub.logger('info', 'All workers have been terminated. Proceeding with shutdown.');
+
+			// Start shutdown timeout after all workers are processed
+			setTimeout(() => {
+
+				process.exit(1);
+
+			}, (shutdownTimeout + 3000));
+
+		}
+		catch (err) {
+
+			Hub.logger('error', `Error during shutdown: ${err}`);
+		}
 	}
 }

@@ -2,11 +2,73 @@
 
 	<script>
 
+		const tooltipDelayMs = 250;
+		const tooltipDisplayDelayMs = 1000;
+
+		const actionButtons = {
+								'login': {
+											'tooltip': 'Login to Instance'
+										},
+								'restart': {
+											'tooltip': 'Restart Instance'
+											}
+							};
+
 		const exchanges = <%- JSON.stringify(exchanges) %>;
 
 		const numFormatter = new Function('return ' + `<%- numFormatter %>`)();
 
 		$(document).ready(function () {
+
+			let tooltipDisplayTime = {};
+
+			function getTooltipText(id) {
+
+				for (var key in actionButtons) {
+
+					if (id.startsWith(key)) {
+
+						return actionButtons[key]['tooltip'];
+					}
+				}
+
+				return null;
+			}
+
+			$(document).on('mouseenter', '[id]', function() {
+
+				let $this = $(this);
+				let tooltipText = getTooltipText($this.attr('id'));
+
+				if (tooltipText) {
+
+					let now = Date.now();
+					let lastDisplay = tooltipDisplayTime[$this.attr('id')];
+
+					if (!lastDisplay || now - lastDisplay >= tooltipDisplayDelayMs) {
+
+						$this.data('tooltipTimeout', setTimeout(function() {
+
+							let tooltip = $('<div class="toolTipButtons"></div>').appendTo('body');
+				
+							tooltip.text(tooltipText).css({
+															'top': $this.offset().top - tooltip.outerHeight() - 10,
+															'left': $this.offset().left + ($this.outerWidth() / 2) - (tooltip.outerWidth() / 2)
+														  }).fadeIn(200);
+
+							tooltipDisplayTime[$this.attr('id')] = now;
+
+						}, tooltipDelayMs));
+					}
+				}
+			});
+
+			$(document).on('mouseleave click', '[id]', function() {
+
+				clearTimeout($(this).data('tooltipTimeout'));
+
+				$('.toolTipButtons').fadeOut(200);
+			});
 
 			$('#exchange').empty();
 
@@ -175,7 +237,7 @@
 				$('#spinner-overlay').fadeIn(100);
 
 				$.ajax({
-						url: '/addInstance',
+						url: './addInstance',
 						method: 'POST',
 						contentType: 'application/json',
 						data: JSON.stringify(dataObj),
@@ -232,6 +294,34 @@
 				});
 			}
 
+			function updateInstancesConfirm() {
+
+				$.confirm({
+						title: false,
+						boxWidth: '50%',
+						useBootstrap: false,
+						content: '<div style="font-size: 1.2rem; text-align: left;">Update Instance Configurations?</div>',
+						buttons: {
+
+								ok: {
+										btnClass: 'btn-default',
+										text: '<div style="color: #4aa602;">Update Instances</div>',
+										action: function () {
+
+										updateInstances();
+									}
+								},
+								cancel: {
+
+										 btnClass: 'btn-default',
+										 text: '<div style="color: #000000;">Cancel</div>',	
+										 action: function () {
+										}
+								}
+		 			}
+				});
+			}
+
 			function restartConfirm(instanceId, instanceName) {
 
 				$.confirm({
@@ -243,7 +333,7 @@
 
 									ok: {
 											btnClass: 'btn-default',
-											text: '<div style="color: #4aa602;">Restart</div>',
+											text: '<div style="color: #d80f08;">Restart</div>',
 											action: function () {
 											
 												restartInstance(instanceId);
@@ -260,17 +350,133 @@
 				});
 			}
 
+			function updateInstances() {
+
+				let rows = [];
+				let updates = [];
+
+				$('tr[data-instance]').each(function () {
+
+					let $row = $(this);
+					let enabled = $row.find('input[data-field="enabled"]').prop('checked');
+					let startBoot = $row.find('input[data-field="start_boot"]').prop('checked');
+					let instanceId = $row.data('instanceid');
+					let instanceNameOrig = $row.data('instance');
+					let instanceName = $row.find('td[data-field="name"]').text().trim();
+					let telegramEnabledOverride = $row.find('select#telegram_select_override').val();
+					let signals3CQSSelectOverride = $row.find('select#signals_3cqs_select_override').val();
+					let serverId = $row.find('td[data-field="server_id"]').text().trim();
+					let webServerPort = $row.find('td[data-field="web_server_port"]').text().trim() ? Number($row.find('td[data-field="web_server_port"]').text().trim()) : null;
+					let mongoDbUrl = $row.find('td[data-field="mongo_db_url"]').text().trim();
+					let appConfig = $row.find('td[data-field="app_config"]').text().trim();
+					let botConfig = $row.find('td[data-field="bot_config"]').text().trim();
+					let serverConfig = $row.find('td[data-field="server_config"]').text().trim();
+					let serverIdOverride = $row.find('td[data-field="server_id_override"]').text().trim();
+					let mongoDbUrlOverride = $row.find('td[data-field="mongo_db_url_override"]').text().trim();
+					let webServerPortOverride = $row.find('td[data-field="web_server_port_override"]').text().trim() ? Number($row.find('td[data-field="web_server_port_override"]').text().trim()) : null;
+
+					if (instanceName && (mongoDbUrlOverride || webServerPort || botConfig || serverIdOverride)) {
+
+						/*
+						let dataObj = buildDataObj(enabled, startBoot, instanceId, instanceName, appConfig, botConfig, serverConfig, serverId, mongoDbUrl, webServerPort, telegram, {
+							serverIdOverride,
+							mongoDbUrlOverride,
+							webServerPortOverride
+						});
+						*/
+
+						let dataObj = buildDataObj({
+							
+							enabled: enabled,
+							startBoot: startBoot,
+							instanceId: instanceId,
+							instanceName: instanceName,
+							appConfig: appConfig,
+							botConfig: botConfig,
+							serverConfig: serverConfig,
+							serverId: serverId,
+							mongoDbUrl: mongoDbUrl,
+							webServerPort: webServerPort,
+							overrides: {
+								serverIdOverride: serverIdOverride,
+								mongoDbUrlOverride: mongoDbUrlOverride,
+								webServerPortOverride: webServerPortOverride,
+								telegramEnabledOverride: telegramEnabledOverride,
+								signals3CQSOverride: signals3CQSSelectOverride,
+							}
+						});
+
+						dataObj.name_orig = instanceNameOrig; // Add name_orig for updates
+						updates.push(dataObj);
+
+						const rowObj = {
+							'row': $row,
+							'name': instanceName
+						}
+
+						rows.push(rowObj);
+					}
+				});
+
+				if (updates.length > 0) {
+
+					$('#spinner-overlay').fadeIn(100);
+
+					$.ajax({
+						url: './update-instances',
+						method: 'POST',
+						contentType: 'application/json',
+						data: JSON.stringify(updates),
+						success: function (response) {
+
+							$('#spinner-overlay').fadeOut(100);
+
+							// Update instance name to reflect changes
+							for (let i = 0; i < rows.length; i++) {
+
+								const rowData = rows[i];
+
+								let $row = rowData.row;
+								let instanceName = rowData.name;
+
+								$row.data('instance', instanceName);
+							}
+
+							let responseMsg = response.message;
+
+							if (!response.success) {
+
+								responseMsg = 'Failed to update instances: ' + responseMsg;
+							}
+
+							alertBox(responseMsg, function() {});
+						},
+						error: function (xhr, status, error) {
+
+							$('#spinner-overlay').fadeOut(100);
+
+							alertBox('Error: ' + xhr.responseText);
+						}
+					});
+				}
+			}
+
 			function restartInstance(instanceId, isntanceName) {
+
+				$('#spinner-overlay').fadeIn(100);
 
 				// Perform the AJAX POST request
 				$.ajax({
-					url: '/startInstance',
+					url: './startInstance',
 					method: 'POST',
 					contentType: 'application/json',
 					data: JSON.stringify({
 						id: instanceId
 					}),
 					success: function (response) {
+
+						$('#spinner-overlay').fadeOut(100);
+
 						// Show a success message
 						alertBox('Instance restarted!');
 
@@ -278,6 +484,9 @@
 						// $(this).closest('tr').remove(); // If you want to remove the row after stopping
 					},
 					error: function (xhr, status, error) {
+
+						$('#spinner-overlay').fadeOut(100);
+
 						// Show an error message
 						alertBox('Failed to restart instance: ' + xhr.responseText);
 					}
@@ -440,9 +649,10 @@
 					const baseUrl = window.location.origin;
 					const url = new URL(baseUrl);
 
-					url.port = finalPort;
-					url.pathname = '/';
-					url.search = '';
+					//url.port = finalPort;
+					//url.pathname = '/';
+					//url.search = '';
+					url.pathname = '/instance/' + finalPort;
 
 					window.open(url.href, '_blank');
 
@@ -510,7 +720,7 @@
 					$('#app_config').val(`app-${instanceName}.json`);
 					$('#bot_config').val(`bot-${instanceName}.json`);
 
-					$('#mongo_db_url').val(`mongodb://localhost:27017/SymBot-${instanceName}`);
+					$('#mongo_db_url').val(`mongodb://127.0.0.1:27017/SymBot-${instanceName}`);
 				}
 				else {
 
@@ -655,12 +865,6 @@
 					return;
 				}
 
-				if (exchange == '') {
-
-					alertBox('Please select an exchange to use');
-					return;
-				}
-
 				// Append .json if necessary
 				appConfig = appendJsonExtension(appConfig);
 				botConfig = appendJsonExtension(botConfig);
@@ -678,10 +882,16 @@
 												'this': $(this),
 												'instance_id': $(this).data('instanceid')
 											  });
-
-						botConfigMatchFound = true;
 					}
 				});
+
+
+				// Alert to select an exchange if new bot config
+				if (exchange == '' && botConfigMatches.length == 0) {
+
+					alertBox('Please select an exchange to use');
+					return;
+				}
 
 				//let dataObj = buildDataObj(false, false, '', instanceName, appConfig, botConfig, '', '', mongoDbUrl, webServerPort);
 				let dataObj = buildDataObj({
@@ -732,113 +942,7 @@
 			// Update existing instances
 			$('#update-button').on('click', function () {
 
-				let rows = [];
-				let updates = [];
-
-				$('tr[data-instance]').each(function () {
-
-					let $row = $(this);
-					let enabled = $row.find('input[data-field="enabled"]').prop('checked');
-					let startBoot = $row.find('input[data-field="start_boot"]').prop('checked');
-					let instanceId = $row.data('instanceid');
-					let instanceNameOrig = $row.data('instance');
-					let instanceName = $row.find('td[data-field="name"]').text().trim();
-					let telegramEnabledOverride = $row.find('select#telegram_select_override').val();
-					let signals3CQSSelectOverride = $row.find('select#signals_3cqs_select_override').val();
-					let serverId = $row.find('td[data-field="server_id"]').text().trim();
-					let webServerPort = $row.find('td[data-field="web_server_port"]').text().trim() ? Number($row.find('td[data-field="web_server_port"]').text().trim()) : null;
-					let mongoDbUrl = $row.find('td[data-field="mongo_db_url"]').text().trim();
-					let appConfig = $row.find('td[data-field="app_config"]').text().trim();
-					let botConfig = $row.find('td[data-field="bot_config"]').text().trim();
-					let serverConfig = $row.find('td[data-field="server_config"]').text().trim();
-					let serverIdOverride = $row.find('td[data-field="server_id_override"]').text().trim();
-					let mongoDbUrlOverride = $row.find('td[data-field="mongo_db_url_override"]').text().trim();
-					let webServerPortOverride = $row.find('td[data-field="web_server_port_override"]').text().trim() ? Number($row.find('td[data-field="web_server_port_override"]').text().trim()) : null;
-
-					if (instanceName && (mongoDbUrlOverride || webServerPort || botConfig || serverIdOverride)) {
-
-						/*
-						let dataObj = buildDataObj(enabled, startBoot, instanceId, instanceName, appConfig, botConfig, serverConfig, serverId, mongoDbUrl, webServerPort, telegram, {
-							serverIdOverride,
-							mongoDbUrlOverride,
-							webServerPortOverride
-						});
-						*/
-
-						let dataObj = buildDataObj({
-							
-							enabled: enabled,
-							startBoot: startBoot,
-							instanceId: instanceId,
-							instanceName: instanceName,
-							appConfig: appConfig,
-							botConfig: botConfig,
-							serverConfig: serverConfig,
-							serverId: serverId,
-							mongoDbUrl: mongoDbUrl,
-							webServerPort: webServerPort,
-							overrides: {
-								serverIdOverride: serverIdOverride,
-								mongoDbUrlOverride: mongoDbUrlOverride,
-								webServerPortOverride: webServerPortOverride,
-								telegramEnabledOverride: telegramEnabledOverride,
-								signals3CQSOverride: signals3CQSSelectOverride,
-							}
-						});
-
-						dataObj.name_orig = instanceNameOrig; // Add name_orig for updates
-						updates.push(dataObj);
-
-						const rowObj = {
-							'row': $row,
-							'name': instanceName
-						}
-
-						rows.push(rowObj);
-					}
-				});
-
-				if (updates.length > 0) {
-
-					$('#spinner-overlay').fadeIn(100);
-
-					$.ajax({
-						url: '/update-instances',
-						method: 'POST',
-						contentType: 'application/json',
-						data: JSON.stringify(updates),
-						success: function (response) {
-
-							$('#spinner-overlay').fadeOut(100);
-
-							// Update instance name to reflect changes
-							for (let i = 0; i < rows.length; i++) {
-
-								const rowData = rows[i];
-
-								let $row = rowData.row;
-								let instanceName = rowData.name;
-
-								$row.data('instance', instanceName);
-							}
-
-							let responseMsg = response.message;
-
-							if (!response.success) {
-
-								responseMsg = 'Failed to update instances: ' + responseMsg;
-							}
-
-							alertBox(responseMsg, function() {});
-						},
-						error: function (xhr, status, error) {
-
-							$('#spinner-overlay').fadeOut(100);
-
-							alertBox('Error: ' + xhr.responseText);
-						}
-					});
-				}
+				updateInstancesConfirm();
 			});
 
 			$(document).on('click', '#restartInstance', function () {
@@ -965,7 +1069,7 @@
 						<br>
 						<br>
 						<center>
-							<button id="add-button" type="button" class="hub-primary-btn">Add Instance</button>
+							<button id="add-button" type="button" class="hub-primary-btn" style="width: auto; padding: 5px 10px;">Add Instance</button>
 						</center>
 					</form>
 				</div>
@@ -1055,12 +1159,12 @@
 											</select>
 										</td>
 										<td nowrap>
-											<span style="display: inline-block; margin-right: 5px;">
-												<button class="open-instance-btn hub-primary-btn">Login</button>
+											<span id="loginButton" style="display: inline-block; margin-right: 5px;">
+												<button class="open-instance-btn hub-primary-btn">➥</button>
 											</span>
-											
-											<span style="display: inline-block; margin-right: 5px;">
-												<button class="hub-stop-btn" id="restartInstance" data-instanceid="<%= config.id %>">Restart</button>
+
+											<span id="restartButton" style="display: inline-block; margin-right: 5px;">
+												<button class="hub-stop-btn" id="restartInstance" data-instanceid="<%= config.id %>">⟳</button>
 											</span>
 											
 											<span style="display: inline-block; margin-right: 5px;">
@@ -1072,7 +1176,6 @@
 												Enabled<br>
 												<input type="checkbox" id="enabled" data-field="enabled" value="" <%= config.enabled ? 'checked' : '' %>>
 											</span>
-											
 										</td>
 									</tr>
 									<% }) %>
@@ -1086,7 +1189,7 @@
 				</div>
 				<br>
 				<!-- Update Button -->
-				<button id="update-button" class="hub-primary-btn">Update</button>
+				<button id="update-button" class="hub-primary-btn" style="width: auto; padding: 5px 10px;">Update</button>
 			</div>
 		</main>
 	</center>

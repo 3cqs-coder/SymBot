@@ -11,10 +11,12 @@ const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 const bodyParser = require('body-parser');
 const Routes = require(pathRoot + '/hub/routes.js');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 const router = express.Router();
 
+const proxyMap = new Map();
 
 let socket;
 let shareData;
@@ -35,11 +37,40 @@ async function initApp() {
 		'resave': false,
 		'saveUninitialized': false,
 		'store': new FileStore({
-				'path': shareData.appData.path_root + '/sessions',
-				'logFn': function(){}
+			'path': shareData.appData.path_root + '/sessions',
+			'logFn': function() {}
 		}),
 		'cookie': {
 			'expires': (sessionExpireMins * 60) * 1000
+		}
+	});
+
+	// Middleware to handle incoming requests
+	app.use('/instance/:appId', async (req, res, next) => {
+
+		const { appId } = req.params;
+
+		/*
+		console.log(`Received request for appId: ${appId}`);
+		console.log(`Original URL: ${req.originalUrl}`);
+		console.log(`Method: ${req.method}`);
+		console.log(`Request Body:`, req.body);
+		*/
+
+		try {
+
+			const proxyMiddleware = await getProxyMiddleware(appId);
+
+			return proxyMiddleware(req, res, next);
+		}
+		catch (err) {
+		
+			console.error('Error during proxying:', err);
+
+			if (!res.headersSent) {
+
+				return res.status(500).send('Internal Server Error');
+			}
 		}
 	});
 
@@ -75,6 +106,109 @@ async function initApp() {
 }
 
 
+
+// Create or get the proxy middleware for an appId
+const getProxyMiddleware = async (appId) => {
+
+	if (!proxyMap.has(appId)) {
+
+		const port = await getAppPort(appId);
+
+		if (!port) {
+			throw new Error(`No matching port found for appId: ${appId}`);
+		}
+
+		const targetUrl = `http://127.0.0.1:${port}`;
+
+		//console.log(`Creating proxy middleware for ${appId} targeting ${targetUrl}`);
+
+		const proxyMiddleware = createProxyMiddleware({
+			target: targetUrl,
+			changeOrigin: true,
+			followRedirects: false,
+			autoRewrite: true,
+			hostRewrite: true,
+			cookieDomainRewrite: true,
+			ws: true,
+			pathRewrite: (path) => path.replace(`/instance/${appId}`, ''),
+			timeout: 120000,
+			proxyTimeout: 120000,
+			on: {
+				proxyReq: (proxyReq, req) => {
+
+					//console.log('Proxy Request:', req.method, req.originalUrl);
+
+					if (req.headers.cookie) {
+
+						proxyReq.setHeader('Cookie', req.headers.cookie);
+					}
+				},
+				proxyRes: (proxyRes, req, res) => {
+
+					//console.log('Response received:', proxyRes.statusCode);
+
+					if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400) {
+
+						const location = proxyRes.headers['location'];
+						const newLocation = `/instance/${appId}${location}`;
+
+						//console.log(`Redirecting to: ${location}`);
+
+						return res.redirect(proxyRes.statusCode, newLocation);
+					}
+				},
+				error: (err, req, res) => {
+
+					let msg = 'Proxy Error: ' + JSON.stringify(err.message);
+
+					shareData.Hub.logger('error', msg);
+
+					if (res && res.status && !res.headersSent) {
+					
+						return res.status(500).send(msg);
+					}
+					else {
+					
+						//console.error('Proxy response object is not valid:', res);
+						shareData.Hub.logger('error', 'Proxy response object is not valid');
+					}
+				},
+			},
+		});
+
+		proxyMap.set(appId, proxyMiddleware);
+	}
+
+	return proxyMap.get(appId);
+};
+
+
+async function getAppPort(appId) {
+
+	let portFound;
+
+	const ports = shareData.appData['web_server_ports'];
+
+	const apps = {};
+
+	ports.forEach(port => {
+
+		apps[port] = port;
+	});
+
+	for (let app in apps) {
+
+		if (app == appId) {
+
+			portFound = apps[app];
+			break;
+		}
+	}
+
+	return portFound;
+}
+
+
 async function initSocket(sessionMiddleware, server) {
 
 	socket = require('socket.io')(server, {
@@ -84,8 +218,8 @@ async function initSocket(sessionMiddleware, server) {
 			methods: ['PUT', 'GET', 'POST', 'DELETE', 'OPTIONS'],
 			credentials: false
 		},
-		path: '/ws',
-		serveClient: true,
+		path: '/' + shareData.appData['web_socket_path'],
+		serveClient: false,
 		pingInterval: 10000,
 		pingTimeout: 5000,
 		maxHttpBufferSize: 1e6,
@@ -119,8 +253,7 @@ async function initSocket(sessionMiddleware, server) {
 			if (query.room == undefined || query.room == null || query.room == '') {
 
 				client.join(roomAuth);
-			}
-			else {
+			} else {
 
 				client.join(query.room);
 			}
@@ -128,7 +261,7 @@ async function initSocket(sessionMiddleware, server) {
 			client.on('joinRooms', (data) => {
 
 				data.rooms.forEach(room => {
-					
+
 					client.join(room);
 					//console.log(`Client joined room: ${room}`);
 				});
@@ -181,6 +314,23 @@ async function start(port) {
 		}
 	});
 
+	/*
+		server.on('upgrade', async (req, socket, head) => {
+
+			const segments = req.url.split('/');
+	    
+			const appId = segments[2];
+		
+			try {
+				const proxyMiddleware = await getProxyMiddleware(appId);
+				// Call the proxy middleware for WebSocket upgrade
+				proxyMiddleware.upgrade(req, socket, head);
+			} catch (err) {
+				console.error('Error during WebSocket upgrade:', err);
+				socket.destroy(); // Close the socket on error
+			}
+		});
+	*/
 
 	if (isError == undefined || isError == null) {
 

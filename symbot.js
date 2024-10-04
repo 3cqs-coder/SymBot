@@ -267,6 +267,7 @@ async function init() {
 										'max_log_days': appConfig['data']['max_log_days'],
 										'mongo_db_url': appConfig['data']['mongo_db_url'],
 										'web_server_port': appConfig['data']['web_server']['port'],
+										'web_socket_path': 'ws' + instanceName,
 										'exchanges': {},
 										'api_key': apiKey,
 										'api_enabled': appConfig['data']['api']['enabled'],

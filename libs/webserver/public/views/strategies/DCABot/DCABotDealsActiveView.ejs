@@ -166,7 +166,7 @@
 
 		$.ajax({
 					type: 'GET',
-					url: '/api/deals',
+					url: './api/deals',
 					data: {},
 					dataType: 'json',
 					success: function(data) {
@@ -197,7 +197,7 @@
 
 		$.ajax({
 					type: 'POST',
-					url: '/api/deals/' + dealId + '/panic_sell',
+					url: './api/deals/' + dealId + '/panic_sell',
 					data: {},
 					dataType: 'json',
 					success: function(data) {
@@ -230,7 +230,7 @@
 
 		$.ajax({
 					type: 'POST',
-					url: '/api/deals/' + dealId + '/update_deal',
+					url: './api/deals/' + dealId + '/update_deal',
 					data: data,
 					dataType: 'json',
 					success: function(data) {
@@ -265,7 +265,7 @@
 
 		$.ajax({
 					type: 'POST',
-					url: '/api/bots/' + botId + '/disable',
+					url: './api/bots/' + botId + '/disable',
 					data: data,
 					dataType: 'json',
 					success: function(data) {
@@ -390,7 +390,7 @@
 		$.ajax({
 
 			type: 'POST',
-	  		url: '/api/deals/' + dealId + '/pause',
+	  		url: './api/deals/' + dealId + '/pause',
 	  		data: requestBody,
 	  		dataType: 'json',
 	  		success: function(data) {
@@ -478,7 +478,7 @@
 		$.ajax({
 
 			type: 'POST',
-	  		url: '/api/deals/' + dealId + '/cancel',
+	  		url: './api/deals/' + dealId + '/cancel',
 	  		data: requestBody,
 	  		dataType: 'json',
 	  		success: function(data) {
@@ -580,7 +580,7 @@
 		$.ajax({
 
 			type: 'POST',
-  			url: '/api/deals/' + dealId + '/add_funds',
+  			url: './api/deals/' + dealId + '/add_funds',
   			data: requestBody,
   			dataType: 'json',
   			success: function(data) {

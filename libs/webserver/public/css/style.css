@@ -315,9 +315,11 @@ a:visited {
 .hub-primary-btn {
 	background-color: #28a745;
 	color: white;
-	padding: 5px 10px;
+	width: 27px;
+	height: 27px;
 	border: none;
 	border-radius: 5px;
+	vertical-align: middle;
 	cursor: pointer;
 }
 
@@ -325,9 +327,11 @@ a:visited {
 .hub-stop-btn {
 	background-color: #dc3545;
 	color: white;
-	padding: 5px 10px;
+	width: 27px;
+	height: 27px;
 	border: none;
 	border-radius: 5px;
+	vertical-align: middle;
 	cursor: pointer;
 }
 

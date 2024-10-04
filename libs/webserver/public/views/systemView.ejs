@@ -232,7 +232,7 @@ function processShutDown() {
 
     $.ajax({
         type: 'POST',
-        url: '/system/shutdown',
+        url: './system/shutdown',
         data: requestBody,
         dataType: 'json',
         success: function(data) {
@@ -256,7 +256,7 @@ function processBackupDb(password) {
 
 	$('#spinner-overlay').fadeIn(100);
 
-	fetch('/system/backup', {
+	fetch('./system/backup', {
 			method: 'POST',
 			body: requestBody,
 			headers: {
@@ -333,7 +333,7 @@ function processRestoreDb(password, convertData, resetServerId) {
 
 	$.ajax({
 		type: 'POST',
-		url: '/system/restore',
+		url: './system/restore',
 		data: formData,
 		contentType: false, // Prevent jQuery from overriding content type
 		processData: false, // Prevent jQuery from processing the data
