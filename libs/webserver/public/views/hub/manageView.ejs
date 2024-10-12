@@ -237,7 +237,7 @@
 				$('#spinner-overlay').fadeIn(100);
 
 				$.ajax({
-						url: './addInstance',
+						url: './add_instance',
 						method: 'POST',
 						contentType: 'application/json',
 						data: JSON.stringify(dataObj),
@@ -377,14 +377,6 @@
 
 					if (instanceName && (mongoDbUrlOverride || webServerPort || botConfig || serverIdOverride)) {
 
-						/*
-						let dataObj = buildDataObj(enabled, startBoot, instanceId, instanceName, appConfig, botConfig, serverConfig, serverId, mongoDbUrl, webServerPort, telegram, {
-							serverIdOverride,
-							mongoDbUrlOverride,
-							webServerPortOverride
-						});
-						*/
-
 						let dataObj = buildDataObj({
 							
 							enabled: enabled,
@@ -423,7 +415,7 @@
 					$('#spinner-overlay').fadeIn(100);
 
 					$.ajax({
-						url: './update-instances',
+						url: './update_instances',
 						method: 'POST',
 						contentType: 'application/json',
 						data: JSON.stringify(updates),
@@ -467,7 +459,7 @@
 
 				// Perform the AJAX POST request
 				$.ajax({
-					url: './startInstance',
+					url: './start_instance',
 					method: 'POST',
 					contentType: 'application/json',
 					data: JSON.stringify({
@@ -628,7 +620,7 @@
 			});
 
 			// Handle opening instance in a new window
-			$(document).on('click', '.open-instance-btn', function () {
+			$(document).on('click', '#loginButton', function () {
 
 				var $row = $(this).closest('tr');
 				var port = $row.find('td[data-field="web_server_port"]').text().trim();
@@ -893,10 +885,9 @@
 					return;
 				}
 
-				//let dataObj = buildDataObj(false, false, '', instanceName, appConfig, botConfig, '', '', mongoDbUrl, webServerPort);
 				let dataObj = buildDataObj({
-							enabled: false,
-							startBoot: false,
+							enabled: true,
+							startBoot: true,
 							instanceName: instanceName,
 							appConfig: appConfig,
 							botConfig: botConfig,
@@ -1043,29 +1034,6 @@
 							</label>
 							<select id="exchange" name="exchange" value="" class="form-field" style="width: 200px; cursor: pointer;"></select>
 						</div>
-						<!--
-					<div class="hub-form-group">
-						<label for="server_config">Server Config:</label>
-						<input type="text" id="server_config" name="server_config" value="server.json" class="form-field">
-					</div>
-
-					<center>
-						<h4>Overrides</h4>
-					</center>
-					<div class="hub-form-group">
-						<label for="server_id">Server ID:</label>
-						<input type="text" id="server_id_override" name="server_id_override" class="form-field">
-					</div>
-					<div class="hub-form-group">
-						<label for="mongo_db_url_override">Mongo DB URL:</label>
-						<input type="text" id="mongo_db_url_override" name="mongo_db_url_override" class="form-field">
-					</div>
-					<div class="hub-form-group">
-						<label for="web_server_port_override">Web Server Port:</label>
-						<input type="number" id="web_server_port_override" name="web_server_port_override" class="form-field">
-					</div>
-					-->
-
 						<br>
 						<br>
 						<center>
@@ -1160,7 +1128,7 @@
 										</td>
 										<td nowrap>
 											<span id="loginButton" style="display: inline-block; margin-right: 5px;">
-												<button class="open-instance-btn hub-primary-btn">➥</button>
+												<button class="hub-primary-btn">➥</button>
 											</span>
 
 											<span id="restartButton" style="display: inline-block; margin-right: 5px;">

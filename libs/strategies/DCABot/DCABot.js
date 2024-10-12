@@ -4407,20 +4407,6 @@ async function startVerify(config, startId) {
 }
 
 
-async function startSignals() {
-
-	// Start signals after everything else is finished loading
-
-	const appConfigFile = shareData.appData.app_config;
-
-	const appConfig = await Common.getConfig(appConfigFile);
-
-	let enabled = shareData.appData['signals_3cqs_enabled'];
-
-	const socket = await shareData.Signals3CQS.start(enabled, appConfig['data']['signals']['3CQS']['api_key']);
-}
-
-
 async function startAsap(pairIgnore) {
 
 	// Check for any resuming deals before continuing
@@ -5000,7 +4986,7 @@ async function initApp() {
 
 	//getBalanceTracker();
 
-	startSignals();
+	Common.startSignals();
 
 	delete shareData.appData.starting_dca;
 }

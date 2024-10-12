@@ -57,21 +57,27 @@ async function initApp() {
 		console.log(`Request Body:`, req.body);
 		*/
 
-		try {
+		const proxyMiddleware = await getProxyMiddleware(appId);
 
-			const proxyMiddleware = await getProxyMiddleware(appId);
+		if (proxyMiddleware.success) {
 
-			return proxyMiddleware(req, res, next);
+			const proxy = proxyMiddleware.proxy;
+
+			return proxy(req, res, next);
 		}
-		catch (err) {
-		
-			console.error('Error during proxying:', err);
+		else {
+
+			const err = proxyMiddleware.error;
+
+			const msg = 'Error during proxying: ' + err;
+
+			shareData.Hub.logger('error', msg);
 
 			if (!res.headersSent) {
-
-				return res.status(500).send('Internal Server Error');
+	
+				return res.status(500).send(msg);
 			}
-		}
+		}		
 	});
 
 	app.use(sessionMiddleware);
@@ -106,106 +112,111 @@ async function initApp() {
 }
 
 
-
 // Create or get the proxy middleware for an appId
 const getProxyMiddleware = async (appId) => {
+
+	let success = true;
+
+	let isError;
+	let proxyFound;
 
 	if (!proxyMap.has(appId)) {
 
 		const port = await getAppPort(appId);
 
 		if (!port) {
-			throw new Error(`No matching port found for appId: ${appId}`);
+
+			success = false;
+
+			isError = `No matching port found for appId: ${appId}`;
 		}
 
-		const targetUrl = `http://127.0.0.1:${port}`;
+		if (success) {
 
-		//console.log(`Creating proxy middleware for ${appId} targeting ${targetUrl}`);
+			const targetUrl = `http://127.0.0.1:${port}`;
 
-		const proxyMiddleware = createProxyMiddleware({
-			target: targetUrl,
-			changeOrigin: true,
-			followRedirects: false,
-			autoRewrite: true,
-			hostRewrite: true,
-			cookieDomainRewrite: true,
-			ws: true,
-			pathRewrite: (path) => path.replace(`/instance/${appId}`, ''),
-			timeout: 120000,
-			proxyTimeout: 120000,
-			on: {
-				proxyReq: (proxyReq, req) => {
+			//console.log(`Creating proxy middleware for ${appId} targeting ${targetUrl}`);
 
-					//console.log('Proxy Request:', req.method, req.originalUrl);
+			const proxyMiddleware = createProxyMiddleware({
+				target: targetUrl,
+				changeOrigin: true,
+				followRedirects: false,
+				autoRewrite: true,
+				hostRewrite: true,
+				cookieDomainRewrite: true,
+				ws: true,
+				pathRewrite: (path) => path.replace(`/instance/${appId}`, ''),
+				timeout: 120000,
+				proxyTimeout: 120000,
+				on: {
+					proxyReq: (proxyReq, req) => {
 
-					if (req.headers.cookie) {
+						//console.log('Proxy Request:', req.method, req.originalUrl);
 
-						proxyReq.setHeader('Cookie', req.headers.cookie);
-					}
+						if (req.headers.cookie) {
+
+							proxyReq.setHeader('Cookie', req.headers.cookie);
+						}
+					},
+					proxyRes: (proxyRes, req, res) => {
+
+						//console.log('Response received:', proxyRes.statusCode);
+
+						if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400) {
+
+							const location = proxyRes.headers['location'];
+							const newLocation = `/instance/${appId}${location}`;
+
+							//console.log(`Redirecting to: ${location}`);
+
+							return res.redirect(proxyRes.statusCode, newLocation);
+						}
+					},
+					error: (err, req, res) => {
+
+						let msg = 'Proxy Error: ' + JSON.stringify(err.message);
+
+						shareData.Hub.logger('error', msg);
+
+						if (res && res.status && !res.headersSent) {
+
+							return res.status(500).send(msg);
+						}
+						else {
+
+							//console.error('Proxy response object is not valid:', res);
+							shareData.Hub.logger('error', 'Proxy response object is not valid');
+						}
+					},
 				},
-				proxyRes: (proxyRes, req, res) => {
+			});
 
-					//console.log('Response received:', proxyRes.statusCode);
-
-					if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400) {
-
-						const location = proxyRes.headers['location'];
-						const newLocation = `/instance/${appId}${location}`;
-
-						//console.log(`Redirecting to: ${location}`);
-
-						return res.redirect(proxyRes.statusCode, newLocation);
-					}
-				},
-				error: (err, req, res) => {
-
-					let msg = 'Proxy Error: ' + JSON.stringify(err.message);
-
-					shareData.Hub.logger('error', msg);
-
-					if (res && res.status && !res.headersSent) {
-					
-						return res.status(500).send(msg);
-					}
-					else {
-					
-						//console.error('Proxy response object is not valid:', res);
-						shareData.Hub.logger('error', 'Proxy response object is not valid');
-					}
-				},
-			},
-		});
-
-		proxyMap.set(appId, proxyMiddleware);
+			proxyMap.set(appId, proxyMiddleware);
+		}
 	}
 
-	return proxyMap.get(appId);
+	if (success) {
+
+		proxyFound = proxyMap.get(appId);
+	}
+
+	return ( { 'success': success, 'error': isError, 'proxy': proxyFound } );
 };
 
 
 async function getAppPort(appId) {
 
-	let portFound;
-
 	const ports = shareData.appData['web_server_ports'];
 
-	const apps = {};
+	for (let port of ports) {
 
-	ports.forEach(port => {
+		if (port == appId) {
 
-		apps[port] = port;
-	});
-
-	for (let app in apps) {
-
-		if (app == appId) {
-
-			portFound = apps[app];
-			break;
+			return port;
 		}
 	}
 
-	return portFound;
+	return undefined;
 }
 
 

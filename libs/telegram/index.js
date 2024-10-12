@@ -130,9 +130,23 @@ function start(tokenId, enabled) {
 }
 
 
+function stop() {
+
+	try {
+
+		bot.stop();
+	}
+	catch(e) {}
+
+	bot = null;
+	initSuccess = false;
+}
+
+
 module.exports = {
 
 	start,
+	stop,
 	sendMessage,
 
 	init: function(obj) {

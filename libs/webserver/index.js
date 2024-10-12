@@ -38,21 +38,38 @@ const shouldCompress = (req, res) => {
 function initApp() {
 
 	const sessionExpireMins = 60 * 24;
-	const sessionSecret = shareData.appData.server_id;
 	const sessionCookieName = 'SymBot' + shareData.appData.instance_name;
 
-	const store = new MongoDBStore({
+	let sessionSecret = shareData.appData.server_id;
 
-		'uri': shareData.appData.mongo_db_url,
-		'collection': 'sessions'
-	},
-	function(err) {
+	let store;
 
-		if (err) {
+	if (!shareData.appData.config_mode) {
 
-			shareData.Common.logger(JSON.stringify(err));
-		}
-	});
+		store = new MongoDBStore({
+
+			'uri': shareData.appData.mongo_db_url,
+			'collection': 'sessions'
+		},
+		function(err) {
+
+			if (err) {
+
+				shareData.Common.logger(JSON.stringify(err));
+			}
+		});
+	}
+	else {
+
+		sessionSecret = 'SymBot' + Math.floor(Math.random() * 1000000) + 1;
+
+		const FileStore = require('session-file-store')(session);
+
+		store = new FileStore({
+			'path': path.join(pathRoot, '..', 'sessions'),
+			'logFn': function() {}
+		});
+	}
 
 	const sessionMiddleware = session({
 
@@ -66,6 +83,8 @@ function initApp() {
 		}
 	});
 
+	app.disable('x-powered-by');
+
 	app.use(sessionMiddleware);
 
 	// Compress all HTTP responses
@@ -75,30 +94,6 @@ function initApp() {
 		level: 6,
 
 	}));
-
-	app.disable('x-powered-by');
-
-	app.use((req, res, next) => {
-
-		const timeOut = (60 * 1000) * serverTimeoutMins;
-
-		req.setTimeout((timeOut - (1000 * 5)));
-		res.append('Server', shareData.appData.name + ' v' + shareData.appData.version);
-
-		if (shareData.appData.database_error || shareData.appData.system_pause) {
-
-			let obj = {
-				'date': new Date(),
-				'error': shareData.appData.database_error || shareData.appData.system_pause
-			};
-		
-			res.status(503).send(obj);
-		}
-		else {
-
-			next();
-		}
-	});
 
 	app.use(function(err, req, res, next) {
 
@@ -116,6 +111,38 @@ function initApp() {
 	app.use(express.json());
 
 	app.use(cookieParser());
+
+	app.use((req, res, next) => {
+
+		const allowedRoutes = ['/login', '/config'];
+
+		const timeOut = (60 * 1000) * serverTimeoutMins;
+
+		req.setTimeout((timeOut - (1000 * 5)));
+		res.append('Server', shareData.appData.name + ' v' + shareData.appData.version);
+
+		if (shareData.appData.config_mode && allowedRoutes.length > 0 && !allowedRoutes.includes(req.path)) {
+
+			//return res.status(403).send('Access Forbidden: This route is not allowed.');
+			res.redirect('/login');
+
+			return;
+		}
+
+		if (shareData.appData.database_error || shareData.appData.system_pause) {
+
+			let obj = {
+				'date': new Date(),
+				'error': shareData.appData.database_error || shareData.appData.system_pause
+			};
+		
+			res.status(503).send(obj);
+		}
+		else {
+
+			next();
+		}
+	});
 
 	const upload = multer({
 		dest: 'uploads/',

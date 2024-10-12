@@ -64,6 +64,7 @@ async function init() {
 	let workerDataObj = {};
 	let botConfigData = {};
 
+	let isConfig = false;
 	let isReset = false;
 	let resetServerId = false;
 	let consoleLog = false;
@@ -76,6 +77,11 @@ async function init() {
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
 
 		consoleLog = true;
+	}
+
+	if (process.argv[2] && process.argv[2].toLowerCase() == 'config') {
+
+		isConfig = true;
 	}
 
 	if(process.argv[2] && process.argv[2].toLowerCase() == 'clglite') {
@@ -281,6 +287,7 @@ async function init() {
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
 										'reset': isReset,
+										'config_mode': false,
 										'worker_data': workerData,
 										'started': new Date()
 								   },
@@ -364,27 +371,63 @@ async function init() {
 
 		const dbUrl = appDataConfig.mongo_db_url;
 
-		let dbStarted =	await DB.start(dbUrl);
+		if (isConfig || (dbUrl == undefined || dbUrl == null || dbUrl == '')) {
 
-		if (!dbStarted) {
+			let setDbUrl;
 
-			success = false;
+			appDataConfig.config_mode = true;
+
+			if (!process.env.DOCKER_RUNNING) {
+
+				if (dbUrl) {
+
+					setDbUrl = dbUrl;
+				}
+				else {
+
+					setDbUrl = 'mongodb://127.0.0.1:27017/SymBot';
+				}
+			}
+			else {
+
+				if (dbUrl) {
+
+					setDbUrl = dbUrl;
+				}
+				else {
+
+					setDbUrl = 'mongodb://symbot:symbot123@database/symbot';
+				}
+			}
+
+			appDataConfig.mongo_db_url = setDbUrl;
+
+			Common.logger('WARNING: ' + appDataConfig.name + ' is running in configuration mode', true);
 		}
 		else {
 
-			await System.start(dbUrl);
+		let dbStarted =	await DB.start(dbUrl);
 
-			let res = await verifyServerId(serverConfigFile, serverConfig);
-			
-			serverIdError = res['server_id_error'];
-
-			if (!res.success) {
+			if (!dbStarted) {
 
 				success = false;
 			}
 			else {
 
-				shareData.appData.server_id = res.server_id;
+				await System.start(dbUrl);
+
+				let res = await verifyServerId(serverConfigFile, serverConfig);
+
+				serverIdError = res['server_id_error'];
+
+				if (!res.success) {
+
+					success = false;
+				}
+				else {
+
+					shareData.appData.server_id = res.server_id;
+				}
 			}
 		}
 	}

@@ -83,7 +83,7 @@ function initRoutes(router) {
 	});
 
 
-	router.post('/update-instances', async (req, res) => {
+	router.post('/update_instances', async (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
@@ -98,7 +98,7 @@ function initRoutes(router) {
 	});
 
 
-	router.post('/addInstance', async (req, res) => {
+	router.post('/add_instance', async (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
@@ -113,7 +113,7 @@ function initRoutes(router) {
 	});
 
 
-	router.post('/startInstance', async (req, res) => {
+	router.post('/start_instance', async (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 

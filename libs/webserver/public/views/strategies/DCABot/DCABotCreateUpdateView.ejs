@@ -470,6 +470,7 @@
 		const val = $('#' + id).val();
 
 		const charCode = (e.which) ? e.which : e.keyCode;
+		const charStr = String.fromCharCode(charCode);
 
 		if (id == undefined || id == null) {
 
@@ -478,14 +479,19 @@
 
 		if (id.toLowerCase() != 'pair' && id.toLowerCase() != 'botname') {
 
-			let regEx = /[^0-9\.]/g;
+			let regEx = /[^0-9\.\-]/g;
 
-			if (id.toLowerCase() == 'dealmax' || id.toLowerCase() == 'dealcooldown' || id.toLowerCase() == 'pairmax' || id.toLowerCase() == 'dcamaxorder') {
+			if (id.toLowerCase() == 'dealmax' || id.toLowerCase() == 'dealcooldown' || id.toLowerCase() == 'pairmax' || id.toLowerCase() == 'pairdealsmax' || id.toLowerCase() == 'dcamaxorder') {
 
 				regEx = /[^0-9]/g;
 			}
 
 			if (charCode == 46 && (val.split('.').length - 1) > 0) {
+
+				return false;
+			}
+
+			if (charStr == '-' && val.length > 0) {
 
 				return false;
 			}

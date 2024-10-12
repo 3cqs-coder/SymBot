@@ -73,14 +73,26 @@ async function updateConfig(req, res) {
 
 	const body = req.body;
 	const sessionId = req.session.id;
+	const mongodburl = body.mongodburl;
 	const password = body.password;
 	const passwordNew = body.passwordnew;
 	const apiKey = body.apikey;
-	const telegram = body.telegram;
+	const telegram = body.telegram_enabled;
+	const telegramTokenId = body.telegram_token_id;
+	const telegramUserId = body.telegram_user_id;
+	const signals3CQS = body.signals_3cqs_enabled;
+	const signals3CQSApiKey = body.signals_3cqs_api_key;
 
 	let pairButtons = body.pairbuttons;
 	let pairBlacklist = body.pairblacklist;
-	let telegramEnabled = false;
+
+	let telegramEnabled = convertBoolean(telegram, false);
+	let signals3CQSEnabled = convertBoolean(signals3CQS, false);
+
+	let dbErr;
+	let dataMessage = 'Configuration Updated';
+
+	const appConfigFile = shareData.appData.app_config;
 
 	if (pairButtons == undefined || pairButtons == null || pairButtons == '') {
 
@@ -109,7 +121,7 @@ async function updateConfig(req, res) {
 
 	if (success) {
 
-		let data = await getConfig('app.json');
+		let data = await getConfig(appConfigFile);
 
 		let appConfig = data.data;
 
@@ -140,23 +152,76 @@ async function updateConfig(req, res) {
 			await setToken();
 		}
 
-		if (telegram != undefined && telegram != null && telegram != '') {
-
-			telegramEnabled = true;
-		}
-
 		appConfig['bots']['pair_buttons'] = pairButtonsUC;
 		shareData['appData']['bots']['pair_buttons'] = pairButtonsUC;
 
 		appConfig['bots']['pair_blacklist'] = pairBlacklistUC;
 		shareData['appData']['bots']['pair_blacklist'] = pairBlacklistUC;
 
+		appConfig['signals']['3CQS']['api_key'] = signals3CQSApiKey;
+		appConfig['signals']['3CQS']['enabled'] = signals3CQSEnabled;
+		shareData['appData']['signals_3cqs_enabled'] = signals3CQSEnabled;
+
 		appConfig['telegram']['enabled'] = telegramEnabled;
+		appConfig['telegram']['token_id'] = telegramTokenId;
+		appConfig['telegram']['notify_user_id'] = telegramUserId;
+
+		shareData['appData']['telegram_id'] = telegramUserId;
 		shareData['appData']['telegram_enabled'] = telegramEnabled;
+		shareData['appData']['telegram_enabled_config'] = telegramEnabled;
 
-		await saveConfig('app.json', appConfig);
+		if (shareData.appData.config_mode) {
 
-		let obj = { 'success': true, 'data': 'Configuration Updated' };
+			try {
+
+				const db = await shareData.System.connectDb(mongodburl);
+
+				await db.close();
+
+				if (db == undefined || db == null || db == '') {
+
+					dbErr = 'Unabled to connect to database';
+				}
+			}
+			catch(e) {
+
+				dbErr = e.message;
+			}
+
+			if (dbErr != undefined && dbErr != null && dbErr != '') {
+
+				success = false;
+				dataMessage = 'Database Error: ' + dbErr;
+			}
+			else {
+
+				let msg = 'Database URL modified. Shutting down. Please restart for changes to take effect.';
+
+				dataMessage = msg;
+
+				// Successful configuration. Shutdown to start fresh config.
+				appConfig['mongo_db_url'] = mongodburl;
+
+				logger(msg, true);
+
+				setTimeout(() => { shareData.System.shutDown(); }, 1500);
+			}
+		}
+
+		if (success) {
+
+			await saveConfig(appConfigFile, appConfig);
+
+			// Restart Signals
+			startSignals();
+
+			// Restart Telegram bot
+			shareData.Telegram.stop();
+			await delay(1000);
+			shareData.Telegram.start(telegramTokenId, telegramEnabled);
+		}
+
+		let obj = { 'success': success, 'data': dataMessage };
 		
 		res.send(obj);
 	}
@@ -166,6 +231,20 @@ async function updateConfig(req, res) {
 		
 		res.send(obj);
 	}
+}
+
+
+async function startSignals() {
+
+	// Start signals after everything else is finished loading
+
+	const appConfigFile = shareData.appData.app_config;
+
+	const appConfig = await getConfig(appConfigFile);
+
+	let enabled = shareData.appData['signals_3cqs_enabled'];
+
+	const socket = await shareData.Signals3CQS.start(enabled, appConfig['data']['signals']['3CQS']['api_key']);
 }
 
 
@@ -1214,7 +1293,15 @@ async function verifyLogin(req, res, isHub) {
 		}
 		else {
 
-			renderView('homeView', req, res);
+			// Redirect to config view if in config mode
+			if (shareData.appData.config_mode) {
+
+				res.redirect('/config');
+			}
+			else {
+
+				renderView('homeView', req, res);
+			}
 		}
 	}
 	else {
@@ -1404,6 +1491,7 @@ module.exports = {
 	getAppVersions,
 	validateAppVersion,
 	dealDurationMinutes,
+	startSignals,
 	sendSocketMsg,
 
 	init: function(obj) {

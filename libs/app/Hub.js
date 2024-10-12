@@ -856,7 +856,7 @@ async function routeUpdateInstances(req, res) {
 
 			success = false;
 
-			logger('error', `Error in routeUpdateInstances: ${error.message}`);
+			logger('error', `Error updating instances: ${error.message}`);
 			message = 'Error: ' + error.message;
 		}
 	}
@@ -1008,7 +1008,7 @@ async function routeStartWorker(req, res) {
 	}
 	catch (error) {
 
-		console.error('Error in routeStartWorker:', error);
+		console.error('Error starting worker:', error);
 
 		res.status(500).send('Server error: ' + error.message);
 	}
