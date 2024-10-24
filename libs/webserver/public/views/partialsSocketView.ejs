@@ -1,5 +1,8 @@
 <script>
 
+let socketGlobal;
+const removeNotifsSec = 12;
+
 function removeNotificationDisplay(id) {
 
 	$('#' + id).fadeOut(1000, function() {
@@ -8,11 +11,24 @@ function removeNotificationDisplay(id) {
 	});
 }
 
+
 $(document).ready(function() {
 
 	const maxRows = 10;
-	const removeSec = 12;
+	const room = 'notifications';
 	const modalNotifyId = '#modalNotifications';
+
+	let wsTranports = ['websocket', 'polling'];
+
+	const webSocketPath = basePath + '<%- appData['web_socket_path'] %>';
+
+	let wslastPart = webSocketPath.split('/').pop();
+
+	if (wslastPart !== 'ws') {
+
+		// Use polling only to avoid potential WebSocket conflicts for instances
+		wsTranports = wsTranports.filter(transport => transport !== 'websocket');
+	}
 
 	try {
 
@@ -24,25 +40,32 @@ $(document).ready(function() {
 			$('.notificationButton').addClass('notificationButtonAlert');
 		}
 	}
-	catch(e) {
+	catch (e) {
 
 	}
 
 	const socket = io('/', {
 
 		query: {
-			'room': 'notifications'
+			'room': room
 		},
 		extraHeaders: {
 			'user-agent': '<%- appData.name %>/<%- appData.version %>'
 		},
-		transports: ['websocket', 'polling'],
-		path: '/ws',
+		transports: wsTranports,
+		path: webSocketPath,
 		reconnection: true,
 		reconnectionDelay: 10000
 	});
 
-	socket.on('connect', (data) => {});
+	socketGlobal = socket;
+
+	socket.on('connect', (data) => {
+
+		socket.emit('joinRooms', {
+			rooms: [room]
+		});
+	});
 
 	socket.on('connect_error', (data) => {});
 
@@ -93,38 +116,9 @@ $(document).ready(function() {
 
 	socket.on('data', (data) => {
 
-		let id = 'notifs-' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
+		if (data.type === 'notification') {
 
-		let msg = '<div id="' + id + '" class="notificationsRow">' + data + '</div>';
-
-		if (dataTracker['notifications'] == undefined || dataTracker['notifications'] == null) {
-
-			dataTracker['notifications'] = {};
-		}
-
-		dataTracker['notifications']['date'] = new Date();
-		dataTracker['notifications']['alert'] = true;
-
-		updateDataTracker();
-
-		$('.notificationButton').addClass('notificationButtonAlert');
-
-		$('#notificationsBox').append(msg);
-
-		$('#' + id).hide();
-		$('#' + id).fadeIn(500);
-
-		let currentRows = $('.notificationsRow').length;
-
-		setTimeout(() => {
-
-			removeNotificationDisplay(id);
-
-		}, (removeSec * 1000));
-
-		if (currentRows > maxRows) {
-
-			//$('.notificationsRow').slice((maxRows - currentRows)).remove();
+			processNotificationData(data.message);
 		}
 	});
 
@@ -167,8 +161,7 @@ $(document).ready(function() {
 
 				showModal = false;
 			}
-		}
-		catch (e) {
+		} catch (e) {
 
 			showModal = true;
 		}
@@ -184,7 +177,44 @@ $(document).ready(function() {
 			socket.emit('notifications_history', {});
 		}
 	});
-
 });
+
+
+function processNotificationData(data) {
+
+	let id = 'notifs-' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
+
+	let msg = '<div id="' + id + '" class="notificationsRow">' + data + '</div>';
+
+	if (dataTracker['notifications'] == undefined || dataTracker['notifications'] == null) {
+
+		dataTracker['notifications'] = {};
+	}
+
+	dataTracker['notifications']['date'] = new Date();
+	dataTracker['notifications']['alert'] = true;
+
+	updateDataTracker();
+
+	$('.notificationButton').addClass('notificationButtonAlert');
+
+	$('#notificationsBox').append(msg);
+
+	$('#' + id).hide();
+	$('#' + id).fadeIn(500);
+
+	let currentRows = $('.notificationsRow').length;
+
+	setTimeout(() => {
+
+		removeNotificationDisplay(id);
+
+	}, (removeNotifsSec * 1000));
+
+	if (currentRows > maxRows) {
+
+		//$('.notificationsRow').slice((maxRows - currentRows)).remove();
+	}
+}
 
 </script>

@@ -17,7 +17,6 @@ const router = express.Router();
 const Routes = require(pathRoot + '/webserver/routes.js');
 
 const serverTimeoutMins = 3;
-const roomAuth = 'logs';
 
 let shareData;
 let socket;
@@ -39,24 +38,43 @@ const shouldCompress = (req, res) => {
 function initApp() {
 
 	const sessionExpireMins = 60 * 24;
-	const sessionSecret = shareData.appData.server_id;
+	const sessionCookieName = 'SymBot' + shareData.appData.instance_name;
 
-	const store = new MongoDBStore({
+	let sessionSecret = shareData.appData.server_id;
 
-		'uri': shareData.appData.mongo_db_url,
-		'collection': 'sessions'
-	},
-	function(err) {
+	let store;
 
-		if (err) {
+	if (!shareData.appData.config_mode) {
 
-			shareData.Common.logger(JSON.stringify(err));
-		}
-	});
+		store = new MongoDBStore({
+
+			'uri': shareData.appData.mongo_db_url,
+			'collection': 'sessions'
+		},
+		function(err) {
+
+			if (err) {
+
+				shareData.Common.logger(JSON.stringify(err));
+			}
+		});
+	}
+	else {
+
+		sessionSecret = 'SymBot' + Math.floor(Math.random() * 1000000) + 1;
+
+		const FileStore = require('session-file-store')(session);
+
+		store = new FileStore({
+			'path': path.join(pathRoot, '..', 'sessions'),
+			'logFn': function() {}
+		});
+	}
 
 	const sessionMiddleware = session({
 
 		'secret': sessionSecret,
+		'name': sessionCookieName,
 		'resave': false,
 		'saveUninitialized': false,
 		'store': store,
@@ -64,6 +82,10 @@ function initApp() {
 			'expires': (sessionExpireMins * 60) * 1000
 		}
 	});
+
+	app.disable('x-powered-by');
+
+	app.use(sessionMiddleware);
 
 	// Compress all HTTP responses
 	app.use(compression({
@@ -73,14 +95,39 @@ function initApp() {
 
 	}));
 
-	app.disable('x-powered-by');
+	app.use(function(err, req, res, next) {
+
+		shareData.Common.logger(JSON.stringify(err.stack));
+	});
+
+	app.set('views', pathRoot + '/webserver/public/views');
+	app.set('view engine', 'ejs');
+
+	app.use('/js', express.static(pathRoot + '/webserver/public/js'));
+	app.use('/css', express.static(pathRoot + '/webserver/public/css'));
+	app.use('/data', express.static(pathRoot + '/webserver/public/data'));
+	app.use('/images', express.static(pathRoot + '/webserver/public/images'));
+
+	app.use(express.json());
+
+	app.use(cookieParser());
 
 	app.use((req, res, next) => {
+
+		const allowedRoutes = ['/login', '/config'];
 
 		const timeOut = (60 * 1000) * serverTimeoutMins;
 
 		req.setTimeout((timeOut - (1000 * 5)));
 		res.append('Server', shareData.appData.name + ' v' + shareData.appData.version);
+
+		if (shareData.appData.config_mode && allowedRoutes.length > 0 && !allowedRoutes.includes(req.path)) {
+
+			//return res.status(403).send('Access Forbidden: This route is not allowed.');
+			res.redirect('/login');
+
+			return;
+		}
 
 		if (shareData.appData.database_error || shareData.appData.system_pause) {
 
@@ -96,25 +143,6 @@ function initApp() {
 			next();
 		}
 	});
-
-	app.use(function(err, req, res, next) {
-
-		shareData.Common.logger(JSON.stringify(err.stack));
-	});
-
-	app.set('views', pathRoot + '/webserver/public/views');
-	app.set('view engine', 'ejs');
-
-	app.use('/js', express.static(pathRoot + '/webserver/public/js'));
-	app.use('/css', express.static(pathRoot + '/webserver/public/css'));
-	app.use('/data', express.static(pathRoot + '/webserver/public/data'));
-	app.use('/images', express.static(pathRoot + '/webserver/public/images'));
-	
-	app.use(sessionMiddleware);
-
-	app.use(express.json());
-
-	app.use(cookieParser());
 
 	const upload = multer({
 		dest: 'uploads/',
@@ -151,7 +179,7 @@ function initSocket(sessionMiddleware, server) {
 				methods: ['PUT', 'GET', 'POST', 'DELETE', 'OPTIONS'],
 				credentials: false
 		},
-		path: '/ws',
+		path: '/' + shareData.appData['web_socket_path'],
 		serveClient: false,
 		pingInterval: 10000,
 		pingTimeout: 5000,
@@ -193,6 +221,21 @@ function initSocket(sessionMiddleware, server) {
 				client.join(query.room);
 			}
 
+			client.on('joinRooms', (data) => {
+
+				data.rooms.forEach(room => {
+					
+					client.join(room);
+					//console.log(`Client joined room: ${room}`);
+				});
+			});
+
+			client.on('leaveRoom', (room) => {
+
+				client.leave(room);
+				//console.log(`Client left room: ${room}`);
+			});
+
 			client.on('notifications_history', function (data) {
 
 				shareData.Common.getNotificationHistory(client, data);
@@ -202,19 +245,9 @@ function initSocket(sessionMiddleware, server) {
 }
 
 
-async function sendSocketMsg(msg, room) {
+async function getSocket() {
 
-	let sendRoom = roomAuth;
-
-	if (room != undefined && room != null && room != '') {
-
-		sendRoom = room;
-	}
-
-	if (socket) {
-
-		socket.to(sendRoom).emit('data', msg);
-	}
+	return socket;
 }
 
 
@@ -236,7 +269,7 @@ function start(port) {
 
 			shareData.Common.logger(`Port ${port} already in use`, true);
 
-			process.exit(1);
+			shareData.System.shutDown();
 		}
 		else {
 
@@ -267,7 +300,7 @@ module.exports = {
 
 	app,
 	start,
-	sendSocketMsg,
+	getSocket,
 
 	init: function(obj) {
 

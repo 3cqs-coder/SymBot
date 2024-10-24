@@ -3,7 +3,9 @@
 <script>
 
 	const token = '<%= token %>';
-	const telegram = '<%= appData['telegram_enabled'] %>';
+	const telegramEnabled = '<%= appData['telegram_enabled_config'] %>';
+	const signals3CQSEnabled = '<%= appData['signals_3cqs_enabled'] %>';
+	const configMode = '<%= appData['config_mode'] %>';
 	const pairButtons = <%- '[' + appData.bots['pair_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
 	const pairBlackList = <%- '[' + appData.bots['pair_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
 
@@ -120,6 +122,28 @@
 	$(document).ready(function() {
 
 		$('[id*="toggle"]').simpleSwitch();
+		$('#msgBox').empty();
+
+		if (convertBoolean(configMode)) {
+
+			$('#configMongoDb').toggle();
+
+			let msgBox = '';
+
+			msgBox += '<div style="display: block;"><%= appData['name'] %> is currently in configuration mode</div>';
+
+			$('#msgBox').css({
+				'padding': '10px',
+				'margin-bottom': '30px',
+				'border-radius': '5px',
+				'background-color': 'yellow',
+				'color': '#000000',
+				'border': '1px solid rgba(0, 0, 0, 0.2)',
+				'box-shadow': '0 0 10px rgba(0, 0, 0, 0.1)'
+			});
+
+			$('#msgBox').html('<div style="display: block; font-weight: bold;">' + msgBox + '</div>');
+		}
 
 		$('#pairbuttons').select2({ tags: true, data: pairButtons });
 		$('#pairbuttons').val(pairButtons);
@@ -129,7 +153,12 @@
 		$('#pairblacklist').val(pairBlackList);
 		$('#pairblacklist').trigger('change');
 
-		if (convertBoolean(telegram)) {
+		if (convertBoolean(signals3CQSEnabled)) {
+
+			$('#toggleSignals3CQS').click();
+		}
+
+		if (convertBoolean(telegramEnabled)) {
 
 			$('#toggleTelegram').click();
 		}
@@ -188,10 +217,12 @@
 			<b id="headerText" class="contentHeader">Configuration</b>
 		</div>
 
-		<form autocomplete="off" action="/config" method="POST" id="formConfig">
+		<span id="msgBox" style="position: relative; display: flex; justify-content: center;"></span>
+
+		<form autocomplete="off" action="./config" method="POST" id="formConfig">
 
 			<div style="padding-bottom: 5px;">
-				<label for="password">Current Password
+				<label for="password"><b>Current Password</b>
 					<span class="toolTip">?<span class="toolTipText">
 						This is the password used to login to the <%- appData.name %> web interface.
 					</span></span>
@@ -200,17 +231,26 @@
 			</div>
 
 			<div style="padding-bottom: 5px; display: none;" id="configNewPass">
-				<label for="passwordnew">New Password</label>
+				<label for="passwordnew"><b>New Password</b></label>
 				<input type="password" name="passwordnew" id="passwordnew" class="form-field" style="width: 250px;">
 			</div>
 
 			<div style="padding-bottom: 5px; display: none;" id="configConfirmPass">
-				<label for="passwordnew2">New Password Again</label>
+				<label for="passwordnew2"><b>New Password Again</b></label>
 				<input type="password" name="passwordnew2" id="passwordnew2" class="form-field" style="width: 250px;">
 			</div>
 
+			<div style="padding-bottom: 5px; display: none;" id="configMongoDb">
+				<label for="mongodburl"><b>Mongo DB URL</b>
+					<span class="toolTip">?<span class="toolTipText">
+						This is the Mongo Database URL used for <%- appData.name %> data storage.
+					</span></span>
+				</label>
+				<input name="mongodburl" id="mongodburl" value="<%- appData.mongo_db_url %>" class="form-field" style="width: 250px;" required>
+			</div>
+
 			<div style="padding-bottom: 5px;">
-				<label for="apikey">API Key <span style="font-size: 0.99rem;"><i>(Not displayed for security)</i></span>
+				<label for="apikey"><b>API Key</b> <span style="font-size: 0.99rem;"><i>(Not displayed for security)</i></span>
 					<span class="toolTip">?<span class="toolTipText">
 						This is the key used for <%- appData.name %> API access
 					</span></span>
@@ -219,7 +259,7 @@
 			</div>
 
 			<div style="padding-bottom: 5px;">
-				<label for="apitoken">Webhook API Token
+				<label for="apitoken"><b>Webhook API Token</b>
 					<span class="toolTip">?<span class="toolTipText">
 						This is the token used for <%- appData.name %> webhook access
 					</span></span>
@@ -229,7 +269,7 @@
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
-				<label for="pairbuttons">Pair Buttons
+				<label for="pairbuttons"><b>Pair Buttons</b>
 					<span class="toolTip">?<span class="toolTipText">
 						These are buttons used to automatically fill in all pairs after clicking on one when creating or updating bots.
 					</span></span>
@@ -239,7 +279,7 @@
 			</div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
-				<label for="pairblacklist">Pair Blacklist
+				<label for="pairblacklist"><b>Pair Blacklist</b>
 					<span class="toolTip">?<span class="toolTipText">
 						These are pairs that you do not want to trade. You can use full pairs such as BTC/USD or wildcards such as BTC/*.
 					</span></span>
@@ -247,8 +287,82 @@
 				<select id="pairblacklist" name="pairblacklist" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>
 			</div>
 
+
 			<div style="padding-top: 10px; padding-bottom: 5px;">
-				<input id="toggleTelegram" name="telegram" type=checkbox> Telegram Notifications
+
+				<b>3CQS Signals</b>
+				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
+				
+				<tr>
+					<td>
+						<label for="password">API Key:
+							<span class="toolTip">?<span class="toolTipText">
+								This is your API key for accessing and using 3CQS signals. Please note that you may encounter repeated error messages if the key is invalid or if too many connection attempts are made.
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+					<input type="password" name="signals_3cqs_api_key" id="signals_3cqs_api_key" class="form-field" style="width: 250px; margin-bottom: 5px;" value="<%= services['signals']['3CQS']['api_key'] %>">
+					<br>
+					Register at <a href="https:///www.3cqs.com" target=_blank>3CQS.com</a> to get your API key
+					</td>
+				</tr>
+
+				<tr>
+					<td>Enabled:</td>
+
+					<td>
+						<input id="toggleSignals3CQS" name="signals_3cqs_enabled" type=checkbox>
+					</td>
+				</tr>
+
+				</table>
+			</div>
+
+
+			<div style="padding-top: 10px; padding-bottom: 5px;">
+
+				<b>Telegram Settings</b>
+				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
+				
+				<tr>
+					<td>
+						<label for="password">Token ID:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the token ID created using Telegram's Bot Father
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+					<input type="password" name="telegram_token_id" id="telegram_token_id" class="form-field" style="width: 250px;" value="<%= services['telegram']['token_id'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="password">User ID:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the Telegram user ID notifications will be sent to
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+					<input name="telegram_user_id" id="telegram_user_id" class="form-field" style="width: 250px;" value="<%= services['telegram']['notify_user_id'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>Enabled:</td>
+
+					<td>
+						<input id="toggleTelegram" name="telegram_enabled" type=checkbox>
+					</td>
+				</tr>
+
+				</table>
 			</div>
 
 			<button style="margin-top: 20px" type="button" id="checkUpdates" class="btn" style="cursor: pointer;">

@@ -40,14 +40,35 @@
 	const maxRows = 1000;
 	const offsetBottom = -225;
 
+	let basePath;
 	let dataTracker = {};
 	let modalTracker = {};
 	let pairBTC = 'BTC/USD';
 	let exchangeBTC = 'bitstamp';
-	let buffer = []; // buffer - incoming log
-	let countdownTimer;
+
+	let isHub = <%- (typeof isHub !== 'undefined' && isHub !== '') ? isHub : false %>;
 
 	$(document).ready(function() {
+
+		basePath = setBasePath();
+
+		if (isHub) {
+
+			const hubSuperscript = $('<sup>').text('HUB').addClass('hub-superscript');
+
+			$('#divLogo').css('position', 'relative');
+
+			$('#divLogo').append(hubSuperscript);
+
+			const hideElements = [ '#btcPrice', '#notifications', '#liveLogs' ];
+
+			for (let i = 0; i < hideElements.length; i++) {
+
+				let id = hideElements[i];
+
+				$(id).hide();
+			}
+		}
 
 		const modalTvId = '#modalTvSettings';
 
@@ -101,7 +122,7 @@
 
 		$('#logo').on('click', function() {
 
-			window.location.href = '/';
+			window.location.href = './';
 		});
 
 		$('#btcPrice').on('click', function() {
@@ -109,8 +130,32 @@
 			showTradingView('homeView', 'modal', false, false, pairBTC, exchangeBTC);
 		});
 
-		getPriceBTC();
+		if (!isHub) {
+
+			getPriceBTC();
+		}
 	});
+
+
+	function setBasePath() {
+
+		let basePath = '/';
+
+	    const currentUrl = window.location.href; // Get the full current URL
+
+		const url = new URL(currentUrl);
+    
+		const segments = url.pathname.split('/').filter(segment => segment);
+
+		if (segments.length >= 2 && segments[0] === 'instance') {
+
+			basePath = '/instance/' + segments[1] + '/';
+		}
+
+		$('head').append('<base href="' + url.origin + basePath + '">');
+
+		return basePath;
+	}
 
 
 	function changeMode(mode) {
@@ -136,7 +181,7 @@
 
 	function getTradingViewData() {
 
-		fetch('/data/tradingViewData.json')
+		fetch('./data/tradingViewData.json')
 		.then(response => response.json())
 		.then(function(json) {
 
@@ -508,7 +553,7 @@
 			res = await $.ajax({
 		
 						type: 'GET',
-						url: '/api/markets',
+						url: './api/markets',
 						data: { 'exchange': exchange, 'pair': pair },
 						dataType: 'json',
 						success: function(data) {
@@ -666,85 +711,12 @@
 			exchange = 'COINBASE';
 		}
 
-		let url = '/api/tradingview?jquery=' + jquery + '&script=' + script + '&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
+		let url = './api/tradingview?jquery=' + jquery + '&script=' + script + '&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
 
 		openModal(modalId, '#' + divId, '<span id="tradingViewSettings">&#9881;</span> TradingView Chart ' + pair, 'Loading...');
 
 		$('#' + divId).load(url);
 	}
-
-
-	function startCountdown(duration) {
-
-		let remaining = duration;
-
-		$('#countdown').text(`(${remaining}s)`);
-
-		countdownTimer = setInterval(() => {
-
-			remaining--;
-
-			$('#countdown').text(`(${remaining}s)`);
-
-			if (remaining <= 0) {
-
-				clearInterval(countdownTimer);
-
-				$('#countdown').text('');
-
-				setLiveState();
-			}
-		}, 1000);
-	}	
-
-
-	function stopCountdown() {
-
-    	clearInterval(countdownTimer);
-
-    	$('#countdown').text('');
-	}
-
-
-	function displayLog(data) {
-
-		let msg = '<div class="logRow">' + data + '</div>';
-
-		$('#dataBox').prepend(msg);
-
-		let currentRows = $('.logRow').length;
-
-		if (currentRows > maxRows) {
-
-			$('.logRow').slice(maxRows).remove(); // better suited for prepending
-		}
-
-		resizeBotsDeals(offsetBottom);
-	}
-
-
-	function setLiveState() {
-
-		$('#simple-switch').switchToggle(true);
-
-    	$('#dataBox').css('overflow-y', 'auto');
-
-    	$('#status-text').text('Live');
-
-    	flushBuffer();
-		
-    	stopCountdown();
-	}
-
-
-    function flushBuffer() {
-
-    	// Prepend buffered entries in order & flush
-        buffer.forEach(displayLog);
-
-        buffer = [];
-    }
-
 
 	</script>
 
@@ -758,7 +730,7 @@
 
 	<div id="btcPrice"></div>
 
-	<div style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);">
+	<div id="divLogo" style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: inline-block;">
 		<img id="logo" src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
 

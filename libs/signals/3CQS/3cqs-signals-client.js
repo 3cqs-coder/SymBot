@@ -22,6 +22,7 @@ const providerId = signalsJson['metadata']['provider_id'];
 let fatalError = false;
 let verboseNotifications = false;
 
+let socketGlobal;
 let shareData;
 
 
@@ -34,6 +35,13 @@ setInterval(() => {
 
 
 async function start(enabled, apiKey) {
+
+	if (socketGlobal) {
+
+		await stop(socketGlobal);
+
+		socketGlobal = undefined;
+	}
 
 	if (providerId == undefined || providerId == null  || providerId == '') {
 
@@ -61,6 +69,7 @@ async function start(enabled, apiKey) {
 		'reconnectionDelay': 10000
 	});
 
+	socketGlobal = socket;
 
 	socket.on('connect', (data) => {
 

@@ -16,6 +16,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Installation](#installation)
 - [Installation Video](#installation-video)
 - [Docker Installation](#installation-docker)
+- [SymBot Hub](#symbot-hub)
 - [Upgrading](#upgrading)
 - [Configuration](#configuration)
 - [Telegram Setup](#telegram-setup)
@@ -25,7 +26,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [API Sample Usage](#api-sample-usage)
 - [Webhooks](#webhooks)
 - [Backup and Restore Features](#backup-and-restore-features)
-- [Resetting SymBot](#resetting-symbot)
+- [Reset or Configure SymBot](#reset-or-configure-symbot)
 - [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
 - [Disclaimer](#disclaimer)
 
@@ -44,17 +45,21 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 
 ## Installation
 
-If you would rather run SymBot using Docker then skip this section and go to the [Docker Installation](#installation-docker) below.
+If you prefer to run SymBot using Docker, feel free to skip this section and proceed to the [Docker Installation](#installation-docker) section below.
 
+Once you have met all the requirements, follow these simple steps to install SymBot:
 
 1. Open a command line terminal
 2. Change directory to where SymBot files are located
 3. Type: `npm install`
-4. Wait until all packages are downloaded and installed
-5. Modify the app and bot configuration files as necessary (see [Configuration](#configuration))
+4. Wait for all packages to download and install
+5. SymBot will start in configuration mode, allowing you to enter your database URL and other settings using the web interface.
+	- Default password is *admin*
+	- Modify the app and bot configuration files as necessary (see [Configuration](#configuration))
 6. Type: `npm start`. You can also use `npm start consolelog` to display all logging to the console for testing purposes. The same information is also logged to files in the `logs` directory
 7. Open a web browser and type: http://127.0.0.1:3000
 
+<a id="pm2-id"></a>
 ### Recommended additional steps (optional)
 
 To have SymBot run in the background it is recommended to use the Node.js process manager called **pm2**. Here's how to use it:
@@ -86,6 +91,8 @@ SymBot will now start automatically even when the system is rebooted. With the a
 
 Sometimes you want just a little more guidance on how to get everything installed, so here's a quick video that demonstrates how to get SymBot installed along with Node.js and MongoDB on Ubuntu.
 
+**Note:** With SymBot's configuration mode, manually editing the configuration files before starting, as shown in the video, is no longer required.
+
 <a href="https://youtu.be/p_gZtRrgNNQ" target="_blank">
 	<picture>
 		<img src="https://github.com/3cqs-coder/SymBot/assets/111208586/b428f4d4-7f1b-4ce3-9c48-0bb29d2b4e7e" width="720" />
@@ -100,14 +107,52 @@ The Docker build files can be modified as necessary, but should only be done if 
 
 1. Open a command line terminal
 2. Change directory to where SymBot files are located
-3. Open the **app.json** configuration file and set `mongo_db_url` to `mongodb://symbot:symbot123@database/symbot`
-4. Make any additional changes to the app and bot configuration files as necessary (see [Configuration](#configuration))
-5. Change directory to `docker` in the same location where SymBot files are located
-6. Type: `docker-compose -p symbot up -d --build`
-7. Wait for Docker to build everything and all containers to start
-8. Open a web browser and type: http://127.0.0.1:3000
+3. Make any additional changes to the app and bot configuration files as necessary (see [Configuration](#configuration))
+	- SymBot will automatically configure the database URL and set your password to *admin*
+4. Change directory to `docker` in the same location where SymBot files are located
+5. Type: `docker-compose -p symbot up -d --build`
+6. Wait for Docker to build everything and all containers to start
+7. Open a web browser and type: http://127.0.0.1:3000
+
+SymBot will initially start in configuration mode. After you confirm the default settings and update, it will shutdown and restart automatically.
 
 Mongo Express is also installed which can be used to access MongoDB visually by opening a web browser to  http://127.0.0.1:3010
+
+<a id="symbot-hub-id"></a>
+## SymBot Hub
+
+SymBot Hub makes it easy to manage multiple SymBot instances from a single codebase. Whether you're testing strategies on different exchanges, running real and paper (sandbox) trading, or managing other setups, you can control everything with just a click.
+
+With SymBot Hub's simple web interface, you can easily add, update, restart, or disable any instance. It also combines all instances into one system using an internal proxy server, so you only need one port to access everything. Plus, SymBot Hub helps you monitor system resources like memory usage, making instance management straightforward and efficient.
+
+### Starting SymBot Hub
+
+Before starting SymBot Hub, make sure your first SymBot configuration is set up and working as expected. The initial instance will be created automatically using your default configuration files.
+
+To get started:
+
+1.  Open a command line terminal.
+2.  If any SymBot instances are running, stop them.
+3.  Navigate to the directory where your SymBot files are located.
+4. You can change the default port in **hub.json** but it is recommended to make all instance additions or updates using the web interface.
+5.  Run the command: `node symbot-hub.js`
+6.  Open a web browser and go to: http://127.0.0.1:3100
+
+Your SymBot instances are now all accessible through SymBot Hub. For example, if you have two SymBot instances running on ports 3000 and 3001, you can access them by visiting:
+
+-   http://127.0.0.1:3100/instance/3000
+-   http://127.0.0.1:3100/instance/3001
+
+This setup also makes it easier to use a domain name to access your SymBot instances. By pointing your domain to SymBot Hub, you can access them at:
+
+-   http://your-domain.com/instance/3000
+-   http://your-domain.com/instance/3001
+
+Once SymBot Hub is running, it is recommended to update your process manager to automatically start SymBot Hub instead of individual SymBot instances. This ensures that SymBot Hub takes over the management of all SymBot instances, while your process manager continues to handle the automatic startup of SymBot Hub itself.
+
+If your process manager, such as [pm2](#pm2-id), has maximum memory restart parameters configured, you may need to increase the limit, as SymBot Hub will consume more resources as the number of instances grows.
+
+Lastly, be aware that exchanges often impose connection limits, and if you’re using services like Telegram, 3CQS signals, or other providers requiring API keys, there may also be restrictions on the number of connections allowed per IP address or API key. To stay within these limits, you may need to disable certain services on specific instances.
 
 ## Upgrading
 
@@ -161,6 +206,7 @@ These files are located in the `config` directory
 		- **WARNING:**
 			- Do not run multiple instances of SymBot using the same database. This will lead to severe bot malfunction and could irreversibly damage your bot's functionality.
 			- Avoid direct access to MongoDB. You should never attempt to view, modify, or interact with the SymBot database directly through the MongoDB shell or any other utility. Doing so risks corrupting the database, which could lead to total data loss and irreversible damage to your bot's operation.
+		- You do not need to enter this manually. It can be entered using the web interface while in configuration mode.
 		- For quick set up, create a free account at https://cloud.mongodb.com and copy the URL given into the app config. It begins with something like: mongodb+srv://
 		- If running a local MongoDB instance, specifying `
 mongodb://127.0.0.1:27017/SymBot
@@ -840,11 +886,21 @@ To restore a backup, you must enter the encryption password used during the back
 Regular backups of your database are vital for protecting your trading data and ensuring the continuity of your strategies. It's essential to backup your database regularly, particularly before making significant changes to your settings or deploying new strategies. Always remember to securely store your encryption password, as it is required to restore your database.
 
 
-## Resetting SymBot
+## Reset or Configure SymBot
 
-There are two ways to reset SymBot. You can reset the entire database, or just the server ID if you want to migrate an existing SymBot database to a different server or instance.
+There are three command line options available for modifying SymBot:
 
-If you want to reset the SymBot database or server ID for any reason, you can do so only from the command line. It will first ask to confirm, then display a reset code you must enter, and confirm again.
+1.  **Enable Configuration Mode**: This option allows you to easily update your database URL and other settings through the web interface.
+
+2.  **Reset the Entire Database**: Use this option if you need to reset all data within SymBot.
+
+3.  **Reset the Server ID**: If you want to migrate an existing SymBot database to a different server or instance, you can reset just the server ID.
+
+To reset the SymBot database or server ID, you must use the command line. The system will first prompt you for confirmation, display a reset code that you must enter, and then require another confirmation to proceed.
+
+#### Configuration mode
+1. Stop any running instances of SymBot
+2. Type: `npm start config` (or `node ./symbot.js config`)
 
 #### Reset database
 ##### *** CAUTION *** This will purge all data from the SymBot database!
@@ -872,7 +928,10 @@ If you want to reset the SymBot database or server ID for any reason, you can do
 - Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected scenarios, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
 
 #### Can I run multiple SymBot instances on the same server?
-- Yes, with a few simple steps:
+
+Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on the same server.
+
+-  Although not recommended, if you would rather do it manually, follow these simple steps:
 
 	1. Clone the SymBot code into a new directory and follow the same installation procedures
 	2.  Change your `mongo_db_url` to point to a different database, such as `mongodb://127.0.0.1:27017/SymBot2`
@@ -936,6 +995,9 @@ If you want to reset the SymBot database or server ID for any reason, you can do
 
 #### Why is my system suddenly using more CPU or memory?
 - SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience. See also [Advanced Setup](#advanced-setup) for additional tips.
+
+#### What is the difference between SymBot and SymBot Hub?
+- SymBot is the software used for trading, while SymBot Hub serves as a central platform to manage multiple SymBot instances, offering a simplified and more efficient way to access them. While SymBot Hub is optional, it is highly recommended if you're running multiple SymBot instances.
 
 #### How can I disable logging to file to save disk space?
 - While we do not recommend disabling logging to file, you have the option to do so by running adding the argument `clglite` when starting the application. 

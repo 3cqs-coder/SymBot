@@ -23,11 +23,16 @@ let dbUrl;
 const backupDir = pathRoot + '/backups';
 
 
-const connectDb = async () => {
+const connectDb = async (url) => {
+
+	if (url == undefined || url == null || url == '') {
+
+		url = dbUrl;
+	}
 
 	try {
 
-		const connection = mongoose.createConnection(dbUrl, {});
+		const connection = mongoose.createConnection(url, {});
 
 		// Ensure the connection is fully established
 		await new Promise((resolve, reject) => {
@@ -872,6 +877,7 @@ module.exports = {
 	pause,
 	resetConsole,
 	resetDatabase,
+	connectDb,
 	backupDb,
 	restoreDb,
 	routeBackupDb,

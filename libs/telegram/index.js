@@ -117,9 +117,9 @@ function logError(err, data) {
 }
 
 
-function start(tokenId) {
+function start(tokenId, enabled) {
 
-	if (tokenId != undefined && tokenId != null && tokenId != '') {
+	if (enabled && (tokenId != undefined && tokenId != null && tokenId != '')) {
 
 		initApp(tokenId);
 	}
@@ -130,9 +130,23 @@ function start(tokenId) {
 }
 
 
+function stop() {
+
+	try {
+
+		bot.stop();
+	}
+	catch(e) {}
+
+	bot = null;
+	initSuccess = false;
+}
+
+
 module.exports = {
 
 	start,
+	stop,
 	sendMessage,
 
 	init: function(obj) {

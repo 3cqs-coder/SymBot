@@ -1,0 +1,118 @@
+<%- include('../partialsHeaderView'); %>
+
+<script>
+
+	function submitForm() {
+
+		let form = '#formConfig';
+		let submitUrl = $(form).attr('action');
+
+		if ($('#password').val() == '') {
+
+			alertBox('Please enter your current password');
+
+			return;
+		}
+
+		if ($('#passwordnew').val() != $('#passwordnew2').val()) {
+
+			alertBox('Passwords do not match');
+
+			return;
+		}
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'POST',
+					url: submitUrl,
+					data: $(form).serialize(),
+					dataType: 'json',
+					success: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						if (!data.success) {
+
+							alertBox(data.data, function() { window.location.reload(); });
+						}
+						else {
+
+							alertBox(data.data, function() { window.location.reload(); });
+						}
+
+						$('#password').val('');
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + JSON.stringify(data));
+					}
+		});
+	}
+
+
+	$(document).ready(function() {
+
+		$('#configChangePass').on('click', function(e) {
+
+			$('#configNewPass').toggle();
+			$('#configConfirmPass').toggle();
+		});
+
+		$('#submitButton').on('click', function(e) {
+
+			e.preventDefault();
+
+			submitForm();
+		});
+
+	});
+
+</script>
+
+
+<main>
+
+	<div id="contentBox" style="max-width: 800px;">
+
+		<div class="contentHeaderBox" style="text-align: center;">
+			<b id="headerText" class="contentHeader">Configuration</b>
+		</div>
+
+		<form autocomplete="off" action="./config" method="POST" id="formConfig">
+
+			<div style="padding-bottom: 5px;">
+				<label for="password">Current Password
+					<span class="toolTip">?<span class="toolTipText">
+						This is the password used to login to the <%- appData.name %> web interface.
+					</span></span>
+				</label>
+				<input type="password" name="password" id="password" class="form-field" style="width: 250px;" required> <span id="configChangePass" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Change</span>
+			</div>
+
+			<div style="padding-bottom: 5px; display: none;" id="configNewPass">
+				<label for="passwordnew">New Password</label>
+				<input type="password" name="passwordnew" id="passwordnew" class="form-field" style="width: 250px;">
+			</div>
+
+			<div style="padding-bottom: 5px; display: none;" id="configConfirmPass">
+				<label for="passwordnew2">New Password Again</label>
+				<input type="password" name="passwordnew2" id="passwordnew2" class="form-field" style="width: 250px;">
+			</div>
+
+			<div style="text-align: center; padding-top: 25px;">
+				<button type="submit" id="submitButton" class="btn" style="cursor: pointer;">
+					Update
+				</button>
+			</div>
+
+		</form>
+	</div>
+
+</main>
+
+
+<%- include('../partialsFooterView'); %>

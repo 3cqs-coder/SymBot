@@ -480,7 +480,17 @@ async function processConfig(req, res) {
 			tokenBase64 = Buffer.from(token, 'utf8').toString('base64');
 		}
 
-		res.render( 'configView', { 'appData': shareData.appData, 'token': tokenBase64 } );
+		const appConfigFile = shareData.appData.app_config;
+
+		const appConfig = await shareData.Common.getConfig(appConfigFile);
+
+		const services = Object.assign({
+
+			telegram: appConfig.data.telegram,
+			signals: appConfig.data.signals
+		});
+
+		res.render( 'configView', { 'appData': shareData.appData, 'token': tokenBase64, 'services': services } );
 	}
 	else {
 

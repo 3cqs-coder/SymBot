@@ -14,7 +14,7 @@ const packageJson = require(pathRoot + '/package.json');
 
 const convertAnsi = new Convert();
 
-const logNotifications = pathRoot + '/logs/services/notifications/notifications.log';
+const logNotifications = pathRoot + '/logs/services/notifications/notifications{INSTANCE_NAME}.log';
 
 let shareData;
 
@@ -73,14 +73,26 @@ async function updateConfig(req, res) {
 
 	const body = req.body;
 	const sessionId = req.session.id;
+	const mongodburl = body.mongodburl;
 	const password = body.password;
 	const passwordNew = body.passwordnew;
 	const apiKey = body.apikey;
-	const telegram = body.telegram;
+	const telegram = body.telegram_enabled;
+	const telegramTokenId = body.telegram_token_id;
+	const telegramUserId = body.telegram_user_id;
+	const signals3CQS = body.signals_3cqs_enabled;
+	const signals3CQSApiKey = body.signals_3cqs_api_key;
 
 	let pairButtons = body.pairbuttons;
 	let pairBlacklist = body.pairblacklist;
-	let telegramEnabled = false;
+
+	let telegramEnabled = convertBoolean(telegram, false);
+	let signals3CQSEnabled = convertBoolean(signals3CQS, false);
+
+	let dbErr;
+	let dataMessage = 'Configuration Updated';
+
+	const appConfigFile = shareData.appData.app_config;
 
 	if (pairButtons == undefined || pairButtons == null || pairButtons == '') {
 
@@ -109,7 +121,7 @@ async function updateConfig(req, res) {
 
 	if (success) {
 
-		let data = await getConfig('app.json');
+		let data = await getConfig(appConfigFile);
 
 		let appConfig = data.data;
 
@@ -140,23 +152,76 @@ async function updateConfig(req, res) {
 			await setToken();
 		}
 
-		if (telegram != undefined && telegram != null && telegram != '') {
-
-			telegramEnabled = true;
-		}
-
 		appConfig['bots']['pair_buttons'] = pairButtonsUC;
 		shareData['appData']['bots']['pair_buttons'] = pairButtonsUC;
 
 		appConfig['bots']['pair_blacklist'] = pairBlacklistUC;
 		shareData['appData']['bots']['pair_blacklist'] = pairBlacklistUC;
 
+		appConfig['signals']['3CQS']['api_key'] = signals3CQSApiKey;
+		appConfig['signals']['3CQS']['enabled'] = signals3CQSEnabled;
+		shareData['appData']['signals_3cqs_enabled'] = signals3CQSEnabled;
+
 		appConfig['telegram']['enabled'] = telegramEnabled;
+		appConfig['telegram']['token_id'] = telegramTokenId;
+		appConfig['telegram']['notify_user_id'] = telegramUserId;
+
+		shareData['appData']['telegram_id'] = telegramUserId;
 		shareData['appData']['telegram_enabled'] = telegramEnabled;
+		shareData['appData']['telegram_enabled_config'] = telegramEnabled;
 
-		await saveConfig('app.json', appConfig);
+		if (shareData.appData.config_mode) {
 
-		let obj = { 'success': true, 'data': 'Configuration Updated' };
+			try {
+
+				const db = await shareData.System.connectDb(mongodburl);
+
+				await db.close();
+
+				if (db == undefined || db == null || db == '') {
+
+					dbErr = 'Unabled to connect to database';
+				}
+			}
+			catch(e) {
+
+				dbErr = e.message;
+			}
+
+			if (dbErr != undefined && dbErr != null && dbErr != '') {
+
+				success = false;
+				dataMessage = 'Database Error: ' + dbErr;
+			}
+			else {
+
+				let msg = 'Database URL modified. Shutting down. Please restart for changes to take effect.';
+
+				dataMessage = msg;
+
+				// Successful configuration. Shutdown to start fresh config.
+				appConfig['mongo_db_url'] = mongodburl;
+
+				logger(msg, true);
+
+				setTimeout(() => { shareData.System.shutDown(); }, 1500);
+			}
+		}
+
+		if (success) {
+
+			await saveConfig(appConfigFile, appConfig);
+
+			// Restart Signals
+			startSignals();
+
+			// Restart Telegram bot
+			shareData.Telegram.stop();
+			await delay(1000);
+			shareData.Telegram.start(telegramTokenId, telegramEnabled);
+		}
+
+		let obj = { 'success': success, 'data': dataMessage };
 		
 		res.send(obj);
 	}
@@ -166,6 +231,20 @@ async function updateConfig(req, res) {
 		
 		res.send(obj);
 	}
+}
+
+
+async function startSignals() {
+
+	// Start signals after everything else is finished loading
+
+	const appConfigFile = shareData.appData.app_config;
+
+	const appConfig = await getConfig(appConfigFile);
+
+	let enabled = shareData.appData['signals_3cqs_enabled'];
+
+	const socket = await shareData.Signals3CQS.start(enabled, appConfig['data']['signals']['3CQS']['api_key']);
 }
 
 
@@ -375,6 +454,17 @@ async function sendNotification(data) {
 	let maxNotifications = 500;
 	let fileName = logNotifications;
 
+	const instanceName = await getInstanceName();
+
+	if (instanceName && instanceName.trim() !== '') {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', `-${instanceName}`);
+	}
+	else {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', '');
+	}
+
 	let msg = data['message'];
 	let msgType = data['type'];
 	let telegramId = data['telegram_id'];
@@ -399,7 +489,12 @@ async function sendNotification(data) {
 	}
 
 	// Relay message to WebSocket notifications room
-	shareData.WebServer.sendSocketMsg(msg, 'notifications');
+	sendSocketMsg({
+
+		'room': 'notifications',
+		'type': 'notification',
+		'message': msg
+	});
 
 	// Save notifications
 	saveData(fileName, JSON.stringify(historyArr));
@@ -409,6 +504,17 @@ async function sendNotification(data) {
 async function getNotificationHistory(client, data) {
 
 	let fileName = logNotifications;
+
+	const instanceName = await getInstanceName();
+
+	if (instanceName && instanceName.trim() !== '') {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', `-${instanceName}`);
+	}
+	else {
+
+		fileName = fileName.replace('{INSTANCE_NAME}', '');
+	}
 
 	let historyArr = [];
 
@@ -436,11 +542,23 @@ async function getNotificationHistory(client, data) {
 }
 
 
-async function showLogs(req, res) {
+async function showLogs(req, res, isHub) {
 
+	let filesFiltered;
+
+	const instanceName = await getInstanceName();
 	const files = await getLogs();
 
-	res.render( 'logsView', { 'appData': shareData.appData, 'files': files } );
+	if (instanceName != undefined && instanceName != null && instanceName != '') {
+
+		filesFiltered = files.filter(file => new RegExp(`${instanceName}\\.log$`).test(file.name));
+	}
+	else {
+
+		filesFiltered = files;
+	}
+
+	res.render( 'logsView', { 'appData': shareData.appData, 'files': filesFiltered, 'isHub': isHub } );
 }
 
 
@@ -498,6 +616,8 @@ async function downloadLog(file, req, res) {
 
 async function logger(data, consoleLog) {
 
+	const instanceName = await getInstanceName();
+
 	if (typeof data !== 'string') {
 		data = JSON.stringify(data);
 	}
@@ -518,7 +638,7 @@ async function logger(data, consoleLog) {
 
 	const dateObj = getDateParts(dateNow);
 
-	const fileName = pathRoot + '/logs/' + dateObj.date + '.log';
+	const fileName = pathRoot + '/logs/' + dateObj.date + (instanceName ? '-' + instanceName : '') + '.log';
 
 	const logDataOrig = logData;
 
@@ -533,7 +653,12 @@ async function logger(data, consoleLog) {
 
 	if (shareData && shareData.WebServer) {
 
-		shareData.WebServer.sendSocketMsg(convertAnsi.toHtml(logDataOrig));
+		sendSocketMsg({
+
+			'room': 'logs',
+			'type': 'log',
+			'message': convertAnsi.toHtml(logDataOrig)
+		});
 	}
 }
 
@@ -566,6 +691,23 @@ async function delay(msec) {
 
 		setTimeout(() => { resolve('') }, msec);
 	});
+}
+
+
+async function getInstanceName() {
+
+	let instanceName = '';
+
+	try {
+
+		if (shareData['appData']['worker_data'] && typeof shareData['appData']['worker_data'] === 'object') {
+
+			instanceName = shareData['appData']['worker_data']['name'];
+		}
+	}
+	catch(e) {}
+
+	return instanceName;
 }
 
 
@@ -1111,7 +1253,7 @@ async function verifyPasswordHash(dataObj) {
 }
 
 
-async function verifyLogin(req, res) {
+async function verifyLogin(req, res, isHub) {
 
 	let msg;
 
@@ -1137,12 +1279,30 @@ async function verifyLogin(req, res) {
 
 	msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;
 
-	logger(msg);
-	sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	if (!isHub) {
+
+		logger(msg);
+		sendNotification({ 'message': msg, 'telegram_id': shareData.appData.telegram_id });
+	}
 
 	if (success) {
 
-		renderView('homeView', req, res);
+		if (isHub) {
+
+			renderView('hub/homeView', req, res, isHub);
+		}
+		else {
+
+			// Redirect to config view if in config mode
+			if (shareData.appData.config_mode) {
+
+				res.redirect('/config');
+			}
+			else {
+
+				renderView('homeView', req, res);
+			}
+		}
 	}
 	else {
 
@@ -1183,9 +1343,38 @@ function validateApiKey(key) {
 }
 
 
-async function renderView(view, req, res) {
+async function sendSocketMsg(data) {
 
-	res.render( view, { 'appData': shareData.appData } );
+	const roomAuth = 'logs';
+
+	let room = data['room'];
+	let msg = data['message'];
+	let msgType = data['type'];
+
+	const socket = await shareData.WebServer.getSocket();
+
+	let sendRoom = roomAuth;
+
+	if (room != undefined && room != null && room != '') {
+
+		sendRoom = room;
+	}
+
+	if (msgType == undefined || msgType == null || msgType == '') {
+
+		msgType = sendRoom;
+	}
+
+	if (socket) {
+
+		socket.to(sendRoom).emit('data', { 'type': msgType, 'message': msg });
+	}
+}
+
+
+async function renderView(view, req, res, isHub) {
+
+	res.render( view, { 'isHub': isHub, 'appData': shareData.appData } );
 }
 
 
@@ -1271,6 +1460,7 @@ module.exports = {
 	saveConfig,
 	updateConfig,
 	pairBlackListed,
+	getInstanceName,
 	getData,
 	saveData,
 	getDateParts,
@@ -1301,6 +1491,8 @@ module.exports = {
 	getAppVersions,
 	validateAppVersion,
 	dealDurationMinutes,
+	startSignals,
+	sendSocketMsg,
 
 	init: function(obj) {
 
