@@ -1,0 +1,95 @@
+#articles-container {
+	display: flex;
+	flex-wrap: wrap; /* Allows items to wrap to the next line */
+	justify-content: center; /* Center the items */
+	border-radius: 5px;
+	background-color: var(--table-background-color);
+}
+
+.article-card {
+	flex: 1 1 300px; /* Each card takes up at least 300px */
+	margin: 10px; /* Margin around each card */
+	max-width: calc(33.33% - 20px); /* Allows up to 3 cards per row */
+	box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+	border-radius: 5px;
+	overflow: hidden;
+	background-color: var(--content-box-background-color); /* Background for cards */
+	position: relative; /* Positioning for hover effects */
+}
+
+.card-img-top {
+	height: 200px; /* Fixed height for consistent image size */
+	width: 100%; /* Full width of the card */
+	object-fit: cover; /* Ensures the image covers the area without stretching */
+}
+
+.card-image-placeholder {
+	height: 200px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background-color: #717171; /* Placeholder background */
+	color: #d3d4d6;
+}
+
+.card-body {
+	padding: 15px;
+}
+
+.card-title {
+	font-size: 1.5rem; /* Enlarging the title */
+	cursor: pointer; /* Pointer cursor for titles */
+	margin-bottom: 10px; /* Spacing below the title */
+}
+
+.card-title a {
+	text-decoration: none; /* Remove underline from links */
+	color: var(--content-box-color); /* Link color */
+}
+
+.card-title a:hover {
+	text-decoration: underline; /* Underline on hover */
+}
+
+.card-text {
+	font-size: 1.3rem; /* Enlarging the description text */
+	margin: 10px 0; /* Margin for spacing */
+}
+
+.article-published-info {
+	font-size: 1.4rem; /* Enlarging the published by text */
+	color: #6c757d; /* Muted text color */
+}
+
+.article-link {
+	cursor: pointer; /* Pointer cursor for images and titles */
+}
+
+#search-input {
+	width: 100%;
+	max-width: 400px;
+	margin: 20px auto;
+	padding: 10px;
+	font-size: 1.2rem;
+	border: 1px solid #ccc;
+	border-radius: 5px;
+	display: block;
+	outline: none; /* Removes the blue border on focus */
+}
+
+#search-input:focus {
+	outline: none; /* Ensures no outline on focus */
+	border-color: #999; /* Optional: Change border color on focus if needed */ 
+}
+
+@media (max-width: 768px) {
+	.article-card {
+		max-width: calc(50% - 20px); /* 2 cards per row on tablets */
+	}
+}
+
+@media (max-width: 576px) {
+	.article-card {
+		max-width: 100%; /* 1 card per row on mobile */
+	}
+}

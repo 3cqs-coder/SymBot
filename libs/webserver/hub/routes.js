@@ -128,6 +128,21 @@ function initRoutes(router) {
 	});
 
 
+	router.get('/news', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.Hub.routeShowNews(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get('/config', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');

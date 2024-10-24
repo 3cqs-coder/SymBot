@@ -114,8 +114,11 @@ The Docker build files can be modified as necessary, but should only be done if 
 6. Wait for Docker to build everything and all containers to start
 7. Open a web browser and type: http://127.0.0.1:3000
 
+SymBot will initially start in configuration mode. After you confirm the default settings and update, it will shutdown and restart automatically.
+
 Mongo Express is also installed which can be used to access MongoDB visually by opening a web browser to  http://127.0.0.1:3010
 
+<a id="symbot-hub-id"></a>
 ## SymBot Hub
 
 SymBot Hub makes it easy to manage multiple SymBot instances from a single codebase. Whether you're testing strategies on different exchanges, running real and paper (sandbox) trading, or managing other setups, you can control everything with just a click.
@@ -131,8 +134,9 @@ To get started:
 1.  Open a command line terminal.
 2.  If any SymBot instances are running, stop them.
 3.  Navigate to the directory where your SymBot files are located.
-4.  Run the command: `node symbot-hub.js`
-5.  Open a web browser and go to: http://127.0.0.1:3100
+4. You can change the default port in **hub.json** but it is recommended to make all instance additions or updates using the web interface.
+5.  Run the command: `node symbot-hub.js`
+6.  Open a web browser and go to: http://127.0.0.1:3100
 
 Your SymBot instances are now all accessible through SymBot Hub. For example, if you have two SymBot instances running on ports 3000 and 3001, you can access them by visiting:
 
@@ -924,7 +928,10 @@ To reset the SymBot database or server ID, you must use the command line. The sy
 - Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected scenarios, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
 
 #### Can I run multiple SymBot instances on the same server?
-- Yes, with a few simple steps:
+
+Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on the same server.
+
+-  Although not recommended, if you would rather do it manually, follow these simple steps:
 
 	1. Clone the SymBot code into a new directory and follow the same installation procedures
 	2.  Change your `mongo_db_url` to point to a different database, such as `mongodb://127.0.0.1:27017/SymBot2`

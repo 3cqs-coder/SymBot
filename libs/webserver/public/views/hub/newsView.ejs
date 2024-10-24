@@ -1,0 +1,89 @@
+<%- include('../partialsHeaderView'); %>
+
+<link rel="stylesheet" href="/css/style-news.css" />
+
+<script>
+
+	$(document).ready(function() {
+
+		// Click event for images and titles
+		$('.article-link').on('click', function(e) {
+			const link = $(this).data('link'); // Get the URL from data attribute
+			if (link) {
+				window.open(link, '_blank'); // Open the URL in a new window
+			}
+		});
+
+		// Intelligent search function
+		$('#search-input').on('input', function() {
+			const searchTerm = $(this).val().toLowerCase().trim(); // Get the search input
+			const searchWords = searchTerm.split(/\s+/); // Split input into individual words
+
+			$('.article-card').each(function() {
+				const title = $(this).find('.card-title').text().toLowerCase();
+				const description = $(this).find('.card-text').text().toLowerCase();
+
+				// Check if all search words are found in either the title or description
+				const matches = searchWords.every(word => title.includes(word) || description.includes(word));
+
+				if (matches) {
+					$(this).show(); // Show matching articles
+				} else {
+					$(this).hide(); // Hide non-matching articles
+				}
+			});
+		});
+
+		// Ensure all articles are shown by default on page load
+		$('.article-card').show();
+
+		// Update the published date using timeDiff
+		$('.article-published-info').each(function() {
+			const pubDateElement = $(this).find('.pubDate');
+			const pubDate = new Date(pubDateElement.data('pubdate'));
+			const currentDate = new Date();
+			const timeAgo = timeDiff(pubDate, currentDate);
+			const timeAgoMin = timeAgo.replace(/\d{1,2}s/g, '').trim();
+			pubDateElement.text(`${timeAgoMin} ago`);
+		});
+
+	});
+</script>
+
+<main>
+    <div id="contentBox">
+        <div class="contentHeaderBox" style="text-align: center;">
+            <b id="headerText" class="contentHeader">Latest News</b>
+        </div>
+
+        <input type="text" id="search-input" placeholder="Search articles..." />
+
+        <div id="articles-container">
+            <% articles.forEach(article => { %>
+                <div class="article-card">
+                    <div class="card-img-top article-link" data-link="<%= article.link %>">
+                        <% if (article.imageUrl) { %>
+                            <img src="<%= article.imageUrl %>" alt="<%= article.title %>" referrerpolicy="no-referrer" style="display: block; width: 100%; height: 200px; object-fit: cover;">
+                        <% } else { %>
+                            <div class="card-image-placeholder">
+                                <span>No Image Available</span>
+                            </div>
+                        <% } %>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title article-link" data-link="<%= article.link %>">
+                            <%= article.title %>
+                        </h5>
+                        <p class="card-text"><%= article.description %></p>
+                        <p class="article-published-info">
+                            <small>By <%= article.creator %></small>
+                            <small class="pubDate" data-pubdate="<%= article.pubDate %>"><%= new Date(article.pubDate).toLocaleString() %></small>
+                        </p>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    </div>
+</main>
+
+<%- include('../partialsFooterView'); %>

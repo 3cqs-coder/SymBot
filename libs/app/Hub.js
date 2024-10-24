@@ -5,7 +5,7 @@ const fsp = require('fs').promises;
 const path = require('path');
 const net = require('net');
 const ccxt = require('ccxt');
-
+const { parseStringPromise } = require('xml2js');
 
 let shareData;
 
@@ -1055,6 +1055,79 @@ async function routeUpdateConfig(req, res) {
 }
 
 
+async function routeShowNews(req, res) {
+
+	let articles = [];
+
+	const news = await getNews(Buffer.from('aHR0cHM6Ly93d3cuM2Nxcy5jb20vc2l0ZS9uZXdzL3Jzcw==', 'base64').toString('utf-8'));
+
+	if (news.success) {
+
+		articles = news.data;
+	}
+
+	res.render( 'hub/newsView', { 'isHub': true, 'appData': shareData.appData, 'articles': articles } );
+}
+
+
+async function getNews(url) {
+
+	let success = false;
+
+	let data;
+	let isErr;
+
+	const response = await shareData.Common.fetchURL({
+		'url': url
+	});
+
+	if (response.success) {
+
+		success = true;
+
+		try {
+
+			const rssXml = response.data;
+			const result = await parseStringPromise(rssXml);
+			const channel = result.rss.channel[0];
+			const articles = [];
+
+			channel.item.forEach((item) => {
+
+				try {
+
+					const article = {
+						'title': item.title && item.title[0] ? item.title[0] : null,
+						'description': item.description && item.description[0] ? item.description[0] : null,
+						'link': item.link && item.link[0] ? item.link[0] : null,
+						'pubDate': item.pubDate && item.pubDate[0] ? item.pubDate[0] : null,
+						'creator': item['dc:creator'] && item['dc:creator'][0] ? item['dc:creator'][0] : 'N/A',
+						'imageUrl': item.enclosure && item.enclosure[0] && item.enclosure[0].$.url ? item.enclosure[0].$.url : null
+					};
+
+					articles.push(article);
+				}
+				catch (e) {}
+			});
+
+			data = articles;
+		}
+		catch (error) {
+
+			success = false;
+			isErr = error;
+		}
+
+	}
+
+	return {
+		'success': success,
+		'error': isErr,
+		'data': data
+	};
+}
+
+
 async function getExchanges() {
 
 	const exchanges = ccxt.exchanges;
@@ -1131,6 +1204,7 @@ module.exports = {
 	routeUpdateInstances,
 	routeUpdateConfig,
 	routeStartWorker,
+	routeShowNews,
 	processConfig,
 	validateConfig,
 	getExchanges,
