@@ -939,6 +939,19 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 			const price = parseFloat(bidPrice);
 
+			// Invalid price
+			if (price == undefined || price == null || price == '' || price === 0) {
+
+				cancelOnly = true;
+
+				let msg = 'Invalid Price: ' + price + ' / Pair: ' + pair + ' / Deal ID: ' + dealId;
+
+				if (shareData.appData.verboseLog) {
+					
+					Common.logger(colors.red.bold(msg));
+				}
+			}
+
 			let targetPrice = 0;
 
 			let orders = deal.orders;
@@ -956,10 +969,16 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				const baseOrder = deal.orders[0];
 				targetPrice = baseOrder.target;
 
+				// Something went wrong, don't allow deal to start
+				if (cancelOnly) {
+
+					buySuccess = false;
+				}
+
 				if (baseOrder.type == 'MARKET') {
 					//Send market order to exchange
 
-					if (!config.sandBox) {
+					if (!config.sandBox && !cancelOnly) {
 
 						const priceFiltered = await filterPrice(exchange, pair, price);
 

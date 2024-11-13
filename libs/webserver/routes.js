@@ -72,6 +72,21 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.post('/system/update', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.System.routeUpdateSystem(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.post('/system/shutdown', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');

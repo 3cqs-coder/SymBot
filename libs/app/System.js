@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const archiver = require('archiver');
 const unzipper = require('unzipper');
+const fetch = require('node-fetch-commonjs');
+const { exec } = require('child_process');
 
 const prompt = require('prompt-sync')({
 	sigint: true
@@ -430,7 +432,7 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 		shareData.Common.logger('Decompressing: ' + targetPathDec);
 
 		// Decompress backup file
-		await decompress(targetPathDec, dir); 
+		await decompress(targetPathDec, dir);
 
 		// Restore database
 		let res = await restoreDb(dir);
@@ -770,6 +772,331 @@ async function pause(bool, msg) {
 }
 
 
+async function routeUpdateSystem(req, res) {
+
+	const dataUpdate = await updateSystem();
+
+	if (dataUpdate.success) {
+
+		res.status(200).send('System update complete.');
+	}
+	else {
+
+		res.status(500).send('An error occurred during update: ' + dataUpdate.error);
+	}
+}
+
+
+async function updateSystem() {
+
+	let success = false;
+	let systemMsg = 'System Updating';
+
+	const outputDir = pathRoot + '/downloads';
+	const extractDir = outputDir + '/' + shareData.Common.uuidv4();
+
+	const appVersion = shareData.appData.version;
+	const appConfigFile = shareData.appData.app_config;
+
+	let isErr;
+	let cmdError = '';
+	let cmdStdError = '';
+	let cmdStdOut = '';
+	let extractDirName = '';
+
+	const getFirstDir = rootPath => fs.readdirSync(rootPath).find(f => fs.statSync(path.join(rootPath, f)).isDirectory()) || null;
+
+	const mergeAppConfigs = (data, appConfigs) => {
+
+		const instanceConfigs = new Set(data.instances.map(instance => instance.app_config));
+
+		appConfigs.forEach(config => instanceConfigs.add(config));
+
+		return Array.from(instanceConfigs);
+	};
+
+	// If Hub is running, send system pause to all instances
+	const resParent = await shareData.Common.sendParentMsg({
+
+		'type': 'system_pause_all',
+		'data': { 'pause': true, 'message': systemMsg }
+	});
+
+	if (!resParent.success) {
+
+		await pause(true, systemMsg);
+	}
+
+	shareData.Common.logger(systemMsg);
+
+	// Wait short delay for data to stop processing
+	await shareData.Common.delay(5000);
+
+	try {
+
+		let appConfigs = [];
+
+		appConfigs.push(appConfigFile);
+
+		const appInfo = await shareData.Common.validateAppVersion();
+
+		const owner = appInfo.owner;
+		const repo = appInfo.repo;
+		const latestTag = appInfo.remote;
+
+		if (!appInfo.success || !appInfo.update_available) {
+
+			throw new Error('You already have the latest version');
+		}
+
+		// Download latest tag zip file
+		const downloadUrl = `https://github.com/${owner}/${repo}/archive/refs/tags/${latestTag}.zip`;
+		const zipResponse = await fetch(downloadUrl);
+
+		if (!zipResponse.ok) throw new Error(`Failed to download zip: ${zipResponse.statusText}`);
+
+		// Create output directory if it doesn't exist
+		if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
+
+		const filename = `${repo}-${latestTag}.zip`;
+		const outFile = outputDir + '/' + filename;
+
+		// Write the zip file to disk
+		const fileStream = fs.createWriteStream(outFile);
+
+		await new Promise((resolve, reject) => {
+			zipResponse.body.pipe(fileStream);
+			zipResponse.body.on('error', reject);
+			fileStream.on('finish', resolve);
+		});
+
+		await decompress(outFile, extractDir);
+
+		try {
+
+			extractDirName = getFirstDir(extractDir);
+		}
+		catch(e) {
+
+			throw new Error(e.message);
+		}
+
+		let appConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/app.json');
+		let hubConfig = await shareData.Common.getData(pathRoot + '/config/hub.json');
+
+		if (hubConfig.success) {
+
+			appConfigs = mergeAppConfigs(JSON.parse(hubConfig.data), appConfigs);
+		}
+
+		// Update all app config files
+		for (let configFile of appConfigs) {
+
+			let diffs = null;
+			let appConfigOld = null;
+			let appConfigCombined = null;
+
+			appConfigOld = await shareData.Common.getData(pathRoot + '/config/' + configFile);
+
+			diffs = await findMissingParameters(JSON.parse(appConfigOld.data), JSON.parse(appConfigNew.data));
+			appConfigCombined = diffs.combined;
+
+			// Save new config
+			await shareData.Common.saveConfig(configFile, appConfigCombined);
+		}
+
+		// Remove existing files except config folder and replace with new 
+		await moveFiles(pathRoot, extractDir + '/' + extractDirName);
+
+		// Cleanup files
+		fs.unlinkSync(outFile);
+		removeDirectorySync(extractDir);
+
+		// Execute "npm install" in the original directory
+		await new Promise((resolve, reject) => {
+
+			exec('npm install', {
+				'cwd': pathRoot
+			}, (error, stdout, stderr) => {
+
+				if (error) {
+
+					cmdError = error.message;
+					reject(error);
+
+					return;
+				}
+				if (stderr) {
+
+					cmdStdError = stderr;
+					reject(new Error(stderr));
+
+					return;
+				}
+
+				cmdStdOut += stdout;
+
+				resolve();
+			});
+		});
+
+		if (!cmdError && !cmdStdError) {
+
+			success = true;
+		}
+	}
+	catch (error) {
+
+		isErr = error.message;
+	}
+
+	const resObj = {
+		'success': success,
+		'error': isErr,
+		'cmd': {
+			'stdout': cmdStdOut,
+			'stderr': cmdStdError,
+			'error': cmdError
+		}
+	};
+
+	shareData.Common.logger('System Update Complete: ' + JSON.stringify(resObj));
+
+	if (success) {
+
+		// If Hub is running, shutdown all instances
+		const resParent = await shareData.Common.sendParentMsg({
+
+			'type': 'shutdown_hub',
+			'data': ''
+		});
+
+		if (!resParent.success) {
+
+			shutDownFunction();
+		}
+	}
+	else {
+
+		// If Hub is running, send system unpause to all instances
+		const resParent = await shareData.Common.sendParentMsg({
+
+			'type': 'system_pause_all',
+			'data': { 'pause': false, 'message': '' }
+		});
+
+		if (!resParent.success) {
+
+			await pause(false, '');
+		}
+	}
+
+	return resObj;
+}
+
+
+async function moveFiles(originalDir, newDir) {
+
+	try {
+
+		const items = await fsp.readdir(newDir);
+
+		for (const item of items) {
+
+			// Skip "config" directory
+			if (item === 'config') {
+
+				continue;
+			}
+
+			const newItemPath = path.join(newDir, item);
+			const originalItemPath = path.join(originalDir, item);
+
+			const stats = await fsp.stat(newItemPath);
+
+			if (stats.isFile()) {
+
+				// File
+				await fsp.unlink(originalItemPath).catch(() => {});
+				await fsp.rename(newItemPath, originalItemPath);
+			}
+			else if (stats.isDirectory()) {
+
+				// Directory
+				removeDirectorySync(originalItemPath);
+				await fsp.rename(newItemPath, originalItemPath);
+			}
+		}
+	}
+	catch (e) {
+
+		throw new Error(e.message);
+	}
+}
+
+
+async function findMissingParameters(obj1, obj2, path = '') {
+
+	const missing = {};
+	const combined = Array.isArray(obj1) ? [...obj1] : {
+		...obj1
+	};
+
+	// Check for missing properties in obj2
+	for (const key in obj2) {
+
+		const fullPath = path ? `${path}.${key}` : key;
+
+		if (!(key in obj1)) {
+
+			missing[fullPath] = 'Missing in obj1'; // Key exists in obj2 but not in obj1
+			combined[key] = obj2[key]; // Include the missing key from obj2 in the combined object
+		}
+		else if (typeof obj2[key] === 'object' && obj2[key] !== null) {
+
+			if (Array.isArray(obj2[key])) {
+
+				// If it's an array, we need to ensure it's merged appropriately
+				if (!Array.isArray(obj1[key])) {
+
+					combined[key] = obj2[key];
+				}
+				else {
+
+					// Merge arrays without overwriting
+					combined[key] = [...new Set([...obj1[key], ...obj2[key]])];
+				}
+			}
+			else {
+
+				// Recursive check for nested objects
+				const nestedResult = await findMissingParameters(obj1[key], obj2[key], fullPath);
+
+				Object.assign(missing, nestedResult.missing); // Merge missing keys
+
+				combined[key] = nestedResult.combined; // Combine objects
+			}
+		}
+	}
+
+	// Check for missing properties in obj1
+	for (const key in obj1) {
+
+		const fullPath = path ? `${path}.${key}` : key;
+
+		if (!(key in obj2)) {
+
+			missing[fullPath] = 'Missing in obj2'; // Key exists in obj1 but not in obj2
+		}
+	}
+
+	return {
+		missing,
+		combined
+	};
+}
+
+
 async function resetConsole(serverIdError, resetServerId) {
 
 	// Reset database from command line
@@ -877,11 +1204,13 @@ module.exports = {
 	pause,
 	resetConsole,
 	resetDatabase,
+	updateSystem,
 	connectDb,
 	backupDb,
 	restoreDb,
 	routeBackupDb,
 	routeRestoreDb,
+	routeUpdateSystem,
 	get shutDown() {
         return shutDownFunction;
     },

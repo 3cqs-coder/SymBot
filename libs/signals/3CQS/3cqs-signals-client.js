@@ -471,7 +471,7 @@ async function removeDataDb() {
 
 async function convertCondition(data) {
 
-	const numsRegEx = /^[0-9. ]+$/;
+	const numsRegEx = /^-?[0-9. ]+$/;
 
 	if (numsRegEx.test(data)) {
 

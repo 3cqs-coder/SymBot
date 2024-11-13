@@ -26,6 +26,7 @@ const Dependencies = require('check-dependencies').sync({ verbose: false });
 
 
 let workerData;
+let parentPortReference;
 let appDataConfig;
 let gotSigInt = false;
 let shutdownTimeout = 2000;
@@ -261,6 +262,7 @@ async function init() {
 	let shareData = {
 						'appData': {
 										'name': packageJson.description + (instanceName ? '-' + instanceName : ''),
+										'name_main': packageJson.description,
 										'instance_name': instanceName,
 										'version': packageJson.version,
 										'update_available': update_available,
@@ -289,6 +291,7 @@ async function init() {
 										'reset': isReset,
 										'config_mode': false,
 										'worker_data': workerData,
+										'parent_port': parentPortReference,
 										'started': new Date()
 								   },
 						'DB': DB,
@@ -406,7 +409,7 @@ async function init() {
 		}
 		else {
 
-		let dbStarted =	await DB.start(dbUrl);
+			let dbStarted =	await DB.start(dbUrl);
 
 			if (!dbStarted) {
 
@@ -578,12 +581,19 @@ async function setInstanceConfig(config) {
 }
 
 
+async function setInstanceParentPort(port) {
+
+	parentPortReference = port;
+}
+
+
 async function start() {
 
 	let initData;
 
 	await Common.makeDir('backups');
 	await Common.makeDir('uploads');
+	await Common.makeDir('downloads');
 	await Common.makeDir('logs');
 	await Common.makeDir('logs/services');
 	await Common.makeDir('logs/services/notifications');
@@ -666,7 +676,11 @@ module.exports = {
 	start,
 	shutDown,
 	setInstanceConfig,
+	setInstanceParentPort,
 	get DCABot() {
         return DCABot;
+    },
+	get System() {
+        return System;
     }
 }

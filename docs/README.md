@@ -29,6 +29,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Reset or Configure SymBot](#reset-or-configure-symbot)
 - [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
 - [Disclaimer](#disclaimer)
+- [Help Support](#help-support)
 
 ## Requirements
 
@@ -155,6 +156,8 @@ If your process manager, such as [pm2](#pm2-id), has maximum memory restart para
 Lastly, be aware that exchanges often impose connection limits, and if you’re using services like Telegram, 3CQS signals, or other providers requiring API keys, there may also be restrictions on the number of connections allowed per IP address or API key. To stay within these limits, you may need to disable certain services on specific instances.
 
 ## Upgrading
+
+SymBot offers a convenient, one-click upgrade feature within its web interface. This feature automatically checks for new updates, downloads necessary files, installs them, and updates any required packages. Although the automated upgrade process eliminates the need to follow the manual steps below, it's recommended to review them to ensure that any process manager in use restarts SymBot correctly and that all trading activities resume smoothly.
 
 When upgrading to a new version of SymBot it is recommended to follow the basic steps below.
 
@@ -1008,3 +1011,14 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 All investment strategies and investments involve risk of loss. All information found here, including any ideas, opinions, views, predictions, forecasts, or suggestions, expressed or implied herein, are for informational, entertainment or educational purposes only and should not be construed as personal investment advice. Conduct your own due diligence, or consult a licensed financial advisor or broker before making any and all investment decisions. Any investments, trades, speculations, or discussions made on the basis of any information found here, expressed or implied herein, are committed at your own risk, financial or otherwise.
 
 By using the software, you acknowledge that you should only invest money you are prepared to lose. The authors and affiliates are not responsible for any trading results, and you use the software at your own risk.
+
+## Help Support
+
+If you enjoy **SymBot** and would like to help support its growth, please consider contributing. Your donations will assist in maintaining and enhancing the project for the future.
+
+You can contribute any amount through:
+
+- **BTC**: bc1qz35q0jf94j44ljd9tyfwvgh4fcc5w8hmt9y24h
+- **ETH**: 0x85aa19CB35A023265875d4d76C7dA09CCa9EF639
+- **USDT (ERC20)**: 0x85aa19CB35A023265875d4d76C7dA09CCa9EF639
+- Or directly via [GitHub Sponsors](https://github.com/sponsors/3cqs-coder)

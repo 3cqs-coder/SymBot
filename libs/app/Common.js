@@ -680,6 +680,7 @@ function logMonitor() {
 		delFiles(pathRoot + '/logs', maxDays);
 		delFiles(pathRoot + '/backups', 1, true);
 		delFiles(pathRoot + '/uploads', 1, true);
+		delFiles(pathRoot + '/downloads', 1, true);
 
 	}, (hoursInterval * (60 * 60 * 1000)));
 }
@@ -1372,6 +1373,30 @@ async function sendSocketMsg(data) {
 }
 
 
+async function sendParentMsg(data) {
+
+	const parentPort = shareData.appData.parent_port;
+
+	let msg = data['data'];
+	let msgType = data['type'];
+
+	let success = false;
+
+	if (parentPort) {
+
+		success = true;
+
+		parentPort.postMessage({
+
+			'type': msgType,
+			'data': msg
+		});
+	}
+
+	return { 'success': success };
+}
+
+
 async function renderView(view, req, res, isHub) {
 
 	res.render( view, { 'isHub': isHub, 'appData': shareData.appData } );
@@ -1381,67 +1406,106 @@ async function renderView(view, req, res, isHub) {
 const stripNonNumeric = (inputString) => inputString.replace(/[^0-9.]/g, '');
 
 
-async function getAppVersions() {
-
-    try {
-        let req = await fetch('https://raw.githubusercontent.com/3cqs-coder/SymBot/main/package.json');
-        let { version } = await req.json();
-        return { remote: stripNonNumeric(version), local: stripNonNumeric(packageJson.version) };
-    } catch (err) {
-        logger('Failed to retrieve remote application version', true);
-        return { remote: '0.0.0', local: '0.0.0' };
-    }
-}
-
-
 async function validateAppVersion() {
 
-    const { local, remote } = await getAppVersions();
-    const parseVersion = (version) => { return version.split(/[\.-]/); };
+	const owner = '3cqs-coder';
+	const repo = 'SymBot';
+	const url = `https://api.github.com/repos/${owner}/${repo}/tags`;
 
-    const localParts = parseVersion(local);
-    const remoteParts = parseVersion(remote);
+	let remoteVersion = '0.0.0';
+	let localVersion = '0.0.0';
+	let success = true;
+	let error = null;
+	let update_available = false;
 
-    let update_available = false;
+	try {
 
-    for (let i = 0; i < Math.max(localParts.length, remoteParts.length); i++) {
+		const response = await fetch(url);
 
-        const local_segment = i < localParts.length ? localParts[i] : '';
-        const remote_segment = i < remoteParts.length ? remoteParts[i] : '';
+		if (!response.ok) {
 
-        if (local_segment === '' && remote_segment !== '') {
-            // Local version has fewer segments than remote
-            update_available = true;
-            break;
-        }
+			success = false;
+			error = `Failed to fetch tags: ${response.statusText}`;
+		}
+		else {
 
-        if (local_segment < remote_segment) {
-            update_available = true;
-            break;
-        }
+			const tags = await response.json();
 
-        if (local_segment > remote_segment) {
-            // Current version is newer than remote
-            update_available = false;
-            break;
-        }
-    }
+			if (tags.length === 0) {
 
-    if (update_available) {
+				success = false;
+				error = 'No tags found for this repository.';
+			}
+			else {
 
-        logger('WARNING: Your app version is outdated. Please update to the latest version.', true);
-        logger('Current version: ' + local + ' Latest version: ' + remote, true);
+				const latestTag = tags[0].name;
 
-	} else {
+				localVersion = stripNonNumeric(packageJson.version);
+				remoteVersion = stripNonNumeric(latestTag);
 
-		if (local !== remote) {
+				const parseVersion = (version) => version.split(/[\.-]/);
 
-			logger('WARNING: Your app version is newer than the remote version. This should not happen.', true);
-            logger('Current version: ' + local + ' Latest version: ' + remote, true);
-        }
-    }
+				const localParts = parseVersion(localVersion);
+				const remoteParts = parseVersion(remoteVersion);
 
-    return { 'update_available': update_available };
+				for (let i = 0; i < Math.max(localParts.length, remoteParts.length); i++) {
+
+					const localSegment = i < localParts.length ? localParts[i] : '';
+					const remoteSegment = i < remoteParts.length ? remoteParts[i] : '';
+
+					if (localSegment === '' && remoteSegment !== '') {
+
+						update_available = true;
+						break;
+					}
+
+					if (localSegment < remoteSegment) {
+
+						update_available = true;
+						break;
+					}
+
+					if (localSegment > remoteSegment) {
+
+						update_available = false;
+						break;
+					}
+				}
+
+				if (!update_available && remoteVersion <= localVersion) {
+
+					success = false;
+					error = 'You already have the latest version';
+				}
+			}
+		}
+	}
+	catch (err) {
+
+		success = false;
+		error = 'Failed to retrieve remote application version';
+	}
+
+	if (update_available) {
+
+		logger('WARNING: Your app version is outdated. Please update to the latest version.', true);
+		logger(`Current version: ${localVersion} Latest version: ${remoteVersion}`, true);
+	}
+	else if (localVersion !== remoteVersion) {
+
+		logger('WARNING: Your app version is newer than the remote version. This should not happen.', true);
+		logger(`Current version: ${localVersion} Latest version: ${remoteVersion}`, true);
+	}
+
+	return {
+		owner,
+		repo,
+		remote: remoteVersion,
+		local: localVersion,
+		success,
+		error,
+		update_available
+	};
 }
 
 
@@ -1488,11 +1552,11 @@ module.exports = {
 	showTradingView,
 	fetchURL,
 	getProcessInfo,
-	getAppVersions,
 	validateAppVersion,
 	dealDurationMinutes,
 	startSignals,
 	sendSocketMsg,
+	sendParentMsg,
 
 	init: function(obj) {
 

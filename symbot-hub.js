@@ -145,6 +145,8 @@ if (isMainThread) {
 				{ shutdownTimeout }
 			));
 
+			SymBot.setInstanceParentPort(parentPort); 
+
 			await SymBot.start();
 
 			console.log(`Finished Starting Instance: ${instanceName}`);
@@ -193,6 +195,22 @@ async function processWorkerTaskMessage(SymBot, message) {
 			type: 'deals_active',
 			data: msg
 		});
+	}
+
+	// System pause received for SymBot worker
+	if (message.type === 'system_pause') {
+
+		parentPort.postMessage({
+
+			type: 'system_pause_received'
+		});
+
+		const data = message.data;
+
+		const isPause = data.pause;
+		const pauseMessage = data.message;
+
+		await SymBot.System.pause(isPause, pauseMessage);
 	}
 
 	// Shutdown received for SymBot worker
@@ -252,6 +270,27 @@ function processWorkerMessageMain(workerId, instanceName) {
 		else if (message.type === 'deals_active') {
 
 			//console.log(message.data);
+		}
+		else if (message.type === 'system_pause_all') {
+
+			// Worker sent system pause for all instances
+			Hub.logger('info', `Worker ID ${workerId} [${instanceName}] requested system pause for all instances`);
+
+			// Relay message to all workers
+			for (const { worker } of workerMap.values()) {
+
+				worker.postMessage({
+					type: 'system_pause',
+					data: message.data
+				});
+			}
+		}
+		else if (message.type === 'shutdown_hub') {
+
+			// Worker sent global Hub shutdown
+			Hub.logger('info', `Worker ID ${workerId} [${instanceName}] requested Hub shutdown`);
+
+			shutDown();
 		}
 	};
 }

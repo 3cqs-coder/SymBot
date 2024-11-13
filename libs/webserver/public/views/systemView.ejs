@@ -60,6 +60,65 @@ $.confirm({
 }
 
 
+function updateSystem() {
+
+$.confirm({
+	  title: false,
+	  boxWidth: "50%",
+	  useBootstrap: false,
+	  content: `<div style="font-size: 1.2rem; text-align: left;">Update <%- appData.name_main %>?<br><br>
+	<form action="" style="display: inline;">
+	<B>WARNING:</b>
+
+		<ul>
+			<li>This will update <%- appData.name_main %> and all Hub instances to the latest version.
+			<li>All functionality will stop and will only resume after the system is back up.
+			<li><%- appData.name_main %> will shutdown after the update completes. You must start it manually if you do not have a process manager that does it automatically.
+			<li>It is highly recommended to monitor logs and activity for a period of time after the update completes to ensure everything is working as expected.
+		</ul>
+
+	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">UPDATE</span> <%- appData.name_main %></b>
+	</form>
+	</div>`,
+	  buttons: {
+		  formSubmit: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #d80f08;">Update</div>',
+			  action: function() {
+
+				const inputValue = parseFloat($('#confirmNum').val());
+				const confirmBox = $('#confirmBox').prop('checked');
+
+				if (!confirmBox) {
+
+					alertBox('You must check the box to confirm update', function() {});
+				}
+				else {
+
+					processUpdate();
+				 }
+			  },
+		  },
+		  cancel: {
+			  btnClass: 'btn-default',
+			  text: '<div style="color: #000000;">Cancel</div>',
+			  action: function() {},
+		},
+	},
+	  onContentReady: function() {
+
+		$('#confirmBox').prop('checked', false);
+
+		let jc = this;
+		  this.$content.find("form").on("submit", function(e) {
+			e.preventDefault();
+			  jc.$$formSubmit.trigger("click");
+		  });
+	  },
+  });
+}
+
+
 function backupDb() {
 
 $.confirm({
@@ -249,6 +308,47 @@ function processShutDown() {
 }
 
 
+function processUpdate() {
+
+const requestBody = {};
+
+$('#spinner-overlay').fadeIn(100);
+
+$.ajax({
+		type: 'POST',
+		url: './system/update',
+		data: requestBody,
+        dataType: 'json',
+		success: function(data) {
+
+			$('#spinner-overlay').fadeOut(100);
+
+			alertBox('Update successful!', function() {});
+		},
+		error: function(data) {
+
+			$('#spinner-overlay').fadeOut(100);
+
+			let message = 'Error occurred during update process.';
+
+			const responseText = data.responseText || message;
+
+			try {
+
+				const parsedResponse = JSON.parse(responseText);
+				message = parsedResponse.message || responseText;
+			}
+			catch (e) {
+
+				message = responseText;
+			}
+
+			alertBox(message, function() {});
+		}
+	});
+}
+
+
 function processBackupDb(password) {
 
 	const requestBody = new URLSearchParams();
@@ -381,6 +481,10 @@ function processRestoreDb(password, convertData, resetServerId) {
 
 		<div class="mainMenuItem">
 			<a href="javascript:void(0);" onclick="restoreDb();">Restore Database</a>
+		</div>
+
+		<div class="mainMenuItem">
+			<a href="javascript:void(0);" onclick="updateSystem();">Update System</a>
 		</div>
 
 		<div class="mainMenuItem" style="border-bottom: 0;">
