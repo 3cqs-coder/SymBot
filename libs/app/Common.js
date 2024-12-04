@@ -90,7 +90,15 @@ async function updateConfig(req, res) {
 	let signals3CQSEnabled = convertBoolean(signals3CQS, false);
 
 	let dbErr;
+	let hubInstance = false;
 	let dataMessage = 'Configuration Updated';
+
+	const instanceName = await getInstanceName();
+
+	if (instanceName && instanceName.trim() !== '') {
+
+		hubInstance = true;
+	}
 
 	const appConfigFile = shareData.appData.app_config;
 
@@ -151,6 +159,9 @@ async function updateConfig(req, res) {
 			// Set API token
 			await setToken();
 		}
+
+		const telegramEnabledOrig = shareData['appData']['telegram_enabled'];
+		const signals3CQSEnabledOrig = shareData['appData']['signals_3cqs_enabled'];
 
 		appConfig['bots']['pair_buttons'] = pairButtonsUC;
 		shareData['appData']['bots']['pair_buttons'] = pairButtonsUC;
@@ -215,10 +226,17 @@ async function updateConfig(req, res) {
 			// Restart Signals
 			startSignals();
 
-			// Restart Telegram bot
-			shareData.Telegram.stop();
-			await delay(1000);
-			shareData.Telegram.start(telegramTokenId, telegramEnabled);
+			// Restart Telegram based on if Hub in use as it may be overriding instance settings
+			if (!hubInstance || (hubInstance && telegramEnabledOrig)) {
+
+				shareData.Telegram.stop();
+
+				if (telegramEnabled) {
+
+					await delay(1000);
+					shareData.Telegram.start(telegramTokenId, telegramEnabled);
+				}
+			}
 		}
 
 		let obj = { 'success': success, 'data': dataMessage };
@@ -1136,6 +1154,32 @@ function roundAmount(amount) {
 }
 
 
+function adjustDecimals(value, ...arr) {
+
+	const numValue = Number(value);
+
+	if (isNaN(numValue)) {
+		return 0;
+	}
+
+	const flattenedArr = arr.flat();
+
+	const decimalPlaces = flattenedArr
+		.map(v => (isNaN(Number(v)) ? 0 : (String(v).split('.').length > 1 ? String(v).split('.')[1].length : 0)))
+		.filter(v => v > 0);
+
+	const maxDecimals = decimalPlaces.length > 0 ? Math.max(...decimalPlaces) : 0;
+
+	return numValue.toFixed(maxDecimals);
+}
+
+
+function getPrecision(arr) {
+
+	return 10 ** -Math.max(...arr.map(n => (n.toString().split('.')[1] || '').length));
+}
+
+
 function numFormatter(num) {
 
 	num = Number(num);
@@ -1179,6 +1223,32 @@ function mergeObjects(origObj, newObj) {
 	let mergeObj = { ...newObj, ...origObj };
 
 	return mergeObj;
+}
+
+
+function deepCopy(obj, seen = new WeakMap()) {
+
+	if (obj === null || typeof obj !== 'object') return obj;
+	if (seen.has(obj)) return seen.get(obj);
+
+	if (obj instanceof Date) return new Date(obj);
+	if (obj instanceof RegExp) return new RegExp(obj);
+	if (obj instanceof Map) return new Map([...obj].map(([k, v]) => [deepCopy(k, seen), deepCopy(v, seen)]));
+	if (obj instanceof Set) return new Set([...obj].map(v => deepCopy(v, seen)));
+
+	const copy = Array.isArray(obj) ? [] : {};
+
+	seen.set(obj, copy);
+
+	for (const key in obj) {
+
+		if (obj.hasOwnProperty(key)) {
+
+			copy[key] = deepCopy(obj[key], seen);
+		}
+	}
+
+	return copy;
 }
 
 
@@ -1530,7 +1600,10 @@ module.exports = {
 	getDateParts,
 	getTimeZone,
 	roundAmount,
+	adjustDecimals,
+	getPrecision,
 	mergeObjects,
+	deepCopy,
 	numToBase26,
 	numFormatter,
 	hashCode,

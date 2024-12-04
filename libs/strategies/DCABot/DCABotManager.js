@@ -267,6 +267,8 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 		toDate = fromDate;
 	}
 
+	const extractQtyValues = obj => Object.entries(obj).flatMap(([k, v]) => k === 'qty' ? [v] : (typeof v === 'object' && v ? extractQtyValues(v) : []));
+
 	const tzData = shareData.Common.getTimeZone();
 
 	const timeZoneOffset = tzData['offset'];
@@ -321,9 +323,33 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 
 			if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
 
+				let minMoveAmount;
+
+				const feeData = sellData.feeData;
+
 				const profitPerc = Number(sellData.profit);
 
 				const profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
+
+				if (typeof feeData == 'object' && feeData.minMoveAmount != undefined && feeData.minMoveAmount != null) {
+
+					minMoveAmount = feeData.minMoveAmount;
+				}
+				else {
+
+					minMoveAmount = orders[orderCount - 1]['orderMetadata']['minimum_movement_amount'];
+				}
+
+				let profitBaseOrig = Number(profit) / Number(sellData.price);
+
+				let profitBase = shareData.Common.adjustDecimals(profitBaseOrig, minMoveAmount);
+
+				if (profitBase == 0) {
+
+					const qtyArr = extractQtyValues(orders);
+
+					profitBase = shareData.Common.adjustDecimals(profitBaseOrig, minMoveAmount, qtyArr);
+				}
 
 				const dataObj = {
 									'bot_id': deal.botId,
@@ -332,8 +358,11 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 									'pair': deal.pair.toUpperCase(),
 									'date_start': new Date(deal.date),
 									'date_end': new Date(sellData.date),
+									'price': Number(sellData.price),
 									'profit': profit,
+									'profit_base': profitBase,
 									'profit_percent': profitPerc,
+									'minimum_movement_amount': minMoveAmount,
 									'safety_orders': orderCount - 1
 								};
 

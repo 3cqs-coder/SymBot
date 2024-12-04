@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const Signals3CQSSchema = new Schema({
-	signal_id: { type: String, unique: true },
+	bot_id: { type: String, required: true },
+	signal_id: { type: String, required: true },
 	signal_id_parent: String,
 	signal_data: Object,
 	created: Date,
@@ -12,6 +13,8 @@ const Signals3CQSSchema = new Schema({
 	timestamps: true
 });
 
+
+Signals3CQSSchema.index({ bot_id: 1, signal_id: 1 }, { unique: true });
 
 
 module.exports = {

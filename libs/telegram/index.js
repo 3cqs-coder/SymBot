@@ -18,7 +18,7 @@ let shareData;
 
 async function initApp(tokenId) {
 
-	bot = new Telegraf(tokenId,  { handlerTimeout: 100 });
+	bot = new Telegraf(tokenId, { handlerTimeout: 100 });
 
 	bot.command('start', (ctx) => {
 
@@ -59,7 +59,14 @@ async function initApp(tokenId) {
 	});
 
 
-	bot.launch().catch(err => { initSuccess = false; logError(err, ''); });
+	bot.launch()
+		.then(() => {
+			initSuccess = true;
+		})
+		.catch(err => {
+			initSuccess = false;
+			logError(err, '');
+	});
 }
 
 

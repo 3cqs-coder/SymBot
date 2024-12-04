@@ -829,9 +829,6 @@ async function updateSystem() {
 
 	shareData.Common.logger(systemMsg);
 
-	// Wait short delay for data to stop processing
-	await shareData.Common.delay(5000);
-
 	try {
 
 		let appConfigs = [];
@@ -848,6 +845,9 @@ async function updateSystem() {
 
 			throw new Error('You already have the latest version');
 		}
+
+		// Wait short delay for data to stop processing
+		await shareData.Common.delay(5000);
 
 		// Download latest tag zip file
 		const downloadUrl = `https://github.com/${owner}/${repo}/archive/refs/tags/${latestTag}.zip`;
@@ -1118,7 +1118,8 @@ async function resetConsole(serverIdError, resetServerId) {
 		warnMsg += 'database!';
 	}
 
-	warnMsg += '\n';
+	warnMsg += '\n\n';
+	warnMsg += 'Database to reset: ' + shareData.appData['mongo_db_url'] + '\n';
 
 	console.log(warnMsg);
 

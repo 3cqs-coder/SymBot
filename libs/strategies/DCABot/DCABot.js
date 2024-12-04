@@ -1027,6 +1027,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					}
 
 					await updateDealTracker({ 
+												'exchange': exchange,
 												'deal_id': dealId,
 												'price': price,
 												'config': config,
@@ -1037,6 +1038,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 												'error': buyError
 											});
 
+					// Invalid order re-verification implementation may be needed for initial buy to start deal
+					// Could delay closing deals quickly during increased volatility
 					if (!buySuccess) {
 
 						// Initial buy failed
@@ -1065,9 +1068,11 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				const unfilledOrders = orders.filter(item => item.filled != 1);
 				const currentOrder = filledOrders.pop();
 
-				const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee);
-				
+				const profitData = await calculateProfit(exchange, pair, price, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee, config.sandBox);
+
 				let profit = profitData['profit_percentage'];
+				let profitBase = profitData['profit_base'];
+				let profitQuote = profitData['profit'];
 
 				let profitPerc = profit;
 
@@ -1091,6 +1096,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				for (let i = 0; i < orders.length; i++) {
 
 					let buyOrderId = '';
+					let buyOrderInvalid = false;
 					let buyNSF = false;
 
 					const order = orders[i];
@@ -1118,18 +1124,43 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								const buy = await buyOrder(exchange, dealId, pair, order.qty, priceFiltered);
 
-								if (!buy.success) {
+								// Buy not successful / Buy successful but verification failed 
+								if (!buy.success || (buy.success && !buy.success_verify)) {
 
 									buySuccess = false;
+
+									buyOrderInvalid = buy.invalid;
 									buyError = buy.message;
 									buyNSF = buy.nsf;
+
+									let msgErr;
+									let msgType;
 
 									// Insufficient funds to buy
 									if (buyNSF) {
 
-										let msg = 'Insufficient funds to buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
+										msgType = 'deal_error';
+										msgErr = 'Insufficient funds to buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
+									}
+									else if (buyOrderInvalid) {
 
-										await sendDealError(msg);
+										const retryMins = 2;
+
+										msgType = 'deal_error';
+										msgErr = 'Invalid order for deal ID ' + dealId + '. Pausing buy orders for ' + retryMins + ' minutes.';
+
+										await verifyInvalidOrder(0, retryMins, exchange, pair, config.botId, dealId, buy['data']['id'], i, orders);
+									}
+									else {
+
+										msgType = 'deal_error';
+										msgErr = 'An error occurred during buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
+									}
+
+									// Pause deal buy orders
+									if (msgErr != undefined && msgErr != null && msgErr != '') {
+
+										await sendDealMessage(msgType, msgErr);
 
 										const pauseData = await pauseDeal(config.botId, dealId, false, true, false);
 									}
@@ -1142,9 +1173,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							if (buySuccess) {
 
-								orders[i].filled = 1;
-								orders[i].orderId = buyOrderId;
-								orders[i].dateFilled = new Date();
+								await updateOrderDeal(dealId, i, buyOrderId, orders);
 
 								if (shareData.appData.verboseLog) {
 		
@@ -1169,15 +1198,10 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										)
 									);
 								}
-
-								await Deals.updateOne({
-									dealId: dealId
-								}, {
-									orders: orders
-								});
 							}
 							
 							await updateDealTracker({
+														'exchange': exchange,
 														'deal_id': dealId,
 														'price': price,
 														'config': config,
@@ -1211,6 +1235,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								const qtySumSell = feeData['dcaOrderQtySumNet'];
 								const priceFiltered = feeData['priceFiltered'];
 								const exchangeFeePercent = feeData['exchangeFeePercent'];
+								const minMoveAmount = feeData['minMoveAmount'];
+
+								const qtySumSellBase = await filterAmount(exchange, pair, (Number(qtySumSell) - Number(profitBase)));
 
 								// Calculate profit based on new exchange fee percent
 								//const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, exchangeFeePercent);
@@ -1236,6 +1263,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								if (sellSuccess) {
 
 									await updateDealTracker({
+																'exchange': exchange,
 																'deal_id': dealId,
 																'price': price,
 																'config': config,
@@ -1316,6 +1344,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						else {
 
 							await updateDealTracker({
+														'exchange': exchange,
 														'deal_id': dealId,
 														'price': price,
 														'config': config,
@@ -1337,6 +1366,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								nextOrder = nextOrder.price;
 								nextOrder = parseFloat(Number(nextOrder) - (Number(nextOrder) * priceSlippageBuyPercent));
+
+								nextOrder = Common.adjustDecimals(nextOrder, price, currentOrder.average, currentOrder.target);
 							}
 
 							if (shareData.appData.verboseLog) {
@@ -1962,10 +1993,10 @@ const cancelOrder = async (exchange, orderId, pair, dealId) => {
 }
 
 
-const verifyOrder = async (exchange, orderId, pair, dealId) => {
+const verifyExchangeOrder = async (exchange, orderId, pair, dealId) => {
 
 	const maxSec = 75;
-	const maxTries = 5;
+	const maxTries = 15;
 
 	let success = true;
 	let finished = false;
@@ -2024,7 +2055,7 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 				// Reduce count to allow more time for other error retries
 				count--;
 
-				if (invalidCount > maxTries) {
+				if (invalidCount >= maxTries) {
 
 					success = false;
 					finished = true;
@@ -2114,6 +2145,15 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 
 	msg = 'Verify Order Complete. Order ID: ' + orderId + ' / Pair: ' + pair + ' / Deal ID: ' + dealId + ' / Success: ' + success;
 
+	if (orderInvalid) {
+
+		let msgWarn = 'WARNING: Unable to verify order on exchange. Manual verification is strongly recommended.';
+
+		msg += ' / ' + msgWarn;
+
+		Common.sendNotification({ 'message': msg, 'type': 'deal_error', 'telegram_id': shareData.appData.telegram_id });
+	}
+
 	const dataObj = { 
 						'success': success,
 						'message': msg,
@@ -2132,6 +2172,166 @@ const verifyOrder = async (exchange, orderId, pair, dealId) => {
 }
 
 
+const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
+
+	let success = false;
+	let finished = false;
+	let orderInvalid = false;
+
+	let orderAmount = null;
+	let orderQty = null;
+	let orderPrice = null;
+
+	if (orderId) {
+
+		while (!finished) {
+
+			let orderVerify = await verifyExchangeOrder(exchange, orderId, pair, dealId);
+
+			if (orderVerify.success) {
+
+				// Verification successful
+				const orderVerifyData = orderVerify.data;
+
+				orderAmount = orderVerifyData.cost;
+				orderQty = orderVerifyData.filled ?? orderVerifyData.amount;
+				orderPrice = orderVerifyData.price;
+
+				success = true;
+				finished = true;
+			}
+			else {
+
+				// Verification failed
+				if (orderVerify.timeout_order || orderVerify.timeout_verify) {
+
+					// Handle timeouts and retry
+					await Common.delay(1000);
+				}
+				else {
+
+					if (orderVerify.invalid) {
+
+						orderInvalid = true;
+					}
+
+					success = false;
+					finished = true;
+				}
+			}
+		}
+	}
+	else {
+
+		Common.logger(`Unable to verify order. No order ID received from exchange. Deal ID: ${dealId}`);
+	}
+
+	return {
+		'success': success,
+		'order_amount': orderAmount,
+		'order_qty': orderQty,
+		'order_price': orderPrice,
+		'order_invalid': orderInvalid
+	};
+}
+
+
+const verifyInvalidOrder = async (count, mins, exchange, pair, botId, dealId, orderId, orderNo, ordersArr) => {
+
+	let retryMins = 2;
+
+	if (mins != undefined && mins != null) {
+
+		retryMins = mins;
+	}
+
+	if (count == undefined || count == null) {
+
+		count = 0;
+	}
+
+	count++;
+
+	let orders = Common.deepCopy(ordersArr);
+
+	setTimeout(async () => {
+
+		let resume = false;
+
+		let msg = 'Attempt #' + count + ' to verify order ID ' + orderId + ' for deal ID ' + dealId + '.';
+
+		await sendDealMessage('info', msg);
+
+		if (orderId != undefined && orderId != null && orderId != '') {
+
+			const verifyData = await verifyBuySellOrder(exchange, orderId, pair, dealId);
+
+			if (verifyData.success) {
+
+				resume = true;
+
+				let msg = 'Attempt #' + count + ' to verify order ID ' + orderId + ' for deal ID ' + dealId + ' successful.';
+
+				await updateOrderDeal(dealId, orderNo, orderId, orders);
+
+				await sendDealMessage('info', msg);
+
+				// Wait short delay before resuming so any existing DCA follow logic finishes
+				await Common.delay(5000);
+			}
+			else {
+
+				let isDealPause = false;
+				let isDealPauseBuy = false;
+				let isDealPauseSell = false;
+
+				let msg = 'Attempt #' + count + ' to verify order ID ' + orderId + ' for deal ID ' + dealId + ' unsuccessful.';
+
+				const deal = await Deals.findOne({
+					dealId: dealId,
+					status: 0
+				});
+		
+				if (deal) {
+
+					isDealPause = Common.convertBoolean(deal.paused, false);
+					isDealPauseBuy = Common.convertBoolean(deal.pausedBuy, false);
+					isDealPauseSell = Common.convertBoolean(deal.pausedSell, false);
+				}
+
+				// If deal is still paused then try again after n minutes
+				if (deal && (isDealPause || isDealPauseBuy)) {
+
+					msg += ' Trying again in ' + retryMins + ' minutes.';
+
+					verifyInvalidOrder(count, retryMins, exchange, pair, botId, dealId, orderId, orderNo, orders);
+				}
+				else {
+
+					msg += ' Will not try again.';
+				}
+
+				await sendDealMessage('info', msg);
+			}
+		}
+		else {
+
+			resume = true;
+		}
+
+		if (resume) {
+
+			let msg = 'Resuming buy orders for deal ID ' + dealId;
+
+			await sendDealMessage('info', msg);
+
+			const pauseData = await pauseDeal(botId, dealId, false);
+		}
+
+	}, (60000 * retryMins));
+}
+
+
 const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 	const maxTries = 5;
@@ -2147,8 +2347,8 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 	let nsf = false;
 	let finished = false;
-	let finishedVerify = false;
 	let successVerify = false;
+	let orderInvalid = false;
 
 	let count = 0;
 
@@ -2203,54 +2403,13 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 		// Verify order on exchange
 		orderId = order['id'];
 
-		if (orderId != undefined && orderId != null && orderId != '') {
+		const verifyData = await verifyBuySellOrder(exchange, orderId, pair, dealId);
 
-			while (!finishedVerify) {
-
-				let orderVerify = await verifyOrder(exchange, orderId, pair, dealId);
-
-				if (orderVerify.success) {
-
-					// Verification successful
-
-					const orderVerifyData = orderVerify.data;
-
-					orderAmount = orderVerifyData.cost;
-					orderQty = orderVerifyData.filled ?? orderVerifyData.amount;
-					orderPrice = orderVerifyData.price;
-
-					successVerify = true;
-					finishedVerify = true;
-				}
-				else {
-
-					// Verification failed, consider buy order unsuccessful
-
-					if (orderVerify['timeout_order'] || orderVerify['timeout_verify']) {
-
-						// Handle cases of timeouts
-						// Circuit breaker
-
-						// Timeout occurred so delay and try again
-						await Common.delay(1000);
-					}
-					else {
-
-						success = false;
-						successVerify = false;
-						finishedVerify = true;
-					}
-				}
-			}
-		}
-		else {
-
-			successVerify = false;
-
-			let msg = 'Unable to verify order. No order ID received from exchange. Deal ID: ' + dealId;
-
-			Common.logger(msg);
-		}
+		successVerify = verifyData['success'];
+		orderAmount = verifyData['order_amount'];
+		orderQty = verifyData['order_qty'];
+		orderPrice = verifyData['order_price'];
+		orderInvalid = verifyData['order_invalid'];
 	}
 
 	const dataObj = {
@@ -2259,7 +2418,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 						'success_verify': successVerify,
 						'data': order,
 						'error': isErr,
-						'verified': finishedVerify,
+						'invalid': orderInvalid,
 						'nsf': nsf,
 						'message': msg,
 						'deal_id': dealId,
@@ -2414,7 +2573,7 @@ const getSlippage = async(normalize) => {
 }
 
 
-const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfitPercent, exchangeFeePercent) => {
+const calculateProfit = async (exchange, pair, price, orderAverage, orderSum, takeProfitPercent, exchangeFeePercent, sandBox) => {
 
 	let profitPerc = await Percentage.subNumsAsPerc(
 		price,
@@ -2432,11 +2591,32 @@ const calculateProfit = async (price, sandBox, orderAverage, orderSum, takeProfi
 	profitPerc = profitPerc - Number(exchangeFeePercent) - (Number(priceSlippageSellPercent));
 	profitPerc = Number(Number(profitPerc).toFixed(2));
 
-	const takeProfit = shareData.Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent) - priceSlippageSellPercent) / 100)));
-	const currentProfit = shareData.Common.roundAmount(Number((Number(orderSum) * (Number(profitPerc) / 100))));
+	const takeProfit = Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent) - priceSlippageSellPercent) / 100)));
+	const currentProfit = Common.roundAmount(Number((Number(orderSum) * (Number(profitPerc) / 100))));
+
+	let baseProfit = Number(currentProfit) / Number(price);
+
+	if (exchange && pair) {
+
+		try {
+
+			baseProfit = await filterAmount(exchange, pair, Number(baseProfit));
+		}
+		catch(e) {
+
+			// Does not meet exchange requirements or some filter error
+			baseProfit = 0;
+		}
+
+		if (!baseProfit) {
+
+			baseProfit = 0;
+		}
+	}
 
 	const data = {
 					'profit': currentProfit,
+					'profit_base': baseProfit,
 					'take_profit': takeProfit,
 					'profit_percentage': profitPerc
 				 };
@@ -2664,6 +2844,7 @@ const calculateSellData = async (pair, price, exchange, configObj, addFee, curre
 	let allOrders = filledOrders;
 	allOrders.push(currentOrder);
 
+	let minMoveAmount;
 	let exchangeFeeQtySum = 0;
 	let exchangeFeeAmountSum = 0;
 
@@ -2683,6 +2864,12 @@ const calculateSellData = async (pair, price, exchange, configObj, addFee, curre
 
 		exchangeFeeQtySum += exchangeFeeQty;
 		exchangeFeeAmountSum += exchangeFeeAmount;
+
+		try {
+
+			minMoveAmount = orderMetadata['minimum_movement_amount'];
+		}
+		catch (e) {}
 	}
 
 	const priceFiltered = await filterPrice(exchange, pair, price);
@@ -2733,76 +2920,19 @@ const calculateSellData = async (pair, price, exchange, configObj, addFee, curre
 						'exchangeFeeSumDiffPercent': exchangeFeeSumDiffPercent,
 						'exchangeFeeQtySumDiffPercent': exchangeFeeQtySumDiffPercent,
 						'exchangeFeePercent': exchangeFeePercent,
-						'priceFiltered': priceFiltered
+						'priceFiltered': priceFiltered,
+						'minMoveAmount': minMoveAmount
 				   };
 
 	return resObj;
 }
 
 
-async function calculatePairData(arr) {
-
-	let sum = 0;
-	let count = 0;
-	let wholeNumberCount = 0;
-	let differenceSum = 0;
-
-	let totalLength = arr.length;
-
-	arr.forEach((num, index) => {
-
-		const parts = num.split('.');
-
-		if (parts.length === 2) {
-
-			// If contains decimal, add to the sum and increment count
-			sum += parseFloat(`0.${parts[1]}`);
-			count++;
-
-		} else {
-
-			// Whole number found
-			wholeNumberCount++;
-		}
-
-		// Calculate difference with the next number
-		if (index < totalLength - 1) {
-
-			const currentNum = parseFloat(num);
-			const nextNum = parseFloat(arr[index + 1]);
-			differenceSum += Math.abs(nextNum - currentNum);
-		}
-	});
-
-	// Calculate average decimal
-	const average = count > 0 ? sum / count : 0;
-
-	// Calculate average difference
-	const averageDifference = totalLength > 1 ? differenceSum / (totalLength - 1) : 1;
-
-	// Calculate average whole number percentage
-	const wholeNumberPercentage = (wholeNumberCount / totalLength) * 100;
-
-	// Calculate addFeePercentage
-	const addFeePercentage = average * (wholeNumberPercentage / 100);
-
-	// Calculate minQty
-	const minAmount = +(wholeNumberCount / totalLength);
-
-	return {
-		'average_decimal': Number(average.toFixed(2)),
-		'total_count': totalLength,
-		'whole_number_count': wholeNumberCount,
-		'whole_number_percent': Number(wholeNumberPercentage.toFixed(2)),
-		'add_fee_percent': Number(addFeePercentage.toFixed(4)),
-		'minimum_movement_amount': Number(minAmount.toFixed(4))
-	};
-}
-
-
 async function getPairPrecision(exchange, exchangeName, pair, isPairData) {
 
 	let minMoveAmount;
+
+	exchangeName = await getExchangeAlias(exchangeName);
 
 	try {
 
@@ -2829,7 +2959,11 @@ async function getPairPrecision(exchange, exchangeName, pair, isPairData) {
 	if (!isPairData && (minMoveAmount == undefined || minMoveAmount == null)) {
 
 		const pairData = await getPairData(pair);
-		minMoveAmount = pairData['pair_data']['minimum_movement_amount'];
+
+		if (pairData.success) {
+
+			minMoveAmount = pairData['pair_data']['minimum_movement_amount'];
+		}
 	}
 
 	return minMoveAmount;
@@ -2849,7 +2983,7 @@ async function getPairData(pair) {
 	}
 
 	const botConfigFile = shareData.appData.bot_config;
-	const botConfig = await shareData.Common.getConfig(botConfigFile);
+	const botConfig = await Common.getConfig(botConfigFile);
 
 	let config = botConfig.data;
 
@@ -2885,7 +3019,9 @@ async function getPairData(pair) {
 			qtyArr.push(orderDataSteps[i][5])
 		}
 
-		pairData = await calculatePairData(qtyArr);
+		const precisionAmount = Common.getPrecision(qtyArr);
+
+		pairData = { 'minimum_movement_amount': precisionAmount };
 	}
 
 	const resObj = {
@@ -3110,11 +3246,11 @@ async function getExchangeAlias(exchangeName) {
 }
 
 
-async function sendDealError(msg) {
+async function sendDealMessage(msgType, msg) {
 
 	Common.logger(colors.bgRed(msg));
 
-	await Common.sendNotification({ 'message': msg, 'type': 'deal_error', 'telegram_id': shareData.appData.telegram_id });
+	await Common.sendNotification({ 'message': msg, 'type': msgType, 'telegram_id': shareData.appData.telegram_id });
 }
 
 
@@ -3139,7 +3275,7 @@ async function processOrderError(data) {
 
 		let msg = 'An error occurred starting deal ID ' + dealId + '. Disabling bot. Check the logs for details.';
 
-		await sendDealError(msg);
+		await sendDealMessage('deal_error', msg);
 		const statusObj = await sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
 	}
 
@@ -3259,6 +3395,20 @@ async function deleteDeal(dealId) {
 	}
 
 	return( { 'success': success } );
+}
+
+
+const updateOrderDeal = async (dealId, orderNo, orderId, orders) => {
+
+	orders[orderNo].filled = 1;
+	orders[orderNo].orderId = orderId;
+	orders[orderNo].dateFilled = new Date();
+
+	await Deals.updateOne({
+		dealId: dealId
+	}, {
+		orders: orders
+	});
 }
 
 
@@ -3462,12 +3612,15 @@ async function createDealTracker(data) {
 }
 
 
-async function updateDealTracker(data) {	
+async function updateDealTracker(data) {
 
-	let dataObj = JSON.parse(JSON.stringify(data));
+	const { exchange, ...dataInObj } = data;
+
+	let dataObj = JSON.parse(JSON.stringify(dataInObj));
 
 	dataObj['active'] = true;
 	dataObj['updated'] = new Date();
+	dataObj['exchange'] = exchange;
 
 	const dealId = data['deal_id'];
 
@@ -3801,6 +3954,7 @@ async function getBalanceTracker() {
 async function getDealInfo(data) {
 
 	const updated = data['updated'];
+	const exchange = data['exchange'];
 	const dealId = data['deal_id'];
 	const active = data['active'];
 	const price = data['price'];
@@ -3817,11 +3971,12 @@ async function getDealInfo(data) {
 
 	if (currentOrder != undefined && currentOrder != null) {
 
-		const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee);
+		const profitData = await calculateProfit(exchange, config.pair, price, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee, config.sandBox);
 
 		const profitPerc = profitData['profit_percentage'];
 		const takeProfit = profitData['take_profit'];
 		const currentProfit = profitData['profit'];
+		const currentProfitBase = profitData['profit_base'];
 
 		const dealInfo = {
 							'updated': updated,
@@ -3838,6 +3993,7 @@ async function getDealInfo(data) {
 							'price_average': currentOrder.average,
 							'price_target': currentOrder.target,
 							'profit': currentProfit,
+							'profit_base': currentProfitBase,
 							'profit_percentage': profitPerc,
 							'take_profit': takeProfit,
 							'deal_count': config.dealCount,
@@ -3877,7 +4033,7 @@ async function initConfigData(config) {
 
 	const botConfigFile = shareData.appData.bot_config;
 
-	const botConfig = await shareData.Common.getConfig(botConfigFile);
+	const botConfig = await Common.getConfig(botConfigFile);
 
 	// Set exchange options
 	configObj['exchangeOptions'] = botConfig.data['exchangeOptions'];
@@ -4116,8 +4272,8 @@ async function sendNotificationFinish(botName, dealId, pair, sellData) {
 		}
 	}
 
-	const profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
-	const duration = shareData.Common.timeDiff(new Date(), new Date(deal['date']));
+	const profit = Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
+	const duration = Common.timeDiff(new Date(), new Date(deal['date']));
 
 	try {
 
@@ -4579,6 +4735,13 @@ async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell) {
 
 		// Both pauseBuy and pauseSell are true
 		pause = true;
+		pauseBuy = false;
+		pauseSell = false;
+	}
+	else if (pause === false && (pauseBuy == undefined || pauseBuy == null) && (pauseSell == undefined || pauseSell == null)) {
+
+		// Only pause passed as false
+		pause = false;
 		pauseBuy = false;
 		pauseSell = false;
 	}

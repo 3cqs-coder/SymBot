@@ -258,13 +258,7 @@ async function processSignal(data) {
 
 	let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
 
-	// Check if signal was already logged
-	const signalDataDb = await getSignalDb({ 'signal_id': signalId });
-
-	updateDb(data);
-
-	// Only start if signal has not been seen before
-	if (signalDataDb.length == 0 && signal == 'BOT_START' && diffSec < (60 * maxMins)) {
+	if (signal == 'BOT_START' && diffSec < (60 * maxMins)) {
 
 		let query = {
 						'active': true,
@@ -288,6 +282,17 @@ async function processSignal(data) {
 				const botName = bot.botName;
 				const config = bot.config;
 				const pairs = config.pair;
+
+				// Check if signal was already logged for a particular bot
+				const signalDataDb = await getSignalDb({ 'bot_id': botId, 'signal_id': signalId });
+
+				updateDb(botId, data);
+
+				// Only start if signal has not been seen before
+				if (signalDataDb.length != 0) {
+
+					return;
+				}
 
 				if (config.startConditions != undefined && config.startConditions != null) {
 
@@ -486,9 +491,10 @@ async function convertCondition(data) {
 }
 
 
-async function updateDb(data) {
+async function updateDb(botId, data) {
 
 	const signal = new Signals({
+									'bot_id': botId,
 									'signal_id': data.signal_id,
 									'signal_id_parent': data.signal_id_parent,
 									'created': data.created,
