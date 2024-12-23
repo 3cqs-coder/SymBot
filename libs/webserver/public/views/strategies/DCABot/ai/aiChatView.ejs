@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%- appData.name %> Chat</title>
+</head>
+<body>
+	<div id="aiChatSpinner" class="spinner-dynamic-container" style="width: 99%; height: 90%;"><div class="spinner-dynamic"></div></div>
+    <div id="aiChatBox"></div>
+
+    <script src="./js/vendor/marked/marked.min.js"></script>
+	<script>
+		$(document).ready(function () {
+
+			let $currentMessageElement = null;
+			let messageBuffer = '';
+
+			const room = 'chat' + Math.random().toString(36).slice(2) + Math.floor(Date.now() / 1000);
+			const content = <%- JSON.stringify(bodyData) %>;
+
+			// Add room to payload
+			try {
+
+				content.message.room = room;
+			}
+			catch(e) {}
+
+			const $chatBox = $('#aiChatBox');
+	
+			if (typeof socketGlobal !== 'undefined') {
+
+				const socket = socketGlobal;
+	
+				// Join chat room
+				socket.emit('joinRooms', {
+					rooms: [room]
+				});
+	
+				// Handle incoming data
+				socket.on('data', function (data) {
+
+					// Hide spinner when data stream starts
+					if (messageBuffer == '') {
+
+						$('#aiChatSpinner').hide();
+					}
+
+					if (data.type === 'message') {
+
+						const messageContent = data.message;
+
+						if (messageContent) {
+
+							displayMessage(messageContent);
+						}
+					}
+				});
+	
+				// Leave room on window unload
+				const leaveRoom = () => { if (socket) socket.emit('leaveRoom', room); };
+
+				$(window).on('beforeunload', leaveRoom);
+				$(document).on('dialogclose', '.ui-dialog-content', leaveRoom);
+			}
+
+			// Handle window resize
+			$(window).resize(function () {
+				resizeBotsDeals(offsetBottom);
+			});
+
+			function postChatPrompt(content) {
+
+				$.ajax({
+					type: 'POST',
+					url: './chat/deal/prompt',
+					data: content,
+					dataType: 'json',
+					success: function(data) {
+
+						// Response ok
+					},
+					error: function(data) {
+
+						// Some error in ajax call
+						$('#aiChatSpinner').hide();
+
+						alertBox('Error: ' + JSON.stringify(data));
+					}
+				});
+			}
+
+			function displayMessage(content) {
+
+				if (content === 'END_OF_CHAT') {
+
+					if ($currentMessageElement) {
+
+						$currentMessageElement.html(marked.parse(messageBuffer.replace(/\n/g, '<br>')));
+						messageBuffer = ''; // Clear buffer
+						$currentMessageElement = null; // Reset element
+					}
+				}
+				else {
+
+					if (!$currentMessageElement) {
+
+						$currentMessageElement = $('<div>', {
+							class: 'message bot-message'
+						});
+
+						$chatBox.append($currentMessageElement);
+					}
+	
+					// Accumulate message data
+					messageBuffer += content;
+	
+					// Update the message element with accumulated data
+					$currentMessageElement.html(marked.parse(messageBuffer.replace(/\n/g, '<br>')));
+				}
+	
+				// Scroll to the bottom of the chat box
+				$chatBox.scrollTop($chatBox.prop('scrollHeight'));
+			}
+
+			postChatPrompt(content);
+		});
+	</script>
+	
+</body>
+</html>

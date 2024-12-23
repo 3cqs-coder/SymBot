@@ -129,6 +129,20 @@ $(document).ready(function() {
 		removeNotificationDisplay(id);
 	});
 
+	$(document).on('change', '#hideNotifs', function() {
+
+		if ($('#hideNotifs').prop('checked')) {
+
+			dataTracker['hideNotifs'] = true;
+		}
+		else {
+
+			delete dataTracker['hideNotifs'];
+		}
+
+		updateDataTracker();
+	});
+
 	$(document).on('change', '#notificationsList', function() {
 
 		let optionSelected = $('option:selected', this).val();
@@ -168,11 +182,24 @@ $(document).ready(function() {
 
 		if (showModal) {
 
-			let titleExtra = '<span style="padding-left: 10px;"><select id="notificationsList"><option value="">Show All</select></span>';
+			let titleExtra = '<span style="padding-left: 10px;">';
+
+			titleExtra += '<select id="notificationsList"><option value="">Show All</select>';
+			titleExtra += ' &nbsp; <b>Hide</b> <input id="hideNotifs" name="hideNotifs" type=checkbox class="form-field">';
+
+			titleExtra += '</span>';
 
 			let content = '<div class="spinner-dynamic-container"><div class="spinner-dynamic"></div></div>';
 
 			openModal('notificationsView', modalNotifyId, 'Notification Center History ' + titleExtra, content);
+
+			$('#hideNotifs').simpleSwitch();
+			$('#hideNotifs').prop('checked', false);
+
+			if (dataTracker['hideNotifs']) {
+
+				$('#hideNotifs').click();
+			}
 
 			socket.emit('notifications_history', {});
 		}
@@ -197,6 +224,12 @@ function processNotificationData(data) {
 	updateDataTracker();
 
 	$('.notificationButton').addClass('notificationButtonAlert');
+
+	// Don't display if notifications are hidden
+	if (dataTracker['hideNotifs']) {
+
+		return;
+	}
 
 	$('#notificationsBox').append(msg);
 

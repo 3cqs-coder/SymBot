@@ -1097,6 +1097,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 					let buyOrderId = '';
 					let buyOrderInvalid = false;
+					let buyOrderStatusInvalid = false;
 					let buyNSF = false;
 
 					const order = orders[i];
@@ -1129,7 +1130,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 									buySuccess = false;
 
-									buyOrderInvalid = buy.invalid;
+									buyOrderInvalid = buy.invalid_order;
+									buyOrderStatusInvalid = buy.invalid_status;
 									buyError = buy.message;
 									buyNSF = buy.nsf;
 
@@ -1824,7 +1826,7 @@ const getBalance = async (exchange, symbol) => {
 const getOrder = async (exchange, orderId, pair, dealId) => {
 
 	const days = 1;
-	const limit = 100;
+	const limit = 500;
 	const maxTries = 15;
 
 	let success = false;
@@ -2003,6 +2005,7 @@ const verifyExchangeOrder = async (exchange, orderId, pair, dealId) => {
 	let timeOutOrder = false;
 	let timeOutVerify = false;
 	let orderInvalid = false;
+	let statusInvalid = false;
 
 	let count = 0;
 	let orderCount = 0;
@@ -2137,6 +2140,8 @@ const verifyExchangeOrder = async (exchange, orderId, pair, dealId) => {
 
 				}
 
+				statusInvalid = true;
+
 				success = false;
 				finished = true;
 			}
@@ -2160,7 +2165,8 @@ const verifyExchangeOrder = async (exchange, orderId, pair, dealId) => {
 						'data': order,
 						'status': orderStatus,
 						'attempts': orderCount,
-						'invalid': orderInvalid,
+						'invalid_order': orderInvalid,
+						'invalid_status': statusInvalid,
 						'timeout_order': timeOutOrder,
 						'timeout_verify': timeOutVerify,
 						'error': errMsg
@@ -2177,6 +2183,7 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 	let success = false;
 	let finished = false;
 	let orderInvalid = false;
+	let statusInvalid = false;
 
 	let orderAmount = null;
 	let orderQty = null;
@@ -2210,9 +2217,14 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 				}
 				else {
 
-					if (orderVerify.invalid) {
+					if (orderVerify.invalid_order) {
 
 						orderInvalid = true;
+					}
+
+					if (orderVerify.invalid_status) {
+
+						statusInvalid = true;
 					}
 
 					success = false;
@@ -2231,7 +2243,8 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 		'order_amount': orderAmount,
 		'order_qty': orderQty,
 		'order_price': orderPrice,
-		'order_invalid': orderInvalid
+		'order_invalid': orderInvalid,
+		'status_invalid': statusInvalid
 	};
 }
 
@@ -2349,6 +2362,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 	let finished = false;
 	let successVerify = false;
 	let orderInvalid = false;
+	let statusInvalid = false;
 
 	let count = 0;
 
@@ -2410,6 +2424,14 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 		orderQty = verifyData['order_qty'];
 		orderPrice = verifyData['order_price'];
 		orderInvalid = verifyData['order_invalid'];
+		statusInvalid = verifyData['status_invalid'];
+
+		if (statusInvalid) {
+
+			// Buy order successful, but verification returned invalid status (Not open, filled, closed, etc.)
+
+			//success = false;
+		}
 	}
 
 	const dataObj = {
@@ -2418,7 +2440,8 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 						'success_verify': successVerify,
 						'data': order,
 						'error': isErr,
-						'invalid': orderInvalid,
+						'invalid_order': orderInvalid,
+						'invalid_status': statusInvalid,
 						'nsf': nsf,
 						'message': msg,
 						'deal_id': dealId,

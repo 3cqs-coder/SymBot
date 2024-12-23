@@ -1,5 +1,11 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
+let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/', pathRoot.lastIndexOf('/') - 1));
+
 let shareData;
 let queueStartDeal;
 let symbolList = {};
@@ -107,7 +113,9 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
+	const aiDealTemplate = await shareData.Common.getData(pathRoot + '/libs/webserver/public/views/strategies/DCABot/ai/aiDealAnalyze.ejs');
+
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'aiDealTemplate': aiDealTemplate.data, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
 }
 
 

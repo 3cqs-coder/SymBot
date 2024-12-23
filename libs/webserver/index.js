@@ -305,6 +305,7 @@ module.exports = {
 	init: function(obj) {
 
 		shareData = obj;
+
 		Routes.init(shareData);
     }
 }

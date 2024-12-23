@@ -48,5 +48,11 @@
 					 			"api_key": ""
 				 			}
 			   },
+	"ai": {
+				"ollama": {
+					"host": "",
+					"model": ""
+				}
+			},
 	"verbose_log": true
 }

@@ -209,6 +209,44 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.post('/chat/deal/view', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		const body = req.body;
+
+		if (req.session.loggedIn) {
+
+			res.render( 'strategies/DCABot/ai/aiChatView', { 'appData': shareData.appData, 'bodyData': body } );
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/chat/deal/prompt', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		const body = req.body;
+
+		if (req.session.loggedIn) {
+
+			shareData.Ollama.streamChat(JSON.stringify(body));
+
+			let obj = { 'success': true };
+
+			res.status(200).send(obj);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get('/bots/create', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -501,8 +539,9 @@ async function processConfig(req, res) {
 
 		const services = Object.assign({
 
-			telegram: appConfig.data.telegram,
-			signals: appConfig.data.signals
+			'ai': appConfig.data.ai,
+			'telegram': appConfig.data.telegram,
+			'signals': appConfig.data.signals
 		});
 
 		res.render( 'configView', { 'appData': shareData.appData, 'token': tokenBase64, 'services': services } );

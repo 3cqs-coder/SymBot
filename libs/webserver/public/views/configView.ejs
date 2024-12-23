@@ -320,7 +320,6 @@
 				</table>
 			</div>
 
-
 			<div style="padding-top: 10px; padding-bottom: 5px;">
 
 				<b>Telegram Settings</b>
@@ -359,6 +358,48 @@
 
 					<td>
 						<input id="toggleTelegram" name="telegram_enabled" type=checkbox>
+					</td>
+				</tr>
+
+				</table>
+			</div>
+
+			<div style="padding-top: 10px; padding-bottom: 5px;">
+
+				<b>Artificial Intelligence (AI)</b>
+				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
+				
+				<tr>
+					<td></td>
+					<td>
+						<a href="https://ollama.com/" target=_blank>Ollama</a> must be installed
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<label for="password">Ollama Host:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the host URL to the server running Ollama
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input name="ollama_host" id="ollama_host" class="form-field" style="width: 250px;" value="<%= services['ai']['ollama']['host'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="password">Model:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the Large Language Model (LLM) that will be used to process content
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input name="ollama_model" id="ollama_model" class="form-field" style="width: 250px;" value="<%= services['ai']['ollama']['model'] %>">
 					</td>
 				</tr>
 
