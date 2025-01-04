@@ -16,6 +16,10 @@
 										'button': '<span class="disableButton">$+</span>',
 										'tooltip': 'Add funds to deal'
 									},
+							'ai': {
+										'button': '<span class="disableButton">&#9889;</span>',
+										'tooltip': 'AI Analyze deal'
+									},
 							'cancel': {
 										'button': '<span class="disableButton">X</span>',
 										'tooltip': 'Cancel deal'
@@ -78,6 +82,29 @@
 		openModal(modalId, '#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
   	}
 
+	function openAiChat(modalId, divId, dealId, content) {
+
+		let url = './chat/deal/view';
+
+		openModal(modalId, '#' + divId, 'AI Analysis ' + dealId, 'Processing...');
+
+		let data = {
+						'message': {
+										'content': content
+									}
+		};
+
+		$.ajax({
+					url: url,
+				    method: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify(data),
+					success: function(response) {
+						
+						$('#' + divId).html(response);
+					}
+		});
+	}
 
 	function panicSellConfirm(dealId) {
 
@@ -157,6 +184,39 @@
 									 	}
 							 }
 		});
+	}
+
+
+	function renderAIContent(dealId) {
+
+		const aiDealTemplate = <%- JSON.stringify(aiDealTemplate) %>;
+		const template = aiDealTemplate;
+
+		let sumTotal = 0;
+		let qtySumTotal = 0;
+
+		const orders = dealTracker[dealId]['orders'];
+
+		orders.forEach(order => {
+
+			if (order.filled) {
+
+				sumTotal += order.amount || 0;
+				qtySumTotal += order.qty || 0;
+			}
+		});
+
+		// Render the template with the required data
+		const renderedTemplate = ejs.render(template, {
+			'dealId': dealId,
+			'dealInfo': dealTracker[dealId]['info'],
+			'config': dealTracker[dealId]['config'],
+			'orders': orders,
+			'sumTotal': sumTotal,
+			'qtySumTotal': qtySumTotal
+		});
+
+		openAiChat(modalId, 'modal', dealId, renderedTemplate);
 	}
 
 
@@ -644,6 +704,7 @@
 					pause: { button: pauseButtonDeal },
 					resume: { button: resumeButtonDeal },
 					stop: { button: stopButtonDeal },
+					ai: { button: aiButtonDeal },
 					panic: { button: panicButtonDeal }
 			} = actionButtons;
 
@@ -743,6 +804,7 @@
 
 			dealTracker[dealId] = {};
 
+			dealTracker[dealId]['date'] = deal['date'];
 			dealTracker[dealId]['info'] = deal['info'];
 			dealTracker[dealId]['config'] = config;
 			dealTracker[dealId]['orders'] = deal['orders'];
@@ -771,6 +833,7 @@
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
 			contentArr.push('<td>' + dealCount + '</td>');
+			contentArr.push('<td style="text-align: center;"><div id="ai' + dealId + i + '">' + aiButtonDeal + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButtonDeal + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="panic' + dealId + i + '">' + panicButtonDeal + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="add' + dealId + i + '">' + addFundsButtonDeal + '</div></td>');
@@ -1096,6 +1159,18 @@
 					dealEdit(dealId);
 				}
 			}
+			else if (col == (colCount - 7)) {
+
+				// AI Analyze Deal
+				let dealId = row.data('dealid');
+
+				if (dealTracker[dealId] == undefined || dealTracker[dealId] == null) {
+
+					return;
+				}
+
+				renderAIContent(dealId);
+			}
 			else {
 
 				// Order History
@@ -1164,7 +1239,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#126;</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

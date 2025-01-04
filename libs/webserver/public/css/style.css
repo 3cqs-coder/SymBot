@@ -669,6 +669,19 @@ form textarea {
 }
 
 
+#aiChatBox {
+
+	flex: 1;
+	padding: 20px;
+	overflow-y: auto;
+	font-size: 1.3rem;
+	color: var(--table-content-color);
+	background: var(--content-box-background-color);
+	display: flex;
+	flex-direction: column;
+}
+
+
 #ordersBox {
 
 	z-index: 1000;
@@ -1100,7 +1113,7 @@ table#botsDeals tr:hover {
 
 .toolTipButtons {
 
-	z-index: 7000;
+	z-index: 6500;
 	display: none;
 	position: absolute;
 	background-color: #525252;

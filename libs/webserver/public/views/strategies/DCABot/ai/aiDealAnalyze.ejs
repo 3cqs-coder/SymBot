@@ -1,0 +1,52 @@
+<% 
+let ordersContent = '';
+let lastOrderDate = '';
+let sumTotal = 0;
+let qtySumTotal = 0;
+let averagePrice = 0;
+let allOrderDates = [];
+
+const duration = timeDiff(new Date(), new Date(dealTracker[dealId].date));
+
+// Calculate totals, collect all order dates, and determine the last order date and average price
+dealTracker[dealId].orders.forEach(order => {
+    if (order.filled) {
+        const dateFilled = order.dateFilled ? dateConvertLocal(new Date(order.dateFilled)) : '';
+        if (dateFilled) {
+            allOrderDates.push(dateFilled);
+            if (!lastOrderDate || new Date(dateFilled) > new Date(lastOrderDate)) {
+                lastOrderDate = dateFilled;
+                averagePrice = order.average || 0;
+            }
+        }
+        ordersContent += `
+Order #${order.orderNo || ''}: Date: ${dateFilled}. Order Price: $${order.price !== undefined ? order.price : ''}. 
+Order Amount: $${order.amount !== undefined ? order.amount : ''}. Order Quantity: ${order.qty !== undefined ? order.qty : ''}.
+        `;
+        sumTotal += order.amount || 0;
+        qtySumTotal += order.qty || 0;
+    }
+});
+%>
+
+<%= ordersContent %>
+
+The current price as of <%= dateConvertLocal(new Date(dealTracker[dealId].info.updated)) %> is: $<%= dealTracker[dealId].info.price_last %>. Current profit at this price is <%= dealTracker[dealId].info.profit_percentage %>%.
+The total amount spent is $<%= sumTotal.toFixed(2) %>, and the total quantity bought is <%= qtySumTotal %>.  
+The deal started on <%= dateConvertLocal(new Date(dealTracker[dealId].date)) %> and has been active for a total duration of <%= duration %>.  
+The last buy order date is <%= lastOrderDate %>, and the average price is $<%= parseFloat(averagePrice.toFixed(10)) %>.  
+
+**All Buy Order Dates**:  
+<%= allOrderDates.join(', ') %>  
+
+Upon closing, the deal will sell the entire quantity at the final target sell price of $<%= dealTracker[dealId].info.price_target %>, achieving a profit margin of <%= dealTracker[dealId].config.dcaTakeProfitPercent %>%.
+
+The estimated final profit is calculated as follows:  
+**(Target Sell Price × Total Quantity) - Total Amount Spent**
+
+Estimated Profit = ($<%= dealTracker[dealId].info.price_target %> × <%= qtySumTotal %>) - $<%= sumTotal %>  
+= **$<%= (dealTracker[dealId].info.price_target * qtySumTotal - sumTotal).toFixed(2) %>**
+
+Use the above data, including all order dates and pricing details, to provide a more realistic and accurate estimation of the deal's future closing date. Highlight key dates and the profit estimate clearly. Since today is <%= dateConvertLocal(new Date()) %>, the estimated closing date and time must be after that.
+
+Provide a final summary in the end in just a few sentences.

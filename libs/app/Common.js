@@ -82,6 +82,8 @@ async function updateConfig(req, res) {
 	const telegramUserId = body.telegram_user_id;
 	const signals3CQS = body.signals_3cqs_enabled;
 	const signals3CQSApiKey = body.signals_3cqs_api_key;
+	const ollamaHost = body.ollama_host;
+	const ollamaModel = body.ollama_model;
 
 	let pairButtons = body.pairbuttons;
 	let pairBlacklist = body.pairblacklist;
@@ -177,6 +179,9 @@ async function updateConfig(req, res) {
 		appConfig['telegram']['token_id'] = telegramTokenId;
 		appConfig['telegram']['notify_user_id'] = telegramUserId;
 
+		appConfig['ai']['ollama']['host'] = ollamaHost;
+		appConfig['ai']['ollama']['model'] = ollamaModel;
+
 		shareData['appData']['telegram_id'] = telegramUserId;
 		shareData['appData']['telegram_enabled'] = telegramEnabled;
 		shareData['appData']['telegram_enabled_config'] = telegramEnabled;
@@ -222,6 +227,10 @@ async function updateConfig(req, res) {
 		if (success) {
 
 			await saveConfig(appConfigFile, appConfig);
+
+			// Restart Ollama
+			shareData.Ollama.stop();
+			shareData.Ollama.start(ollamaHost, ollamaModel);
 
 			// Restart Signals
 			startSignals();

@@ -1,5 +1,11 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
+let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/', pathRoot.lastIndexOf('/') - 1));
+
 let shareData;
 let queueStartDeal;
 let symbolList = {};
@@ -107,7 +113,9 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
+	const aiDealTemplate = await shareData.Common.getData(pathRoot + '/libs/webserver/public/views/strategies/DCABot/ai/aiDealAnalyze.ejs');
+
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'aiDealTemplate': aiDealTemplate.data, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
 }
 
 
@@ -965,6 +973,20 @@ async function apiAddFundsDeal(req, res) {
 }
 
 
+async function apiGetBalances(req, res) {
+
+	let success = true;
+
+	const balances = await shareData.DCABot.getBalanceTracker();
+
+	const resObj = { 'date': new Date(), 'success': success, 'data': balances };
+
+	shareData.Common.logger('API Get Balances: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
+}
+
+
 async function apiCreateUpdateBot(req, res) {
 
 	let reqPath = req.path;
@@ -987,7 +1009,7 @@ async function apiCreateUpdateBot(req, res) {
 	const body = req.body;
 
 	const botNamePassed = body.botName;
-	const createStep = body.createStep;
+	const createStep = body.createStep ?? '';
 
 	if (body.pair == undefined || body.pair == null || body.pair == '') {
 
@@ -1873,6 +1895,7 @@ module.exports = {
 	apiPanicSellDeal,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
+	apiGetBalances,
 	viewBots,
 	viewCreateUpdateBot,
 	viewActiveDeals,

@@ -22,6 +22,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Telegram Setup](#telegram-setup)
 - [Advanced Setup](#advanced-setup)
 - [Reverse Proxy Setup](#reverse-proxy-setup)
+- [Artificial Intelligence (AI)](#artificial-intelligence-ai)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
 - [Webhooks](#webhooks)
@@ -221,6 +222,7 @@ mongodb://localhost:27017/SymBot
 
 	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. You must have a 3CQS API key for these to work. You can get one by signing up for free at https://www.3CQS.com. Webhooks must also be enabled for these signals to work.
 
+	- `ai` contains a section to use artificial intelligent services with SymBot. 
 
 - **bot.json**
 
@@ -440,6 +442,42 @@ sudo systemctl nginx restart
 You should now be able to access SymBot by opening your web browser to http://your-domain-name.com
 
 
+## Artificial Intelligence (AI)
+
+### What is Artificial Intelligence?
+
+Artificial Intelligence (AI) refers to machines designed to think and learn like humans. These systems use data and algorithms to recognize patterns, make decisions, and improve over time without needing human input. AI is found in everyday tools, such as voice assistants and website recommendations, as well as in complex fields like healthcare and finance. SymBot makes it easy to integrate this powerful technology, allowing you to analyze your trades with ease.
+
+### How Can AI Help with Trading?
+
+AI can be a big help in trading by analyzing market trends, predicting price movements, and automating trades. It looks at data like price changes, trading volumes, and news to help traders make smarter decisions. AI can also spot risks in deals, help automate buying or selling based on certain conditions, and even analyze the mood of the market using tools like sentiment analysis. Large Language Models (LLMs), a type of AI, can also process and understand large amounts of text data, such as news or social media, to help predict how the market might react to certain events. This makes trading easier and safer for regular people by offering insights and automating tasks.
+
+SymBot makes it easy to analyze your trading deals. With just one click, it uses information from your existing orders and current pricing which then, using Ollama, the AI processes this data, analyzing price trends and market conditions to predict potential outcomes. This helps you make smarter decisions about whether to continue, adjust, or pause your strategy.
+
+### What is Ollama?
+
+Ollama is an AI tool that helps process and understand large amounts of data. It can analyze text, make predictions, and provide insights based on the information it receives. Ollama is designed to handle complex tasks like analyzing market data or understanding trends, making it easier to make informed decisions.
+
+SymBot uses Ollama to quickly analyze your trading data, such as your deal orders and current prices, to help predict if a deal will be profitable. You don’t need to be an expert; just click and let SymBot handle the analysis!
+
+### Ollama Installation
+
+Before installing Ollama, ensure your system meets the following requirements:
+
+-   **Processor:** A multi-core CPU
+-   **Memory:** At least 16 GB of RAM is recommended, especially for running large models.
+-   **GPU:**
+    -   For Macs, an Apple Silicon GPU is ideal.
+    -   For other systems, an NVIDIA GPU with CUDA support is preferred.
+    -   Models can also run on a CPU, but this may result in significantly slower performance.
+
+1. Visit [Ollama's official website](https://ollama.com), download the installer for your operating system and follow the provided installation instructions.
+2. Download a model using the command: `ollama pull <model_name>`. For example: `ollama pull llama3.2`.
+3. By default, Ollama runs on port 11434.
+	- If you need to access Ollama remotely, you must configure it to listen on `0.0.0.0` instead of `localhost`.
+4. If Ollama did not start automatically, start it using: `ollama serve`.
+5. Now just put the host URL and model in SymBot's configuration. For example: `http://127.0.0.1:11434` and `llama3.2` to use Ollama for AI trading analysis.
+
 ## API Information
 
 Take more control of your bots and deals using SymBot APIs. You can easily enable or disable bots and start deals using triggers or signals from 3CQS, TradingView, your own custom scripts and strategies, or from any of your other favorite providers.
@@ -624,6 +662,16 @@ GET /api/deals/completed
 
 ```
 POST /api/bots/{botId}/start_deal
+```
+
+### Get account balances
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| -        |          |               |                      | Get all account asset balances |
+
+```
+POST /api/accounts/balances
 ```
 
 ### Get markets
@@ -830,6 +878,14 @@ curl -i -X POST \
 -H 'api-key: {API-KEY}' \
 -d '{ "pair": "BTC/USD" }' \
 http://127.0.0.1:3000/api/bots/{botId}/start_deal
+```
+
+#### Get account balances
+```
+curl -i -X POST \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/accounts/balances
 ```
 
 #### Get markets

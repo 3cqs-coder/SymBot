@@ -4,7 +4,7 @@
 /*
 
 	SymBot
-	Copyright © 2023 - 2024 3CQS.com All Rights Reserved
+	Copyright © 2023 - 2025 3CQS.com All Rights Reserved
 	Licensed under Creative Commons Attribution-NonCommerical-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 */
@@ -20,6 +20,7 @@ const Queue = require(__dirname + '/libs/app/Queue.js');
 const System = require(__dirname + '/libs/app/System.js');
 const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
+const Ollama = require(__dirname + '/libs/ai/OllamaClient.js');
 const packageJson = require(__dirname + '/package.json');
 const Dependencies = require('check-dependencies').sync({ verbose: false });
 
@@ -302,7 +303,8 @@ async function init() {
 						'Queue': Queue,
 						'System': System,
 						'Telegram': Telegram,
-						'WebServer': WebServer
+						'WebServer': WebServer,
+						'Ollama': Ollama,
 					};
 
 	// Apply config overrides from hub
@@ -350,6 +352,7 @@ async function init() {
 	DCABotManager.init(shareData);
 	Telegram.init(shareData);
 	WebServer.init(shareData);
+	Ollama.init(shareData);
 
 	let success = true;
 
@@ -456,6 +459,12 @@ async function init() {
 
 		Telegram.start(appConfig['data']['telegram']['token_id'], appDataConfig['telegram_enabled']);
 		WebServer.start(appDataConfig['web_server_port']);
+
+		// Start AI / Ollama client
+		const ollamaHost = appConfig['data']['ai']['ollama']['host'];
+		const ollamaModel = appConfig['data']['ai']['ollama']['model'];
+
+		Ollama.start(ollamaHost, ollamaModel);
 
 		const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
