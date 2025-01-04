@@ -973,6 +973,20 @@ async function apiAddFundsDeal(req, res) {
 }
 
 
+async function apiGetBalances(req, res) {
+
+	let success = true;
+
+	const balances = await shareData.DCABot.getBalanceTracker();
+
+	const resObj = { 'date': new Date(), 'success': success, 'data': balances };
+
+	shareData.Common.logger('API Get Balances: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
+}
+
+
 async function apiCreateUpdateBot(req, res) {
 
 	let reqPath = req.path;
@@ -995,7 +1009,7 @@ async function apiCreateUpdateBot(req, res) {
 	const body = req.body;
 
 	const botNamePassed = body.botName;
-	const createStep = body.createStep;
+	const createStep = body.createStep ?? '';
 
 	if (body.pair == undefined || body.pair == null || body.pair == '') {
 
@@ -1881,6 +1895,7 @@ module.exports = {
 	apiPanicSellDeal,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
+	apiGetBalances,
 	viewBots,
 	viewCreateUpdateBot,
 	viewActiveDeals,

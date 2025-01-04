@@ -3905,11 +3905,9 @@ async function processResumeDealTracker(data) {
 async function getBalanceTracker() {
 
 	let getNew = false;
-
 	let balances = {};
 
 	let lastUpdated = balanceTracker['updated'];
-
 	let diffSec = (new Date().getTime() - new Date(lastUpdated).getTime()) / 1000;
 
 	if (diffSec > 5 || lastUpdated == undefined || lastUpdated == null) {
@@ -3932,25 +3930,33 @@ async function getBalanceTracker() {
 
 			if (balance.success) {
 
-				balances[exchangeName] = balance.balance;
+				let uniqueName = exchangeName;
+				let counter = 1;
+
+				// Ensure unique name
+				while (uniqueName in balances) {
+
+					uniqueName = `${exchangeName}_${counter++}`;
+				}
+
+				balances[uniqueName] = balance.balance;
 			}
 		}
 	}
 	else {
-
+		
 		try {
 
-			balances = JSON.parse(JSON.stringify(balanceTracker));
+			balances = JSON.parse(JSON.stringify(balanceTracker.balances));
 		}
-		catch(e) {}
+		catch (e) {}
 	}
 
 	const resObj = {
-						'updated': new Date(),
-						'balances': balances
-				   };
+		'updated': new Date(),
+		'balances': balances
+	};
 
-	// Divide total by qty sum in orders to get percentage difference
 	for (let exchange in balances) {
 
 		const exchangeData = balances[exchange];
@@ -5223,6 +5229,7 @@ module.exports = {
 	getResumeDealTracker,
 	getSymbol,
 	getSymbolsAll,
+	getBalanceTracker,
 	applyConfigData,
 	startDelay,
 	resumeDeal,

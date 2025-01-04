@@ -50,6 +50,7 @@
 			   },
 	"ai": {
 				"ollama": {
+					"enabled": true,
 					"host": "",
 					"model": ""
 				}

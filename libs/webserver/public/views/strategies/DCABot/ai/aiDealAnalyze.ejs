@@ -31,7 +31,7 @@ Order Amount: $${order.amount !== undefined ? order.amount : ''}. Order Quantity
 
 <%= ordersContent %>
 
-Today is <%= dateConvertLocal(new Date()) %>. The current price as of <%= dateConvertLocal(new Date(dealTracker[dealId].info.updated)) %> is: $<%= dealTracker[dealId].info.price_last %>. Current profit at this price is <%= dealTracker[dealId].info.profit_percentage %>%.
+The current price as of <%= dateConvertLocal(new Date(dealTracker[dealId].info.updated)) %> is: $<%= dealTracker[dealId].info.price_last %>. Current profit at this price is <%= dealTracker[dealId].info.profit_percentage %>%.
 The total amount spent is $<%= sumTotal.toFixed(2) %>, and the total quantity bought is <%= qtySumTotal %>.  
 The deal started on <%= dateConvertLocal(new Date(dealTracker[dealId].date)) %> and has been active for a total duration of <%= duration %>.  
 The last buy order date is <%= lastOrderDate %>, and the average price is $<%= parseFloat(averagePrice.toFixed(10)) %>.  
@@ -47,6 +47,6 @@ The estimated final profit is calculated as follows:
 Estimated Profit = ($<%= dealTracker[dealId].info.price_target %> × <%= qtySumTotal %>) - $<%= sumTotal %>  
 = **$<%= (dealTracker[dealId].info.price_target * qtySumTotal - sumTotal).toFixed(2) %>**
 
-Use the above data, including all order dates and pricing details, to provide a more realistic and accurate estimation of the deal's future closing date. Highlight key dates and the profit estimate clearly.
+Use the above data, including all order dates and pricing details, to provide a more realistic and accurate estimation of the deal's future closing date. Highlight key dates and the profit estimate clearly. Since today is <%= dateConvertLocal(new Date()) %>, the estimated closing date and time must be after that.
 
 Provide a final summary in the end in just a few sentences.

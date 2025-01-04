@@ -4,7 +4,7 @@
 /*
 
 	SymBot
-	Copyright © 2023 - 2024 3CQS.com All Rights Reserved
+	Copyright © 2023 - 2025 3CQS.com All Rights Reserved
 	Licensed under Creative Commons Attribution-NonCommerical-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 */

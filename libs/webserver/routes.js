@@ -513,6 +513,19 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.post([ '/api/accounts/:exchangeId/balances', '/api/accounts/balances' ], (req, res) => {
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiGetBalances(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.all('*', (req, res) => {
 
 		redirectNotFound(res);

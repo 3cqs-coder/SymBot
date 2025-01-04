@@ -476,6 +476,7 @@ Before installing Ollama, ensure your system meets the following requirements:
 3. By default, Ollama runs on port 11434.
 	- If you need to access Ollama remotely, you must configure it to listen on `0.0.0.0` instead of `localhost`.
 4. If Ollama did not start automatically, start it using: `ollama serve`.
+5. Now just put the host URL and model in SymBot's configuration. For example: `http://127.0.0.1:11434` and `llama3.2` to use Ollama for AI trading analysis.
 
 ## API Information
 
@@ -661,6 +662,16 @@ GET /api/deals/completed
 
 ```
 POST /api/bots/{botId}/start_deal
+```
+
+### Get account balances
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| -        |          |               |                      | Get all account asset balances |
+
+```
+POST /api/accounts/balances
 ```
 
 ### Get markets
@@ -867,6 +878,14 @@ curl -i -X POST \
 -H 'api-key: {API-KEY}' \
 -d '{ "pair": "BTC/USD" }' \
 http://127.0.0.1:3000/api/bots/{botId}/start_deal
+```
+
+#### Get account balances
+```
+curl -i -X POST \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/accounts/balances
 ```
 
 #### Get markets
