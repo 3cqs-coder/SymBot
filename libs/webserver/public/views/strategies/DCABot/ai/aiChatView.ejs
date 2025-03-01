@@ -6,30 +6,36 @@
     <title><%- appData.name %> Chat</title>
 </head>
 <body>
-	<div id="aiChatSpinner" class="spinner-dynamic-container" style="width: 99%; height: 90%;"><div class="spinner-dynamic"></div></div>
-    <div id="aiChatBox"></div>
 
+    <div class="aiChatContainer">
+        <div id="aiChatSpinner" class="spinner-dynamic-container" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"><div class="spinner-dynamic"></div></div>
+        <div id="aiChatBox"></div>
+        <div id="chatInputContainer">
+            <input id="chatInput" type="text" placeholder="Type your message here...">
+            <button id="chatSendButton">Send</button>
+        </div>
+    </div>
+    
     <script src="./js/vendor/marked/marked.min.js"></script>
 	<script>
-		$(document).ready(function () {
-
+		$(document).ready(function() {
+	
 			let $currentMessageElement = null;
 			let messageBuffer = '';
-
+			let canSendMessage = true;
+	
 			const room = 'chat' + Math.random().toString(36).slice(2) + Math.floor(Date.now() / 1000);
 			const content = <%- JSON.stringify(bodyData) %>;
-
+	
 			// Add room to payload
 			try {
-
 				content.message.room = room;
-			}
-			catch(e) {}
-
+			} catch (e) {}
+	
+			const contentOrigObj = content;
 			const $chatBox = $('#aiChatBox');
 	
 			if (typeof socketGlobal !== 'undefined') {
-
 				const socket = socketGlobal;
 	
 				// Join chat room
@@ -38,18 +44,17 @@
 				});
 	
 				// Handle incoming data
-				socket.on('data', function (data) {
+				socket.on('data', function(data) {
 
-					// Hide spinner when data stream starts
-					if (messageBuffer == '') {
+					if (messageBuffer === '') {
 
 						$('#aiChatSpinner').hide();
 					}
-
+	
 					if (data.type === 'message') {
 
 						const messageContent = data.message;
-
+	
 						if (messageContent) {
 
 							displayMessage(messageContent);
@@ -58,48 +63,48 @@
 				});
 	
 				// Leave room on window unload
-				const leaveRoom = () => { if (socket) socket.emit('leaveRoom', room); };
-
+				const leaveRoom = () => {
+					if (socket) {
+						socket.emit('leaveRoom', room);
+					}
+				};
+	
 				$(window).on('beforeunload', leaveRoom);
 				$(document).on('dialogclose', '.ui-dialog-content', leaveRoom);
 			}
-
-			// Handle window resize
-			$(window).resize(function () {
-				resizeBotsDeals(offsetBottom);
-			});
-
+	
 			function postChatPrompt(content) {
 
+				$('#aiChatSpinner').show();
+				toggleInputState(true);
+	
 				$.ajax({
 					type: 'POST',
 					url: './chat/deal/prompt',
 					data: content,
 					dataType: 'json',
-					success: function(data) {
-
-						// Response ok
-					},
+					success: function(data) {},
 					error: function(data) {
 
-						// Some error in ajax call
 						$('#aiChatSpinner').hide();
 
+						toggleInputState(false);
 						alertBox('Error: ' + JSON.stringify(data));
 					}
 				});
 			}
-
+	
 			function displayMessage(content) {
 
 				if (content === 'END_OF_CHAT') {
 
 					if ($currentMessageElement) {
-
-						$currentMessageElement.html(marked.parse(messageBuffer.replace(/\n/g, '<br>')));
-						messageBuffer = ''; // Clear buffer
-						$currentMessageElement = null; // Reset element
+						messageBuffer = '';
+						$currentMessageElement = null;
 					}
+
+					canSendMessage = true; // Allow sending messages
+					toggleInputState(false); // Enable input box and button
 				}
 				else {
 
@@ -112,20 +117,72 @@
 						$chatBox.append($currentMessageElement);
 					}
 	
-					// Accumulate message data
 					messageBuffer += content;
-	
-					// Update the message element with accumulated data
-					$currentMessageElement.html(marked.parse(messageBuffer.replace(/\n/g, '<br>')));
+					$currentMessageElement.html(marked.parse(messageBuffer));
 				}
 	
-				// Scroll to the bottom of the chat box
-				$chatBox.scrollTop($chatBox.prop('scrollHeight'));
+				scrollToBottom();
 			}
 
+			function toggleInputState(disable) {
+
+				$('#chatInput').prop('disabled', disable);
+				$('#chatSendButton').prop('disabled', disable);
+
+				if (!disable) {
+
+					$('#chatInput').focus();
+				}
+			}
+	
+			function scrollToBottom() {
+
+				$chatBox.scrollTop($chatBox.prop('scrollHeight'));
+			}
+	
+			$('#chatSendButton').on('click', sendMessage);
+	
+			$('#chatInput').on('keypress', function(e) {
+
+				if (e.which === 13 && canSendMessage) {
+
+					sendMessage();
+					e.preventDefault();
+				}
+			});
+
+			function sendMessage() {
+
+				const userMessage = $('#chatInput').val().trim();
+	
+				// Don't send if not allowed or the message is empty
+				if (!canSendMessage || !userMessage) return;
+	
+				canSendMessage = false;
+	
+				const $userMessage = $('<div>', {
+					class: 'message user-message',
+					text: userMessage
+				});
+
+				$chatBox.append($userMessage);
+				$('#chatInput').val('');
+	
+				const userContent = {
+					...contentOrigObj
+				};
+	
+				userContent.message.content = userMessage;
+				postChatPrompt(userContent);
+	
+				scrollToBottom();
+			}
+	
+			// Enable input and send button once chat is ready
+			toggleInputState(false);
+	
 			postChatPrompt(content);
 		});
 	</script>
-	
 </body>
 </html>

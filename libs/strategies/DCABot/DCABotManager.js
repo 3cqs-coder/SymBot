@@ -137,6 +137,14 @@ async function viewBots(req, res) {
 			const botName = bot.botName;
 
 			bot = await removeDbKeys(bot);
+
+			const config = JSON.parse(JSON.stringify(bot.config));
+
+			const maxFundsObj = await shareData.DCABot.calculateMaxFunds(config);
+
+			const maxFundsCamelCaseObj = shareData.Common.convertToCamelCase(maxFundsObj);
+
+			bot.config = Object.assign({}, config, maxFundsCamelCaseObj);
 		}
 
 		botsSort = shareData.Common.sortByKey(bots, 'date');
@@ -241,10 +249,14 @@ async function apiGetBots(req, res) {
 
 			const config = JSON.parse(JSON.stringify(bot.config));
 
+			const maxFundsObj = await shareData.DCABot.calculateMaxFunds(config);
+
 			delete bot.date;
 			delete bot.config;
 
-			const botData = Object.assign({}, bot, config);
+			const maxFundsCamelCaseObj = shareData.Common.convertToCamelCase(maxFundsObj);
+
+			const botData = Object.assign({}, bot, config, maxFundsCamelCaseObj);
 
 			bots[i] = botData;
 		}
@@ -1677,6 +1689,27 @@ async function calculateOrders(body) {
 	let orders = await shareData.DCABot.start({ 'create': false, 'config': botData });
 
 	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
+}
+
+
+async function calculateMaxFundsExchange(configObj) {
+
+	let config = JSON.parse(JSON.stringify(configObj));
+
+	config['createStep'] = 'getOrders';
+	config['pair'] = config['pair'][0];
+
+	// Remove data to only calculate orders
+	delete config['botId'];
+	delete config['botName'];
+
+	// Set first start condition for calculate orders
+	config['startCondition'] = config['startConditions'][0];
+
+	const orderData = await calculateOrders(config);
+	const maxFunds = orderData.orders.data.content;
+
+	return maxFunds;
 }
 
 

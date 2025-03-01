@@ -2375,7 +2375,21 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 			msg = 'BUY SUCCESS';
 
-			order = await exchange.createOrder(pair, 'market', 'buy', qty, price);
+			let orderParamsObj = {
+				'symbol': pair,
+				'type': 'market',
+				'side': 'buy',
+				'quantity': qty,
+				'price': price
+			};
+
+			let template = getOrderTemplate();
+			let templateParams = template.createOrder.buy.params;
+			let orderParamsArr = replacePlaceholders(templateParams, orderParamsObj);
+
+			// Pass params in the same structure as referenced in template
+			order = await exchange.createOrder(...orderParamsArr);
+			//order = await exchange.createOrder(pair, 'market', 'buy', qty, price);
 
 			finished = true;
 		}
@@ -2485,7 +2499,27 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 
 			msg = 'SELL SUCCESS';
 
-			order = await exchange.createOrder(pair, 'market', 'sell', qty, price);
+			let orderParamsObj = {
+				'symbol': pair,
+				'type': 'market',
+				'side': 'sell',
+				'quantity': qty,
+				'price': price
+			};
+
+			// Remove price from params so quantity is not altered
+			if (exchange.id == 'bybit') {
+
+				delete orderParamsObj.price;
+			}
+
+			let template = getOrderTemplate();
+			let templateParams = template.createOrder.sell.params;
+			let orderParamsArr = replacePlaceholders(templateParams, orderParamsObj);
+
+			// Pass params in the same structure as referenced in template
+			order = await exchange.createOrder(...orderParamsArr);
+			//order = await exchange.createOrder(pair, 'market', 'sell', qty, price);
 
 			finished = true;
 		}
@@ -2541,6 +2575,50 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 };
 
 
+const getOrderTemplate = () => {
+
+	const template = {
+		"createOrder": {
+			"buy": {
+				"params": [
+					"{symbol}",
+					"{type}",
+					"{side}",
+					"{quantity}",
+					"{price}"
+				]
+			},
+			"sell": {
+				"params": [
+					"{symbol}",
+					"{type}",
+					"{side}",
+					"{quantity}",
+					"{price}"
+				]
+			}
+		}
+	};
+
+	return template;
+}
+
+
+const replacePlaceholders = (params, data) => {
+
+	return params.flatMap(param => {
+
+			if (typeof param === "string" && param.startsWith("{") && param.endsWith("}")) {
+
+				const key = param.slice(1, -1);
+				return key in data ? [data[key]] : [];
+			}
+
+			return [param];
+	});
+};
+
+
 const getDeviation = async (a, b) => {
 
 	return (Math.abs( (a - b) / ( (a + b) / 2 ) ) * 100);
@@ -2593,6 +2671,59 @@ const getSlippage = async(normalize) => {
 	}
 
 	return { priceSlippageBuyPercent, priceSlippageSellPercent };
+}
+
+
+async function calculateMaxFunds(config) {
+
+	const {
+		dcaMaxOrder,
+		dcaOrderAmount,
+		dcaOrderSizeMultiplier,
+		dcaOrderStepPercent,
+		dcaOrderStepPercentMultiplier,
+		firstOrderAmount,
+		exchangeFee,
+		pairMax,
+		pairDealsMax,
+		pair = [],
+	} = { ...config };
+
+	const safetyOrdersMax = Number(dcaMaxOrder);
+	const safetyOrderVolume = Number(dcaOrderAmount);
+	const safetyOrderVolumeScale = Number(dcaOrderSizeMultiplier);
+	const safetyOrderStepPerc = Number(dcaOrderStepPercent);
+	const safetyOrderStepScale = Number(dcaOrderStepPercentMultiplier);
+	const baseOrderVolume = Number(firstOrderAmount);
+	const feeMultiplier = 1 + (Number(exchangeFee) * 2) / 100;
+
+	const totalPairs = Array.isArray(pair) && pair.length > 0 ? pair.length : 1;
+
+	const effectivePairMax = Math.max(1, Number(pairMax) || 1);
+	const effectivePairDealsMax = Math.max(1, Number(pairDealsMax));
+
+	const maxDeviation =
+		safetyOrderStepScale === 1 ?
+		safetyOrdersMax * safetyOrderStepPerc :
+		(safetyOrderStepPerc * (1 - Math.pow(safetyOrderStepScale, safetyOrdersMax))) /
+		(1 - safetyOrderStepScale);
+
+	let maxFunds = baseOrderVolume * feeMultiplier;
+
+	for (let i = 0; i < safetyOrdersMax; i++) {
+
+		maxFunds += safetyOrderVolume * Math.pow(safetyOrderVolumeScale, i) * feeMultiplier;
+	}
+
+	const botMaxFunds = Math.round(
+		maxFunds * Math.min(effectivePairMax, totalPairs) * effectivePairDealsMax * 100
+	) / 100;
+
+	return {
+		'max_deviation': Math.round(maxDeviation * 100) / 100,
+		'max_funds': Math.round(maxFunds * 100) / 100,
+		'bot_max_funds': botMaxFunds,
+	};
 }
 
 
@@ -3843,7 +3974,7 @@ async function processResumeDealTracker(data) {
 	const maxSec = 60;
 	const dateNow = new Date();
 
-	const dealId = data['deal_id'];
+	const dealId = data['deal_id'] ?? 'ALL DEALS';
 
 	let success = false;
 	let finished = false;
@@ -4007,6 +4138,8 @@ async function getDealInfo(data) {
 		const currentProfit = profitData['profit'];
 		const currentProfitBase = profitData['profit_base'];
 
+		const maxFundsObj = await calculateMaxFunds(config);
+
 		const dealInfo = {
 							'updated': updated,
 							'active': active,
@@ -4026,7 +4159,9 @@ async function getDealInfo(data) {
 							'profit_percentage': profitPerc,
 							'take_profit': takeProfit,
 							'deal_count': config.dealCount,
-							'deal_max': config.dealMax
+							'deal_max': config.dealMax,
+							'max_deviation': maxFundsObj.max_deviation,
+							'max_funds': maxFundsObj.max_funds,
 						 };
 
 		return ({ 'success': true, 'info': dealInfo, 'config': config, 'orders': orders });
@@ -4893,6 +5028,8 @@ async function addFundsDeal(dealId, volume) {
 
 	if (deal) {
 
+		let orderNo;
+
 		const configDeal = JSON.parse(JSON.stringify(deal.config));
 		const orders = JSON.parse(JSON.stringify(deal.orders));
 
@@ -5002,6 +5139,8 @@ async function addFundsDeal(dealId, volume) {
 						newOrder.dateFilled = new Date();
 
 						oldOrders.splice(i, 0, newOrder);
+
+						orderNo = newOrder.orderNo;
 					}
 					else {
 
@@ -5068,6 +5207,9 @@ async function addFundsDeal(dealId, volume) {
 					config: config,
 					orders: oldOrders,
 				});
+
+				// Recalculate orders
+				// let data = await recalculateOrders(dealId, orderNo);
 			}
 		}
 		else {
@@ -5083,6 +5225,155 @@ async function addFundsDeal(dealId, volume) {
 	}
 
 	return ( { 'success': success, 'data': msg } );
+}
+
+
+async function recalculateOrders(dealId, orderNo, orderId, newPrice) {
+
+	let success = true;
+	let msg = 'Success';
+
+	const deal = await Deals.findOne({
+		dealId: dealId,
+		status: 0,
+	});
+
+	if (!deal) {
+
+		success = false;
+		msg = 'Deal ID not found';
+	}
+	else {
+
+		const config = JSON.parse(JSON.stringify(deal.config));
+		let oldOrders = JSON.parse(JSON.stringify(deal.orders));
+
+		Common.logger(colors.red.bold('Recalculating orders for deal ID ' + dealId));
+
+		let exchange;
+
+		try {
+
+			exchange = await connectExchange(config);
+		}
+		catch (error) {
+
+			Common.logger('Error connecting to exchange: ' + error.message);
+
+			success = false;
+			msg = 'Error connecting to exchange';
+		}
+
+		if (exchange) {
+
+			await exchange.loadMarkets();
+
+			// Determine the order to update
+			let orderFound = false;
+			let orderIndex = -1;
+
+			if (orderId !== undefined) {
+
+				// Search by orderId
+				for (let i = 0; i < oldOrders.length; i++) {
+
+					if (oldOrders[i].orderId === orderId) {
+
+						orderIndex = i;
+						orderFound = true;
+
+						break;
+					}
+				}
+			}
+			else if (typeof orderNo === 'number') {
+
+				// Use orderNo to find the order
+				for (let i = 0; i < oldOrders.length; i++) {
+
+					if (Number(oldOrders[i].orderNo) === orderNo) {
+
+						orderIndex = i;
+						orderFound = true;
+
+						break;
+					}
+				}
+			}
+
+			// If neither orderId nor valid orderNo is found, set success to false
+			if (!orderFound) {
+
+				success = false;
+				msg = 'Order ID or orderNo not found';
+			}
+			else {
+
+				// Update the specific order with the new price or existing price if newPrice is undefined
+				const updatedPrice = newPrice !== undefined ? newPrice : oldOrders[orderIndex].price;
+
+				oldOrders[orderIndex].price = await filterPrice(exchange, config.pair, updatedPrice);
+				oldOrders[orderIndex].amount = await filterPrice(exchange, config.pair, oldOrders[orderIndex].qty * updatedPrice);
+
+				// Recalculate quantities and amounts, and update running totals
+				let runningQtySum = 0;
+				let runningSum = 0;
+
+				for (let i = 0; i < oldOrders.length; i++) {
+
+					let currentOrder = oldOrders[i];
+
+					/*
+					if (currentOrder.filled) {
+					    // Do nothing with filled orders
+					    continue;
+					}
+					*/
+
+					// Calculate quantities and amounts
+					currentOrder.qtySum = runningQtySum + parseFloat(currentOrder.qty);
+					currentOrder.sum = runningSum + parseFloat(currentOrder.amount);
+
+					// Filter quantities and amounts
+					currentOrder.qtySum = await filterAmount(exchange, config.pair, parseFloat(currentOrder.qtySum));
+					currentOrder.sum = await filterPrice(exchange, config.pair, parseFloat(currentOrder.sum));
+
+					// Update running totals
+					runningQtySum = parseFloat(currentOrder.qtySum);
+					runningSum = parseFloat(currentOrder.sum);
+
+					// Calculate average price
+					currentOrder.average = await filterPrice(exchange, config.pair, parseFloat(currentOrder.sum) / parseFloat(currentOrder.qtySum));
+
+					// Calculate target price based on updated average price
+					currentOrder.target = await calculateTargetPrice({
+						'exchange': exchange,
+						'pair': config.pair,
+						'price': currentOrder.average,
+						'takeProfit': config.dcaTakeProfitPercent,
+						'exchangeFee': config.exchangeFee
+					});
+
+					// Update previous order's qtySum and sum for next iteration
+					if (i > 0) {
+
+						oldOrders[i - 1].qtySum = parseFloat(oldOrders[i - 1].qtySum);
+						oldOrders[i - 1].sum = parseFloat(oldOrders[i - 1].sum);
+					}
+				}
+
+				// Update deal if recalculation was successful
+				const botId = deal.botId;
+
+				await updateDeal(botId, dealId, {
+					config: config,
+					orders: oldOrders,
+				});
+			}
+		}
+	}
+
+	return { 'success': success, 'data': msg };
 }
 
 
@@ -5235,6 +5526,7 @@ module.exports = {
 	resumeDeal,
 	getBalance,
 	getPairData,
+	calculateMaxFunds,
 	convertDataToSandBox,
 
 	init: function(obj) {

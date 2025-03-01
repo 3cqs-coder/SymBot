@@ -797,6 +797,7 @@ async function updateSystem() {
 
 	const appVersion = shareData.appData.version;
 	const appConfigFile = shareData.appData.app_config;
+	const botConfigFile = shareData.appData.bot_config;
 
 	let isErr;
 	let cmdError = '';
@@ -806,11 +807,11 @@ async function updateSystem() {
 
 	const getFirstDir = rootPath => fs.readdirSync(rootPath).find(f => fs.statSync(path.join(rootPath, f)).isDirectory()) || null;
 
-	const mergeAppConfigs = (data, appConfigs) => {
+	const mergeConfigs = (param, data, configs) => {
 
-		const instanceConfigs = new Set(data.instances.map(instance => instance.app_config));
+		const instanceConfigs = new Set(data.instances.map(instance => instance[param]));
 
-		appConfigs.forEach(config => instanceConfigs.add(config));
+		configs.forEach(config => instanceConfigs.add(config));
 
 		return Array.from(instanceConfigs);
 	};
@@ -832,8 +833,10 @@ async function updateSystem() {
 	try {
 
 		let appConfigs = [];
+		let botConfigs = [];
 
 		appConfigs.push(appConfigFile);
+		botConfigs.push(botConfigFile);
 
 		const appInfo = await shareData.Common.validateAppVersion();
 
@@ -882,27 +885,32 @@ async function updateSystem() {
 		}
 
 		let appConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/app.json');
+		let botConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/bot.json');
+
 		let hubConfig = await shareData.Common.getData(pathRoot + '/config/hub.json');
 
 		if (hubConfig.success) {
 
-			appConfigs = mergeAppConfigs(JSON.parse(hubConfig.data), appConfigs);
+			appConfigs = mergeConfigs('app_config', JSON.parse(hubConfig.data), appConfigs);
+			botConfigs = mergeConfigs('bot_config', JSON.parse(hubConfig.data), botConfigs);
 		}
 
-		// Update all app config files
-		for (let configFile of appConfigs) {
+		// Combine configs
+		const allConfigs = [
+			...appConfigs.map(file => ({ file, updated: true, newData: appConfigNew.data })),
+			...botConfigs.map(file => ({ file, updated: false, newData: botConfigNew.data }))
+		];
 
-			let diffs = null;
-			let appConfigOld = null;
-			let appConfigCombined = null;
+		// Update all config files
+		for (let { file, updated, newData } of allConfigs) {
 
-			appConfigOld = await shareData.Common.getData(pathRoot + '/config/' + configFile);
+			let configOld = await shareData.Common.getData(pathRoot + '/config/' + file);
 
-			diffs = await findMissingParameters(JSON.parse(appConfigOld.data), JSON.parse(appConfigNew.data));
-			appConfigCombined = diffs.combined;
+			let diffs = await findMissingParameters(JSON.parse(configOld.data), JSON.parse(newData));
+			let configCombined = diffs.combined;
 
 			// Save new config
-			await shareData.Common.saveConfig(configFile, appConfigCombined);
+			await shareData.Common.saveConfig(file, configCombined, updated);
 		}
 
 		// Remove existing files except config folder and replace with new 
@@ -926,14 +934,15 @@ async function updateSystem() {
 
 					return;
 				}
-				if (stderr) {
+
+				if (stderr && !stderr.includes('warning')) {
 
 					cmdStdError = stderr;
 					reject(new Error(stderr));
 
 					return;
 				}
-
+		
 				cmdStdOut += stdout;
 
 				resolve();

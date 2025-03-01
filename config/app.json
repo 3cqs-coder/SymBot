@@ -28,7 +28,7 @@
 									},
 				"exchange": {
 								"default": {
-											"account_balance_currencies": [ "USDT", "USD" ],
+											"account_balance_currencies": [ "USDC", "USDT", "USD" ],
 											"orders": {
 														"buy": {
 																"slippage_percent": 0

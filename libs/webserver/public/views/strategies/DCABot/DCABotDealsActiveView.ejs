@@ -6,6 +6,7 @@
 	let dealTracker = {};
 	let dealTrackerErrors = {};
 	let activeBots = [];
+	let csvDataArr = [];
 	let modalId = 'activeDealsView';
 
 	const tooltipDelayMs = 250;
@@ -187,6 +188,37 @@
 	}
 
 
+	function csvDownloadConfirm(data) {
+
+		$.confirm({
+
+					title: false,
+					boxWidth: '50%',
+					useBootstrap: false,
+					content: '<div style="font-size: 1.2rem; text-align: left;">Download active deals CSV?</div>',
+					buttons: {
+
+								ok: {
+										btnClass: 'btn-default',
+										text: '<div style="color: #1a9f00;">Download CSV</div>',
+										action: function () {
+
+											const appName = '<%- appData.name %>';
+
+											jsonToCsv(appName + '-Active-Deals', appName + ' Active DCA Bot Deals', true, true, data);
+										}
+									 },
+								cancel: {
+
+										 btnClass: 'btn-default',
+										 text: '<div style="color: #000000;">Cancel</div>',	
+										 action: function () { }
+								 	}
+						 }
+		});
+	}
+
+
 	function renderAIContent(dealId) {
 
 		const aiDealTemplate = <%- JSON.stringify(aiDealTemplate) %>;
@@ -236,7 +268,7 @@
 						let date = data.date;
 						let deals = data.data;
 
-						populateDeals(date, deals);
+						csvDataArr = populateDeals(date, deals);
 
 						setReloadTimeout();
 					},
@@ -683,15 +715,19 @@
 		let dealsErrorArr = [];
 
 		dealTracker = {};
+		csvDataArr = [];
 
 		for (let i = 0; i < deals.length; i++) {
 
 			if(!activeBots.includes(deals[i].botName)) {
+
 				activeBots.push(deals[i].botName);
+
 				$('#active-bot-filter').append('<option value="' + deals[i].botName + '">' + deals[i].botName + '</option>');
 			}
 
 			if(selectedBot != 'all' && deals[i].botName != selectedBot) {
+
 				continue;
 			}
 
@@ -719,7 +755,6 @@
 			let dealCount;
 
 			const deal = deals[i];
-
 			const config = deal['config'];
 			const dealId = deal['dealId'];
 			const pause = deal['info']['pause'];
@@ -731,8 +766,43 @@
 			const profit = deal['info']['profit'];
 			const profitBase = deal['info']['profit_base'];
 			const profitPerc = deal['info']['profit_percentage'];
+			const maxFunds = Math.round(deal['info']['max_funds']);
+			const maxDeviation = deal['info']['max_deviation'];
 
 			const duration = timeDiff(new Date(), new Date(deal['date']));
+
+			let csvDealInfo = JSON.parse(JSON.stringify(deal.info));
+
+			const manualProperties = {
+				'started': dateConvertLocal(new Date(deal['date'])),
+				'updated': dateConvertLocal(new Date(csvDealInfo.updated)),
+				'duration': duration,
+				'bot_id': deal['botId'],
+				'bot_name': deal['info']['bot_name'],
+				'deal_id': dealId,
+				'profit_target_percentage': config['dcaTakeProfitPercent']
+			};
+
+			csvDealInfo = {
+				...manualProperties,
+				...Object.fromEntries(
+					Object.entries(csvDealInfo).filter(([key]) => !(key in manualProperties))
+				)
+			};
+
+			const reorderings = [
+				{ after: 'active', property: 'bot_active' },
+				{ after: 'profit_percentage', property: 'profit_target_percentage' }
+			];
+
+			reorderings.forEach(reordering => {
+
+				csvDealInfo = reorderProperties(csvDealInfo, reordering.after, reordering.property);
+			});
+
+			delete csvDealInfo['take_profit'];
+
+			csvDataArr.push(csvDealInfo);
 
 			if (!botActive) {
 
@@ -832,6 +902,7 @@
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '%</td>');
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
+			contentArr.push('<td>$' + maxFunds + '</td>')
 			contentArr.push('<td>' + dealCount + '</td>');
 			contentArr.push('<td style="text-align: center;"><div id="ai' + dealId + i + '">' + aiButtonDeal + '</div></td>');
 			contentArr.push('<td style="text-align: center;"><div id="edit' + dealId + i + '">' + editButtonDeal + '</div></td>');
@@ -878,6 +949,8 @@
 		$('#botsDeals').tablesorter().trigger('update');
 
 		resizeBotsDeals();
+
+		return csvDataArr;
 	}
 
 
@@ -1053,6 +1126,12 @@
 		});
 
 
+		$('#csvDownload').click(function() {
+
+			csvDownloadConfirm(csvDataArr);
+		});
+
+
 		$('#botDealSelectorShow').click(function() {
 
 			if ($('.botDealSelectorWrapper').is(':visible')) {
@@ -1217,7 +1296,12 @@
 			<div class="contentHeaderBox">
 
 				<b class="contentHeader">Active DCA Bot Deals</b>
-				<span id="botDealSelectorShow">&#9881;</span>
+
+				<span class="viewSettings">
+					<span id="csvDownload">&#8659;</span>
+					<span id="botDealSelectorShow">&#9881;</span>
+				</span>
+
 				<span style="display: flex; font-size: 1.2rem; justify-content: center; gap: 20px; margin-top: 10px;">
 					<p style="margin-top: 0; margin-bottom: 0;">Active P/L: <span id="totalProfit"></span></p>
 					<p style="margin-top: 0; margin-bottom: 0;">In Deals: <span id="inDeals"></span></p>
@@ -1239,7 +1323,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Max Funds</th> </th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

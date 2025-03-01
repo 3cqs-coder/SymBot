@@ -268,7 +268,7 @@
 
 					<thead style="position: sticky; top: 0; z-index: 1000;">
 						<tr class="tableHeader">
-							<th>Bot Name</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
+							<th>Bot Name</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
 						</tr>
 					</thead>
 
@@ -287,6 +287,8 @@
 			let active = bot['active'];
 			let dealMax = bot['config']['dealMax'];
 			let pairMax = bot['config']['pairMax'];
+			let maxFunds = Math.round(bot['config']['maxFunds']);
+			let botMaxFunds = Math.round(bot['config']['botMaxFunds']);
 			let sandBox = bot['config']['sandBox'];
 
 			if (bot['config']['startConditions'] != undefined && bot['config']['startConditions'] != null && bot['config']['startConditions'] != '') {
@@ -372,6 +374,7 @@
 						<td><%- bot['config']['dcaTakeProfitPercent'] %>%</td>
 						<td><%- dealMax %></td>
 						<td><%- pairMax %></td>
+						<td>$<%- botMaxFunds %></td>
 						<td><%- startCondition %></td>
 						<td><%- sandBox %></td>
 						<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>

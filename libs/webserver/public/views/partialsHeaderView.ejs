@@ -697,26 +697,122 @@
 
 	function showTradingView(modalId, divId, jquery, script, pair, exchange) {
 
-		if (exchange == undefined || exchange == null || exchange == '') {
+		if (!exchange) {
 
 			return;
 		}
 
-		exchange = exchange.toUpperCase();
+		const ccxtToTradingView = {
 
-		if (exchange.startsWith('COINBASE')) {
-			if (pair.includes('USDC')) {
-				// Replace "USDC" with "USD"
-				pair = pair.replace(/USDC/g, 'USD');
-			}
-			exchange = 'COINBASE';
+			"coinbasepro": "COINBASE",
+			"coinbaseexchange": "COINBASE",
+			"coinbaseinternational": "COINBASE",
+			"gate": "GATEIO",
+			"myokx": "OKX"
+		};
+
+		exchange = exchange.toLowerCase();
+
+		exchange = ccxtToTradingView[exchange] || exchange.toUpperCase();
+
+		let url = `./api/tradingview?jquery=${jquery}&script=${script}&exchange=${exchange}&pair=${pair.replace(/[^a-z0-9]/gi, "_")}`;
+
+		openModal(modalId, `#${divId}`, `<span id="tradingViewSettings">&#9881;</span> TradingView Chart ${pair}`, "Loading...");
+
+		$("#" + divId).load(url);
+	}
+
+
+	function reorderProperties(obj, firstKey, secondKey) {
+
+		const propertiesArray = Object.entries(obj);
+
+		const firstIndex = propertiesArray.findIndex(([key]) => key === firstKey);
+		const secondIndex = propertiesArray.findIndex(([key]) => key === secondKey);
+
+		if (firstIndex !== -1 && secondIndex !== -1) {
+
+			// Remove the secondKey from the array
+			const [secondEntry] = propertiesArray.splice(secondIndex, 1);
+
+			// Insert the secondKey directly after the firstKey
+			const firstKeyIndex = propertiesArray.findIndex(([key]) => key === firstKey);
+			propertiesArray.splice(firstKeyIndex + 1, 0, secondEntry);
 		}
 
-		let url = './api/tradingview?jquery=' + jquery + '&script=' + script + '&exchange=' + exchange + '&pair=' + pair.replace(/[^a-z0-9]/gi, '_');
+		// Convert the array back to an object
+		const reorderedObj = Object.fromEntries(propertiesArray);
 
-		openModal(modalId, '#' + divId, '<span id="tradingViewSettings">&#9881;</span> TradingView Chart ' + pair, 'Loading...');
+		return reorderedObj;
+	}
 
-		$('#' + divId).load(url);
+
+	function jsonToCsv(fileName, title, download, headers, jsonData) {
+
+		const data = typeof jsonData !== 'object' ? JSON.parse(jsonData) : jsonData;
+
+		let rowCount = 0;
+		let csvContent = '';
+
+		csvContent += title + '\r\n\n';
+
+		const now = new Date();
+		const dateNow = now.toISOString().split('T')[0].replace(/[^a-zA-Z0-9]/g, '');
+		const timeNow = now.toISOString().split('T')[1].split('.')[0].replace(/[^a-zA-Z0-9]/g, '');
+		const timeStamp = dateNow + '_' + timeNow;
+
+		if (headers) {
+	
+			let headerRow = '';
+
+			for (const key in data[0]) {
+
+				headerRow += key + ',';
+			}
+
+			headerRow = headerRow.slice(0, -1);
+			csvContent += headerRow + '\r\n';
+		}
+
+		data.forEach(rowData => {
+
+			let row = '';
+
+			for (const key in rowData) {
+
+				row += `"${rowData[key]}",`;
+			}
+
+			row = row.slice(0, -1);
+			rowCount++;
+
+			csvContent += row + '\r\n';
+		});
+
+		if (rowCount == 0) {
+
+			alertBox('Invalid data');
+			return;
+		}
+
+		const fileUri = 'data:text/csv;charset=utf-8,%EF%BB%BF' + encodeURIComponent(csvContent);
+
+		let link = document.createElement('a');
+
+		link.href = fileUri;
+		link.style.visibility = 'hidden';
+		link.download = `${fileName}_${timeStamp}.csv`;
+
+		if (!download) {
+
+			return { 'link': link, 'csv': escape(csvContent) };
+		}
+		else {
+
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+		}
 	}
 
 	</script>

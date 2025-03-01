@@ -2,6 +2,8 @@
 
 <script>
 
+	let csvDataArr = [];
+
 	function getDeals(filters) {
 
 		$('#spinner-overlay').fadeIn(100);
@@ -22,7 +24,7 @@
 
 						let deals = data;
 
-						populateDeals(deals);
+						csvDataArr = populateDeals(deals);
 					},
 					error: function(data) {
 
@@ -117,6 +119,8 @@
 
 		let contentArr = [];
 
+		csvDataArr = [];
+
 		for (let i = 0; i < deals.length; i++) {
 
 			let profitPercColor = '#1a9f00';
@@ -148,6 +152,28 @@
 			contentArr.push('</tr>');
 
 			totalProfit += profit;
+
+			let csvDealInfo = JSON.parse(JSON.stringify(deal));
+
+			const manualProperties = {
+				'date_start': dateConvertLocal(new Date(deal['date_start'])),
+				'date_end': dateConvertLocal(new Date(deal['date_end'])),
+				'duration': duration,
+				'bot_id': deal.bot_id,
+				'bot_name': deal.bot_name,
+				'deal_id': dealId,
+			};
+			
+			csvDealInfo = {
+				...manualProperties,
+				...Object.fromEntries(
+					Object.entries(csvDealInfo).filter(([key]) => !(key in manualProperties))
+				)
+			};
+
+			delete csvDealInfo['minimum_movement_amount'];
+
+			csvDataArr.push(csvDealInfo);
 		}
 
 		if (totalProfit <= 0) {
@@ -165,6 +191,39 @@
 		$('#botsDeals').tablesorter().trigger('update');
 
 		resizeBotsDeals();
+
+		return csvDataArr;
+	}
+
+
+	function csvDownloadConfirm(data) {
+
+		$.confirm({
+
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">Download deals history CSV?</div>',
+			buttons: {
+
+						ok: {
+								btnClass: 'btn-default',
+								text: '<div style="color: #1a9f00;">Download CSV</div>',
+								action: function () {
+
+									const appName = '<%- appData.name %>';
+
+									jsonToCsv(appName + '-Deals-History', appName + ' DCA Bot Deals History', true, true, data);
+								}
+							 },
+						cancel: {
+
+								 btnClass: 'btn-default',
+								 text: '<div style="color: #000000;">Cancel</div>',	
+								 action: function () { }
+							 }
+				 }
+		});
 	}
 
 
@@ -255,6 +314,13 @@
 			}
 		});
 
+
+		$('#csvDownload').click(function() {
+
+			csvDownloadConfirm(csvDataArr);
+		});
+
+
 		// Populate date from query string
 		let fromDate = new URL(window.location.href).searchParams.get('from');
 
@@ -279,6 +345,10 @@
 			<div class="contentHeaderBox">
 
 				<b class="contentHeader">DCA Bot Deals History</b>
+
+				<span class="viewSettings">
+					<span id="csvDownload">&#8659;</span>
+				</span>
 
 				<span style="display: flex; justify-content: center; font-size: 1.2rem; gap: 20px; margin-top: 10px; margin-bottom: 0;">
 					<p style="margin-top: 0; margin-bottom: 0;">Total P/L: <span id="totalProfit"></span></p>

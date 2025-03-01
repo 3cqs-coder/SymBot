@@ -6,26 +6,67 @@ let ollama;
 let modelCurrent;
 let shareData;
 
+
 const modelDefault = 'llama3.2';
 const TIMEOUT_MS = 75000;
+const maxHistory = 25;
+const maxMessageAge = 2 * (60 * 60 * 1000);
+const hoursInterval = 1;
 
-const streamChatResponse = async ({ room, model, message, abortSignal }) => {
+// Map to store conversation history for each room
+const conversationHistory = new Map();
+
+
+setInterval(() => {
+
+    cleanupRooms();
+
+}, (hoursInterval * (60 * 60 * 1000)));
+
+
+const streamChatResponse = async ({ room, model, message, abortSignal, reset }) => {
 
 	let fullResponse = '';
 
-	// Reset conversation context
-	const resetMessage = {
-		role: 'system',
-		content: 'Reset the conversation context.',
+	// Reset conversation context if requested
+	if (reset) {
+
+		const resetMessage = {
+			role: 'system',
+			content: 'Reset the conversation context.',
+			timestamp: Date.now(),
+		};
+
+		// Reset the history for the room
+		conversationHistory.set(room, [resetMessage]);
+		//console.log('History reset for room:', room);
+	}
+
+	// Get the current conversation history for the room
+	const history = conversationHistory.get(room) || [];
+
+	// Append user message to history
+	const userMessage = {
+		role: 'user',
+		content: message.content,
+		timestamp: Date.now(),
 	};
 
-	const response = await ollama.chat({
-		'model': model,
-		'stream': true,
-		'messages': [resetMessage, message],
-	});
+	history.push(userMessage);
 
+	// Ensure the history is not more than maxHistory
+	if (history.length > maxHistory) {
+
+        history.shift();
+	}
+
+	// Proceed with chat response generation
 	try {
+		const response = await ollama.chat({
+			model: model,
+			stream: true,
+			messages: history,
+		});
 
 		for await (const part of response) {
 
@@ -42,49 +83,67 @@ const streamChatResponse = async ({ room, model, message, abortSignal }) => {
 			sendMessage(room, content);
 		}
 
+		// Add the assistant's response to the conversation history
+		const assistantMessage = {
+			role: 'assistant',
+			content: fullResponse,
+			timestamp: Date.now(),
+		};
+
+		history.push(assistantMessage);
+
+		// Ensure the history is not more than maxHistory after adding the assistant's message
+		if (history.length > maxHistory) {
+
+			history.shift();
+		}
+
 		// Signal end of chat for the current conversation
 		sendMessage(room, 'END_OF_CHAT');
 
 		const logObj = {
-			'room': room,
-			'message': message,
-			'response': fullResponse
+			room,
+			message,
+			response: fullResponse,
 		};
 
 		shareData.Common.logger('Ollama Request: ' + JSON.stringify(logObj));
+
+		// Update the conversation history for the room
+		conversationHistory.set(room, history);
 	}
-	catch (err) {
+    catch (err) {
 
-		if (abortSignal.aborted) {
+        if (abortSignal.aborted) {
 
-			sendMessage(room, 'Stream aborted due to timeout');
+            sendMessage(room, 'Stream aborted due to timeout');
 		}
-		else {
-
-			throw err;
+        else {
+            
+            throw err;
 		}
 	}
 };
 
 
-const streamChatResponseWithTimeout = async ({ room, model, message }) => {
+const streamChatResponseWithTimeout = async ({ room, model, message, reset }) => {
 
 	const abortController = new AbortController();
 
 	const timeout = setTimeout(() => { abortController.abort(); }, TIMEOUT_MS);
 
 	try {
-
 		await streamChatResponse({
 			room,
 			model,
 			message,
-			abortSignal: abortController.signal
+			abortSignal: abortController.signal,
+			reset,
 		});
 	}
-	finally {
+    finally {
 
-		clearTimeout(timeout);
+        clearTimeout(timeout);
 	}
 };
 
@@ -109,15 +168,18 @@ async function streamChat(data) {
 			content: parsedData.message.content,
 		};
 
+		const reset = parsedData.message.reset || false; // Check for reset flag
+
 		await streamChatResponseWithTimeout({
 			room,
 			model,
-			message
+			message,
+			reset,
 		});
 	}
-	catch(err) {
+    catch (err) {
 
-		sendError(room, err.message);
+        sendError(room, err.message);
 	}
 }
 
@@ -125,19 +187,18 @@ async function streamChat(data) {
 async function sendMessage(room, msg) {
 
 	shareData.Common.sendSocketMsg({
-		'room': room,
-		'type': 'message',
-		'message': msg,
+		room,
+		type: 'message',
+		message: msg,
 	});
 }
 
 
 async function sendError(room, msg) {
 
-	const logData = 'Ollama Error: ' + msg;
+    const logData = 'Ollama Error: ' + msg;
 
 	shareData.Common.logger(logData);
-
 	sendMessage(room, logData);
 }
 
@@ -146,48 +207,67 @@ function start(host, model) {
 
 	if (model != undefined && model != null && model != '') {
 
-		modelCurrent = model;
+        modelCurrent = model;
 	}
-	else {
+    else {
 
 		modelCurrent = modelDefault;
 	}
 
 	try {
-	
 		ollama = new Ollama({
 			'host': host,
 		});
 	}
-	catch(err) {
+    catch (err) {
 
-		sendError('', err.message);
+        sendError('', err.message);
 	}
 }
 
 
 function stop() {
 
-	if (ollama) {
+    if (ollama) {
 
-		try {
-
+        try {
 			ollama.abort();
 			ollama = null;
 		}
-		catch(e) {}
-    }
+        catch (e) {}
+	}
+}
+
+
+function cleanupRooms() {
+
+    const now = Date.now();
+
+	conversationHistory.forEach((history, room) => {
+		// Remove messages older than maxMessageAge
+		const filteredHistory = history.filter(msg => (now - msg.timestamp) <= maxMessageAge);
+
+		// If the history becomes empty after filtering, delete the room's history
+		if (filteredHistory.length === 0) {
+
+            conversationHistory.delete(room);
+			//console.log('Removed empty history for room:', room);
+		}
+        else {
+
+            conversationHistory.set(room, filteredHistory);
+			//console.log('History cleaned and updated for room:', room, filteredHistory);
+		}
+	});
 }
 
 
 module.exports = {
-
 	start,
 	stop,
 	streamChat,
 
 	init: function(obj) {
-
 		shareData = obj;
-	},
+	}
 };

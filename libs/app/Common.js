@@ -44,13 +44,22 @@ async function getConfig(fileName) {
 }
 
 
-async function saveConfig(fileName, data) {
+async function saveConfig(fileName, data, updated) {
 
 	let err;
 	let success = false;
 
+	if ((updated == undefined || updated == null || updated == '') && updated !== false) {
+
+		updated = true;
+	}
+
 	try {
-		data.updated = new Date().toISOString();
+
+		if (updated) {
+
+			data.updated = new Date().toISOString();
+		}
 
 		fs.writeFileSync(
 			pathRoot + '/config/' + fileName,
@@ -1081,6 +1090,17 @@ function convertBoolean(param, defaultVal) {
 }
 
 
+function convertToCamelCase(obj) {
+
+	return Object.fromEntries(
+		Object.entries(obj).map(([key, value]) => [
+			key.replace(/_([a-z])/g, (_, char) => char.toUpperCase()),
+			value
+		])
+	);
+}
+
+
 function convertStringToNumeric(obj) {
 
     if (typeof obj !== 'object' || obj === null) {
@@ -1595,6 +1615,7 @@ module.exports = {
 	uuidv4,
 	makeDir,
 	convertBoolean,
+	convertToCamelCase,
 	convertStringToNumeric,
 	isNumeric,
 	sortByKey,

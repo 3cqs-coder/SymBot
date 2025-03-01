@@ -28,16 +28,14 @@ Order Amount: $${order.amount !== undefined ? order.amount : ''}. Order Quantity
     }
 });
 %>
+Below is the buy orders history for cryptocurrency pair: <%= dealTracker[dealId].config.pair %> under the DCA (Dollar Cost Average) deal ID <%= dealId %>.
 
 <%= ordersContent %>
 
-The current price as of <%= dateConvertLocal(new Date(dealTracker[dealId].info.updated)) %> is: $<%= dealTracker[dealId].info.price_last %>. Current profit at this price is <%= dealTracker[dealId].info.profit_percentage %>%.
+The current price for <%= dealTracker[dealId].config.pair %> as of <%= dateConvertLocal(new Date(dealTracker[dealId].info.updated)) %> is: $<%= dealTracker[dealId].info.price_last %>. Current profit at this price is <%= dealTracker[dealId].info.profit_percentage %>%.
 The total amount spent is $<%= sumTotal.toFixed(2) %>, and the total quantity bought is <%= qtySumTotal %>.  
 The deal started on <%= dateConvertLocal(new Date(dealTracker[dealId].date)) %> and has been active for a total duration of <%= duration %>.  
 The last buy order date is <%= lastOrderDate %>, and the average price is $<%= parseFloat(averagePrice.toFixed(10)) %>.  
-
-**All Buy Order Dates**:  
-<%= allOrderDates.join(', ') %>  
 
 Upon closing, the deal will sell the entire quantity at the final target sell price of $<%= dealTracker[dealId].info.price_target %>, achieving a profit margin of <%= dealTracker[dealId].config.dcaTakeProfitPercent %>%.
 
