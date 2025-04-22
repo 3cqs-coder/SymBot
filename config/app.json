@@ -17,6 +17,12 @@
 					"token_id": "",
 					"notify_user_id": ""
 				},
+	"cron_backup": {
+					"enabled": false,
+					"schedule": "",
+					"password": "",
+					"max": ""
+	},
 	"bots": {
 				"start_conditions": {
 										"asap": {

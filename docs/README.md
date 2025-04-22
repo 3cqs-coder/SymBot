@@ -203,6 +203,12 @@ These files are located in the `config` directory
 		- `pair_buttons` is an array of currencies that is used to automatically fill in pairs after clicking on one of these buttons when creating or updating bots.
 		-	`pair_blacklist` is an array of pairs that you don't want to trade. You can use full pairs such as BTC/USD or wildcards such as BTC/*. This can be useful to prevent bots from starting deals using stablecoin pairs such as USDT/USD as those will generally have little volatility in typical market conditions.
 
+	- `cron_backup` 
+		- `schedule` this is a crontab format schedule of the days and time to process tasks.
+		- `password` is the password that will be used to encrypt database backups. It is required and is not a plain text password, but rather an encrypted form of it, so it should not be manually entered.
+		- `max` is the maximum number of backups to keep.
+		- `enabled` is whether the cron scheduler will run and automatically process database backups.
+
 	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see [Telegram Setup](#telegram-setup)).
 
 	- `mongo_db_url` is the URL to your MongoDB instance.
@@ -501,6 +507,7 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | dealCoolDown                  | integer  | NO            |                      | Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair. |
+| profitCurrency                | string   | NO            | quote                | Currency used for the profit when trading with this bot. Can be set to "base" or "quote". |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
 ```
@@ -526,6 +533,7 @@ POST /api/bots/create
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | dealCoolDown                  | integer  | NO            |                      | Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair. |
+| profitCurrency                | string   | NO            | quote                | Currency used for the profit when trading with this bot. Can be set to "base" or "quote". |
 | startCondition                | string   | NO            | asap                 | Start deals using "*asap*" or by "*api*"                                |
 
 ```
@@ -569,6 +577,7 @@ POST /api/bots/{botId}/disable
 | dcaTakeProfitPercent| number        | NO                   |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder         | integer       | NO                   |                      | Maximum DCA / safety orders allowed per deal                            |
 | dealLast            | boolean       | NO                   | false                | Prevents a new deal from starting after this deal completes. Setting only applies to this deal. If you have multiple deals running with the same pair, this will not affect the other deals. |
+| profitCurrency      | string        | NO                   | quote                | Currency used for the profit when trading with this bot. Can be set to "base" or "quote". |
 
 ```
 POST /api/deals/{dealId}/update_deal
@@ -704,6 +713,16 @@ GET /api/markets
 GET /api/tradingview
 ```
 
+### Backup database
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| password    | string   | YES           |                      |                 |
+
+```
+POST /api/system/backup
+```
+
 ## API Sample Usage
 
 #### Create bot
@@ -725,6 +744,7 @@ curl -i -X POST \
 		"dcaTakeProfitPercent": 1.5,
 		"dcaMaxOrder": 46,
 		"dealMax": 0,
+		"profitCurrency": "quote",
 		"startCondition": "asap"
 	}' \
 http://127.0.0.1:3000/api/bots/create
@@ -749,6 +769,7 @@ curl -i -X POST \
 		"dcaTakeProfitPercent": 1.5,
 		"dcaMaxOrder": 46,
 		"dealMax": 0,
+		"profitCurrency": "quote",
 		"startCondition": "api"
 	}' \
 http://127.0.0.1:3000/api/bots/update
@@ -798,7 +819,8 @@ curl -i -X POST \
 -H 'api-key: {API-KEY}' \
 -d '{
 		"dcaTakeProfitPercent": 1.5,
-		"dcaMaxOrder": 12
+		"dcaMaxOrder": 12,
+		"profitCurrency": "base"
 	}' \
 http://127.0.0.1:3000/api/deals/{dealId}/update_deal
 ```
@@ -901,6 +923,15 @@ curl -i -X GET \
 http://127.0.0.1:3000/api/tradingview?script=true&exchange=binance&pair=BTC_USDT&theme=dark&width=1000&height=600
 ```
 
+#### Backup database
+```
+curl -X POST http://127.0.0.1:3000/api/system/backup \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{"password": "encryption_password"}' \
+-o SymBot_Backup_DB.zip.enc
+```
+
 ## Webhooks
 
 A webhook is like a special type of API. While APIs rely on one program asking for data and waiting for a response, webhooks work differently. They instantly send data from one program or service to another when a specific event happens. This eliminates the need for manual requests and makes data sharing between software systems smoother and faster.
@@ -934,7 +965,7 @@ SymBot offers built-in backup and restore capabilities that focus on safeguardin
 
 #### Backup Capabilities
 
-You can manually create encrypted backups of SymBot's database through the web interface. This ensures that all trading data, including bot configurations and trade history, is securely stored and protected from unauthorized access.
+You can manually create encrypted backups of SymBot's database through the web interface, programmatically using the integrated API, or schedule automatic backups in the web interface.  This ensures that all trading data, including bot configurations and trade history, is securely stored and protected from unauthorized access.
 
 #### Restore Capabilities
 

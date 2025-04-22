@@ -1165,6 +1165,93 @@ table#botsDeals tr:hover {
 }
 
 
+.toolTipStatic {
+
+	position: relative;
+	display: inline-block;
+	cursor: pointer;
+	color: #ffffff;
+	font-size: 0.98rem;
+	font-weight: normal;
+	background: #969696;
+	padding: 0px 6px;
+	border-radius: 100%;
+}
+
+
+.toolTipStatic .toolTipText {
+
+	position: absolute;
+	z-index: 7000;
+	top: 50%;
+	left: 120%;
+	transform: translateY(-50%);
+	font-size: 1.1rem;
+	min-width: 300px; /* Set min-width to 300px */
+	max-width: 350px; /* Set max-width */
+	width: auto; /* Allow width to adjust based on content */
+	min-height: 55px;
+	background-color: #a9d17f; /* Lightened Green */
+	border: 1px solid #8cba58; /* Slightly Darker Green Border */
+	box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.4); /* More prominent shadow */
+	color: #000;
+	text-align: left;
+	padding: 10px;
+	border-radius: 5px;
+	word-wrap: break-word; /* Allow text to wrap properly */
+	white-space: normal; /* Allow normal wrapping */
+}
+
+
+.toolTipStatic .toolTipText::before {
+
+	content: "";
+	position: absolute;
+	top: 50%;
+	right: 100%;
+	transform: translateY(-50%);
+	border-width: 9px;
+	border-style: solid;
+	border-color: transparent #8cba58 transparent transparent; /* Darker Green Arrow */
+}
+
+
+.toolTipStatic .toolTipText::after {
+
+	content: "";
+	position: absolute;
+	top: 50%;
+	right: 100%;
+	transform: translateY(-50%);
+	margin-top: 1px;
+	margin-right: -1px;
+	border-width: 8px;
+	border-style: solid;
+	border-color: transparent #a9d17f transparent transparent; /* Lighter Green Arrow Fill */
+}
+
+
+.toolTipStatic .toolTipText.tooltip-red {
+
+	background-color: #f4a489; /* Lightened Red */
+	border: 1px solid #d87b60; /* Slightly Darker Red Border */
+	box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.4); /* More prominent shadow */
+	color: #000;
+}
+
+
+.toolTipStatic .toolTipText.tooltip-red::before {
+
+	border-color: transparent #d87b60 transparent transparent; /* Darker Red Arrow */
+}
+
+
+.toolTipStatic .toolTipText.tooltip-red::after {
+
+	border-color: transparent #f4a489 transparent transparent; /* Lighter Red Arrow Fill */
+}
+
+
 .viewSettings {
 
 	position: absolute;

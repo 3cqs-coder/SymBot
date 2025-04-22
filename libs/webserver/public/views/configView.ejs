@@ -66,6 +66,135 @@
 		});
 	}
 
+	function getBackupScheduleCron() {
+
+		let success = true;
+		const checkedDays = [];
+
+		$('#backup_days input[type="checkbox"]:checked').each(function () {
+	
+			checkedDays.push($(this).val());
+		});
+
+		let time = $('#backup_time').val().trim(); // "HH:MM"
+		let dayOfMonth = $('#backup_day_month').val().trim(); // optional
+		const maxBackups = $('#backup_max').val().trim();
+		const password = $('#backup_password').val().trim();
+		const isEnabled = $('#toggleBackup').is(':checked');
+
+		let cronSchedule = '';
+		let localTime = '';
+		let utcTime = '';
+		let daysOfWeek = [];
+
+		if (isEnabled) {
+
+			if (!/^\d{1,2}:\d{2}$/.test(time)) {
+	
+				success = false;
+
+				alertBox("Backup time must be in HH:MM format");
+			}
+
+			if (password == undefined || password == null || password == '') {
+	
+				success = false;
+
+				alertBox("Backup password must be entered");
+			}
+
+			if (checkedDays.length == 0) {
+
+				success = false;
+
+				alertBox("Please select at least one day for backups");
+			}
+		}
+
+		// Convert local time string to UTC
+		const [localHour, localMinute] = time.split(':').map(Number);
+		const local = new Date();
+		local.setHours(localHour, localMinute, 0, 0);
+
+		// Get UTC values directly
+		const utcHour = local.getUTCHours();
+		const utcMinute = local.getUTCMinutes();
+
+		const cronMinute = utcMinute;
+		const cronHour = utcHour;
+		const cronDayOfMonth = dayOfMonth ? dayOfMonth : '*';
+		const cronMonth = '*';
+		const cronDayOfWeek = checkedDays.length ? checkedDays.join(',') : '*';
+
+		cronSchedule = `${cronMinute} ${cronHour} ${cronDayOfMonth} ${cronMonth} ${cronDayOfWeek}`;
+		localTime = `${String(localHour).padStart(2, '0')}:${String(localMinute).padStart(2, '0')}`;
+		utcTime = `${String(utcHour).padStart(2, '0')}:${String(utcMinute).padStart(2, '0')}`;
+		daysOfWeek = checkedDays;
+
+		return {
+			success,
+			cronSchedule,
+			localTime,
+			utcTime,
+			daysOfWeek,
+			maxBackups,
+			password,
+			enabled: isEnabled
+		}
+	}
+
+
+	function populateBackupSchedule(data) {
+
+		if (!data || !data.cronSchedule) return;
+
+		const [minute, hour, dayOfMonth, , dayOfWeek] = data.cronSchedule.split(' ');
+
+		const utc = new Date();
+		utc.setUTCHours(Number(hour), Number(minute), 0, 0);
+
+		const localHour = String(utc.getHours()).padStart(2, '0');
+		const localMinute = String(utc.getMinutes()).padStart(2, '0');
+
+		$('#backup_time').val(`${localHour}:${localMinute}`);
+
+		// Set day of month
+		if (dayOfMonth !== '*') {
+
+			$('#backup_day_month').val(dayOfMonth);
+		}
+		else {
+
+			$('#backup_day_month').val('');
+		}
+
+		// Uncheck all days first
+		$('#backup_days input[type="checkbox"]').prop('checked', false);
+
+		// Set selected days
+		if (dayOfWeek !== '*') {
+
+			dayOfWeek.split(',').forEach(d => {
+
+				$(`#backup_days input[type="checkbox"][value="${d}"]`).prop('checked', true);
+			});
+		}
+
+		// Set other fields
+		if (data.maxBackups !== undefined) $('#backup_max').val(data.maxBackups);
+		if (data.password !== undefined) $('#backup_password').val(data.password);
+		if (data.enabled !== undefined) {
+
+			//$('#toggleBackup').prop('checked', data.enabled === '1' || data.enabled === 1 || data.enabled === true);
+
+			if (data.enabled) {
+
+				$('#toggleBackup').click();
+			} 
+
+		}
+	}
+
 
 	function submitForm() {
 
@@ -86,12 +215,32 @@
 			return;
 		}
 
+		let cronData = getBackupScheduleCron();
+
+		if (!cronData.success) {
+
+			return;
+		}
+
 		$('#spinner-overlay').fadeIn(100);
+
+		let formData = $(form).serializeArray();
+
+		// Remove existing backup_enabled
+		formData = formData.filter(item => item.name !== 'backup_enabled');
+
+		formData.push({ name: 'cron_backup_schedule', value: cronData.cronSchedule });
+		formData.push({ name: 'cron_backup_days', value: cronData.daysOfWeek.join(',') });
+		formData.push({ name: 'cron_backup_local_time', value: cronData.localTime });
+		formData.push({ name: 'cron_backup_utc_time', value: cronData.utcTime });
+		formData.push({ name: 'cron_backup_max', value: cronData.maxBackups });
+		formData.push({ name: 'cron_backup_password', value: cronData.password });
+		formData.push({ name: 'cron_backup_enabled', value: cronData.enabled })
 
 		$.ajax({
 					type: 'POST',
 					url: submitUrl,
-					data: $(form).serialize(),
+					data: $.param(formData),
 					dataType: 'json',
 					success: function(data) {
 
@@ -123,6 +272,71 @@
 
 		$('[id*="toggle"]').simpleSwitch();
 		$('#msgBox').empty();
+
+		$('#backup_time').timepicker({
+			timeFormat: 'HH:mm',
+			stepHour: 1,
+			stepMinute: 5,
+			controlType: 'select',
+			oneLine: true,
+			dropdown: true,
+			scrollbar: true
+		});
+  
+		$('#showPassword').on('click', function () {
+			
+			const input = $('#backup_password');
+			const type = input.attr('type') === 'password' ? 'text' : 'password';
+			
+			input.attr('type', type);
+			$(this).text(type === 'password' ? 'Show' : 'Hide');
+		});
+
+		const cronObj =	{
+			"cronSchedule": "<%= services['cron_backup']['schedule'] %>",
+			"maxBackups": "<%= services['cron_backup']['max'] %>",
+			"password": "<%= services['cron_backup']['password'] %>",
+			"enabled": convertBoolean("<%= services['cron_backup']['enabled'] %>")
+		};
+
+		if (cronObj.password != undefined && cronObj.password != null && cronObj.password != '') {
+
+			cronObj.password = window.atob(cronObj.password);
+		}
+
+		populateBackupSchedule(cronObj);
+
+		$(document).on('keypress', '#botsCreate input', function(e) {
+
+			const id = $(this).attr('id');
+			const val = $('#' + id).val();
+
+			const charCode = (e.which) ? e.which : e.keyCode;
+			const charStr = String.fromCharCode(charCode);
+
+			if (id == undefined || id == null) {
+
+				return;
+			}
+
+			if (id.startsWith('backup_') && id.toLowerCase() != 'backup_password') {
+
+				let regEx = /[^0-9]/g;
+
+				if (id.toLowerCase() == 'backup_time') {
+
+					regEx = /[^0-9\:]/g;
+				}
+
+				if (charCode == 58 && (val.split(':').length - 1) > 0) {
+
+					return false;
+				}
+
+				if (String.fromCharCode(charCode).match(regEx)) { return false; }
+			}
+		});
+
 
 		if (convertBoolean(configMode)) {
 
@@ -405,6 +619,117 @@
 
 				</table>
 			</div>
+
+
+			<div id="scheduleBox" style="padding-top: 10px; padding-bottom: 5px;">
+
+				<b>Database Backups</b>
+				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
+				
+				<tr>
+					<td>
+						<label for="backups">Select Days:
+							<span class="toolTip">?<span class="toolTipText">
+								These are the days to schedule database backups
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+
+						<div id="backup_days" style="display: block; width: 50px;">
+							<label style="display: flex; align-items: center;">
+								<input type="checkbox" class="form-field" value="0"> Sunday
+							</label>
+							<label style="display: flex; align-items: center;">
+								<input type="checkbox" class="form-field" value="1"> Monday
+							</label>
+							<label style="display: flex; align-items: center;">
+								<input type="checkbox" class="form-field" value="2"> Tuesday
+							</label>
+							<label style="display: flex; align-items: center;">
+								<input type="checkbox" class="form-field" value="3"> Wednesday
+							</label>
+							<label style="display: flex; align-items: center;">
+								<input type="checkbox" class="form-field" value="4"> Thursday
+							</label>
+							<label style="display: flex; align-items: center;">
+								<input type="checkbox" class="form-field" value="5"> Friday
+							</label>
+							<label style="display: flex; align-items: center;">
+								<input type="checkbox" class="form-field" value="6"> Saturday
+							</label>
+						</div>
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Time:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the time to schedule database backups
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="text" id="backup_time" style="width: 60px;" class="form-field" placeholder="HH:MM">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Day of Month:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the day of the month to schedule database backups
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="number" id="backup_day_month" min="1" max="31" class="form-field" placeholder="1-31"> (Optional)
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Maximum Backups:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the maximum number of backups to keep
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="number" id="backup_max" class="form-field" placeholder="">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Encryption Password:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the password that will be used to encrypt the database backup archives
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="password" id="backup_password" class="form-field" style="width: 200px;" placeholder="">
+						<span id="showPassword" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
+					</td>
+				</tr>
+
+				<tr>
+					<td>Enabled:</td>
+
+					<td>
+						<input id="toggleBackup" name="backup_enabled" type=checkbox>
+					</td>
+				</tr>
+				</table>
+			</div>
+
 
 			<button style="margin-top: 20px" type="button" id="checkUpdates" class="btn" style="cursor: pointer;">
 				Check for Updates

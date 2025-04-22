@@ -287,6 +287,7 @@ async function init() {
 										'telegram_enabled': telegramEnabled,
 										'telegram_enabled_config': telegramEnabled,
 										'signals_3cqs_enabled': appConfig?.data?.signals?.['3CQS']?.enabled,
+										'cron_backup': appConfig['data']['cron_backup'],
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
 										'reset': isReset,
@@ -603,6 +604,7 @@ async function start() {
 	await Common.makeDir('backups');
 	await Common.makeDir('uploads');
 	await Common.makeDir('downloads');
+	await Common.makeDir('temp');
 	await Common.makeDir('logs');
 	await Common.makeDir('logs/services');
 	await Common.makeDir('logs/services/notifications');

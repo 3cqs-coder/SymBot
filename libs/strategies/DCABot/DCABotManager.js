@@ -113,7 +113,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	const aiDealTemplate = await shareData.Common.getData(pathRoot + '/libs/webserver/public/views/strategies/DCABot/ai/aiDealAnalyze.ejs');
+	const aiDealTemplate = await shareData.Common.getData(pathRoot + '/libs/webserver/public/views/strategies/DCABot/ai/aiDealAnalyzeView.ejs');
 
 	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'aiDealTemplate': aiDealTemplate.data, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
 }
@@ -328,6 +328,9 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 			const deal = dealsHistory[i];
 			const sellData = deal.sellData;
 			const orders = deal.orders;
+			const config = deal.config;
+
+			const profitCurrency = config['profitCurrency'] || 'quote';
 
 			let orderCount = 0;
 
@@ -343,13 +346,15 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 
 			if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
 
+				let profitBase;
+				let profitQuote;
 				let minMoveAmount;
 
 				const feeData = sellData.feeData;
 
 				const profitPerc = Number(sellData.profit);
 
-				const profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
+				const profitQuoteEstimate = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
 
 				if (typeof feeData == 'object' && feeData.minMoveAmount != undefined && feeData.minMoveAmount != null) {
 
@@ -360,15 +365,33 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 					minMoveAmount = orders[orderCount - 1]['orderMetadata']['minimum_movement_amount'];
 				}
 
-				let profitBaseOrig = Number(profit) / Number(sellData.price);
+				if (sellData['profitQuote']) {
 
-				let profitBase = shareData.Common.adjustDecimals(profitBaseOrig, minMoveAmount);
+					profitQuote = Number(sellData['profitQuote']);
+				}
+				else {
 
-				if (profitBase == 0) {
+					profitQuote = profitQuoteEstimate;
+				}
 
-					const qtyArr = extractQtyValues(orders);
+				if (sellData['profitBase']) {
 
-					profitBase = shareData.Common.adjustDecimals(profitBaseOrig, minMoveAmount, qtyArr);
+					profitBase = Number(sellData['profitBase']);
+				}
+				else {
+
+					let profitBaseEstimate = Number(profitQuote) / Number(sellData.price);
+
+					let profitBaseEstimateAdjusted = shareData.Common.adjustDecimals(profitBaseEstimate, minMoveAmount);
+
+					if (profitBaseEstimateAdjusted == 0) {
+
+						const qtyArr = extractQtyValues(orders);
+
+						profitBaseEstimateAdjusted = shareData.Common.adjustDecimals(profitBaseEstimate, minMoveAmount, qtyArr);
+					}
+
+					profitBase = Number(profitBaseEstimateAdjusted);
 				}
 
 				const dataObj = {
@@ -379,9 +402,10 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 									'date_start': new Date(deal.date),
 									'date_end': new Date(sellData.date),
 									'price': Number(sellData.price),
-									'profit': profit,
+									'profit': profitQuote,
 									'profit_base': profitBase,
 									'profit_percent': profitPerc,
+									'profit_currency': profitCurrency,
 									'minimum_movement_amount': minMoveAmount,
 									'safety_orders': orderCount - 1
 								};
@@ -473,7 +497,7 @@ async function apiGetActiveDeals(req, res) {
 
 	let botsActiveObj = {};
 
-	const body = req.body;
+	const body = req.query;
 
 	let active = body.active;
 
@@ -553,6 +577,7 @@ async function apiUpdateDeal(req, res) {
 	let dealLast = body.dealLast;
 	const dcaMaxOrder = body.dcaMaxOrder;
 	const dcaTakeProfitPercent = body.dcaTakeProfitPercent;
+	const profitCurrency = body.profitCurrency;
 
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
 
@@ -612,6 +637,12 @@ async function apiUpdateDeal(req, res) {
 				dealLastUpdate = true;
 			}
 
+			// Set profitCurrency if defined to not change current status
+			if (profitCurrency != undefined && profitCurrency != null && profitCurrency != '') {
+
+				config['profitCurrency'] = profitCurrency;
+			}
+
 			// Override max safety orders if set
 			if (dcaMaxOrder != undefined && dcaMaxOrder != null) {
 
@@ -642,8 +673,8 @@ async function apiUpdateDeal(req, res) {
 			// Block updating until refactoring calculations can be implemented
 			if (isUpdate && manualOrders.length > 0) {
 
-				success = false;
-				content = 'Take profit percentage or max safety orders cannot be changed when manual orders are placed';
+				//success = false;
+				//content = 'Take profit percentage or max safety orders cannot be changed when manual orders are placed';
 			}
 
 			if (success) {
@@ -695,6 +726,16 @@ async function apiUpdateDeal(req, res) {
 
 							// Update deal in database
 							let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
+
+							let recalcObj = await shareData.DCABot.recalculateOrders({
+								'exchange': undefined,
+								'dealId': dealId,
+								'orderIndex': undefined,
+								'orderNo': 1,
+								'orderId': undefined,
+								'price': undefined,
+								'dryRun': false
+							});
 
 							// Check for active deal and resume
 							let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
@@ -1636,6 +1677,7 @@ async function calculateOrders(body) {
 	botData.pair = pair;
 	botData.dealMax = body.dealMax;
 	botData.dealCoolDown = body.dealCoolDown;
+	botData.profitCurrency = body.profitCurrency;
 	botData.pairMax = body.pairMax;
 	botData.pairDealsMax = body.pairDealsMax;
 	botData.volumeMin = body.volumeMin;
@@ -1667,6 +1709,11 @@ async function calculateOrders(body) {
 	if (botData.pairDealsMax == undefined || botData.pairDealsMax == null || botData.pairDealsMax == '') {
 
 		botData.pairDealsMax = 0;
+	}
+
+	if (botData.profitCurrency == undefined || botData.profitCurrency == null || botData.profitCurrency == '') {
+
+		botData.profitCurrency = 'quote';
 	}
 
 	// Check for bot id passed in from body for update

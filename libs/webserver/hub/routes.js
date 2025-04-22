@@ -166,28 +166,15 @@ function initRoutes(router) {
 	});
 
 
-	router.get('/logs', (req, res) => {
-
-		if (req.session.loggedIn) {
-
-			shareData.Common.showLogs(req, res, true);
-		}
-		else {
-
-			res.redirect('/login');
-		}
-	});
-
-
-	router.get('/logs/download/:file', (req, res) => {
+	router.get([ '/logs', '/backups' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
-
+	
+		const type = req.path.replace('/', '');
+	
 		if (req.session.loggedIn) {
 
-			let fileName = req.params.file;
-
-			shareData.Common.downloadLog(fileName, req, res);
+			shareData.Common.showFiles(type, req, res, true);
 		}
 		else {
 
@@ -196,7 +183,25 @@ function initRoutes(router) {
 	});
 
 
-	router.all('*', (req, res) => {
+	router.get([ '/logs/download/:file', '/backups/download/:file' ], (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+	
+		if (req.session.loggedIn) {
+
+			const fileName = req.params.file;
+			const type = req.path.includes('/logs/') ? 'logs' : 'backups';
+
+			shareData.Common.downloadFile(fileName, type, req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.all('*wildcard', (req, res) => {
 
 		redirectNotFound(res);
 	});

@@ -791,6 +791,22 @@
 
 				</td> <td><input id="dealCoolDown" name="dealCoolDown" value="<%- botData.dealCoolDown %>" class="form-field"> Seconds</td></tr>
 
+				<tr><td>Profit Currency: 
+
+					<span class="toolTip">?<span class="toolTipText">
+					Currency used for the profit when trading with this bot.
+					</span></span>
+	
+				</td>
+
+				<td>
+					<select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 200px; background-color: #ffffff; cursor: pointer;">
+					  <option value="base" <%= botData.profitCurrency === 'base' ? 'selected' : '' %>>Base</option>
+					  <option value="quote" <%= botData.profitCurrency !== 'base' ? 'selected' : '' %>>Quote</option>
+					</select>
+				</td>				  
+				</tr>
+
 				<tr id="startConditionFirst"><td>Start Condition:</td> <td><select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select>
 					<span id="infoBox" style="position: relative; display: flex; justify-content: left; padding-top: 5px;"></span>
 				</td></tr>

@@ -153,6 +153,12 @@ const getProxyMiddleware = async (appId) => {
 
 						//console.log('Proxy Request:', req.method, req.originalUrl);
 
+						const realIp = req.headers['x-forwarded-for'] 
+							? `${req.headers['x-forwarded-for']}, ${req.socket.remoteAddress}`
+							: req.socket.remoteAddress;
+
+						proxyReq.setHeader('X-Forwarded-For', realIp);
+
 						if (req.headers.cookie) {
 
 							proxyReq.setHeader('Cookie', req.headers.cookie);

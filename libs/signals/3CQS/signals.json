@@ -207,6 +207,22 @@
 			"description": "SymSync 90"
 		},
 		{
+			"id": 63,
+			"description": "SymSync 80"
+		},
+		{
+			"id": 64,
+			"description": "SymSync 70"
+		},
+		{
+			"id": 65,
+			"description": "SymSync 60"
+		},
+		{
+			"id": 66,
+			"description": "SymSync 50"
+		},
+		{
 			"id": 9,
 			"description": "Super Volatility"
 		},

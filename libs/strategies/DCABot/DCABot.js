@@ -462,38 +462,15 @@ async function start(dataObj, startId) {
 
 						let dcaOrderSize = amount / price;
 
-						// Get adjustments without exchange fee since already previously included
-						const adjustments = await calculateAdjustments({
-
-							'exchange': exchange,
-							'pair': pair,
-							'price': price,
-							'amount': amount,
-							'orderSize': dcaOrderSize,
-							'exchangeFee': 0,
-							'minMoveAmount': null
-						});
-
-						// Call again to get fees
-						const adjustmentsFees = await calculateAdjustments({
-
-							'exchange': exchange,
-							'pair': pair,
-							'price': price,
-							'amount': amount,
-							'orderSize': dcaOrderSize,
-							'exchangeFee': config.exchangeFee,
-							'minMoveAmount': minMoveAmount
-						});
-
-						// Set fees in original adjustments
-						for (let key in adjustments) {
-
-							if (adjustments[key] == undefined || adjustments[key] == null || adjustments[key] == 0) {
-
-								adjustments[key] = adjustmentsFees[key];
-							}
-						}
+						const adjustments = await getAdjustedOrder(
+							exchange, 
+							pair, 
+							price, 
+							amount, 
+							dcaOrderSize, 
+							config.exchangeFee, 
+							minMoveAmount
+						);
 
 						dcaOrderSize = adjustments['order_qty'];
 						amount = adjustments['order_amount'];
@@ -1096,6 +1073,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				for (let i = 0; i < orders.length; i++) {
 
 					let buyOrderId = '';
+					let buyOrderPrice;
 					let buyOrderInvalid = false;
 					let buyOrderStatusInvalid = false;
 					let buyNSF = false;
@@ -1170,12 +1148,20 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								else {
 
 									buyOrderId = buy['data']['id'];
+									buyOrderPrice = buy['data_order']['price'];
 								}
 							}
 
 							if (buySuccess) {
 
-								await updateOrderDeal(dealId, i, buyOrderId, orders);
+								let recalcPrice = price;
+
+								if (buyOrderPrice != undefined && buyOrderPrice != null && buyOrderPrice != '' && buyOrderPrice !== 0) {
+
+									recalcPrice = buyOrderPrice;
+								}
+
+								const orderUpdated = await updateOrderDeal(dealId, i, buyOrderId, orders);
 
 								if (shareData.appData.verboseLog) {
 		
@@ -1200,8 +1186,19 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										)
 									);
 								}
+
+								// Recalculate orders
+								let recalcObj = await recalculateOrders({
+									'exchange': exchange,
+									'dealId': dealId,
+									'orderIndex': undefined,
+									'orderNo': orderUpdated.orderNo,
+									'orderId': undefined,
+									'price': recalcPrice,
+									'dryRun': false
+								});
 							}
-							
+
 							await updateDealTracker({
 														'exchange': exchange,
 														'deal_id': dealId,
@@ -1226,6 +1223,10 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							if (deal.isStart == 1) {
 
+								let qtySumSellOrder;
+
+								let profitCurrency = config['profitCurrency'];
+
 								let sellOrderId = '';
 								let sellNSF = false;
 								let sellSuccess = true;
@@ -1241,6 +1242,16 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								const qtySumSellBase = await filterAmount(exchange, pair, (Number(qtySumSell) - Number(profitBase)));
 
+								// Default profit currency to quote if not defined or profit is negative
+								if (!profitCurrency || profitCurrency == 'quote' || Number(profitBase) <= 0) {
+
+									qtySumSellOrder = qtySumSell;
+								}
+								else {
+
+									qtySumSellOrder = qtySumSellBase;
+								}
+
 								// Calculate profit based on new exchange fee percent
 								//const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, exchangeFeePercent);
 								//const profitPercFinal = profitData['profit_percentage'];
@@ -1248,7 +1259,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 								if (!config.sandBox && !isDealCancel && !cancelOnly) {
 
-									const sell = await sellOrder(exchange, dealId, pair, qtySumSell, priceFiltered);
+									const sell = await sellOrder(exchange, dealId, pair, qtySumSellOrder, priceFiltered);
 
 									sellNSF = sell.nsf;
 
@@ -1304,10 +1315,13 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 														'orderId': sellOrderId,
 														'qtySum': currentOrder.qtySum,
 														'qtySumSell': qtySumSell,
+														'qtySumSellOrder': qtySumSellOrder,
 														'price': price,
 														'average': currentOrder.average,
 														'target': currentOrder.target,
 														'profit': profitPercFinal,
+														'profitBase': profitBase,
+														'profitQuote': profitQuote,
 														'feeData': feeData
 													 };
 
@@ -2249,7 +2263,7 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 }
 
 
-const verifyInvalidOrder = async (count, mins, exchange, pair, botId, dealId, orderId, orderNo, ordersArr) => {
+const verifyInvalidOrder = async (count, mins, exchange, pair, botId, dealId, orderId, orderIndex, ordersArr) => {
 
 	let retryMins = 2;
 
@@ -2285,7 +2299,7 @@ const verifyInvalidOrder = async (count, mins, exchange, pair, botId, dealId, or
 
 				let msg = 'Attempt #' + count + ' to verify order ID ' + orderId + ' for deal ID ' + dealId + ' successful.';
 
-				await updateOrderDeal(dealId, orderNo, orderId, orders);
+				await updateOrderDeal(dealId, orderIndex, orderId, orders);
 
 				await sendDealMessage('info', msg);
 
@@ -2317,7 +2331,7 @@ const verifyInvalidOrder = async (count, mins, exchange, pair, botId, dealId, or
 
 					msg += ' Trying again in ' + retryMins + ' minutes.';
 
-					verifyInvalidOrder(count, retryMins, exchange, pair, botId, dealId, orderId, orderNo, orders);
+					verifyInvalidOrder(count, retryMins, exchange, pair, botId, dealId, orderId, orderIndex, orders);
 				}
 				else {
 
@@ -2439,6 +2453,17 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 		orderPrice = verifyData['order_price'];
 		orderInvalid = verifyData['order_invalid'];
 		statusInvalid = verifyData['status_invalid'];
+
+		// Price returned may not match precision
+		if (orderPrice) {
+
+			const priceFiltered = await filterPrice(exchange, pair, orderPrice);
+
+			if (priceFiltered) {
+
+				orderPrice = priceFiltered;
+			}
+		}
 
 		if (statusInvalid) {
 
@@ -2926,6 +2951,45 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 				   };
 
 	return resObj;
+}
+
+
+const getAdjustedOrder = async (exchange, pair, price, amount, orderSize, exchangeFee, minMoveAmount) => {
+
+	const finalAdjustments = {};
+
+	// Get adjustments without exchange fee since already previously included
+	const baseAdjustments = await calculateAdjustments({
+		exchange,
+		pair,
+		price,
+		amount,
+		orderSize,
+		exchangeFee: 0,
+		minMoveAmount: null
+	});
+
+	// Call again to get fees
+	const feeAdjustments = await calculateAdjustments({
+		exchange,
+		pair,
+		price,
+		amount,
+		orderSize,
+		exchangeFee,
+		minMoveAmount
+	});
+
+	// Set fees in original adjustments
+	for (const key of Object.keys(feeAdjustments)) {
+
+		const base = baseAdjustments[key];
+		const fee = feeAdjustments[key];
+
+		finalAdjustments[key] = (base === undefined || base === null || base === 0) ? fee : base;
+	}
+
+	return finalAdjustments;
 }
 
 
@@ -3552,17 +3616,21 @@ async function deleteDeal(dealId) {
 }
 
 
-const updateOrderDeal = async (dealId, orderNo, orderId, orders) => {
+const updateOrderDeal = async (dealId, orderIndex, orderId, orders) => {
 
-	orders[orderNo].filled = 1;
-	orders[orderNo].orderId = orderId;
-	orders[orderNo].dateFilled = new Date();
+	orders[orderIndex].filled = 1;
+	orders[orderIndex].orderId = orderId;
+	orders[orderIndex].dateFilled = new Date();
 
 	await Deals.updateOne({
 		dealId: dealId
 	}, {
 		orders: orders
 	});
+
+	const orderUpdated = orders[orderIndex];
+
+	return orderUpdated;
 }
 
 
@@ -4140,6 +4208,26 @@ async function getDealInfo(data) {
 
 		const maxFundsObj = await calculateMaxFunds(config);
 
+		const estimateObj = await estimateFunds({
+				'dealId': undefined,
+				'sum': currentOrder.sum,
+				'qtySum': currentOrder.qtySum,
+				'targetProfitPercent': config.dcaTakeProfitPercent,
+				'targetPrice': currentOrder.target,
+				'price': price,
+				'exchangeFee': config.exchangeFee
+		});
+
+		const estAmountNet = Common.adjustDecimals(estimateObj['amount_net'], price, currentOrder.average, currentOrder.target);
+		const estAmountGross = Common.adjustDecimals(estimateObj['amount_gross'], price, currentOrder.average, currentOrder.target);
+		const estAvgNet = Common.adjustDecimals(estimateObj['average_price_net'], price, currentOrder.average, currentOrder.target);
+		const estAvgGross = Common.adjustDecimals(estimateObj['average_price_gross'], price, currentOrder.average, currentOrder.target);
+		const estTargetNet = Common.adjustDecimals(estimateObj['target_price_net'], price, currentOrder.average, currentOrder.target);
+		const estTargetGross = Common.adjustDecimals(estimateObj['target_price_gross'], price, currentOrder.average, currentOrder.target);
+		const estAvgChangePerc = estimateObj['average_price_change_percent'];
+		const estTargetChangePerc = estimateObj['target_price_change_percent'];
+		const estFeeTotal = estimateObj['exchange_fee_total'];
+
 		const dealInfo = {
 							'updated': updated,
 							'active': active,
@@ -4158,6 +4246,17 @@ async function getDealInfo(data) {
 							'profit_base': currentProfitBase,
 							'profit_percentage': profitPerc,
 							'take_profit': takeProfit,
+							'estimates': {
+								'amount_net': estAmountNet,
+								'amount_gross': estAmountGross,
+								'price_average_net': estAvgNet,
+								'price_average_gross': estAvgGross,
+								'price_target_net': estTargetNet,
+								'price_target_gross': estTargetGross,
+								'price_average_change_percent': estAvgChangePerc,
+								'price_target_change_percent': estTargetChangePerc,
+								'exchange_fee_total': estFeeTotal
+							},
 							'deal_count': config.dealCount,
 							'deal_max': config.dealMax,
 							'max_deviation': maxFundsObj.max_deviation,
@@ -4414,30 +4513,39 @@ async function sendNotificationStart(botName, dealId, pair) {
 
 async function sendNotificationFinish(botName, dealId, pair, sellData) {
 
-	let orderCount = 0;
-
 	let msg;
 	let msgLoss;
 	let msgProfit;
+	let profit;
+
+	pair = pair.toUpperCase();
+
+	const pairArr = pair.split('/');
+
+	const pairBase = pairArr[0];
+	const pairQuote = pairArr[1];
 
 	const dealData = await getDeals({ 'dealId': dealId });
-	const profitPerc = Number(sellData.profit);
 
 	const deal = dealData[0];
-	const orders = deal.orders;
+	const config = deal.config;
 
-	for (let x = 0; x < orders.length; x++) {
+	const profitQuote = Number(sellData.profitQuote);
+	const profitBase = Number(sellData.profitBase);
+	const profitPerc = Number(sellData.profit);
 
-		const order = orders[x];
+	const profitCurrency = config['profitCurrency'];
 
-		if (order['filled']) {
-
-			orderCount++;
-		}
-	}
-
-	const profit = Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
 	const duration = Common.timeDiff(new Date(), new Date(deal['date']));
+
+	if (!profitCurrency || profitCurrency == 'quote' || Number(profitBase) <= 0) {
+
+		profit = '$' + profitQuote + ' ' + pairQuote;
+	}
+	else {
+
+		profit = profitBase + ' ' + pairBase;
+	}
 
 	try {
 
@@ -4450,7 +4558,7 @@ async function sendNotificationFinish(botName, dealId, pair, sellData) {
 
 	}
 
-	if (profit <= 0) {
+	if (profitQuote <= 0) {
 
 		msg = msgLoss;
 	}
@@ -5015,10 +5123,117 @@ async function panicSellDeal(dealId) {
 }
 
 
-async function addFundsDeal(dealId, volume) {
+async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchangeFee, targetProfitPercent, maxFunds = Infinity }) {
+
+	const target = parseFloat(targetPrice);
+	const qtySumFloat = parseFloat(qtySum);
+	const sumFloat = parseFloat(sum);
+	const currentPrice = parseFloat(price);
+
+	const totalFeeRate = (parseFloat(exchangeFee) / 100) * 2;
+	const profitMultiplier = 1 + (parseFloat(targetProfitPercent) / 100);
+	const requiredValue = (sumFloat * profitMultiplier) / (1 - totalFeeRate);
+	const additionalValueNeeded = requiredValue - (currentPrice * qtySumFloat);
+
+	let amountWithFees = 0;
+	let avgPrice_funds = 0;
+	let avgChangePercent = 0;
+	let targetChangePercent = 0;
+	let success = true;
+	let message = '';
+
+
+	if (target > currentPrice && additionalValueNeeded > 0) {
+
+		const additionalQty = additionalValueNeeded / (target - currentPrice);
+		amountWithFees = additionalQty * currentPrice;
+		amountWithFees = amountWithFees / (1 - totalFeeRate);
+	
+		if (amountWithFees > maxFunds) {
+
+			success = false;
+			message = 'Insufficient funds to reach target profit';
+			amountWithFees = maxFunds;
+		}
+	}
+	else {
+
+		// No funds needed or not possible to calculate
+		success = false;
+		amountWithFees = 0;
+	}
+
+	let totalFee = amountWithFees * totalFeeRate;
+
+	// Round gross and fee
+	amountWithFees = Math.round((amountWithFees + Number.EPSILON) * 100) / 100;
+	totalFee = Math.round((totalFee + Number.EPSILON) * 100) / 100;
+
+	const amountWithoutFees = Math.round((amountWithFees - totalFee + Number.EPSILON) * 100) / 100;
+
+	// New average price (net-based)
+	const addedQty_net = amountWithoutFees / currentPrice;
+	const newQtySum_net = qtySumFloat + addedQty_net;
+	const newSum_net = sumFloat + amountWithoutFees;
+	const avgPrice_net = newQtySum_net > 0 ? newSum_net / newQtySum_net : 0;
+
+	// New average price (gross-based)
+	const addedQty_gross = amountWithFees / currentPrice;
+	const newQtySum_gross = qtySumFloat + addedQty_gross;
+	const newSum_gross = sumFloat + amountWithFees;
+	const avgPrice_gross = newQtySum_gross > 0 ? newSum_gross / newQtySum_gross : 0;
+
+	// Calculate new target price based on new average and desired profit + fees
+	const newTargetPrice_net = avgPrice_net * (1 + totalFeeRate + parseFloat(targetProfitPercent) / 100);
+	const newTargetPrice_gross = avgPrice_gross * (1 + totalFeeRate + parseFloat(targetProfitPercent) / 100);
+
+	// Process new estimated funds for average price accuracy
+	if (dealId != undefined && dealId != null && dealId != '') {
+
+		const addFundsObj = await addFundsDeal(dealId, avgPrice_net, true);
+
+		if (addFundsObj.success) {
+			const addFundsOrders = addFundsObj.orders;
+			const filledOrders = addFundsOrders.filter(item => item.filled == 1);
+			const currentOrder = filledOrders.pop();
+
+			avgPrice_funds = parseFloat(currentOrder.average);
+		}
+	}
+
+	if (avgPrice_net < (sumFloat / qtySumFloat)) {
+	
+		const prevAvg = sumFloat / qtySumFloat;
+		avgChangePercent = ((prevAvg - avgPrice_net) / prevAvg) * 100;
+	}
+
+	if (newTargetPrice_net < target) {
+		
+		targetChangePercent = ((target - newTargetPrice_net) / target) * 100;
+	}
+
+	return {
+		success,
+		message,
+		amount_net: amountWithoutFees,
+		amount_gross: amountWithFees,
+		exchange_fee_total: totalFee,
+		average_price_net: Number(avgPrice_net.toFixed(8)),
+		average_price_gross: Number(avgPrice_gross.toFixed(8)),
+		average_price_add_funds: Number(avgPrice_funds.toFixed(8)),
+		target_price_net: Number(newTargetPrice_net.toFixed(8)),
+		target_price_gross: Number(newTargetPrice_gross.toFixed(8)),
+		average_price_change_percent: Number(avgChangePercent.toFixed(2)),
+		target_price_change_percent: Number(targetChangePercent.toFixed(2))
+	};
+}
+
+
+async function addFundsDeal(dealId, volume, dryRun) {
 
 	let success = false;
 	let isUpdated = false;
+	let ordersReturn = [];
 	let msg = 'Success';
 
 	const deal = await Deals.findOne({
@@ -5032,14 +5247,9 @@ async function addFundsDeal(dealId, volume) {
 
 		const configDeal = JSON.parse(JSON.stringify(deal.config));
 		const orders = JSON.parse(JSON.stringify(deal.orders));
-
 		const config = await initConfigData(configDeal);
 
-		Common.logger(
-			colors.red.bold('Add Funds to deal ID ' + dealId + ' requested.')
-		);
-
-		let minMoveAmount;
+		Common.logger(colors.red.bold('Add Funds to deal ID ' + dealId + ' requested.'));
 
 		let oldOrders = orders;
 		let exchange = await connectExchange(config);
@@ -5048,332 +5258,408 @@ async function addFundsDeal(dealId, volume) {
 
 			volume = await filterPrice(exchange, config.pair, volume);
 
-			for (let i = 0; i < oldOrders.length; i++) {
+			const allOrdersFilled = oldOrders.every(order => order.filled);
 
-				if (!oldOrders[i].filled && !isUpdated) {
+			async function handleOrder(order, previousOrder = null) {
 
-					const symbolData = await getSymbol(exchange, config.pair);
-					const symbol = symbolData.data;
+				const symbolData = await getSymbol(exchange, config.pair);
+				const symbol = symbolData.data;
+				const askPrice = symbol.ask;
 
-					const bidPrice = symbol.bid;
-					const askPrice = symbol.ask;
+				let price = await filterPrice(exchange, config.pair, askPrice);
+				let amount = await filterPrice(exchange, config.pair, volume);
+				let qty = await filterAmount(exchange, config.pair, (parseFloat(volume) / parseFloat(askPrice)));
 
-					let newOrder = Object.assign({}, oldOrders[i]);
-					let price = await filterPrice(exchange, config.pair, askPrice);
-					let amount = await filterPrice(exchange, config.pair, volume);
-					let qty = await filterAmount(exchange, config.pair, ((volume) / askPrice));
+				let minMoveAmount = oldOrders[0]?.orderMetadata?.minimum_movement_amount;
 
-					// Get minimum movement amount from first order
-					try {
+				const adjustments = await calculateAdjustments({
+					exchange,
+					pair: config.pair,
+					price,
+					amount,
+					orderSize: qty,
+					exchangeFee: config.exchangeFee,
+					minMoveAmount,
+				});
 
-						minMoveAmount = oldOrders[0]['orderMetadata']['minimum_movement_amount'];
-					}
-					catch (e) {}
+				qty = adjustments.order_qty;
+				amount = adjustments.order_amount;
 
-					const adjustments = await calculateAdjustments({
+				let qtySum = parseFloat(qty) + parseFloat(previousOrder?.qtySum || 0);
+				qtySum = await filterAmount(exchange, config.pair, qtySum);
 
-						'exchange': exchange,
-						'pair': config.pair,
-						'price': price,
-						'amount': amount,
-						'orderSize': qty,
-						'exchangeFee': config.exchangeFee,
-						'minMoveAmount': minMoveAmount
-					});
+				let orderSum = parseFloat(amount) + parseFloat(previousOrder?.sum || 0);
+				orderSum = await filterPrice(exchange, config.pair, orderSum);
 
-					qty = adjustments['order_qty'];
-					amount = adjustments['order_amount'];
+				// Round final amount
+				orderSum = Math.round(orderSum * 100) / 100;
 
-					let qtySum = (parseFloat(qty) + parseFloat(oldOrders[i - 1].qtySum));
-					qtySum = await filterAmount(exchange, config.pair, qtySum);
+				const avgPrice = await filterPrice(exchange, config.pair, (orderSum / qtySum));
 
-					let orderSum = (parseFloat(amount) + parseFloat(oldOrders[i - 1].sum));
-					orderSum = await filterPrice(exchange, config.pair, orderSum);
+				const targetObj = {
+					exchange,
+					pair: config.pair,
+					price: avgPrice,
+					takeProfit: config.dcaTakeProfitPercent,
+					exchangeFee: config.exchangeFee,
+				};
 
-					const avgPrice = await filterPrice(exchange, config.pair, (parseFloat(orderSum) / parseFloat(qtySum)));
+				const targetPrice = await calculateTargetPrice(targetObj);
 
-					let targetObj = {
-										'exchange': exchange,
-										'pair': config.pair,
-										'price': avgPrice,
-										'takeProfit': config.dcaTakeProfitPercent,
-										'exchangeFee': config.exchangeFee
-									};
+				if (targetPrice > 0) {
 
-					let targetPrice = await calculateTargetPrice(targetObj);
+					let newOrder = {
+						...order,
+						price,
+						average: avgPrice,
+						target: targetPrice,
+						qty,
+						amount,
+						qtySum,
+						sum: orderSum,
+						filled: 1,
+						manual: true,
+						orderMetadata: adjustments,
+						dateFilled: new Date()
+					};
 
-					if (targetPrice != undefined && targetPrice != null && targetPrice != false && targetPrice > 0) {
+					if (!config.sandBox) {
 
-						let buyOrderId = '';
+						const buy = await buyOrder(exchange, dealId, config.pair, qty, price);
 
-						success = true;
-						isUpdated = true;
+						if (!buy.success) {
 
-						if (!config.sandBox) {
+							msg = buy;
 
-							const buy = await buyOrder(exchange, dealId, config.pair, qty, price);
-
-							if (!buy.success) {
-	
-								success = false;
-								isUpdated = false;
-								msg = buy;
-							}
-							else {
-
-								buyOrderId = buy['data']['id'];
-							}
+							return;
 						}
 
-						newOrder.orderId = buyOrderId;
-						newOrder.price = price;
-						newOrder.average = avgPrice;
-						newOrder.target = targetPrice;
-						newOrder.qty = qty;
-						newOrder.amount = amount;
-						newOrder.qtySum = qtySum;
-						newOrder.sum = orderSum;
-						newOrder.manual = true;
-						newOrder.filled = 1;
-						newOrder.orderMetadata = adjustments;
-						newOrder.dateFilled = new Date();
+						newOrder.orderId = buy.data.id;
+					}
 
-						oldOrders.splice(i, 0, newOrder);
+					let insertionIndex;
 
-						orderNo = newOrder.orderNo;
+					// Insert the newOrder into oldOrders first
+					if (previousOrder) {
+
+						const previousIndex = oldOrders.indexOf(previousOrder);
+
+						insertionIndex = previousIndex + 1;
+						oldOrders.splice(insertionIndex, 0, newOrder);
 					}
 					else {
 
-						success = false;
-
-						const obj = targetObj;
-						delete obj['exchange'];
-
-						msg = 'Unable to calculate target price: ' + JSON.stringify(obj);
+						oldOrders.push(newOrder);
+						insertionIndex = oldOrders.length - 1;
 					}
+
+					// Set orderNo based on insertion index
+					newOrder.orderNo = insertionIndex + 1;
+
+					// Increment orderNo for all subsequent orders
+					for (let j = insertionIndex + 1; j < oldOrders.length; j++) {
+
+						let orderNoOrig = oldOrders[j].orderNo;
+
+						oldOrders[j].orderNo = Number(orderNoOrig) + 1;
+					}
+
+					orderNo = newOrder.orderNo;
+
+					isUpdated = true;
+					success = true;
 				}
-				else if (isUpdated) {
+				else {
 
-					let price = Percentage.subPerc(
-						(oldOrders[i - 1].price),
-						(config.dcaOrderStartDistance)
-					);
-
-					price = await filterPrice(exchange, config.pair, price);
-
-					let orderSize = (oldOrders[i].qty);
-
-					orderSize = await filterAmount(exchange, config.pair, orderSize);
-
-					let orderAmount = parseFloat(orderSize) * parseFloat(price);
-					orderAmount = await filterPrice(exchange, config.pair, orderAmount);
-
-					let orderSum = parseFloat(orderAmount) + parseFloat(oldOrders[i - 1].sum);
-					orderSum = await filterPrice(exchange, config.pair, orderSum);
-
-					let orderQtySum = parseFloat(orderSize) + parseFloat(oldOrders[i - 1].qtySum);
-					orderQtySum = await filterAmount(exchange, config.pair, orderQtySum);
-
-					const avgPrice = await filterPrice(exchange, config.pair, parseFloat(orderSum) / parseFloat(orderQtySum));
-
-					let targetPrice = await calculateTargetPrice({
-
-						'exchange': exchange,
-						'pair': config.pair,
-						'price': avgPrice,
-						'takeProfit': config.dcaTakeProfitPercent,
-						'exchangeFee': config.exchangeFee
-					});
-
-					oldOrders[i].orderNo = Number(oldOrders[i].orderNo) + 1;
-					oldOrders[i].price = price;
-					oldOrders[i].average = avgPrice;
-					oldOrders[i].target = targetPrice;
-					oldOrders[i].qty = orderSize;
-					oldOrders[i].amount = orderAmount;
-					oldOrders[i].qtySum = orderQtySum;
-					oldOrders[i].sum = orderSum;
+					msg = 'Unable to calculate target price: ' + JSON.stringify(targetObj);
 				}
 			}
 
-			//console.table(oldOrders);
+			if (allOrdersFilled) {
+
+				await handleOrder(null, oldOrders[oldOrders.length - 1]);
+			}
+			else {
+
+				for (let i = 0; i < oldOrders.length; i++) {
+
+					if (!oldOrders[i].filled && !isUpdated) {
+
+						await handleOrder(oldOrders[i], i > 0 ? oldOrders[i - 1] : null);
+					}
+				}
+			}
 
 			if (success) {
 
-				const botId = deal.botId;
-				const config = deal.config;
+				let dryRunOrders;
 
-				let dataUpdate = await updateDeal(botId, dealId, {
-					config: config,
-					orders: oldOrders,
+				ordersReturn = oldOrders;
+
+				if (!dryRun) {
+
+					const botId = deal.botId;
+
+					await updateDeal(botId, dealId, {
+						config: deal.config,
+						orders: oldOrders
+					});
+				}
+				else {
+
+					// Pass orders to recalculate without updating db when using dryRun
+					dryRunOrders = oldOrders;
+				}
+
+				let recalcObj = await recalculateOrders({
+					'exchange': exchange,
+					'dealId': dealId,
+					'orders': dryRunOrders,
+					'orderIndex': undefined,
+					'orderNo': orderNo,
+					'orderId': undefined,
+					'price': undefined,
+					'dryRun': dryRun
 				});
 
-				// Recalculate orders
-				// let data = await recalculateOrders(dealId, orderNo);
+				if (recalcObj.success) {
+
+					ordersReturn = null;
+
+					ordersReturn = recalcObj.orders;
+				}
 			}
 		}
 		else {
 
-			success = false;
 			msg = 'Unable to connect to exchange';
 		}
 	}
 	else {
 
-		success = false;
 		msg = 'Deal ID not found';
 	}
 
-	return ( { 'success': success, 'data': msg } );
+	return { 'success': success, 'data': msg, 'orders': ordersReturn };
 }
 
 
-async function recalculateOrders(dealId, orderNo, orderId, newPrice) {
+async function recalculateOrders(params) {
 
-	let success = true;
+	let deal;
+	let config;
+	let success = false;
+	let orderFound = false;
+	let oldOrders = [];
+	let ordersReturn = [];
+	let orderIndex = -1;
 	let msg = 'Success';
 
-	const deal = await Deals.findOne({
-		dealId: dealId,
-		status: 0,
+	deal = await Deals.findOne({
+		dealId: params.dealId,
+		status: 0
 	});
 
 	if (!deal) {
 
-		success = false;
 		msg = 'Deal ID not found';
 	}
 	else {
 
-		const config = JSON.parse(JSON.stringify(deal.config));
-		let oldOrders = JSON.parse(JSON.stringify(deal.orders));
+		config = await initConfigData(JSON.parse(JSON.stringify(deal.config)));
+		oldOrders = params.orders || JSON.parse(JSON.stringify(deal.orders));
 
-		Common.logger(colors.red.bold('Recalculating orders for deal ID ' + dealId));
-
-		let exchange;
+		Common.logger(colors.red.bold(`Recalculating orders for deal ID ${params.dealId}`));
 
 		try {
 
-			exchange = await connectExchange(config);
+			if (!params.exchange) {
+
+				params.exchange = await connectExchange(config);
+				await params.exchange.loadMarkets();
+			}
 		}
 		catch (error) {
 
 			Common.logger('Error connecting to exchange: ' + error.message);
-
-			success = false;
 			msg = 'Error connecting to exchange';
 		}
 
-		if (exchange) {
+		['orderNo'].forEach(key => {
+			
+			if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
 
-			await exchange.loadMarkets();
+				params[key] = Number(params[key]);
+			}
+		});
 
-			// Determine the order to update
-			let orderFound = false;
-			let orderIndex = -1;
+		if (params.exchange) {
 
-			if (orderId !== undefined) {
+			if (params.orderIndex !== undefined && params.orderIndex !== null && params.orderIndex !== '') {
 
-				// Search by orderId
-				for (let i = 0; i < oldOrders.length; i++) {
+				const parsedIndex = parseInt(params.orderIndex, 10);
 
-					if (oldOrders[i].orderId === orderId) {
+				if (isNaN(parsedIndex)) {
 
-						orderIndex = i;
-						orderFound = true;
+					msg = 'Order index must be a valid number';
+				}
+				else if (parsedIndex < 0 || parsedIndex >= oldOrders.length) {
 
-						break;
+					msg = 'Order index out of bounds';
+				}
+				else {
+
+					orderFound = true;
+					orderIndex = parsedIndex;
+				}
+			}
+			else {
+
+				if (params.orderId) {
+
+					for (let i = 0; i < oldOrders.length; i++) {
+
+						if (oldOrders[i].orderId === params.orderId) {
+
+							orderIndex = i;
+							orderFound = true;
+
+							break;
+						}
+					}
+				}
+				else if (typeof params.orderNo === 'number') {
+
+					for (let i = 0; i < oldOrders.length; i++) {
+
+						if (Number(oldOrders[i].orderNo) === params.orderNo) {
+
+							orderIndex = i;
+							orderFound = true;
+
+							break;
+						}
 					}
 				}
 			}
-			else if (typeof orderNo === 'number') {
 
-				// Use orderNo to find the order
-				for (let i = 0; i < oldOrders.length; i++) {
-
-					if (Number(oldOrders[i].orderNo) === orderNo) {
-
-						orderIndex = i;
-						orderFound = true;
-
-						break;
-					}
-				}
-			}
-
-			// If neither orderId nor valid orderNo is found, set success to false
 			if (!orderFound) {
 
-				success = false;
 				msg = 'Order ID or orderNo not found';
 			}
 			else {
 
-				// Update the specific order with the new price or existing price if newPrice is undefined
-				const updatedPrice = newPrice !== undefined ? newPrice : oldOrders[orderIndex].price;
+				// Update specified order with adjusted values
+				const updatedPrice = params.price !== undefined ? params.price : oldOrders[orderIndex].price;
 
-				oldOrders[orderIndex].price = await filterPrice(exchange, config.pair, updatedPrice);
-				oldOrders[orderIndex].amount = await filterPrice(exchange, config.pair, oldOrders[orderIndex].qty * updatedPrice);
+				const adjustedOrder = await getAdjustedOrder(
+					params.exchange,
+					config.pair,
+					updatedPrice,
+					oldOrders[orderIndex].amount,
+					oldOrders[orderIndex].qty,
+					config.exchangeFee,
+					config.minMoveAmount
+				);
 
-				// Recalculate quantities and amounts, and update running totals
+				oldOrders[orderIndex].price = updatedPrice;
+				oldOrders[orderIndex].amount = adjustedOrder.order_amount;
+				oldOrders[orderIndex].qty = adjustedOrder.order_qty;
+
+				// Recalculate all orders
 				let runningQtySum = 0;
 				let runningSum = 0;
+				let allTargetsValid = true;
 
 				for (let i = 0; i < oldOrders.length; i++) {
 
 					let currentOrder = oldOrders[i];
 
-					/*
-					if (currentOrder.filled) {
-					    // Do nothing with filled orders
-					    continue;
+					if (currentOrder.filled && currentOrder.manual) {
+
+						runningQtySum = parseFloat(currentOrder.qtySum);
+						runningSum = parseFloat(currentOrder.sum);
 					}
-					*/
+					else {
 
-					// Calculate quantities and amounts
-					currentOrder.qtySum = runningQtySum + parseFloat(currentOrder.qty);
-					currentOrder.sum = runningSum + parseFloat(currentOrder.amount);
+						// Adjust order again (skip if already done above)
+						if (i !== orderIndex) {
 
-					// Filter quantities and amounts
-					currentOrder.qtySum = await filterAmount(exchange, config.pair, parseFloat(currentOrder.qtySum));
-					currentOrder.sum = await filterPrice(exchange, config.pair, parseFloat(currentOrder.sum));
+							const adjusted = await getAdjustedOrder(
+								params.exchange,
+								config.pair,
+								currentOrder.price,
+								currentOrder.amount,
+								currentOrder.qty,
+								config.exchangeFee,
+								config.minMoveAmount
+							);
 
-					// Update running totals
-					runningQtySum = parseFloat(currentOrder.qtySum);
-					runningSum = parseFloat(currentOrder.sum);
+							currentOrder.amount = adjusted.order_amount;
+							currentOrder.qty = adjusted.order_qty;
+						}
 
-					// Calculate average price
-					currentOrder.average = await filterPrice(exchange, config.pair, parseFloat(currentOrder.sum) / parseFloat(currentOrder.qtySum));
+						currentOrder.qtySum = parseFloat(runningQtySum) + parseFloat(currentOrder.qty);
+						currentOrder.sum = parseFloat(runningSum) + parseFloat(currentOrder.amount);
 
-					// Calculate target price based on updated average price
-					currentOrder.target = await calculateTargetPrice({
-						'exchange': exchange,
-						'pair': config.pair,
-						'price': currentOrder.average,
-						'takeProfit': config.dcaTakeProfitPercent,
-						'exchangeFee': config.exchangeFee
-					});
+						currentOrder.qtySum = await filterAmount(params.exchange, config.pair, currentOrder.qtySum);
+						currentOrder.sum = await filterPrice(params.exchange, config.pair, currentOrder.sum);
 
-					// Update previous order's qtySum and sum for next iteration
-					if (i > 0) {
+						// Round final amount
+						currentOrder.sum = Math.round(currentOrder.sum * 100) / 100;
 
-						oldOrders[i - 1].qtySum = parseFloat(oldOrders[i - 1].qtySum);
-						oldOrders[i - 1].sum = parseFloat(oldOrders[i - 1].sum);
+						runningQtySum = parseFloat(currentOrder.qtySum);
+						runningSum = parseFloat(currentOrder.sum);
+
+						currentOrder.average = await filterPrice(
+							params.exchange,
+							config.pair,
+							(parseFloat(currentOrder.sum) / parseFloat(currentOrder.qtySum))
+						);
+
+						const targetPrice = await calculateTargetPrice({
+							'exchange': params.exchange,
+							'pair': config.pair,
+							'price': currentOrder.average,
+							'takeProfit': config.dcaTakeProfitPercent,
+							'exchangeFee': config.exchangeFee
+						});
+
+						if (targetPrice && targetPrice > 0) {
+
+							currentOrder.target = targetPrice;
+						}
+						else {
+
+							allTargetsValid = false;
+
+							msg = 'Unable to calculate target price: ' + JSON.stringify({
+								'price': currentOrder.average,
+								'takeProfit': config.dcaTakeProfitPercent,
+								'exchangeFee': config.exchangeFee
+							});
+						}
 					}
 				}
 
-				// Update deal if recalculation was successful
-				const botId = deal.botId;
+				if (allTargetsValid) {
 
-				await updateDeal(botId, dealId, {
-					config: config,
-					orders: oldOrders,
-				});
+					if (!params.dryRun) {
+
+						await updateDeal(deal.botId, params.dealId, {
+							config: deal.config,
+							orders: oldOrders
+						});
+					}
+
+					success = true;
+					ordersReturn = oldOrders;
+				}
 			}
 		}
 	}
 
-	return { 'success': success, 'data': msg };
+	return { 'success': success, 'data': msg, 'orders': ordersReturn };
 }
 
 
@@ -5508,6 +5794,7 @@ module.exports = {
 	updateDeal,
 	refreshUpdateDeal,
 	addFundsDeal,
+	recalculateOrders,
 	panicSellDeal,
 	connectExchange,
 	removeConfigData,
