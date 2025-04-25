@@ -12,8 +12,10 @@
 
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const Common = require(__dirname + '/libs/app/Common.js');
-const Hub = require(__dirname + '/libs/app/Hub.js');
-const WebServer = require(__dirname + '/libs/webserver/hub');
+const Hub = require(__dirname + '/libs/app/Hub/Hub.js');
+const HubMain = require(__dirname + '/libs/app/Hub/Main.js');
+const HubWorker = require(__dirname + '/libs/app/Hub/Worker.js');
+const WebServer = require(__dirname + '/libs/webserver/Hub');
 const packageJson = require(__dirname + '/package.json');
 
 
@@ -49,290 +51,7 @@ function initSignalHandlers() {
 }
 
 
-function startWorker(instanceData) {
-
-	const workerId = Common.uuidv4();
-	const instanceName = instanceData.name;
-	const currentDate = new Date().toISOString();
-
-	instanceData.dateStart = currentDate;
-
-	const worker = new Worker(__filename, {
-		workerData: {
-			...instanceData,
-			workerId
-		}
-	});
-
-	worker.on('message', processWorkerMessageMain(workerId, instanceName));
-	worker.on('error', (error) => Hub.logger('error', `Instance for ${instanceName} encountered an error:`, error));
-	worker.on('exit', processWorkerExitMain(workerId));
-
-	worker.once('online', () => {
-
-		Hub.logger('info', `Instance: ${instanceName} (Worker ID: ${workerId}, Thread ID: ${worker.threadId}) started`);
-
-		// Store worker and instanceData in workerMap
-		workerMap.set(workerId, {
-			worker,
-			instance: instanceData,
-			threadId: worker.threadId
-		});
-	});
-}
-
-
-async function startAllWorkers(configs) {
-
-	for (const config of configs) {
-
-		const serverIdInUse = [...workerMap.values()].some(worker => worker.instance.server_id === (config.overrides.server_id || null));
-
-		if (!serverIdInUse) {
-
-			const enabled = config['enabled'];
-			const startBoot = config['start_boot'];
-
-			if (enabled && startBoot) {
-
-				startWorker({
-					//instanceId: config.id,
-					//instanceName: config.name,
-					...config
-				});
-
-				await Common.delay(1000);
-			}
-		}
-		else {
-
-			Hub.logger('info', `Instance for ${config.name} already running.`);
-		}
-	}
-}
-
-
-if (isMainThread) {
-
-	start();
-
-} else {
-
-	// Worker thread logic
-	async function processWorkerTask(data) {
-
-		try {
-
-			const instanceName = data.name;
-			const prefData = `[WORKER-LOG] [${instanceName}] `;
-
-			// Override all console methods to send messages back to the main thread
-			['log', 'error', 'warn', 'info', 'debug'].forEach((method) => {
-
-				console[method] = (...args) => parentPort.postMessage({
-					type: 'log',
-					level: method, // 'log', 'error', 'warn', etc.
-					data: prefData + args.join(' ')
-				});
-			});
-
-			console.log(`Starting Instance: ${instanceName}`);
-
-			const SymBot = require(__dirname + '/symbot.js');
-
-			SymBot.setInstanceConfig(Object.assign({},
-				data,
-				{ shutdownTimeout }
-			));
-
-			SymBot.setInstanceParentPort(parentPort); 
-
-			await SymBot.start();
-
-			console.log(`Finished Starting Instance: ${instanceName}`);
-
-			// Listen for command requests from the main thread
-			parentPort.on('message', (message) => {
-
-				processWorkerTaskMessage(SymBot, message);
-			});
-
-		}
-		catch (error) {
-
-			// Log the error and inform the main thread
-			console.error(`Error performing task for ${data.name}: ${error.message}`);
-		}
-	}
-
-	processWorkerTask(workerData);
-}
-
-
-async function processWorkerTaskMessage(SymBot, message) {
-
-	// Get worker instance memory usage
-	if (message.type === 'memory') {
-
-		const memoryUsage = process.memoryUsage();
-
-		parentPort.postMessage({
-
-			type: 'memory',
-			data: memoryUsage
-		});
-	}
-
-	// Get worker instance active deals
-	if (message.type === 'deals_active') {
-
-		const dealTracker = await SymBot.DCABot.getDealTracker();
-
-		const msg = 'Active Deals: ' + Object.keys(dealTracker).length;
-
-		parentPort.postMessage({
-
-			type: 'deals_active',
-			data: msg
-		});
-	}
-
-	// System pause received for SymBot worker
-	if (message.type === 'system_pause') {
-
-		parentPort.postMessage({
-
-			type: 'system_pause_received'
-		});
-
-		const data = message.data;
-
-		const isPause = data.pause;
-		const pauseMessage = data.message;
-
-		await SymBot.System.pause(isPause, pauseMessage);
-	}
-
-	// Shutdown received for SymBot worker
-	if (message.type === 'shutdown') {
-
-		parentPort.postMessage({
-
-			type: 'shutdown_received'
-		});
-
-		SymBot.shutDown();
-	}
-}
-
-
-function processWorkerMessageMain(workerId, instanceName) {
-
-	// Messsages received from worker
-
-	return (message) => {
-
-		if (message.type === 'log') {
-
-			Hub.logger('info', message.data);
-		}
-		else if (message.type === 'memory') {
-
-			const workerInfo = workerMap.get(workerId);
-
-			if (workerInfo) {
-
-				let msgObj = {
-					'instanceId': workerInfo.instance.id,
-					'instanceName': instanceName,
-					'workerId': workerId,
-					'threadId': workerInfo.threadId,
-					'memoryUsage': {
-						'rss': message.data.rss,
-						'heapTotal': message.data.heapTotal,
-						'heapUsed': message.data.heapUsed
-					}
-				};				
-
-				// Send memory usage to client
-				Common.sendSocketMsg({
-
-					'room': 'memory',
-					'type': 'log_memory',
-					'message': msgObj
-				});
-			}
-			else {
-
-				Hub.logger('error', `Information for Worker ID ${workerId} not found.`);
-			}
-		}
-		else if (message.type === 'deals_active') {
-
-			//console.log(message.data);
-		}
-		else if (message.type === 'system_pause_all') {
-
-			// Worker sent system pause for all instances
-			Hub.logger('info', `Worker ID ${workerId} [${instanceName}] requested system pause for all instances`);
-
-			// Relay message to all workers
-			for (const { worker } of workerMap.values()) {
-
-				worker.postMessage({
-					type: 'system_pause',
-					data: message.data
-				});
-			}
-		}
-		else if (message.type === 'shutdown_hub') {
-
-			// Worker sent global Hub shutdown
-			Hub.logger('info', `Worker ID ${workerId} [${instanceName}] requested Hub shutdown`);
-
-			shutDown();
-		}
-	};
-}
-
-
-function processWorkerExitMain(workerId) {
-
-	return (code) => {
-
-		Hub.logger('info', `Instance exited with code ${code}, Worker ID: ${workerId}`);
-
-		const workerInfo = workerMap.get(workerId);
-
-		if (workerInfo) {
-
-			const { instance } = workerInfo;
-
-			const instanceName = instance.name;
-
-			workerMap.delete(workerId);
-
-			if (code !== 0) {
-
-				Hub.logger('error', `Instance for ${instanceName} exited with code ${code}.`);
-
-				// Optionally restart the instance
-				// startWorker(instance);
-			}
-			else {
-
-				Hub.logger('info', `Instance for ${instanceName} completed successfully.`);
-			}
-		}
-		else {
-
-			Hub.logger('error', `Worker ID ${workerId} does not exist in workerMap.`);
-		}
-	};
-}
-
-
-async function start() {
+async function startHub() {
 
 	let port;
 	let configs;
@@ -406,9 +125,12 @@ async function start() {
 					'Common': Common,
 					'WebServer': WebServer,
 					'Hub': Hub,
-					'startWorker': startWorker,
+					'HubMain': HubMain,
+					'HubFilename': __filename,
 					'workerMap': workerMap
 		};
+
+		HubMain.init(Worker, shareData, shutDown);
 
 		Common.init(shareData);
 		WebServer.init(shareData);
@@ -468,20 +190,9 @@ async function start() {
 
 	await WebServer.start(port);
 
-	startAllWorkers(configs);
+	HubMain.start(configs);
 
-	setInterval(() => logMemoryUsage(), 5000);
-}
-
-
-async function logMemoryUsage() {
-
-	for (const { worker } of workerMap.values()) {
-
-		worker.postMessage({
-			type: 'memory'
-		});
-	}
+	setInterval(() => Hub.logMemoryUsage(), 5000);
 }
 
 
@@ -574,3 +285,20 @@ async function shutDown() {
 		}
 	}
 }
+
+
+async function start() {
+
+	if (isMainThread) {
+
+		startHub();
+	}
+	else {
+
+		HubWorker.init(parentPort, shutdownTimeout);
+		HubWorker.start(workerData);
+	}
+}
+
+
+start();

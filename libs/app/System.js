@@ -974,7 +974,21 @@ async function updateSystem() {
 
 		let appConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/app.json');
 		let botConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/bot.json');
+		let hubConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/hub.json');
 
+		let hubConfigOld = await shareData.Common.getData(pathRoot + '/config/hub.json');
+
+		// Check for new hub.json params
+		if (hubConfigOld.success && hubConfigNew.success) {
+
+			let diffs = await findMissingParameters(JSON.parse(hubConfigOld.data), JSON.parse(hubConfigNew.data));
+			let configCombined = diffs.combined;
+
+			// Save new hub config
+			await shareData.Common.saveConfig('hub.json', configCombined, true);
+		}
+
+		// Reload hub config
 		let hubConfig = await shareData.Common.getData(pathRoot + '/config/hub.json');
 
 		if (hubConfig.success) {

@@ -5193,6 +5193,7 @@ async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchange
 		const addFundsObj = await addFundsDeal(dealId, avgPrice_net, true);
 
 		if (addFundsObj.success) {
+
 			const addFundsOrders = addFundsObj.orders;
 			const filledOrders = addFundsOrders.filter(item => item.filled == 1);
 			const currentOrder = filledOrders.pop();

@@ -10,7 +10,7 @@ const express = require('express');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 const bodyParser = require('body-parser');
-const Routes = require(pathRoot + '/hub/routes.js');
+const Routes = require(pathRoot + '/Hub/routes.js');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();

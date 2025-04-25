@@ -1422,7 +1422,7 @@ async function verifyLogin(req, res, isHub) {
 
 		if (isHub) {
 
-			renderView('hub/homeView', req, res, isHub);
+			renderView('Hub/homeView', req, res, isHub);
 		}
 		else {
 

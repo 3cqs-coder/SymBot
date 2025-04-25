@@ -1047,6 +1047,23 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 #### If I disable a DCA bot will it close my deals?
 - No. Disabling a DCA bot will only prevent new deals from being started. Any existing deals that are running will continue until they complete unless you choose to cancel or panic sell.
 
+#### What does "take profit in base or quote currency" mean?
+
+When your bot takes profit, it means it sells some of your crypto to lock in gains. You can choose how you want to receive those profits:
+
+- *Base currency*: This is the asset you're buying (e.g., BTC if you're buying Bitcoin).
+	- Choosing this option is great if you're a long-term holder who wants to accumulate more of the crypto asset. The bot sells a portion of BTC and buys back BTC when the price dips again — helping you grow your holdings over time. It's ideal if you plan to reinvest profits into the same asset at lower prices.
+
+- *Quote currency*: This is the currency you're spending (e.g., USDT if you're using dollars).  
+	- This option is better if you want to lock in profits in a stable currency like USDT. The bot sells BTC for USDT and holds the USDT, allowing you to secure gains and reduce exposure. It’s also useful if you’re looking to cash out gradually.
+
+For example, let’s say you're trading BTC/USDT:
+
+- *Take profit in base*: Bot sells a portion of BTC and buys back BTC when the price dips again (you keep stacking more BTC).
+- *Take profit in quote*: Bot sells BTC for USDT and keeps the USDT (you realize profit in dollars).
+
+You can switch between base and quote currency at any time by updating your bot or deal settings.
+
 #### What is the difference between canceling and closing a deal?
 - Canceling a deal will remove the active deal from any further trading without selling any assets already bought from previous orders.
 - Closing a deal is basically panic selling where all assets are sold at the current market price whether at a profit or loss at the time of closing the deal.
