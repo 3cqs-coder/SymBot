@@ -136,7 +136,7 @@ async function viewBots(req, res) {
 			const botId = bot.botId;
 			const botName = bot.botName;
 
-			bot = await removeDbKeys(bot);
+			bot = await shareData.DCABot.removeDbKeys(bot);
 
 			const config = JSON.parse(JSON.stringify(bot.config));
 
@@ -245,7 +245,7 @@ async function apiGetBots(req, res) {
 
 			let bot = bots[i];
 
-			bot = await removeDbKeys(bot);
+			bot = await shareData.DCABot.removeDbKeys(bot);
 
 			const config = JSON.parse(JSON.stringify(bot.config));
 
@@ -444,7 +444,7 @@ async function apiShowDeal(req, res, dealId) {
 
 		let price;
 
-		const dealDataDb = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		const dealDataDb = await shareData.DCABot.removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
 		const updated = dealDataDb['updatedAt'];
 		const sellData = dealDataDb['sellData'];
@@ -491,75 +491,13 @@ async function apiShowDeal(req, res, dealId) {
 
 async function apiGetActiveDeals(req, res) {
 
-	let query = {};
-	let dealsArr = [];
-	let dealsSort = [];
-
-	let botsActiveObj = {};
-
 	const body = req.query;
 
 	let active = body.active;
 
-	if (active == undefined || active == null || active == '') {
+	const deals = await shareData.DCABot.getActiveDeals(active);
 
-		active = true;
-	}
-
-	const bots = await shareData.DCABot.getBots({ 'active': active });
-
-	const dealTracker = await shareData.DCABot.getDealTracker();
-
-	if (bots && bots.length > 0) {
-
-		for (let i = 0; i < bots.length; i++) {
-
-			let bot = bots[i];
-
-			const botId = bot.botId;
-			const botName = bot.botName;
-
-			botsActiveObj[botId] = botName;
-		}
-	}
-
-	// Remove sensitive data
-	for (let dealId in dealTracker) {
-
-		let botActive = true;
-
-		let obj = {};
-
-		let deal = dealTracker[dealId];
-
-		let botId = deal['deal']['botId'];
-		let config = deal['deal']['config'];
-		let info = JSON.parse(JSON.stringify(deal['info']));
-
-		let dealRoot = deal['deal'];
-
-		dealRoot = await removeDbKeys(dealRoot);
-		dealRoot['config'] = await shareData.DCABot.removeConfigData(config);
-
-		if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
-
-			botActive = false;
-		}
-
-		obj = Object.assign({}, obj, dealRoot);
-
-		obj['info'] = info;
-		obj['info']['bot_active'] = botActive;
-
-		obj = shareData.Common.convertStringToNumeric(obj);
-
-		dealsArr.push(obj);
-	}
-
-	dealsSort = shareData.Common.sortByKey(dealsArr, 'date');
-	dealsSort = dealsSort.reverse();
-
-	res.send( { 'date': new Date(), 'data': dealsSort } );
+	res.send( { 'date': new Date(), 'data': deals } );
 }
 
 
@@ -583,7 +521,7 @@ async function apiUpdateDeal(req, res) {
 
 	if (data && data.length > 0) {
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		let dealData = await shareData.DCABot.removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
 		const status = dealData['status'];
 		const filledOrders = dealData.orders.filter(item => item.filled == 1);
@@ -806,7 +744,7 @@ async function apiPanicSellDeal(req, res) {
 
 	if (data && data.length > 0) {
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		let dealData = await shareData.DCABot.removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
 		const status = dealData['status'];
 
@@ -856,7 +794,7 @@ async function apiPauseDeal(req, res) {
 
 	if (data && data.length > 0) {
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		let dealData = await shareData.DCABot.removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
 		const botId = dealData.botId;
 		const status = dealData['status'];
@@ -911,7 +849,7 @@ async function apiCancelDeal(req, res) {
 
 	if (data && data.length > 0) {
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		let dealData = await shareData.DCABot.removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
 		const status = dealData['status'];
 		
@@ -963,7 +901,7 @@ async function apiAddFundsDeal(req, res) {
 
 	if (isValid && data && data.length > 0) {
 
-		let dealData = await removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+		let dealData = await shareData.DCABot.removeDbKeys(JSON.parse(JSON.stringify(data[0])));
 
 		const status = dealData['status'];
 		
@@ -1610,20 +1548,6 @@ async function apiStartDealProcess(req, res, taskObj) {
 	shareData.Common.logger('API Start Deal: ' + JSON.stringify(resObj));
 
 	queueStartDeal.callBack(res, resObj, taskObj);
-}
-
-
-async function removeDbKeys(bot) {
-
-	for (let key in bot) {
-
-		if (key.substr(0, 1) == '$' || key.substr(0, 1) == '_') {
-
-			delete bot[key];
-		}
-	}
-	
-	return bot;
 }
 
 

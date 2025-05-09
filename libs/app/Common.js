@@ -665,16 +665,38 @@ async function showFiles(type = 'logs', req, res, isHub) {
 
 async function downloadFile(fileName, type = 'logs', req, res) {
 
-	const filePath = `${pathRoot}/${type}/${fileName}`;
+	const filePath = path.join(pathRoot, type, fileName);
 
-	res.download(filePath, err => {
+	fs.access(filePath, fs.constants.F_OK, (err) => {
 
 		if (err) {
 
-			res.status(err.statusCode || 500).send({
-				'error': err
-			});
+			// File doesn't exist
+			if (!res.headersSent) {
+
+				return res.status(404).send({
+
+					error: 'File not found'
+				});
+			}
+
+			return;
 		}
+
+		res.download(filePath, (err) => {
+
+			if (err && !res.headersSent) {
+
+				res.status(err.statusCode || 500).send({
+					error: err.message
+				});
+			}
+			else if (err) {
+
+				// Headers already sent
+				//console.warn('Download error (after headers sent):', err.message);
+			}
+		});
 	});
 }
 

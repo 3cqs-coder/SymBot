@@ -3686,6 +3686,20 @@ async function updateOrders(data) {
 }
 
 
+async function removeDbKeys(obj) {
+
+	for (let key in obj) {
+
+		if (key.substr(0, 1) == '$' || key.substr(0, 1) == '_') {
+
+			delete obj[key];
+		}
+	}
+
+	return obj;
+}
+
+
 async function convertDataToSandBox() {
 
 	let botData;
@@ -3952,6 +3966,75 @@ async function deleteResumeDealTracker(dealId) {
 		resumeDealTracker[dealId] = null;
 		delete resumeDealTracker[dealId];
 	}
+}
+
+
+async function getActiveDeals(active) {
+
+	let dealsArr = [];
+	let dealsSort = [];
+
+	let botsActiveObj = {};
+
+	if (active == undefined || active == null || active == '') {
+
+		active = true;
+	}
+
+	const bots = await getBots({ 'active': active });
+
+	const dealTracker = await getDealTracker();
+
+	if (bots && bots.length > 0) {
+
+		for (let i = 0; i < bots.length; i++) {
+
+			let bot = bots[i];
+
+			const botId = bot.botId;
+			const botName = bot.botName;
+
+			botsActiveObj[botId] = botName;
+		}
+	}
+
+	// Remove sensitive data
+	for (let dealId in dealTracker) {
+
+		let botActive = true;
+
+		let obj = {};
+
+		let deal = dealTracker[dealId];
+
+		let botId = deal['deal']['botId'];
+		let config = deal['deal']['config'];
+		let info = JSON.parse(JSON.stringify(deal['info']));
+
+		let dealRoot = deal['deal'];
+
+		dealRoot = await removeDbKeys(dealRoot);
+		dealRoot['config'] = await removeConfigData(config);
+
+		if (botsActiveObj[botId] == undefined || botsActiveObj[botId] == null) {
+
+			botActive = false;
+		}
+
+		obj = Object.assign({}, obj, dealRoot);
+
+		obj['info'] = info;
+		obj['info']['bot_active'] = botActive;
+
+		obj = Common.convertStringToNumeric(obj);
+
+		dealsArr.push(obj);
+	}
+
+	dealsSort = Common.sortByKey(dealsArr, 'date');
+	dealsSort = dealsSort.reverse();
+
+	return dealsSort;
 }
 
 
@@ -5806,6 +5889,7 @@ module.exports = {
 	getDealTracker,
 	getStartDealTracker,
 	getResumeDealTracker,
+	getActiveDeals,
 	getSymbol,
 	getSymbolsAll,
 	getBalanceTracker,
@@ -5815,6 +5899,7 @@ module.exports = {
 	getBalance,
 	getPairData,
 	calculateMaxFunds,
+	removeDbKeys,
 	convertDataToSandBox,
 
 	init: function(obj) {

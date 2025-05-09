@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const colors = require('colors');
 
 const pathRoot = path.posix.dirname(path.posix.dirname(path.posix.dirname(fs.realpathSync(__dirname))));
 
@@ -85,7 +86,7 @@ function processWorkerExit(workerId) {
 
 	return (code) => {
 
-		shareData.Hub.logger('info', `Instance exited with code ${code}, Worker ID: ${workerId}`);
+		shareData.Hub.logger('info', colors.red.bold(`Instance exited with code ${code}, Worker ID: ${workerId}`));
 
 		const workerInfo = shareData.workerMap.get(workerId);
 
@@ -99,19 +100,19 @@ function processWorkerExit(workerId) {
 
 			if (code !== 0) {
 
-				shareData.Hub.logger('error', `Instance for ${instanceName} exited with code ${code}.`);
+				shareData.Hub.logger('error', colors.red.bold(`Instance for ${instanceName} exited with code ${code}.`));
 
 				// Optionally restart the instance
 				// startWorker(instance);
 			}
 			else {
 
-				shareData.Hub.logger('info', `Instance for ${instanceName} completed successfully.`);
+				shareData.Hub.logger('info', colors.green.bold(`Instance for ${instanceName} completed successfully.`));
 			}
 		}
 		else {
 
-			shareData.Hub.logger('error', `Worker ID ${workerId} does not exist in workerMap.`);
+			shareData.Hub.logger('error', colors.red.bold(`Worker ID ${workerId} does not exist in workerMap.`));
 		}
 	};
 }
@@ -125,7 +126,7 @@ function startWorker(instanceData) {
 
 	instanceData.dateStart = currentDate;
 
-	const worker = new Worker(shareData.HubFilename, {
+	const worker = new Worker(shareData.appData.hub_filename, {
 		workerData: {
 			...instanceData,
 			workerId

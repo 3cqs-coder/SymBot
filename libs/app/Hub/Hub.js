@@ -5,7 +5,10 @@ const fsp = require('fs').promises;
 const path = require('path');
 const net = require('net');
 const ccxt = require('ccxt');
+const Convert = require('ansi-to-html');
 const { parseStringPromise } = require('xml2js');
+
+const convertAnsi = new Convert();
 
 let shareData;
 
@@ -928,7 +931,7 @@ async function getActiveDeals() {
 		}
 		else {
 
-			console.error('Worker failed:', result.reason);
+			logger('error', 'Worker failed: ' + result.reason);
 		}
 	}
 
@@ -1260,7 +1263,7 @@ async function logger(type, msg) {
 
 			'room': 'notifications',
 			'type': 'notification',
-			'message': msg
+			'message': convertAnsi.toHtml(msg)
 		});
 	}
 	catch (e) {}

@@ -115,6 +115,7 @@ async function startHub() {
 							'version': packageJson.version,
 							'password': hubData['data']['password'],
 							'path_root': __dirname,
+							'hub_filename': __filename,
 							'web_server_ports': undefined,
 							'web_socket_path': 'wsHub_',
 							'hub_config': hubConfigFile,
@@ -126,7 +127,6 @@ async function startHub() {
 					'WebServer': WebServer,
 					'Hub': Hub,
 					'HubMain': HubMain,
-					'HubFilename': __filename,
 					'workerMap': workerMap
 		};
 
@@ -193,6 +193,13 @@ async function startHub() {
 	HubMain.start(configs);
 
 	setInterval(() => Hub.logMemoryUsage(), 5000);
+}
+
+
+async function startWorker() {
+
+	HubWorker.init(parentPort, shutdownTimeout);
+	HubWorker.start(workerData);
 }
 
 
@@ -295,8 +302,7 @@ async function start() {
 	}
 	else {
 
-		HubWorker.init(parentPort, shutdownTimeout);
-		HubWorker.start(workerData);
+		startWorker();
 	}
 }
 

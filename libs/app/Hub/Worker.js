@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const colors = require('colors');
 
 const pathRoot = path.posix.dirname(path.posix.dirname(path.posix.dirname(fs.realpathSync(__dirname))));
 
@@ -10,12 +11,13 @@ let shutdownTimeout;
 
 
 
-// Worker thread logic
-async function processWorkerTask(data) {
+async function processWorkerTask(instanceData) {
+
+	// Worker thread logic
 
 	try {
 
-		const instanceName = data.name;
+		const instanceName = instanceData.name;
 		const prefData = `[WORKER-LOG] [${instanceName}] `;
 
 		// Override all console methods to send messages back to the main thread
@@ -28,12 +30,12 @@ async function processWorkerTask(data) {
 			});
 		});
 
-		console.log(`Starting Instance: ${instanceName}`);
+		console.log(colors.bgBlack.brightYellow.bold(`Starting Instance: ${instanceName}`));
 
 		const SymBot = require(pathRoot + '/symbot.js');
 
 		SymBot.setInstanceConfig(Object.assign({},
-			data,
+			instanceData,
 			{ shutdownTimeout }
 		));
 
@@ -41,7 +43,7 @@ async function processWorkerTask(data) {
 
 		await SymBot.start();
 
-		console.log(`Finished Starting Instance: ${instanceName}`);
+		console.log(colors.bgBlack.brightGreen.bold(`Finished Starting Instance: ${instanceName}`));
 
 		// Listen for command requests from the main thread
 		parentPort.on('message', (message) => {
@@ -53,7 +55,7 @@ async function processWorkerTask(data) {
 	catch (error) {
 
 		// Log the error and inform the main thread
-		console.error(`Error performing task for ${data.name}: ${error.message}`);
+		console.log(colors.bgBlack.brightRed.bold(`Error performing task for ${instanceData.name}: ${error.message}`));
 	}
 }
 
@@ -75,7 +77,7 @@ async function processWorkerTaskMessage(SymBot, message) {
 	// Get worker instance active deals
 	if (message.type === 'deals_active') {
 	
-		const dealTracker = await SymBot.DCABot.getDealTracker();
+		const deals = await SymBot.DCABot.getActiveDeals();
 	
 		parentPort.postMessage({
 	
@@ -83,7 +85,7 @@ async function processWorkerTaskMessage(SymBot, message) {
 			id: message.id,
 			data: {
 					'name': message.name,
-					'deals': dealTracker
+					'deals': deals
 				  }
 		});
 	}
@@ -117,9 +119,9 @@ async function processWorkerTaskMessage(SymBot, message) {
 }
 
 
-async function start(workerData) {
+async function start(instanceData) {
 
-	processWorkerTask(workerData);
+	processWorkerTask(instanceData);
 }
 
 
