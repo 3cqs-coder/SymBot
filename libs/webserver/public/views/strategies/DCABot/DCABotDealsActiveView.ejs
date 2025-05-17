@@ -64,6 +64,7 @@
 		//const dcaMaxOrder = deal['info']['safety_orders_max'];
 		const dcaMaxOrder = deal['config']['dcaMaxOrder'];
 		const dcaTakeProfitPercent = deal['config']['dcaTakeProfitPercent'];
+		const profitCurrency = deal['config']['profitCurrency'];
 		const dealLast = deal['config']['dealLast'];
 
 		$('#dealEditId').val(dealId);
@@ -73,6 +74,15 @@
 
 		$('#dealLast').prop('checked', false);
 		$('#dealLast').switchToggle(false);
+
+		if (!profitCurrency) {
+			
+			$('#profitCurrency').val('quote');
+		}
+		else {
+			
+			$('#profitCurrency').val(profitCurrency);
+		}
 
 		if (dealLast != undefined && dealLast != null && dealLast != '') {
 
@@ -800,6 +810,7 @@
 				csvDealInfo = reorderProperties(csvDealInfo, reordering.after, reordering.property);
 			});
 
+			delete csvDealInfo['estimates'];
 			delete csvDealInfo['take_profit'];
 
 			csvDataArr.push(csvDealInfo);
@@ -889,9 +900,14 @@
 				safetyOrdersTotalDisplay += ' (+' + manualOrders.length + ')';
 			}
 
-			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '">');
+			const estimates = JSON.stringify(deal.info.estimates)
+				.replace(/&/g, '&amp;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#39;');
+
+			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '"  data-estimates="' + estimates + '">');
 			contentArr.push('<td>' + deal['info']['bot_name'] + '</td>');
-			contentArr.push('<td>' + dealId + '</td>');
+			contentArr.push('<td id="dealid-cell">' + dealId + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');
 			contentArr.push('<td>$' + deal['info']['price_last'] + '</td>');
@@ -972,6 +988,63 @@
 		}
 
 
+		$(document).on('mouseenter', '#dealid-cell', function () {
+
+			try {
+
+				let contentPriceTarget;
+				let noAdd = false;
+
+				const pair = $(this).closest('tr').attr('data-pair');
+				const estimates = JSON.parse($(this).closest('tr').attr('data-estimates'));
+
+				const pairSplit = pair.split('/');
+				const base = pairSplit[0];
+				const quote = pairSplit[1];
+
+				const amountNet = estimates['amount_net'];
+				const priceAvgNet = estimates['price_average_net'];
+				const priceTargetNet = estimates['price_target_net'];
+				const priceTargetChangePerc = estimates['price_target_change_percent'];
+
+				if (priceTargetChangePerc > 0) {
+
+					contentPriceTarget = 'This is a ' + Math.abs(priceTargetChangePerc) + '% reduction from the current target price';
+				}
+				else {
+
+					// Amount added would increase target
+					contentPriceTarget = 'Adding funds may increase the target price for this deal';
+
+					noAdd = true;
+				}
+
+				if (!$(this).find('.toolTipStatic').length) {
+				
+					const content = `<span class="toolTipStatic">
+    	   	 			<span class="toolTipText">
+							Buying ${base} at the current market price using $${amountNet} ${quote} may bring the average price bought to $${priceAvgNet} and the new target take profit price to $${priceTargetNet}. ${contentPriceTarget}.
+					</span></span>`;
+
+					$(this).append(content);
+
+					if (noAdd) {
+						
+						$('.toolTipStatic .toolTipText').addClass('tooltip-red');
+					}
+
+				}
+			}
+			catch(e) {}
+		});
+
+
+		$(document).on('mouseleave', '#dealid-cell', function () {
+
+			$(this).find('.toolTipStatic').remove();
+		});
+
+
 		$(document).on('mouseenter', '[id]', function() {
 
 			let $this = $(this);
@@ -1025,11 +1098,13 @@
 			const dealLast = $('#dealLast').prop('checked');
 			const dcaMaxOrder = $('#dcaMaxOrder').val();
 			const dcaTakeProfitPercent = $('#dcaTakeProfitPercent').val();
-	
+			const profitCurrency = $('#profitCurrency').val();
+
 			let dataObj = {
 							'dealLast': dealLast,
 							'dcaMaxOrder': dcaMaxOrder,
-							'dcaTakeProfitPercent': dcaTakeProfitPercent
+							'dcaTakeProfitPercent': dcaTakeProfitPercent,
+							'profitCurrency': profitCurrency
 						  };
 
 			modalTracker[modalId].dialog('close');
@@ -1344,6 +1419,15 @@
 
 				<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" class="form-field"></td></tr>
 				<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" class="form-field"></td></tr>
+
+				<tr><td>Profit Currency: 
+
+					<span class="toolTip" style="padding: 0px 4px;">?<span class="toolTipText">
+					Currency used for the profit for this deal. Changing this will not affect other deals.
+					</span></span>
+
+				</td> <td><select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 100px; background-color: #ffffff; cursor: pointer;"><option value="base">Base<option value="quote">Quote</option></select></td></tr>
+
 				<tr><td>Last Deal:
 				
 				<span class="toolTip" style="padding: 0px 4px;">?<span class="toolTipText">

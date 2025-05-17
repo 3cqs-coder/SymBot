@@ -45,6 +45,12 @@ The estimated final profit is calculated as follows:
 Estimated Profit = ($<%= dealTracker[dealId].info.price_target %> × <%= qtySumTotal %>) - $<%= sumTotal %>  
 = **$<%= (dealTracker[dealId].info.price_target * qtySumTotal - sumTotal).toFixed(2) %>**
 
-Use the above data, including all order dates and pricing details, to provide a more realistic and accurate estimation of the deal's future closing date. Highlight key dates and the profit estimate clearly. Since today is <%= dateConvertLocal(new Date()) %>, the estimated closing date and time must be after that.
+Use the above data, including all order dates and pricing details, to provide a realistic, factual, and accurate estimation of the deal's future closing date. Highlight key dates and the profit estimate clearly.
 
-Provide a final summary in the end in just a few sentences.
+Also provide a second estimated date if $<%= dealTracker[dealId].info.estimates.amount_net %> were added to the deal. This should close sooner than the first in profit since we're lowering the average and target prices.
+This results in buying <%= (Number(dealTracker[dealId].info.estimates.amount_net) / Number(dealTracker[dealId].info.price_last)) %> additional quantity for the deal at the current price of $<%= dealTracker[dealId].info.price_last %>, decreasing the average price to $<%= dealTracker[dealId].info.estimates.price_average_net %> and decreasing the target sell price to $<%= dealTracker[dealId].info.estimates.price_target_net %>.
+This will also increase the final take profit of the deal because of the additional funds added to the deal.
+
+Since today is <%= dateConvertLocal(new Date()) %>, the estimated closing dates and times must be after that.
+
+Separate both estimates clearly showing scenario one and two. Provide a final summary at the end in just a few sentences.

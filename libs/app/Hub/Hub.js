@@ -5,7 +5,10 @@ const fsp = require('fs').promises;
 const path = require('path');
 const net = require('net');
 const ccxt = require('ccxt');
+const Convert = require('ansi-to-html');
 const { parseStringPromise } = require('xml2js');
+
+const convertAnsi = new Convert();
 
 let shareData;
 
@@ -865,6 +868,77 @@ async function routeUpdateInstances(req, res) {
 }
 
 
+async function logMemoryUsage() {
+
+	for (const { worker } of shareData.workerMap.values()) {
+
+		worker.postMessage({
+			type: 'memory'
+		});
+	}
+}
+
+
+async function getActiveDeals() {
+
+	const promises = [];
+	const aggregated = [];
+
+	for (const [id, { worker, instance }] of shareData.workerMap.entries()) {
+
+		// Wrap each worker response in a Promise
+		const p = new Promise((resolve, reject) => {
+
+			const onMessage = (msg) => {
+
+				if (msg.type === 'deals_active_received' && msg.id === instance.id) {
+
+					worker.off('message', onMessage); // Clean up listener
+
+					resolve({
+						id,
+						data: msg.data
+					});
+				}
+			};
+
+			worker.on('message', onMessage);
+
+			worker.postMessage({
+				type: 'deals_active',
+				id: instance.id,
+				name: instance.name
+			});
+
+			// Optional timeout in case worker doesn't respond
+			setTimeout(() => {
+
+				worker.off('message', onMessage);
+				reject(new Error(`Timeout waiting for response from worker ${id}`));
+			}, 5000);
+		});
+
+		promises.push(p);
+	}
+
+	const results = await Promise.allSettled(promises);
+
+	for (const result of results) {
+
+		if (result.status === 'fulfilled') {
+
+			aggregated.push(result.value.data);
+		}
+		else {
+
+			logger('error', 'Worker failed: ' + result.reason);
+		}
+	}
+
+	return aggregated;
+}
+
+
 async function getInstance(instanceId) {
 
     let worker;
@@ -892,7 +966,7 @@ async function getInstance(instanceId) {
 
 async function startInstance(instanceConfig) {
 
-	shareData.startWorker({
+	shareData.HubMain.startWorker({
 		...instanceConfig
 	});
 }
@@ -1066,7 +1140,7 @@ async function routeShowNews(req, res) {
 		articles = news.data;
 	}
 
-	res.render( 'hub/newsView', { 'isHub': true, 'appData': shareData.appData, 'articles': articles } );
+	res.render( 'Hub/newsView', { 'isHub': true, 'appData': shareData.appData, 'articles': articles } );
 }
 
 
@@ -1189,7 +1263,7 @@ async function logger(type, msg) {
 
 			'room': 'notifications',
 			'type': 'notification',
-			'message': msg
+			'message': convertAnsi.toHtml(msg)
 		});
 	}
 	catch (e) {}
@@ -1209,6 +1283,8 @@ module.exports = {
 	validateConfig,
 	getExchanges,
 	setProxyPorts,
+	logMemoryUsage,
+	getActiveDeals,
 
 	init: function(obj) {
 

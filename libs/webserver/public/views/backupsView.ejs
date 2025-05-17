@@ -1,0 +1,36 @@
+<%- include('./partialsHeaderView'); %>
+
+
+<main>
+
+	<div id="contentBox" style="text-align: center; max-width: 400px;">
+
+		<div class="contentHeaderBox" style="text-align: center; width: 100%;">
+			<b class="contentHeader"><%- appData.name %> Backups</b>
+		</div>
+
+
+		<div id="dataBox" class="botsDealsBox" style="width: 100%;">
+
+			<div style="display: inline-block; text-align: left; font-size: 1.2rem; width: 100%;">
+
+			<% 
+				for (let i = 0; i < files.length; i++) {
+					
+					let fileName = files[i]['name'].split(/[\\\/]/).pop();
+					let size = files[i]['size_human'];
+			%>
+
+				<div class="mainMenuItem" style="justify-content: space-between;">
+					<a href="./backups/download/<%- fileName %>"><%- fileName %></a> <%- size %>
+				</div>
+			
+			<% } %>
+
+			</div>
+		</div>
+	</div>
+
+</main>
+
+<%- include('./partialsFooterView'); %>

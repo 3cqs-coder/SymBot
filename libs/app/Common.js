@@ -93,14 +93,20 @@ async function updateConfig(req, res) {
 	const signals3CQSApiKey = body.signals_3cqs_api_key;
 	const ollamaHost = body.ollama_host;
 	const ollamaModel = body.ollama_model;
+	const cronBackup = body.cron_backup_enabled;
+	const cronBackupSchedule = body.cron_backup_schedule;
+	const cronBackupPassword = body.cron_backup_password;
+	const cronBackupMax = Number(body.cron_backup_max ?? 1) || 1;
 
 	let pairButtons = body.pairbuttons;
 	let pairBlacklist = body.pairblacklist;
 
 	let telegramEnabled = convertBoolean(telegram, false);
 	let signals3CQSEnabled = convertBoolean(signals3CQS, false);
+	let cronBackupEnabled = convertBoolean(cronBackup, false);
 
 	let dbErr;
+	let cronBackupPasswordFinal;
 	let hubInstance = false;
 	let dataMessage = 'Configuration Updated';
 
@@ -171,6 +177,13 @@ async function updateConfig(req, res) {
 			await setToken();
 		}
 
+		const cronBackupPasswordEncObj = await shareData.System.encrypt(cronBackupPassword, shareData.appData.password);
+
+		if (cronBackupPasswordEncObj.success) {
+
+			cronBackupPasswordFinal = cronBackupPasswordEncObj.data;
+		}
+
 		const telegramEnabledOrig = shareData['appData']['telegram_enabled'];
 		const signals3CQSEnabledOrig = shareData['appData']['signals_3cqs_enabled'];
 
@@ -188,12 +201,19 @@ async function updateConfig(req, res) {
 		appConfig['telegram']['token_id'] = telegramTokenId;
 		appConfig['telegram']['notify_user_id'] = telegramUserId;
 
+		appConfig['cron_backup']['enabled'] = cronBackupEnabled;
+		appConfig['cron_backup']['schedule'] = cronBackupSchedule;
+		appConfig['cron_backup']['password'] = cronBackupPasswordFinal;
+		appConfig['cron_backup']['max'] = cronBackupMax;
+
 		appConfig['ai']['ollama']['host'] = ollamaHost;
 		appConfig['ai']['ollama']['model'] = ollamaModel;
 
 		shareData['appData']['telegram_id'] = telegramUserId;
 		shareData['appData']['telegram_enabled'] = telegramEnabled;
 		shareData['appData']['telegram_enabled_config'] = telegramEnabled;
+
+		shareData['appData']['cron_backup'] = appConfig['cron_backup'];
 
 		if (shareData.appData.config_mode) {
 
@@ -254,6 +274,16 @@ async function updateConfig(req, res) {
 					await delay(1000);
 					shareData.Telegram.start(telegramTokenId, telegramEnabled);
 				}
+			}
+
+			if (!cronBackupEnabled) {
+
+				await shareData.System.cronBackupStart('', false);
+			}
+
+			if (cronBackupEnabled && (cronBackupSchedule != undefined && cronBackupSchedule != null && cronBackupSchedule != '')) {
+
+				await shareData.System.cronBackupStart(cronBackupSchedule, true);
 			}
 		}
 
@@ -578,75 +608,96 @@ async function getNotificationHistory(client, data) {
 }
 
 
-async function showLogs(req, res, isHub) {
+async function listFiles(type = 'logs') {
+
+	let allFiles = [];
+
+	const dir = `${pathRoot}/${type}`;
+	const files = fs.readdirSync(dir);
+
+	for (let fileName of files) {
+
+		const filePath = `${dir}/${fileName}`;
+		const stats = fs.statSync(filePath);
+
+		if (!stats.isDirectory()) {
+
+			allFiles.push({
+				'name': fileName,
+				'created': stats.ctime,
+				'modified': stats.mtime,
+				'size': stats.size,
+				'size_human': numFormatter(stats.size)
+			});
+		}
+	}
+
+	return allFiles.length > 0 ? sortByKey(allFiles, 'created').reverse() : [];
+}
+
+
+async function showFiles(type = 'logs', req, res, isHub) {
 
 	let filesFiltered;
 
 	const instanceName = await getInstanceName();
-	const files = await getLogs();
+	const files = await listFiles(type);
 
-	if (instanceName != undefined && instanceName != null && instanceName != '') {
+	if (instanceName) {
 
-		filesFiltered = files.filter(file => new RegExp(`${instanceName}\\.log$`).test(file.name));
+		const ext = type === 'logs' ? '.log' : '.enc';
+		const regex = new RegExp(`${instanceName}.*\\${ext}$`);
+
+		filesFiltered = files.filter(file => regex.test(file.name));
 	}
 	else {
 
 		filesFiltered = files;
 	}
 
-	res.render( 'logsView', { 'appData': shareData.appData, 'files': filesFiltered, 'isHub': isHub } );
+	res.render(`${type}View`, {
+		'appData': shareData.appData,
+		'files': filesFiltered,
+		isHub
+	});
 }
 
 
-async function getLogs() {
+async function downloadFile(fileName, type = 'logs', req, res) {
 
-	let allFiles = [];
-	let sortedFiles = [];
+	const filePath = path.join(pathRoot, type, fileName);
 
-	let dir = pathRoot + '/logs';
-
-	let files = fs.readdirSync(dir);
-
-	for (let i in files) {
-
-		let file = dir + '/' + files[i];
-
-		let stats = fs.statSync(file);
-
-		let created = stats.ctime;
-		let modified = stats.mtime;
-		let size = stats.size;
-
-		if (!stats.isDirectory()) {
-
-			let obj = { 'name': file, 'created': created, 'modified': modified, 'size': size, 'size_human': numFormatter(size) };
-
-			allFiles.push(obj);
-		}
-	}
-
-	if (allFiles.length > 0) {
-
-		sortedFiles = sortByKey(allFiles, 'created');
-	}
-
-	return sortedFiles.reverse();
-}
-
-
-async function downloadLog(file, req, res) {
-
-	res.download(pathRoot + '/logs/' + file, function (err) {
+	fs.access(filePath, fs.constants.F_OK, (err) => {
 
 		if (err) {
 
-			let obj = { 'error': err };
+			// File doesn't exist
+			if (!res.headersSent) {
 
-			let code = err['statusCode'];
+				return res.status(404).send({
 
-			res.status(code).send(obj);
+					error: 'File not found'
+				});
+			}
+
+			return;
 		}
-    });
+
+		res.download(filePath, (err) => {
+
+			if (err && !res.headersSent) {
+
+				res.status(err.statusCode || 500).send({
+					error: err.message
+				});
+			}
+			else if (err) {
+
+				// Headers already sent
+				//console.warn('Download error (after headers sent):', err.message);
+			}
+		});
+	});
 }
 
 
@@ -714,7 +765,7 @@ function logMonitor() {
 	setInterval(() => {
 
 		delFiles(pathRoot + '/logs', maxDays);
-		delFiles(pathRoot + '/backups', 1, true);
+		delFiles(pathRoot + '/temp', 1, true);
 		delFiles(pathRoot + '/uploads', 1, true);
 		delFiles(pathRoot + '/downloads', 1, true);
 
@@ -1359,8 +1410,12 @@ async function verifyLogin(req, res, isHub) {
 
 	const body = req.body;
 	const password = body.password;
-	const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
 	const userAgent = req.headers['user-agent'];
+	const rawIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+	.split(',')[0]
+	.trim();
+
+	const ip = rawIp.startsWith('::ffff:') ? rawIp.substring(7) : rawIp;
 
 	const dataPass = shareData.appData.password.split(':');
 
@@ -1389,7 +1444,7 @@ async function verifyLogin(req, res, isHub) {
 
 		if (isHub) {
 
-			renderView('hub/homeView', req, res, isHub);
+			renderView('Hub/homeView', req, res, isHub);
 		}
 		else {
 
@@ -1648,8 +1703,8 @@ module.exports = {
 	timeDiff,
 	logger,
 	logMonitor,
-	showLogs,
-	downloadLog,
+	showFiles,
+	downloadFile,
 	sendNotification,
 	getNotificationHistory,
 	showTradingView,

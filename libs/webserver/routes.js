@@ -6,7 +6,7 @@ let shareData;
 
 function initRoutes(router, upload) {
 
-	router.post([ '/webhook/api/*' ], (req, res, next) => {
+	router.post([ '/webhook/api/*wildcard' ], (req, res, next) => {
 
 		processWebHook(req, res, next);
 	});
@@ -42,11 +42,11 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.post('/system/backup', (req, res) => {
+	router.post(['/system/backup', '/api/system/backup'], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
-		if (req.session.loggedIn) {
+		if (req.path.startsWith('/api') ? validApiKey(req) : req.session.loggedIn) {
 
 			shareData.System.routeBackupDb(req, res);
 		}
@@ -151,11 +151,15 @@ function initRoutes(router, upload) {
 	})
 
 
-	router.get('/logs', (req, res) => {
+	router.get([ '/logs', '/backups' ], (req, res) => {
 
+		res.set('Cache-Control', 'no-store');
+	
+		const type = req.path.replace('/', '');
+	
 		if (req.session.loggedIn) {
 
-			shareData.Common.showLogs(req, res);
+			shareData.Common.showFiles(type, req, res);
 		}
 		else {
 
@@ -174,15 +178,16 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.get('/logs/download/:file', (req, res) => {
+	router.get([ '/logs/download/:file', '/backups/download/:file' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
-
+	
 		if (req.session.loggedIn) {
 
-			let fileName = req.params.file;
+			const fileName = req.params.file;
+			const type = req.path.includes('/logs/') ? 'logs' : 'backups';
 
-			shareData.Common.downloadLog(fileName, req, res);
+			shareData.Common.downloadFile(fileName, type, req, res);
 		}
 		else {
 
@@ -526,7 +531,7 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.all('*', (req, res) => {
+	router.all('*wildcard', (req, res) => {
 
 		redirectNotFound(res);
 	});
@@ -550,12 +555,26 @@ async function processConfig(req, res) {
 
 		const appConfig = await shareData.Common.getConfig(appConfigFile);
 
-		const services = Object.assign({
+		let services = Object.assign({
 
-			'ai': appConfig.data.ai,
-			'telegram': appConfig.data.telegram,
-			'signals': appConfig.data.signals
+			'ai': JSON.parse(JSON.stringify(appConfig.data.ai)),
+			'cron_backup': JSON.parse(JSON.stringify(appConfig.data.cron_backup)),
+			'telegram': JSON.parse(JSON.stringify(appConfig.data.telegram)),
+			'signals': JSON.parse(JSON.stringify(appConfig.data.signals))
 		});
+
+		const cronBackupPasswordEnc = services['cron_backup']['password'];
+		services['cron_backup']['password'] = '';
+
+		if (cronBackupPasswordEnc) {
+
+			const cronBackupPasswordDecObj = await shareData.System.decrypt(cronBackupPasswordEnc, shareData.appData.password);
+
+			if (cronBackupPasswordDecObj.success) {
+
+				services['cron_backup']['password'] = Buffer.from(cronBackupPasswordDecObj.data, 'utf8').toString('base64');
+			}
+		}
 
 		res.render( 'configView', { 'appData': shareData.appData, 'token': tokenBase64, 'services': services } );
 	}

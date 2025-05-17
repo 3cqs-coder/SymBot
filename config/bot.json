@@ -10,6 +10,7 @@
 	"dcaOrderStepPercent": 1.3,
 	"dcaOrderStepPercentMultiplier": 1.0,
 	"dcaTakeProfitPercent": 1.5,
+	"profitCurrency": "quote",
 	"exchange": "coinbasepro",
 	"exchangeFee": 0.45,
 	"exchangeOptions": { "defaultType": "spot" },

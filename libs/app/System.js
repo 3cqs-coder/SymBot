@@ -3,6 +3,7 @@
 const fs = require('fs');
 const fsp = require('fs').promises;
 const path = require('path');
+const cron = require('node-cron');
 const bson = require('bson');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -15,6 +16,7 @@ const prompt = require('prompt-sync')({
 	sigint: true
 });
 
+
 let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
 pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 
@@ -22,6 +24,9 @@ let shareData;
 let shutDownFunction;
 let dbUrl;
 
+const activeCrons = {};
+
+const tempDir = pathRoot + '/temp';
 const backupDir = pathRoot + '/backups';
 
 
@@ -226,7 +231,7 @@ const backupDb = async () => {
 
 	let res;
 
-	const dir = backupDir + '/' + shareData.Common.uuidv4();
+	const dir = tempDir + '/' + shareData.Common.uuidv4();
 
 	shareData.Common.logger('Database backup started');
 
@@ -273,65 +278,17 @@ async function routeBackupDb(req, res) {
 		return;
 	}
 
-	await pause(true, 'Database Backup Processing');
-
-	// Wait short delay for data to stop processing
-	await shareData.Common.delay(5000);
-
 	const body = req.body;
 
 	let password = body.password;
 
-	const dateParts = shareData.Common.getDateParts(new Date());
+	const resBackup = await processBackupDb(password);
 
-	let dateNow = dateParts.date
-	let timeNow = dateParts.time;
+	const msg = resBackup.msg;
+	const outFileEnc = resBackup.full_path;
+	const fileNameEnc = resBackup.file_name;
 
-	dateNow = dateNow.replace(/[^a-zA-Z0-9]/g, '');
-	timeNow = timeNow.replace(/[^a-zA-Z0-9]/g, '');
-
-	const fileName = shareData.appData.name + '-backup-' + dateNow + '_' + timeNow + '.zip';
-
-	const outFile = backupDir + '/' + fileName;
-
-	const resBackup = await backupDb();
-
-	const success = resBackup['success'];
-	const dir = resBackup['dir'];
-
-	if (success) {
-
-		const manifestFile = dir + '/.manifest.json';
-
-		// Create manifest
-		await logManifest(shareData.appData.version, dir, manifestFile);
-
-		shareData.Common.logger('Compressing: ' + fileName);
-
-		await compress(dir, outFile);
-
-		removeDirectorySync(dir);
-
-		const outFileEnc = outFile + '.enc';
-		const fileNameEnc = fileName + '.enc';
-
-		shareData.Common.logger('Encrypting: ' + fileName);
-
-		const encryptObj = await encryptFile(outFile, outFileEnc, password);
-
-		// Delete unencrypted file
-		fs.unlinkSync(outFile);
-
-		await pause(false);
-
-		if (!encryptObj.success) {
-
-			let msg = 'Encryption failed: ' + encryptObj.error;
-
-			shareData.Common.logger(msg);
-
-			throw new Error(msg);
-		}
+	if (resBackup.success) {
 
 		res.download(outFileEnc, fileNameEnc, (err) => {
 
@@ -345,7 +302,7 @@ async function routeBackupDb(req, res) {
 	}
 	else {
 
-		res.status(500).send('Unable to process database backup');
+		res.status(500).send(msg);
 	}
 }
 
@@ -358,7 +315,7 @@ async function routeRestoreDb(req, res) {
 	}
 
 	const tempPath = req.file.path;
-	const targetPath = backupDir + '/' + req.file.originalname;
+	const targetPath = tempDir + '/' + req.file.originalname;
 
 	const body = req.body;
 
@@ -397,6 +354,73 @@ async function routeRestoreDb(req, res) {
 }
 
 
+async function processBackupDb(password) {
+
+	let msg;
+	let outFileEnc;
+	let fileNameEnc;
+
+	const dateParts = shareData.Common.getDateParts(new Date());
+
+	let dateNow = dateParts.date
+	let timeNow = dateParts.time;
+
+	dateNow = dateNow.replace(/[^a-zA-Z0-9]/g, '');
+	timeNow = timeNow.replace(/[^a-zA-Z0-9]/g, '');
+
+	const fileName = shareData.appData.name + '-backup-' + dateNow + '_' + timeNow + '.zip';
+
+	const outFile = tempDir + '/' + fileName;
+
+	await pause(true, 'Database Backup Processing');
+
+	// Wait short delay for data to stop processing
+	await shareData.Common.delay(5000);
+
+	const resBackup = await backupDb();
+
+	let success = resBackup['success'];
+	const dir = resBackup['dir'];
+
+	if (success) {
+
+		const manifestFile = dir + '/.manifest.json';
+
+		// Create manifest
+		await logManifest(shareData.appData.version, dir, manifestFile);
+
+		shareData.Common.logger('Compressing: ' + fileName);
+
+		await compress(dir, outFile);
+
+		removeDirectorySync(dir);
+
+		outFileEnc = outFile + '.enc';
+		fileNameEnc = fileName + '.enc';
+
+		shareData.Common.logger('Encrypting: ' + fileName);
+
+		const encryptObj = await encryptFile(outFile, outFileEnc, password);
+
+		// Delete unencrypted file
+		fs.unlinkSync(outFile);
+
+		if (!encryptObj.success) {
+
+			success = false;
+
+			msg = 'Encryption failed: ' + encryptObj.error;
+
+			shareData.Common.logger(msg);
+		}
+	}
+
+	await pause(false);
+
+	return { 'success': success, 'msg': msg, 'full_path': outFileEnc, 'file_name': fileNameEnc };
+}
+
+
 async function processRestoreDb(tempPath, targetPath, password, convertData, resetServerId) {
 
 	await pause(true, 'Database Restore Processing');
@@ -404,7 +428,7 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 	// Wait short delay for data to stop processing
 	await shareData.Common.delay(5000);
 
-	const dir = backupDir + '/' + shareData.Common.uuidv4();
+	const dir = tempDir + '/' + shareData.Common.uuidv4();
 
 	let targetPathDec;
 	let success = true;
@@ -595,6 +619,64 @@ async function decompress(zipPath, outDir) {
 }
 
 
+async function encrypt(data, password) {
+
+	let success = false, encryptedData = null, error = null;
+
+	try {
+	
+		const key = crypto.createHash('sha256').update(password).digest();
+		const iv = crypto.randomBytes(16);
+		const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+
+		const serialized = Buffer.from(JSON.stringify({ data }));
+		const encrypted = Buffer.concat([cipher.update(serialized), cipher.final()]);
+
+		encryptedData = iv.toString('hex') + ':' + encrypted.toString('base64');
+
+		success = true;
+	}
+	catch (err) {
+
+		error = 'Unexpected error: ' + err.message;
+	}
+
+	return { success, data: encryptedData, error };
+}
+
+
+async function decrypt(data, password) {
+
+	let success = false, decryptedData = null, error = null;
+
+	try {
+
+		const key = crypto.createHash('sha256').update(password).digest();
+		const [ivHex, encryptedBase64] = data.split(':');
+
+		if (!ivHex || !encryptedBase64) throw new Error('Invalid encrypted format');
+
+		const iv = Buffer.from(ivHex, 'hex');
+		const encryptedBuffer = Buffer.from(encryptedBase64, 'base64');
+
+		const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+		const decryptedBuffer = Buffer.concat([decipher.update(encryptedBuffer), decipher.final()]);
+
+		const {	data: originalData } = JSON.parse(decryptedBuffer.toString());
+
+		decryptedData = originalData;
+
+		success = true;
+	}
+	catch (err) {
+
+		error = 'Unexpected error: ' + err.message;
+	}
+
+	return { success, data: decryptedData, error };
+}
+
+
 async function encryptFile(inputPath, outputPath, password) {
 
 	try {
@@ -745,7 +827,13 @@ async function appStarting(req, res) {
 
 		shareData.Common.logger(msg);
 
-		res.status(500).send(msg);
+		try {
+
+			res.status(500).send(msg);
+		}
+		catch(e) {
+
+		}
 
 		return true;
 	}
@@ -886,7 +974,21 @@ async function updateSystem() {
 
 		let appConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/app.json');
 		let botConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/bot.json');
+		let hubConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/hub.json');
 
+		let hubConfigOld = await shareData.Common.getData(pathRoot + '/config/hub.json');
+
+		// Check for new hub.json params
+		if (hubConfigOld.success && hubConfigNew.success) {
+
+			let diffs = await findMissingParameters(JSON.parse(hubConfigOld.data), JSON.parse(hubConfigNew.data));
+			let configCombined = diffs.combined;
+
+			// Save new hub config
+			await shareData.Common.saveConfig('hub.json', configCombined, true);
+		}
+
+		// Reload hub config
 		let hubConfig = await shareData.Common.getData(pathRoot + '/config/hub.json');
 
 		if (hubConfig.success) {
@@ -913,7 +1015,7 @@ async function updateSystem() {
 			await shareData.Common.saveConfig(file, configCombined, updated);
 		}
 
-		// Remove existing files except config folder and replace with new 
+		// Remove existing files except backups and config folders and replace with new 
 		await moveFiles(pathRoot, extractDir + '/' + extractDirName);
 
 		// Cleanup files
@@ -1012,8 +1114,8 @@ async function moveFiles(originalDir, newDir) {
 
 		for (const item of items) {
 
-			// Skip "config" directory
-			if (item === 'config') {
+			// Skip "backups" and "config" directory
+			if (item === 'backups' || item === 'config') {
 
 				continue;
 			}
@@ -1041,6 +1143,227 @@ async function moveFiles(originalDir, newDir) {
 
 		throw new Error(e.message);
 	}
+}
+
+
+async function trimFiles(dir, name, max) {
+
+	try {
+
+		const files = await fsp.readdir(dir);
+
+		// Filter files that start with the given name
+		const matchingFiles = files
+			.filter(file => file.startsWith(name))
+			.map(file => ({ file, fullPath: path.join(dir, file) }));
+
+		if (matchingFiles.length <= Number(max)) return;
+
+		// Get stats and sort by modification time
+		const filesWithStats = await Promise.all(
+
+			matchingFiles.map(async ({ file, fullPath }) => ({
+		 		 file,
+				 fullPath,
+				 mtime: (await fsp.stat(fullPath)).mtime
+			}))
+	  	);
+
+		filesWithStats.sort((a, b) => a.mtime - b.mtime);
+		
+		const filesToDelete = filesWithStats.slice(0, filesWithStats.length - Number(max));
+
+		for (const { fullPath } of filesToDelete) {
+
+			await fsp.unlink(fullPath);
+
+			//console.log(`Deleted: ${fullPath}`);
+		}
+	}
+	catch (err) {
+
+		//console.error('Error trimming files:', err);
+	}
+}
+
+
+async function cronBackupStart(cronSchedule, start) {
+
+	let resStart;
+	let resStop;
+
+	let jobName = 'cron_backup';
+
+	if (!start) {
+
+		resStop = await cronJobToggle(jobName, '', cronBackup, false);
+	}
+	else {
+
+		// Start or restart job
+		resStart = await cronJobToggle(jobName, cronSchedule, cronBackup, true);
+	}
+
+	const resData = { 'job_name': jobName, 'start_result': resStart, 'stop_result': resStop};
+
+	shareData.Common.logger('Cron Backup Job: ' + JSON.stringify(resData));
+}
+
+
+async function cronBackup() {
+
+	let error;
+	let attempts = 0;
+	let success = false;
+	let appStillStarting = true;
+
+	// Verify if app is starting before allowing backup
+	while (attempts < 30) {
+
+		if (await appStarting(null, null)) {
+
+			await shareData.Common.delay(5000);
+
+			attempts++;
+		}
+		else {
+		
+			appStillStarting = false;
+		
+			break;
+		}
+	}
+
+	if (appStillStarting) {
+
+		shareData.Common.logger('Unable to perform scheduled database backup. App is still starting.');
+
+		return { 'success': success };
+	}
+
+	const cronBackupPasswordEnc = shareData['appData']['cron_backup']['password'];
+
+	if (cronBackupPasswordEnc) {
+
+		const cronBackupPasswordDecObj = await decrypt(cronBackupPasswordEnc, shareData.appData.password);
+
+		if (cronBackupPasswordDecObj.success) {
+
+			const password = cronBackupPasswordDecObj.data;
+
+			if (password) {
+
+				shareData.Common.logger('Performing scheduled database backup');
+
+				const resBackup = await processBackupDb(password);
+
+				if (resBackup.success) {
+
+					try {
+
+						await fsp.rename(resBackup.full_path, backupDir + '/' + resBackup.file_name);
+
+						success = true;
+					}
+					catch (err) {
+
+						error  = 'Failed to move file: ' + err;
+					}
+				}
+
+				const logData = { 'backup_result': resBackup, 'error': error };
+
+				shareData.Common.logger('Completed scheduled database backup: ' + JSON.stringify(logData));
+			}
+		}
+	}
+
+	let maxFiles = Number(shareData['appData']['cron_backup']['max']);
+
+	if (maxFiles < 1) {
+
+		maxFiles = 1;
+	}
+
+	// Remove files in backupDir matching appName beyond maxFiles
+	await trimFiles(backupDir, shareData.appData.name, maxFiles);
+
+	return { 'success': success, 'error': error };
+}
+
+
+async function cronJobToggle(name, schedule, task, shouldStart) {
+
+	let success = false;
+	let error = null;
+	let message;
+
+	try {
+
+		if (shouldStart) {
+
+			// If already running, stop it first
+			if (activeCrons[name]) {
+
+				try  {
+
+					activeCrons[name].stop();
+					activeCrons[name].destroy();
+
+					// console.log(`Stopped existing job: ${name}`);
+				}
+				catch(e) {
+
+				}
+			}
+
+			// Try scheduling the new job
+			const job = cron.schedule(schedule, task);
+
+			if (job) {
+
+				activeCrons[name] = job;
+				message = `Started job '${name}' with schedule '${schedule}'`;
+
+				success = true;
+			}
+			else {
+
+				error = new Error(`Failed to schedule job: '${name}'`);
+			}
+		}
+		else {
+
+			if (activeCrons[name]) {
+
+				try {
+
+					activeCrons[name].stop();
+					activeCrons[name].destroy();
+
+					message = `Stopped job '${name}'`;
+					delete activeCrons[name];
+				}
+				catch(e) {
+
+				}
+
+				success = true;
+			}
+			else {
+
+				message = `Job '${name}' is not running.`;
+			}
+		}
+	}
+	catch (err) {
+
+		shareData.Common.logger(`Error with cron job '${name}': ` + err);
+
+		error = err;
+	}
+
+	return { success, error, message };
 }
 
 
@@ -1205,6 +1528,14 @@ async function resetConsole(serverIdError, resetServerId) {
 async function start(url) {
 
 	dbUrl = url;
+
+	const cronEnabled = shareData.appData['cron_backup']['enabled'];
+	const cronSchedule = shareData.appData['cron_backup']['schedule'];
+
+	if (cronEnabled && (cronSchedule != undefined && cronSchedule != null && cronSchedule != '')) {
+
+		cronBackupStart(cronSchedule, true);
+	}
 }
 
 
@@ -1217,10 +1548,16 @@ module.exports = {
 	updateSystem,
 	connectDb,
 	backupDb,
+	encrypt,
+	decrypt,
+	encryptFile,
+	decryptFile,
 	restoreDb,
 	routeBackupDb,
 	routeRestoreDb,
 	routeUpdateSystem,
+	cronJobToggle,
+	cronBackupStart,
 	get shutDown() {
         return shutDownFunction;
     },

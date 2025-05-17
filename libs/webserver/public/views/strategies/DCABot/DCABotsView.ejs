@@ -117,15 +117,24 @@
 			});
 		}
 	}
-	
+
 
 	$(document).ready(function() {
+		
+		document.querySelectorAll('.date-cell').forEach(cell => {
+			
+			const rawDate = cell.getAttribute('data-date');
+			
+			if (rawDate) {
+
+				cell.textContent = dateConvertLocal(rawDate);
+			}
+		});
 
 		$(window).resize(function() {
 
 			resizeBotsDeals();
 		});
-
 
 		$('[id="showActive"]').simpleSwitch();
 		$('[id*="toggle"]').simpleSwitch();
@@ -268,7 +277,7 @@
 
 					<thead style="position: sticky; top: 0; z-index: 1000;">
 						<tr class="tableHeader">
-							<th>Bot Name</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
+							<th>Created</th> <th>Updated</th> <th>Bot Name</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
 						</tr>
 					</thead>
 
@@ -363,6 +372,8 @@
 	%>
 
 					<tr data-botid="<%- bot['botId'] %>" data-botname="<%- bot['botName'] %>" style="vertical-align: top;">
+						<td class="date-cell" data-date="<%= bot['createdAt'] %>"></td>
+						<td class="date-cell" data-date="<%= bot['updatedAt'] %>"></td>						
 						<td><%- bot['botName'] %></td>
 						<td style="max-width: 150px;"><%- pair.toUpperCase() %></td>
 						<td><%- bot['config']['firstOrderAmount'] %></td>
