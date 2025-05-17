@@ -1015,7 +1015,7 @@ async function updateSystem() {
 			await shareData.Common.saveConfig(file, configCombined, updated);
 		}
 
-		// Remove existing files except config folder and replace with new 
+		// Remove existing files except backups and config folders and replace with new 
 		await moveFiles(pathRoot, extractDir + '/' + extractDirName);
 
 		// Cleanup files
@@ -1114,8 +1114,8 @@ async function moveFiles(originalDir, newDir) {
 
 		for (const item of items) {
 
-			// Skip "config" directory
-			if (item === 'config') {
+			// Skip "backups" and "config" directory
+			if (item === 'backups' || item === 'config') {
 
 				continue;
 			}
@@ -1305,8 +1305,16 @@ async function cronJobToggle(name, schedule, task, shouldStart) {
 			// If already running, stop it first
 			if (activeCrons[name]) {
 
-				activeCrons[name].stop();
-				//console.log(`Stopped existing job: ${name}`);
+				try  {
+
+					activeCrons[name].stop();
+					activeCrons[name].destroy();
+
+					// console.log(`Stopped existing job: ${name}`);
+				}
+				catch(e) {
+
+				}
 			}
 
 			// Try scheduling the new job
@@ -1328,9 +1336,17 @@ async function cronJobToggle(name, schedule, task, shouldStart) {
 
 			if (activeCrons[name]) {
 
-				activeCrons[name].stop();
-				message = `Stopped job '${name}'`;
-				delete activeCrons[name];
+				try {
+
+					activeCrons[name].stop();
+					activeCrons[name].destroy();
+
+					message = `Stopped job '${name}'`;
+					delete activeCrons[name];
+				}
+				catch(e) {
+
+				}
 
 				success = true;
 			}
