@@ -775,6 +775,7 @@
 			const botActive = deal['info']['bot_active'];
 			const profit = deal['info']['profit'];
 			const profitBase = deal['info']['profit_base'];
+			const profitQuoteProjected = deal['info']['profit_quote_projected'];
 			const profitPerc = deal['info']['profit_percentage'];
 			const maxFunds = Math.round(deal['info']['max_funds']);
 			const maxDeviation = deal['info']['max_deviation'];
@@ -811,7 +812,6 @@
 			});
 
 			delete csvDealInfo['estimates'];
-			delete csvDealInfo['take_profit'];
 
 			csvDataArr.push(csvDealInfo);
 
@@ -916,6 +916,7 @@
 			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit + '</td>');
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitBase + '</td>');
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitPerc + '%</td>');
+			contentArr.push('<td>$' + profitQuoteProjected + '</td>');
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
 			contentArr.push('<td>$' + maxFunds + '</td>')
@@ -1155,7 +1156,7 @@
 			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
 			textExtraction: {
 
-				8: function(node) {
+				9: function(node) {
 
 					if (node.innerHTML.indexOf('%') != -1) {
 
@@ -1165,7 +1166,7 @@
 
 					return node.innerHTML;
 				},
-				9: function(node) {
+				11: function(node) {
 
 					if (node.innerHTML.indexOf('%') != -1) {
 
@@ -1194,7 +1195,7 @@
 				7: {
 					sorter: "currency"
 				},
-				8: {
+				10: {
 					sorter: "currency"
 				}
 			}
@@ -1398,7 +1399,7 @@
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>TP</th> <th>Safety Orders</th> <th>Max Funds</th> </th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>Profit &asymp;</th> <th>TP</th> <th>Safety Orders</th> <th>Max Funds</th> </th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

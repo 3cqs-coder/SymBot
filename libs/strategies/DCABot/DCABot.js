@@ -2770,7 +2770,9 @@ const calculateProfit = async (exchange, pair, price, orderAverage, orderSum, ta
 	profitPerc = profitPerc - Number(exchangeFeePercent) - (Number(priceSlippageSellPercent));
 	profitPerc = Number(Number(profitPerc).toFixed(2));
 
-	const takeProfit = Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent) - priceSlippageSellPercent) / 100)));
+	//const profitQuoteProjected = Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - Number(exchangeFeePercent) - priceSlippageSellPercent) / 100)));
+	//const profitQuoteProjected = Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent) - (Number(exchangeFeePercent) / 2)) / 100)));
+	const profitQuoteProjected = Common.roundAmount(Number(Number(orderSum) * ((Number(takeProfitPercent)) / 100)));
 	const currentProfit = Common.roundAmount(Number((Number(orderSum) * (Number(profitPerc) / 100))));
 
 	let baseProfit = Number(currentProfit) / Number(price);
@@ -2796,7 +2798,7 @@ const calculateProfit = async (exchange, pair, price, orderAverage, orderSum, ta
 	const data = {
 					'profit': currentProfit,
 					'profit_base': baseProfit,
-					'take_profit': takeProfit,
+					'profit_quote_projected': profitQuoteProjected,
 					'profit_percentage': profitPerc
 				 };
 
@@ -4285,7 +4287,7 @@ async function getDealInfo(data) {
 		const profitData = await calculateProfit(exchange, config.pair, price, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee, config.sandBox);
 
 		const profitPerc = profitData['profit_percentage'];
-		const takeProfit = profitData['take_profit'];
+		const profitQuoteProjected = profitData['profit_quote_projected'];
 		const currentProfit = profitData['profit'];
 		const currentProfitBase = profitData['profit_base'];
 
@@ -4328,7 +4330,7 @@ async function getDealInfo(data) {
 							'profit': currentProfit,
 							'profit_base': currentProfitBase,
 							'profit_percentage': profitPerc,
-							'take_profit': takeProfit,
+							'profit_quote_projected': profitQuoteProjected,
 							'estimates': {
 								'amount_net': estAmountNet,
 								'amount_gross': estAmountGross,

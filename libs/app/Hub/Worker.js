@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const colors = require('colors');
 
-const pathRoot = path.posix.dirname(path.posix.dirname(path.posix.dirname(fs.realpathSync(__dirname))));
+const pathRoot = path.resolve(__dirname, '..', '..', '..');
 
 let parentPort;
 let shutdownTimeout;
@@ -32,7 +32,7 @@ async function processWorkerTask(instanceData) {
 
 		console.log(colors.bgBlack.brightYellow.bold(`Starting Instance: ${instanceName}`));
 
-		const SymBot = require(pathRoot + '/symbot.js');
+		const SymBot = require(path.join(pathRoot, 'symbot.js'));
 
 		SymBot.setInstanceConfig(Object.assign({},
 			instanceData,

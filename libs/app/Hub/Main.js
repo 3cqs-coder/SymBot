@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const colors = require('colors');
 
-const pathRoot = path.posix.dirname(path.posix.dirname(path.posix.dirname(fs.realpathSync(__dirname))));
+const pathRoot = path.resolve(__dirname, '..', '..', '..');
 
 let Worker;
 let shutDownFunction;
