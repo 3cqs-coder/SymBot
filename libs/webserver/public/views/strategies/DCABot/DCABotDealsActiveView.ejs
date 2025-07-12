@@ -53,6 +53,11 @@
 
 	function setReloadTimeout() {
 
+		if (timeOutId) {
+
+			clearTimeout(timeOutId);
+		}
+
 		timeOutId = setTimeout(() => { getActiveDeals(); }, 5000);
 	}
 
@@ -711,6 +716,7 @@
 		const maxMins = 2;
 
 		let totalProfit = 0;
+		let totalProjectedProfit = 0;
 		let activeDeals = 0;
 		let inDeals = 0;
 		let dealDataErrors = 0;
@@ -775,7 +781,7 @@
 			const botActive = deal['info']['bot_active'];
 			const profit = deal['info']['profit'];
 			const profitBase = deal['info']['profit_base'];
-			const profitQuoteProjected = deal['info']['profit_quote_projected'];
+			const profitQuoteProjected = Number(deal['info']['profit_quote_projected']);
 			const profitPerc = deal['info']['profit_percentage'];
 			const maxFunds = Math.round(deal['info']['max_funds']);
 			const maxDeviation = deal['info']['max_deviation'];
@@ -881,7 +887,15 @@
 				dealsErrorArr.push(dealId);
 			}
 
-			totalProfit += profit;
+			if (!isNaN(profit)) {
+
+				totalProfit += profit;
+			}
+
+			if (!isNaN(profitQuoteProjected)) {
+
+				totalProjectedProfit += profitQuoteProjected;
+			}
 
 			dealTracker[dealId] = {};
 
@@ -900,7 +914,7 @@
 				safetyOrdersTotalDisplay += ' (+' + manualOrders.length + ')';
 			}
 
-			const estimates = JSON.stringify(deal.info.estimates)
+			const estimates = JSON.stringify(deal.info.estimates || {})
 				.replace(/&/g, '&amp;')
 				.replace(/"/g, '&quot;')
 				.replace(/'/g, '&#39;');
@@ -962,7 +976,8 @@
 
 		$('#inDeals').html('$' + inDeals.toFixed(2));
 		$('#totalDeals').html(activeDeals);
-		
+		$('#projectedProfit').html('$' + (Math.round(totalProjectedProfit * 100) / 100).toFixed(2));
+
 		$('#botsDeals').tablesorter().trigger('update');
 
 		resizeBotsDeals();
@@ -989,60 +1004,95 @@
 		}
 
 
-		$(document).on('mouseenter', '#dealid-cell', function () {
+		$(document).on('mouseenter', '#dealid-cell', function(e) {
 
 			try {
-
+				
 				let contentPriceTarget;
 				let noAdd = false;
 
 				const pair = $(this).closest('tr').attr('data-pair');
 				const estimates = JSON.parse($(this).closest('tr').attr('data-estimates'));
 
-				const pairSplit = pair.split('/');
-				const base = pairSplit[0];
-				const quote = pairSplit[1];
-
+				const [base, quote] = pair.split('/');
 				const amountNet = estimates['amount_net'];
 				const priceAvgNet = estimates['price_average_net'];
 				const priceTargetNet = estimates['price_target_net'];
 				const priceTargetChangePerc = estimates['price_target_change_percent'];
 
 				if (priceTargetChangePerc > 0) {
-
-					contentPriceTarget = 'This is a ' + Math.abs(priceTargetChangePerc) + '% reduction from the current target price';
+					
+					contentPriceTarget = `This is a ${Math.abs(priceTargetChangePerc)}% reduction from the current target price.`;
 				}
 				else {
-
-					// Amount added would increase target
-					contentPriceTarget = 'Adding funds may increase the target price for this deal';
-
+					
+					contentPriceTarget = `Adding funds may increase the target price for this deal.`;
 					noAdd = true;
 				}
 
-				if (!$(this).find('.toolTipStatic').length) {
-				
-					const content = `<span class="toolTipStatic">
-    	   	 			<span class="toolTipText">
-							Buying ${base} at the current market price using $${amountNet} ${quote} may bring the average price bought to $${priceAvgNet} and the new target take profit price to $${priceTargetNet}. ${contentPriceTarget}.
-					</span></span>`;
+				// Prevent duplicate tooltip
+				if ($('.dynamic-tooltip').length) return;
 
-					$(this).append(content);
+				const tooltip = $(`
+					<span class="toolTipStatic dynamic-tooltip" style="position: absolute;">
+						<span class="toolTipText">
+							Buying ${base} at the current market price using $${amountNet} ${quote} may bring the average price bought to $${priceAvgNet} and the new target take profit price to $${priceTargetNet}. ${contentPriceTarget}
+						</span>
+					</span>
+				`);
 
-					if (noAdd) {
-						
-						$('.toolTipStatic .toolTipText').addClass('tooltip-red');
-					}
-
+				if (noAdd) {
+					
+					tooltip.find('.toolTipText').addClass('tooltip-red');
 				}
+
+				// Add tooltip to body
+				$('body').append(tooltip);
+
+				const $cell = $(this);
+				const cellOffset = $cell.offset();
+				const cellHeight = $cell.outerHeight();
+				const tooltipWidth = tooltip.outerWidth();
+				const tooltipHeight = tooltip.outerHeight();
+
+				// Clone the text into a temporary span to measure it
+				const textClone = $('<span>')
+					.text($cell.text().trim())
+					.css({
+						position: 'absolute',
+						visibility: 'hidden',
+						whiteSpace: 'nowrap',
+						font: $cell.css('font'), // preserve font for accuracy
+						fontSize: $cell.css('font-size'),
+						fontWeight: $cell.css('font-weight'),
+						fontFamily: $cell.css('font-family')
+					})
+					.appendTo('body');
+
+				const textWidth = textClone.outerWidth();
+			
+				textClone.remove();
+
+				// Final position
+				const tooltipTop = cellOffset.top + cellHeight / 2 - tooltipHeight / 2;
+				const tooltipLeft = cellOffset.left + textWidth + 6; // small buffer
+
+				tooltip.css({
+					top: tooltipTop + 'px',
+					left: tooltipLeft + 'px',
+					zIndex: 9999
+				});
 			}
-			catch(e) {}
+			catch (e) {
+	
+				console.error(e);
+			}
 		});
 
 
-		$(document).on('mouseleave', '#dealid-cell', function () {
-
-			$(this).find('.toolTipStatic').remove();
+		$(document).on('mouseleave', '#dealid-cell', function() {
+			
+			$('.dynamic-tooltip').remove();
 		});
 
 
@@ -1378,17 +1428,18 @@
 					<span id="botDealSelectorShow">&#9881;</span>
 				</span>
 
-				<span style="display: flex; font-size: 1.2rem; justify-content: center; gap: 20px; margin-top: 10px;">
-					<p style="margin-top: 0; margin-bottom: 0;">Active P/L: <span id="totalProfit"></span></p>
-					<p style="margin-top: 0; margin-bottom: 0;">In Deals: <span id="inDeals"></span></p>
-					<p style="margin-top: 0; margin-bottom: 0;">Deals: <span id="totalDeals"></span></p>
-					<div class="active-filter" style="display: inline-flex; align-items: center; gap: 5px; height: 20px;">
-						<p>Bot: </p>
-						<select class="form-field" id="active-bot-filter">
-							<option value="all"></option>
-						</select>
+				<div class="summary-bar">
+					<p>Active P/L: <span id="totalProfit"></span></p>
+					<p>Projected Profit: <span id="projectedProfit"></span></p>
+					<p>In Deals: <span id="inDeals"></span></p>
+					<p>Deals: <span id="totalDeals"></span></p>
+					<div class="active-filter">
+						<p>Bot:</p>
+							<select class="form-field" id="active-bot-filter">
+								<option value="all"></option>
+							</select>
 					</div>
-				</span>
+				</div>
 			</div>
 
 			<span id="msgBox" style="position: relative; display: flex; justify-content: center;"></span>

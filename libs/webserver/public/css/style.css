@@ -521,6 +521,7 @@ form textarea {
 	color: transparent;
 	text-shadow: var(--modify-buttons-color);
 	font-size: 1.1rem;
+	white-space: nowrap;
 }
 
 
@@ -1096,6 +1097,31 @@ table#botsDeals tr:hover {
 .botsDealsBox::-webkit-scrollbar-corner {
 
 	display: none;
+}
+
+
+.summary-bar {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 20px;
+	font-size: 1.2rem;
+	margin-top: 10px;
+}
+
+
+.summary-bar p {
+	margin: 0;
+	white-space: nowrap;
+}
+
+
+.summary-bar .active-filter {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 20px;
 }
 
 

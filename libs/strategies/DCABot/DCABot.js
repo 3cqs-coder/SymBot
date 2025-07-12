@@ -814,6 +814,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 	let isDealPause = false;
 	let isDealPauseBuy = false;
 	let isDealPauseSell = false;
+	let isDealVerifying = false;
 	let cancelOnly = false;
 
 	let dcaError;
@@ -874,9 +875,27 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 		// Deal sell error
 		if (dealTracker[dealId]['update']['deal_sell_error']) {
 
+			let isMaxError = false;
+
 			let diffSec = (new Date().getTime() - new Date(dealTracker[dealId]['update']['deal_sell_error']['date']).getTime()) / 1000;
 
-			if (dealTracker[dealId]['update']['deal_sell_error']['count'] > maxSellErrorCount || diffSec > maxSellErrorResetSec) {
+			if (dealTracker[dealId]['update']['deal_sell_error']['verifying']) {
+
+				isDealVerifying = true;
+			}
+
+			if (dealTracker[dealId]['update']['deal_sell_error']['count'] > maxSellErrorCount) {
+
+				isMaxError = true;
+
+				let msg = 'WARNING: Unable to sell deal ID ' + dealId + '. Check the logs for details.';
+
+				Common.logger(colors.red.bold(msg));
+
+				Common.sendNotification({ 'message': msg, 'type': 'warning', 'telegram_id': shareData.appData.telegram_id });
+			}
+
+			if (!isDealVerifying && (isMaxError || diffSec > maxSellErrorResetSec)) {
 
 				delete dealTracker[dealId]['update']['deal_sell_error'];
 			}
@@ -1097,6 +1116,16 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							isBuy = true;
 
+							const handleSuccessfulBuy = async () => {
+
+								const ordersCopy = Common.deepCopy(orders);
+
+								await updateOrderDeal(dealId, i, buy['data']['id'], ordersCopy);
+
+								// Wait before unpausing deal in callback to ensure existing data settles
+								await Common.delay(5000);
+							};
+
 							if (!config.sandBox) {
 
 								const priceFiltered = await filterPrice(exchange, pair, price);
@@ -1129,7 +1158,25 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										msgType = 'deal_error';
 										msgErr = 'Invalid order for deal ID ' + dealId + '. Pausing buy orders for ' + retryMins + ' minutes.';
 
-										await verifyInvalidOrder(0, retryMins, exchange, pair, config.botId, dealId, buy['data']['id'], i, orders);
+										isDealVerifying = true;
+
+										const verifyPromise = verifyInvalidOrder(0, retryMins, exchange, pair, config.botId, dealId, buy['data']['id'], handleSuccessfulBuy, false);
+
+										// Reset verifying flag if needed
+										verifyPromise.then(async (verifyResult) => {
+
+											if (verifyResult.retriesExhausted || verifyResult.notPaused) {
+													
+												try {
+														
+													if (dealTracker[dealId]?.update?.deal_sell_error) {
+														
+														dealTracker[dealId].update.deal_sell_error.verifying = false;
+													}
+												}
+												catch(e) {}
+											}
+										});
 									}
 									else {
 
@@ -1142,7 +1189,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 										await sendDealMessage(msgType, msgErr);
 
-										const pauseData = await pauseDeal(config.botId, dealId, false, true, false);
+										const pauseData = await pauseDeal(config.botId, dealId, null, true, null);
 									}
 								}
 								else {
@@ -1164,7 +1211,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								const orderUpdated = await updateOrderDeal(dealId, i, buyOrderId, orders);
 
 								if (shareData.appData.verboseLog) {
-		
+
 									Common.logger(
 										colors.blue.bold.italic(
 										'Pair: ' +
@@ -1217,7 +1264,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								return ( { 'success': false, 'finished': false } );
 							}
 						}
-						else if ((price >= priceSellOrder && !isDealPause && !isDealPauseSell) || isDealCancel || isDealPanicSell) {
+						else if ((price >= priceSellOrder && !isDealVerifying && !isDealPause && !isDealPauseSell) || isDealCancel || isDealPanicSell) {
 
 							//Sell order
 
@@ -1228,6 +1275,10 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								let profitCurrency = config['profitCurrency'];
 
 								let sellOrderId = '';
+								let sellError;
+								let sellOrderPrice;
+								let sellOrderInvalid = false;
+								let sellOrderStatusInvalid = false;
 								let sellNSF = false;
 								let sellSuccess = true;
 
@@ -1257,23 +1308,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								//const profitPercFinal = profitData['profit_percentage'];
 								const profitPercFinal = Number(Number(profitPerc - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
 
-								if (!config.sandBox && !isDealCancel && !cancelOnly) {
-
-									const sell = await sellOrder(exchange, dealId, pair, qtySumSellOrder, priceFiltered);
-
-									sellNSF = sell.nsf;
-
-									if (!sell.success) {
-
-										sellSuccess = false;
-									}
-									else {
-
-										sellOrderId = sell['data']['id'];
-									}
-								}
-
-								if (sellSuccess) {
+								const handleSuccessfulSell = async () => {
 
 									await updateDealTracker({
 																'exchange': exchange,
@@ -1289,25 +1324,15 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 									if (shareData.appData.verboseLog) {
 
 										Common.logger(
-											colors.blue.bold.italic(
-											'Pair: ' +
-											pair +
-											'\tQty: ' +
-											currentOrder.qtySum +
-											'\tLast Price: $' +
-											price +
-											'\tDCA Price: $' +
-											currentOrder.average +
-											'\tSell Price: $' +
-											currentOrder.target +
-											'\tStatus: ' +
-											colors.red('SELL') +
-											'' +
-											'\tProfit: ' +
-											profit +
-											''
-											)
-										);
+														colors.blue.bold.italic(
+														'Pair: ' + pair +
+														'\tQty: ' + currentOrder.qtySum +
+														'\tLast Price: $' + price +
+														'\tDCA Price: $' + currentOrder.average +
+														'\tSell Price: $' + currentOrder.target +
+														'\tStatus: ' + colors.red('SELL') +
+														'\tProfit: ' + profit
+													));
 									}
 
 									const sellData = {
@@ -1325,27 +1350,109 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 														'feeData': feeData
 													 };
 
-									await Deals.updateOne({
-										dealId: dealId
-									}, {
-										'sellData': sellData,
-										'panicSell': isDealPanicSell,
-										'canceled': isDealCancel,
-										'status': 1
-									});
+									await Deals.updateOne({ dealId }, {
+																		'sellData': sellData,
+																		'panicSell': isDealPanicSell,
+																		'canceled': isDealCancel,
+																		'status': 1
+																	  });
 
 									finished = true;
 
 									await deleteDealTracker(dealId);
 
-									if (shareData.appData.verboseLog) { Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.')); }
+									if (shareData.appData.verboseLog) {
+
+										Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
+									}
 
 									sendNotificationFinish(config.botName, dealId, pair, sellData);
+								};
+
+								if (!config.sandBox && !isDealCancel && !cancelOnly) {
+
+									const sell = await sellOrder(exchange, dealId, pair, qtySumSellOrder, priceFiltered);
+
+									// Sell not successful / Sell successful but verification failed 
+									if (!sell.success || (sell.success && !sell.success_verify)) {
+
+										// sellOrderInvalid - Order not found or unable to be looked up on exchange
+										// sellOrderStatusInvalid - Order may have been canceled by exchange or some other issue
+
+										sellSuccess = false;
+
+										sellOrderInvalid = sell.invalid_order;
+										sellOrderStatusInvalid = sell.invalid_status;
+										sellError = sell.message;
+										sellNSF = sell.nsf;
+
+										let msgErr = null;
+										let msgType = null;
+
+										if (sellNSF) {
+											
+											// Let NSF reduce quantity sell error logic handle below
+										}
+										else if (sellOrderStatusInvalid) {
+
+											// Sell failed after trying to be verified. Maybe exchange canceled order. Try selling again after additional short delay
+
+											await Common.delay(5000);
+										}
+										else if (sellOrderInvalid) {
+
+											const retryMins = 1;
+
+											msgType = 'deal_error';
+											msgErr = `Invalid order for deal ID ${dealId}. Pausing sell orders for ${retryMins} minutes.`;
+
+											isDealVerifying = true;
+
+											const verifyPromise = verifyInvalidOrder(0, retryMins, exchange, pair, config.botId, dealId, sell['data']['id'], handleSuccessfulSell, true);
+
+											// Reset verifying flag if needed
+											verifyPromise.then(async (verifyResult) => {
+
+												if (verifyResult.retriesExhausted || verifyResult.notPaused) {
+													
+													try {
+														
+														if (dealTracker[dealId]?.update?.deal_sell_error) {
+														
+															dealTracker[dealId].update.deal_sell_error.verifying = false;
+														}
+													}
+													catch(e) {}
+												}
+											});
+										}
+										else {
+
+											msgType = 'deal_error';
+											msgErr = `An error occurred during sell order for deal ID ${dealId}. Pausing any further sell orders for deal.`;
+										}
+
+										if (msgErr) {
+
+											await sendDealMessage(msgType, msgErr);
+											await pauseDeal(config.botId, dealId, null, null, true);
+										}
+									}
+									else {
+
+										sellOrderId = sell['data']['id'];
+									}
+								}
+
+								if (sellSuccess) {
+
+									await handleSuccessfulSell();
 								}
 								else {
 
 									// Sell failed
 									dealTracker[dealId]['update']['deal_sell_error']['nsf'] = sellNSF;
+									dealTracker[dealId]['update']['deal_sell_error']['verifying'] = isDealVerifying;
 									dealTracker[dealId]['update']['deal_sell_error']['count']++;
 									dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
 
@@ -2263,33 +2370,37 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 }
 
 
-const verifyInvalidOrder = async (count, mins, exchange, pair, botId, dealId, orderId, orderIndex, ordersArr) => {
+const verifyInvalidOrder = ( count = 0, mins = 2, exchange, pair, botId, dealId, orderId, onSuccessCallback = null, pauseBeforeCallback = false ) => {
 
-	let retryMins = 2;
+	const maxTries = 100;
 
-	if (mins != undefined && mins != null) {
-
-		retryMins = mins;
-	}
-
-	if (count == undefined || count == null) {
-
-		count = 0;
-	}
-
+	const retryMins = mins ?? 2;
 	count++;
 
-	let orders = Common.deepCopy(ordersArr);
+	return new Promise(async (resolve) => {
 
-	setTimeout(async () => {
+		if (count > maxTries) {
+
+			await sendDealMessage(
+				'info',
+				`Max tries (${maxTries}) reached for verifying order ID ${orderId} for deal ID ${dealId}. Will not try again.`
+			);
+
+			return resolve({
+				success: false,
+				retriesExhausted: true
+			});
+		}
+
+		await Common.delay(retryMins * 60000);
 
 		let resume = false;
 
-		let msg = 'Attempt #' + count + ' to verify order ID ' + orderId + ' for deal ID ' + dealId + '.';
+		let msg = `Attempt #${count} to verify order ID ${orderId} for deal ID ${dealId}.`;
 
 		await sendDealMessage('info', msg);
 
-		if (orderId != undefined && orderId != null && orderId != '') {
+		if (orderId) {
 
 			const verifyData = await verifyBuySellOrder(exchange, orderId, pair, dealId);
 
@@ -2297,66 +2408,93 @@ const verifyInvalidOrder = async (count, mins, exchange, pair, botId, dealId, or
 
 				resume = true;
 
-				let msg = 'Attempt #' + count + ' to verify order ID ' + orderId + ' for deal ID ' + dealId + ' successful.';
-
-				await updateOrderDeal(dealId, orderIndex, orderId, orders);
+				msg = `Attempt #${count} to verify order ID ${orderId} for deal ID ${dealId} successful.`;
 
 				await sendDealMessage('info', msg);
-
-				// Wait short delay before resuming so any existing DCA follow logic finishes
-				await Common.delay(5000);
 			}
 			else {
 
-				let isDealPause = false;
-				let isDealPauseBuy = false;
-				let isDealPauseSell = false;
-
-				let msg = 'Attempt #' + count + ' to verify order ID ' + orderId + ' for deal ID ' + dealId + ' unsuccessful.';
-
 				const deal = await Deals.findOne({
-					dealId: dealId,
+					dealId,
 					status: 0
 				});
-		
-				if (deal) {
 
-					isDealPause = Common.convertBoolean(deal.paused, false);
-					isDealPauseBuy = Common.convertBoolean(deal.pausedBuy, false);
-					isDealPauseSell = Common.convertBoolean(deal.pausedSell, false);
-				}
+				const isDealPause = Common.convertBoolean(deal?.paused, false);
+				const isDealPauseBuy = Common.convertBoolean(deal?.pausedBuy, false);
+				const isDealPauseSell = Common.convertBoolean(deal?.pausedSell, false);
 
-				// If deal is still paused then try again after n minutes
-				if (deal && (isDealPause || isDealPauseBuy)) {
+				msg = `Attempt #${count} to verify order ID ${orderId} for deal ID ${dealId} unsuccessful.`;
 
-					msg += ' Trying again in ' + retryMins + ' minutes.';
+				if (deal && (isDealPause || isDealPauseBuy || isDealPauseSell)) {
 
-					verifyInvalidOrder(count, retryMins, exchange, pair, botId, dealId, orderId, orderIndex, orders);
+					msg += ` Trying again in ${retryMins} minutes.`;
+
+					await sendDealMessage('info', msg);
+
+					// Recursive retry
+					const retryResult = await verifyInvalidOrder(
+						count,
+						retryMins,
+						exchange,
+						pair,
+						botId,
+						dealId,
+						orderId,
+						onSuccessCallback,
+						pauseBeforeCallback
+					);
+
+					return resolve(retryResult);
 				}
 				else {
 
 					msg += ' Will not try again.';
-				}
 
-				await sendDealMessage('info', msg);
+					await sendDealMessage('info', msg);
+
+					// Deal is no longer paused, exit
+					return resolve({
+						success: false,
+						notPaused: true
+					});
+				}
 			}
 		}
 		else {
 
+			// No orderId => resume immediately
 			resume = true;
 		}
 
 		if (resume) {
 
-			let msg = 'Resuming buy orders for deal ID ' + dealId;
+			await sendDealMessage('info', `Resuming order placement for deal ID ${dealId}`);
+			
+			if (pauseBeforeCallback) {
+				
+				await pauseDeal(botId, dealId, false);
+			}
 
-			await sendDealMessage('info', msg);
+			if (typeof onSuccessCallback === 'function') {
+				
+				await onSuccessCallback();
+			}
 
-			const pauseData = await pauseDeal(botId, dealId, false);
+			if (!pauseBeforeCallback) {
+				
+				await pauseDeal(botId, dealId, false);
+			}
+
+			return resolve({
+				success: true
+			});
 		}
 
-	}, (60000 * retryMins));
-}
+		return resolve({
+			success: false
+		});
+	});
+};
 
 
 const buyOrder = async (exchange, dealId, pair, qty, price) => {
@@ -2366,22 +2504,17 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 	let msg;
 	let order;
 	let orderId;
-	let orderPrice;
-	let orderAmount;
-	let orderQty;
 	let isErr;
 	let success;
 
 	let nsf = false;
 	let finished = false;
-	let successVerify = false;
-	let orderInvalid = false;
-	let statusInvalid = false;
 
 	let count = 0;
+	let verifyData = {};
 
 	while (!finished) {
-	
+
 		try {
 
 			isErr = null;
@@ -2403,7 +2536,6 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 			// Pass params in the same structure as referenced in template
 			order = await exchange.createOrder(...orderParamsArr);
-			//order = await exchange.createOrder(pair, 'market', 'buy', qty, price);
 
 			finished = true;
 		}
@@ -2414,13 +2546,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 			msg = 'BUY ERROR: ' + e.name + ' ' + e.message;
 
-			if (e instanceof ccxt.InsufficientFunds) {
-
-				nsf = true;
-
-				finished = true;
-			}
-			else if ((e instanceof ccxt.ExchangeError || e instanceof ccxt.BadRequest) && msg.toLowerCase().includes('insufficient')) {
+			if (e instanceof ccxt.InsufficientFunds || ((e instanceof ccxt.ExchangeError || e instanceof ccxt.BadRequest) && msg.toLowerCase().includes('insufficient'))) {
 
 				nsf = true;
 
@@ -2428,7 +2554,6 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 			}
 			else if (e instanceof ccxt.ExchangeError && count < maxTries) {
 
-				// Delay and try again
 				await Common.delay(500 + (Math.random() * 100));
 			}
 			else {
@@ -2442,45 +2567,29 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 	if (success) {
 
-		// Verify order on exchange
 		orderId = order['id'];
 
-		const verifyData = await verifyBuySellOrder(exchange, orderId, pair, dealId);
+		verifyData = await verifyBuySellOrder(exchange, orderId, pair, dealId);
 
-		successVerify = verifyData['success'];
-		orderAmount = verifyData['order_amount'];
-		orderQty = verifyData['order_qty'];
-		orderPrice = verifyData['order_price'];
-		orderInvalid = verifyData['order_invalid'];
-		statusInvalid = verifyData['status_invalid'];
+		if (verifyData.order_price) {
 
-		// Price returned may not match precision
-		if (orderPrice) {
-
-			const priceFiltered = await filterPrice(exchange, pair, orderPrice);
+			const priceFiltered = await filterPrice(exchange, pair, verifyData.order_price);
 
 			if (priceFiltered) {
 
-				orderPrice = priceFiltered;
+				verifyData.order_price = priceFiltered;
 			}
-		}
-
-		if (statusInvalid) {
-
-			// Buy order successful, but verification returned invalid status (Not open, filled, closed, etc.)
-
-			//success = false;
 		}
 	}
 
 	const dataObj = {
 						'date': new Date(),
 						'success': success,
-						'success_verify': successVerify,
+						'success_verify': verifyData.success || false,
 						'data': order,
 						'error': isErr,
-						'invalid_order': orderInvalid,
-						'invalid_status': statusInvalid,
+						'invalid_order': verifyData.order_invalid || false,
+						'invalid_status': verifyData.status_invalid || false,
 						'nsf': nsf,
 						'message': msg,
 						'deal_id': dealId,
@@ -2488,12 +2597,12 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 						'quantity': qty,
 						'price': price,
 						'data_order': {
-							'id': orderId,
-							'price': orderPrice,
-							'amount': orderAmount,
-							'quantity': orderQty
-						}
-					};
+										'id': orderId,
+										'price': verifyData.order_price,
+										'amount': verifyData.order_amount,
+										'quantity': verifyData.order_qty
+									  }
+	};
 
 	Common.logger(dataObj);
 
@@ -2507,6 +2616,7 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 
 	let msg;
 	let order;
+	let orderId;
 	let isErr;
 	let success;
 
@@ -2514,6 +2624,7 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 	let nsf = false;
 
 	let count = 0;
+	let verifyData = {};
 
 	while (!finished) {
 
@@ -2581,17 +2692,43 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 		}
 	}
 
+	if (success) {
+
+		orderId = order['id'];
+
+		verifyData = await verifyBuySellOrder(exchange, orderId, pair, dealId);
+
+		if (verifyData.order_price) {
+
+			const priceFiltered = await filterPrice(exchange, pair, verifyData.order_price);
+
+			if (priceFiltered) {
+
+				verifyData.order_price = priceFiltered;
+			}
+		}
+	}
+
 	const dataObj = {
 						'date': new Date(),
 						'success': success,
+						'success_verify': verifyData.success || false,
 						'data': order,
 						'error': isErr,
+						'invalid_order': verifyData.order_invalid || false,
+						'invalid_status': verifyData.status_invalid || false,
 						'nsf': nsf,
 						'message': msg,
 						'deal_id': dealId,
 						'pair': pair,
 						'quantity': qty,
-						'price': price
+						'price': price,
+						'data_order': {
+										'id': orderId,
+										'price': verifyData.order_price,
+										'amount': verifyData.order_amount,
+										'quantity': verifyData.order_qty
+									  }
 					};
 
 	Common.logger(dataObj);
@@ -2891,7 +3028,9 @@ const processSellData = async(pair, price, dealId, exchange, config, currentOrde
 
 					if (shareData.appData.verboseLog) {
 
-						Common.logger('Applying additional exchange fee factor of ' + addFee + ' to reduce sell quantity for deal ' + dealId + '. Attempt: ' + sellErrorCount + '/' + maxSellErrorCount);
+						let msg = 'Applying additional exchange fee factor of ' + addFee + ' to reduce sell quantity for deal ' + dealId + '. Attempt: ' + sellErrorCount + '/' + maxSellErrorCount;
+
+						Common.logger(colors.red.bold(msg));
 					}
 				}
 
@@ -3493,7 +3632,7 @@ async function processOrderError(data) {
 
 	if (success) {
 
-		let msg = 'An error occurred starting deal ID ' + dealId + '. Disabling bot. Check the logs for details.';
+		let msg = 'An error occurred starting deal ID ' + dealId + '. Disabling bot ' + botName + '. Check the logs for details.';
 
 		await sendDealMessage('deal_error', msg);
 		const statusObj = await sendBotStatus({ 'bot_id': botId, 'bot_name': botName, 'active': active, 'success': success });
@@ -3824,6 +3963,7 @@ async function createSellErrorTracker(dealId) {
 			dealTracker[dealId]['update']['deal_sell_error'] = {};
 			dealTracker[dealId]['update']['deal_sell_error']['history'] = {};
 			dealTracker[dealId]['update']['deal_sell_error']['nsf'] = false;
+			dealTracker[dealId]['update']['deal_sell_error']['verifying'] = false;
 			dealTracker[dealId]['update']['deal_sell_error']['count'] = 0;
 			dealTracker[dealId]['update']['deal_sell_error']['count_dupes'] = 0;
 			dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();

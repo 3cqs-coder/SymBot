@@ -1318,7 +1318,7 @@ async function cronJobToggle(name, schedule, task, shouldStart) {
 			}
 
 			// Try scheduling the new job
-			const job = cron.schedule(schedule, task);
+			const job = cron.schedule(schedule, task, { timezone: 'UTC' });
 
 			if (job) {
 
