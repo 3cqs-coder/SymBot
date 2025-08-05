@@ -19,6 +19,8 @@ const Signals = Schema.Signals3CQSSchema;
 
 const providerId = signalsJson['metadata']['provider_id'];
 
+const disconnectDelayMs = 8000;
+
 let fatalError = false;
 let verboseNotifications = false;
 
@@ -33,8 +35,13 @@ setInterval(() => {
 }, (60000 * 60));
 
 
-
 async function start(enabled, apiKey) {
+
+	let disconnectNotificationTimeout;
+
+	let firstConnect = true;
+	let wasDisconnected = false;
+	let notifiedDisconnect = false;
 
 	if (socketGlobal) {
 
@@ -43,7 +50,7 @@ async function start(enabled, apiKey) {
 		socketGlobal = undefined;
 	}
 
-	if (providerId == undefined || providerId == null  || providerId == '') {
+	if (providerId == undefined || providerId == null || providerId == '') {
 
 		shareData.Common.logger('Invalid Provider ID: ' + signalsFile, true);
 
@@ -56,9 +63,7 @@ async function start(enabled, apiKey) {
 	}
 
 	const socket = require('socket.io-client')('https://stream.3cqs.com', {
-
 		'extraHeaders': {
-
 			'api-key': apiKey,
 			'user-agent': shareData.appData.name + '/' + shareData.appData.version
 		},
@@ -71,15 +76,28 @@ async function start(enabled, apiKey) {
 
 	socketGlobal = socket;
 
-	socket.on('connect', (data) => {
+	socket.on('connect', () => {
 
-		let msg = 'Connected to 3CQS Signals';
+		if (disconnectNotificationTimeout) {
 
-		sendNotification(msg, true);
+			clearTimeout(disconnectNotificationTimeout);
+			disconnectNotificationTimeout = null;
+		}
+
+		if (notifiedDisconnect) {
+
+			sendNotification('Reconnected to 3CQS Signals', true);
+		}
+		else if (firstConnect) {
+			
+			sendNotification('Connected to 3CQS Signals', true);
+		}
+
+		firstConnect = false;
+		wasDisconnected = false;
+		notifiedDisconnect = false;
 
 		let messageId = randomString(15);
-
-		// Get max last n signals
 
 		setTimeout(() => {
 
@@ -91,18 +109,16 @@ async function start(enabled, apiKey) {
 		}, 1000);
 	});
 
-
 	socket.io.on('ping', (data) => {
 
-		//showLog('3CQS SIGNAL PING', data);
+		// Optionally handle ping
 	});
-
 
 	socket.on('signal', (data) => {
 
 		let content = '3CQS SIGNAL RECEIVED';
 
-		if (data['created_history'] != undefined && data['created_history'] != null && data['created_history'] != '') {
+		if (data['created_history']) {
 
 			content += ' (HISTORY)';
 		}
@@ -110,17 +126,15 @@ async function start(enabled, apiKey) {
 		processSignal(data);
 
 		if (shareData.appData.verboseLog) {
-		
+
 			showLog(content, data);
 		}
 	});
-
 
 	socket.on('info', (data) => {
 
 		showLog('3CQS SIGNAL INFO', data);
 	});
-
 
 	socket.on('error', (data) => {
 
@@ -129,23 +143,19 @@ async function start(enabled, apiKey) {
 			fatalError = true;
 		}
 
-		// Too many tries
 		if (data['code'] == 429) {
-
-			// Disconnect and connect again after 30 seconds
 
 			socket.disconnect();
 
 			setTimeout(() => {
 
-				socket.connect();				
+				socket.connect();
 
 			}, 30000);
 		}
 
 		showLog('3CQS SIGNAL ERROR', data);
 	});
-
 
 	socket.on('connect_error', (data) => {
 
@@ -154,7 +164,6 @@ async function start(enabled, apiKey) {
 		showLog('3CQS SIGNAL CONNECT_ERROR', data);
 	});
 
-
 	socket.on('connect_failed', (data) => {
 
 		fatalError = true;
@@ -162,29 +171,28 @@ async function start(enabled, apiKey) {
 		showLog('3CQS SIGNAL CONNECT_FAILED', data);
 	});
 
-
 	socket.on('disconnect', (reason) => {
 
-		let msg = '3CQS SIGNAL Client Disconnected: ' + reason;
+		disconnectNotificationTimeout = setTimeout(() => {
 
-		sendNotification(msg, true);
+			wasDisconnected = true;
+			notifiedDisconnect = true;
 
-		//Either 'io server disconnect' or 'io client disconnect'
-		if (reason === 'io server disconnect') {
+			sendNotification('3CQS SIGNAL Client Disconnected: ' + reason, true);
 
-			let msg = '3CQS SIGNAL Server disconnected the client. Trying to reconnect.';
+			if (reason === 'io server disconnect') {
 
-			sendNotification(msg, true);
+				sendNotification('3CQS SIGNAL Server disconnected the client. Trying to reconnect.', true);
 
-			// Disconnected by server, so reconnect again
-			setTimeout(() => {
+				setTimeout(() => {
 
-				socket.connect();				
+					socket.connect();
 
-			}, 10000);
-		}
+				}, 10000);
+			}
+
+		}, disconnectDelayMs);
 	});
-
 
 	return socket;
 }

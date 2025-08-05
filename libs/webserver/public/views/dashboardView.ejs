@@ -63,8 +63,12 @@
         });
 
         $('#period-select').change(function() {
+
+            const tzData = getTimeZone();
+		    const timeZoneOffset = tzData['offset'];
+
             const period = $(this).val();
-            window.location.href = `./dashboard?duration=${period_map[period]}`;
+            window.location.href = `./dashboard?duration=${encodeURIComponent(period_map[period])}&timeZoneOffset=${encodeURIComponent(timeZoneOffset)}`;
         });
 
 

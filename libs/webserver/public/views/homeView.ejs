@@ -1,5 +1,15 @@
 <%- include('./partialsHeaderView'); %>
 
+<script>
+	$(document).ready(function () {
+
+		const tzData = getTimeZone();
+		const timeZoneOffset = encodeURIComponent(tzData['offset']);
+
+		$('#dashboardLink').attr('href', `./dashboard?timeZoneOffset=${timeZoneOffset}`);
+	});
+</script>
+
 <main>
 
 
@@ -20,7 +30,7 @@
 		</div>
 
 		<div class="mainMenuItem">
-			<a href="./dashboard">Dashboard</a>
+			<a id="dashboardLink" href="./dashboard">Dashboard</a>
 		</div>
 
 		<div class="mainMenuItem">

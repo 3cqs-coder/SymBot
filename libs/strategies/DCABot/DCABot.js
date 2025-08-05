@@ -87,6 +87,7 @@ async function start(dataObj, startId) {
 	let dealMax = config.dealMax;
 	let pairMax = config.pairMax;
 	let pairDealsMax = config.pairDealsMax;
+	let pairBotsDealsMax = config.pairBotsDealsMax;
 
 	if (dealCount == undefined || dealCount == null) {
 
@@ -108,6 +109,11 @@ async function start(dataObj, startId) {
 		pairDealsMax = 0;
 	}
 
+	if (pairBotsDealsMax == undefined || pairBotsDealsMax == null) {
+
+		pairBotsDealsMax = 0;
+	}
+
 	let exchange = await connectExchange(config);
 
 	if (exchange == undefined || exchange == null) {
@@ -120,6 +126,8 @@ async function start(dataObj, startId) {
 
 		//Load markets
 		//const markets = await exchange.loadMarkets();
+
+		let isDealResumeId = false;
 
 		if (pairConfig == undefined || pairConfig == null || pairConfig == '') {
 
@@ -142,18 +150,26 @@ async function start(dataObj, startId) {
 		const symbolData = await getSymbol(exchange, pair);
 		const symbol = symbolData.data;
 
+		// Check if this bot exceeds global pair limit
+		let globalPairLimitExceeded = await checkGlobalPairLimit(pairBotsDealsMax, pair);
+
+		if (dealResumeId != undefined && dealResumeId != null && dealResumeId != '') {
+
+			isDealResumeId = true;
+		}
+
 		// Verify number of same pairs running on bot before start to allow override
-		if (pairDealsMax > 1 && pairDealsActive.length < pairDealsMax) {
+		if (!globalPairLimitExceeded && pairDealsMax > 1 && pairDealsActive.length < pairDealsMax) {
 
 			// Only override if not resuming deal
-			if (dealResumeId == undefined || dealResumeId == null || dealResumeId == '') {
+			if (!isDealResumeId) {
 
 				checkActivePairOverride = true;
 			}
 		}
 
 		// Check for valid symbol data on start
-		if (symbolData.invalid) {
+		if (symbolData.invalid && !isDealResumeId) {
 
 			if (Object.keys(dealTracker).length == 0) {
 
@@ -167,7 +183,7 @@ async function start(dataObj, startId) {
 			let resumeBypass = false;
 
 			// Try again if resuming existing bot deal
-			if (dealResumeId != undefined && dealResumeId != null && dealResumeId != '') {
+			if (isDealResumeId) {
 
 				let configObj = JSON.parse(JSON.stringify(config));
 
@@ -234,7 +250,7 @@ async function start(dataObj, startId) {
 
 			dealIdMain = isActive.dealId;
 
-			if (dealResumeId != undefined && dealResumeId != null && dealResumeId != '') {
+			if (isDealResumeId) {
 
 				dealIdMain = dealResumeId;
 			}
@@ -688,6 +704,7 @@ async function start(dataObj, startId) {
 				dealMax = botConfigDb['dealMax'];
 				pairMax = botConfigDb['pairMax'];
 				pairDealsMax = botConfigDb['pairDealsMax'];
+				pairBotsDealsMax = botConfigDb['pairBotsDealsMax'];
 			}
 		}
 	}
@@ -724,6 +741,9 @@ async function start(dataObj, startId) {
 	// Check for any resuming deals before continuing
 	await processResumeDealTracker({ 'deal_id': dealIdMain });
 
+	// Check if this bot exceeds global pair limit
+	let globalPairLimitExceeded = await checkGlobalPairLimit(pairBotsDealsMax, pair);
+
 	// Get total active same pairs currently running on bot
 	let pairDealsActive = await getDeals({ 'botId': botIdMain, 'pair': pair, 'status': 0 });
 
@@ -757,7 +777,7 @@ async function start(dataObj, startId) {
 	}
 
 	// Start another bot deal if max deals, max pairs have not been reached, and pair is not blacklisted
-	if (!isPairBlackListed && !pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
+	if (!globalPairLimitExceeded && !isPairBlackListed && !pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast && (pairCount < pairMax || pairMax == 0)) {
 
 		let configObj = JSON.parse(JSON.stringify(config));
 
@@ -1116,14 +1136,40 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							isBuy = true;
 
-							const handleSuccessfulBuy = async () => {
+							const handleSuccessfulBuy = async ({ dealId, orderIndex, buyOrderId, buyOrderPrice, orders, price, currentOrder, exchange, pair, profit }) => {
 
-								const ordersCopy = Common.deepCopy(orders);
+								let recalcPrice = price;
 
-								await updateOrderDeal(dealId, i, buy['data']['id'], ordersCopy);
+								if (buyOrderPrice !== undefined && buyOrderPrice !== null && buyOrderPrice !== '' && buyOrderPrice !== 0) {
+									
+									recalcPrice = buyOrderPrice;
+								}
 
-								// Wait before unpausing deal in callback to ensure existing data settles
-								await Common.delay(5000);
+								const orderUpdated = await updateOrderDeal(dealId, orderIndex, buyOrderId, orders);
+
+								if (shareData.appData.verboseLog) {
+
+									Common.logger(
+										colors.blue.bold.italic(
+										'Pair: ' + pair +
+										'\tQty: ' + currentOrder.qtySum +
+										'\tLast Price: $' + price +
+										'\tDCA Price: $' + currentOrder.average +
+										'\tSell Price: $' + currentOrder.target +
+										'\tStatus: ' + colors.green('BUY') +
+										'\tProfit: ' + profit
+									));
+								}
+
+								await recalculateOrders({
+									'exchange': exchange,
+									'dealId': dealId,
+									'orderIndex': undefined,
+									'orderNo': orderUpdated.orderNo,
+									'orderId': undefined,
+									'price': recalcPrice,
+									'dryRun': false
+								});
 							};
 
 							if (!config.sandBox) {
@@ -1131,6 +1177,25 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								const priceFiltered = await filterPrice(exchange, pair, price);
 
 								const buy = await buyOrder(exchange, dealId, pair, order.qty, priceFiltered);
+
+								const handleSuccessfulBuyPostVerify = async () => {
+
+									await handleSuccessfulBuy({
+										'dealId': dealId,
+										'orderIndex': i,
+										'buyOrderId': buy['data']['id'],
+										'buyOrderPrice': buy['data_order']['price'],
+										'orders': Common.deepCopy(orders),
+										'price': price,
+										'currentOrder': currentOrder,
+										'exchange': exchange,
+										'pair': pair,
+										'profit': profit
+									});
+
+									// Wait before unpausing deal in callback to ensure existing data settles
+									await Common.delay(5000);
+								};
 
 								// Buy not successful / Buy successful but verification failed 
 								if (!buy.success || (buy.success && !buy.success_verify)) {
@@ -1160,7 +1225,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 										isDealVerifying = true;
 
-										const verifyPromise = verifyInvalidOrder(0, retryMins, exchange, pair, config.botId, dealId, buy['data']['id'], handleSuccessfulBuy, false);
+										const verifyPromise = verifyInvalidOrder(0, retryMins, exchange, pair, config.botId, dealId, buy['data']['id'], handleSuccessfulBuyPostVerify, false);
 
 										// Reset verifying flag if needed
 										verifyPromise.then(async (verifyResult) => {
@@ -1201,48 +1266,17 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							if (buySuccess) {
 
-								let recalcPrice = price;
-
-								if (buyOrderPrice != undefined && buyOrderPrice != null && buyOrderPrice != '' && buyOrderPrice !== 0) {
-
-									recalcPrice = buyOrderPrice;
-								}
-
-								const orderUpdated = await updateOrderDeal(dealId, i, buyOrderId, orders);
-
-								if (shareData.appData.verboseLog) {
-
-									Common.logger(
-										colors.blue.bold.italic(
-										'Pair: ' +
-										pair +
-										'\tQty: ' +
-										currentOrder.qtySum +
-										'\tLast Price: $' +
-										price +
-										'\tDCA Price: $' +
-										currentOrder.average +
-										'\tSell Price: $' +
-										currentOrder.target +
-										'\tStatus: ' +
-										colors.green('BUY') +
-										'' +
-										'\tProfit: ' +
-										profit +
-										''
-										)
-									);
-								}
-
-								// Recalculate orders
-								let recalcObj = await recalculateOrders({
-									'exchange': exchange,
+								await handleSuccessfulBuy({
 									'dealId': dealId,
-									'orderIndex': undefined,
-									'orderNo': orderUpdated.orderNo,
-									'orderId': undefined,
-									'price': recalcPrice,
-									'dryRun': false
+									'orderIndex': i,
+									'buyOrderId': buyOrderId,
+									'buyOrderPrice': buyOrderPrice,
+									'orders': orders,
+									'price': price,
+									'currentOrder': currentOrder,
+									'exchange': exchange,
+									'pair': pair,
+									'profit': profit
 								});
 							}
 
@@ -1778,6 +1812,29 @@ const filterPrice = async (exchange, pair, price) => {
 
 		return false;
 	}
+};
+
+
+const checkGlobalPairLimit = async (pairBotsDealsMax, pair) => {
+
+	let globalPairLimitExceeded = false;
+
+	if (pairBotsDealsMax == undefined || pairBotsDealsMax == null || pairBotsDealsMax == '') {
+
+		pairBotsDealsMax = 0;
+	}
+
+	if (pairBotsDealsMax > 0) {
+
+		let allDealsForPair = await getDeals({ 'pair': pair, 'status': 0 });
+
+		if (allDealsForPair.length >= pairBotsDealsMax) {
+
+			globalPairLimitExceeded = true;
+		}
+	}
+
+	return globalPairLimitExceeded;
 };
 
 
@@ -2469,19 +2526,19 @@ const verifyInvalidOrder = ( count = 0, mins = 2, exchange, pair, botId, dealId,
 		if (resume) {
 
 			await sendDealMessage('info', `Resuming order placement for deal ID ${dealId}`);
-			
+
 			if (pauseBeforeCallback) {
 				
 				await pauseDeal(botId, dealId, false);
 			}
 
 			if (typeof onSuccessCallback === 'function') {
-				
+
 				await onSuccessCallback();
 			}
 
 			if (!pauseBeforeCallback) {
-				
+
 				await pauseDeal(botId, dealId, false);
 			}
 
@@ -5059,13 +5116,17 @@ async function startVerify(config, startId) {
 				let botConfigDb = bot[0].config;
 
 				let pairMax = botConfigDb.pairMax;
+				let pairBotsDealsMax = botConfigDb.pairBotsDealsMax;
 
 				if (pairMax == undefined || pairMax == null || pairMax == '') {
 
 					pairMax = 0;
 				}
 
-				if (pairMax == 0 || pairCount < pairMax) {
+				// Check if this bot exceeds global pair limit
+				let globalPairLimitExceeded = await checkGlobalPairLimit(pairBotsDealsMax, pair);
+
+				if (!globalPairLimitExceeded && (pairMax == 0 || pairCount < pairMax)) {
 
 					botConfigDb['pair'] = pair;
 					botConfigDb['botId'] = botId;
@@ -5102,6 +5163,7 @@ async function startAsap(pairIgnore) {
 
 			let pairs = config.pair;
 			let pairMax = config.pairMax;
+			let pairBotsDealsMax = config.pairBotsDealsMax;
 
 			if (pairMax == undefined || pairMax == null || pairMax == '') {
 
@@ -5125,13 +5187,16 @@ async function startAsap(pairIgnore) {
 					}
 				}
 
+				// Check if this bot exceeds global pair limit
+				let globalPairLimitExceeded = await checkGlobalPairLimit(pairBotsDealsMax, pair);
+
 				let dealsActive = await getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
 				config['pair'] = pair;
 				config = await applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
 				// Start bot if active, no deals are currently running and start condition is now asap
-				if (dealsActive && dealsActive.length == 0) {
+				if (!globalPairLimitExceeded && dealsActive && dealsActive.length == 0) {
 
 					if (pairMax == 0 || pairCount < pairMax) {
 
@@ -6035,6 +6100,7 @@ module.exports = {
 	getSymbol,
 	getSymbolsAll,
 	getBalanceTracker,
+	checkGlobalPairLimit,
 	applyConfigData,
 	startDelay,
 	resumeDeal,

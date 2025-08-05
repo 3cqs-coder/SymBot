@@ -141,9 +141,9 @@ function initRoutes(router, upload) {
 
 		if (!isLoggedIn(req, res)) return;
 
-		const { duration } = req.query;
+		const { duration, timeZoneOffset } = req.query;
 
-		const { kpi, charts, currencies, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7')});
+		const { kpi, charts, currencies, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7'), timeZoneOffset });
 
 		res.set('Cache-Control', 'no-store');
 

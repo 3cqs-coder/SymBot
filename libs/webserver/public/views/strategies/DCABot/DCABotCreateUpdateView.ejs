@@ -481,7 +481,7 @@
 
 			let regEx = /[^0-9\.\-]/g;
 
-			if (id.toLowerCase() == 'dealmax' || id.toLowerCase() == 'dealcooldown' || id.toLowerCase() == 'pairmax' || id.toLowerCase() == 'pairdealsmax' || id.toLowerCase() == 'dcamaxorder') {
+			if (id.toLowerCase() == 'dealmax' || id.toLowerCase() == 'dealcooldown' || id.toLowerCase() == 'pairmax' || id.toLowerCase() == 'pairdealsmax' || id.toLowerCase() == 'pairbotsdealsmax' || id.toLowerCase() == 'dcamaxorder') {
 
 				regEx = /[^0-9]/g;
 			}
@@ -775,6 +775,15 @@
 				</span></span>
 
 				</td> <td><input id="pairDealsMax" name="pairDealsMax" value="<%- botData.pairDealsMax %>" class="form-field"></td></tr>
+
+				<tr><td>Max Pair Deals (All Bots): 
+
+				<span class="toolTip">?<span class="toolTipText">
+				Maximum number of same pair deals that can run concurrently including all other active bots. Default is unlimited in relation to other bots when empty or set to 0. <div style="height: 15px;"></div> For example, if this is set to 1 then any pair listed in this bot will not start a deal if another bot is already running a deal for that same pair.
+				</span></span>
+
+				</td> <td><input id="pairBotsDealsMax" name="pairBotsDealsMax" value="<%- botData.pairBotsDealsMax %>" class="form-field"></td></tr>
+
 				<tr><td>Minimum 24h Volume: 
 
 				<span class="toolTip">?<span class="toolTipText">

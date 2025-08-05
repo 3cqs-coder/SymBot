@@ -13,6 +13,11 @@
 			filters = {};
 		}
 
+		const tzData = getTimeZone();
+		const timeZoneOffset = tzData['offset'];
+
+		filters.timeZoneOffset = timeZoneOffset;
+
 		$.ajax({
 					type: 'GET',
 					url: './api/deals/completed',

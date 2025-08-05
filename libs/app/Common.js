@@ -1316,15 +1316,30 @@ function deepCopy(obj, seen = new WeakMap()) {
 	if (obj instanceof Map) return new Map([...obj].map(([k, v]) => [deepCopy(k, seen), deepCopy(v, seen)]));
 	if (obj instanceof Set) return new Set([...obj].map(v => deepCopy(v, seen)));
 
-	const copy = Array.isArray(obj) ? [] : {};
-
+	// Preserve prototype chain
+	const copy = Array.isArray(obj) ? [] : Object.create(Object.getPrototypeOf(obj));
 	seen.set(obj, copy);
 
-	for (const key in obj) {
+	// Get all own property keys (string and symbol), including non-enumerable
+	const keys = [
+		...Object.getOwnPropertyNames(obj),
+		...Object.getOwnPropertySymbols(obj)
+	];
 
-		if (obj.hasOwnProperty(key)) {
+	for (const key of keys) {
 
-			copy[key] = deepCopy(obj[key], seen);
+		const desc = Object.getOwnPropertyDescriptor(obj, key);
+
+		if (desc.get || desc.set) {
+
+			// If there are getters/setters, just copy them directly (not invoking)
+			Object.defineProperty(copy, key, desc);
+		}
+		else {
+
+			// Otherwise, copy the value deeply
+			desc.value = deepCopy(desc.value, seen);
+			Object.defineProperty(copy, key, desc);
 		}
 	}
 

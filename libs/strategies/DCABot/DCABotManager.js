@@ -274,150 +274,35 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 	const days = 1;
 	const maxResults = 100;
 
-	let dateTo;
-	let dateFrom;
-	let dealsArr = [];
-
 	let fromDate = req.query.from;
-	let toDate = req.query.to;
+	let toDate = req.query.to || fromDate;
+	const timeZoneOffset = req.query.timeZoneOffset;
 	const botId = req.query.botId;
 
-	if (toDate == undefined || toDate == null || toDate == '') {
-		
-		toDate = fromDate;
-	}
+	let query = { 'sellData': { '$exists': true }, 'status': 1 };
+	let queryOptions = { sort: { 'sellData.date': -1 } };
 
-	const extractQtyValues = obj => Object.entries(obj).flatMap(([k, v]) => k === 'qty' ? [v] : (typeof v === 'object' && v ? extractQtyValues(v) : []));
-
-	const tzData = shareData.Common.getTimeZone();
-
-	const timeZoneOffset = tzData['offset'];
-
-	let	query = { 'sellData': { '$exists': true }, 'status': 1 };
-
-	let queryOptions = {
-							'sort': { 'sellData.date': -1 }
-					   };
-
-	if (fromDate == undefined || fromDate == null || fromDate == '') {
+	if (!fromDate) {
 
 		queryOptions['limit'] = maxResults;
-		
-		//dateFrom = new Date(new Date().getTime() - (days * 24 * 60 * 60 * 1000));
-		//dateTo = new Date(new Date(dateFrom).getTime() + (days * 24 * 60 * 60 * 1000));
 	}
 	else {
 
-		dateFrom = new Date(fromDate + 'T00:00:00' + timeZoneOffset);
-		dateTo = new Date(toDate + 'T23:59:59' + timeZoneOffset);
+		const dateFrom = new Date(`${fromDate}T00:00:00${timeZoneOffset}`);
+		const dateTo = new Date(new Date(`${toDate}T00:00:00${timeZoneOffset}`).getTime() + 86400000);
 
-		query['sellData.date'] = { '$gte': dateFrom, '$lte': dateTo };
+		query['sellData.date'] = { '$gte': dateFrom, '$lt': dateTo };
 	}
 
-	if (botId && botId != 'Default') {
+	if (botId && botId !== 'Default') {
 
 		query['botId'] = botId;
 	}
 
 	const dealsHistory = await shareData.DCABot.getDeals(query, queryOptions);
+	const dealsArr = await getProcessedDeals(dealsHistory || []);
 
-	if (dealsHistory != undefined && dealsHistory != null && dealsHistory != '') {
-
-		for (let i = 0; i < dealsHistory.length; i++) {
-
-			const deal = dealsHistory[i];
-			const sellData = deal.sellData;
-			const orders = deal.orders;
-			const config = deal.config;
-
-			const profitCurrency = config['profitCurrency'] || 'quote';
-
-			let orderCount = 0;
-
-			for (let x = 0; x < orders.length; x++) {
-
-				const order = orders[x];
-
-				if (order['filled']) {
-
-					orderCount++;
-				}
-			}
-
-			if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
-
-				let profitBase;
-				let profitQuote;
-				let minMoveAmount;
-
-				const feeData = sellData.feeData;
-
-				const profitPerc = Number(sellData.profit);
-
-				const profitQuoteEstimate = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPerc / 100))));
-
-				if (typeof feeData == 'object' && feeData.minMoveAmount != undefined && feeData.minMoveAmount != null) {
-
-					minMoveAmount = feeData.minMoveAmount;
-				}
-				else {
-
-					minMoveAmount = orders[orderCount - 1]['orderMetadata']['minimum_movement_amount'];
-				}
-
-				if (sellData['profitQuote']) {
-
-					profitQuote = Number(sellData['profitQuote']);
-				}
-				else {
-
-					profitQuote = profitQuoteEstimate;
-				}
-
-				if (sellData['profitBase']) {
-
-					profitBase = Number(sellData['profitBase']);
-				}
-				else {
-
-					let profitBaseEstimate = Number(profitQuote) / Number(sellData.price);
-
-					let profitBaseEstimateAdjusted = shareData.Common.adjustDecimals(profitBaseEstimate, minMoveAmount);
-
-					if (profitBaseEstimateAdjusted == 0) {
-
-						const qtyArr = extractQtyValues(orders);
-
-						profitBaseEstimateAdjusted = shareData.Common.adjustDecimals(profitBaseEstimate, minMoveAmount, qtyArr);
-					}
-
-					profitBase = Number(profitBaseEstimateAdjusted);
-				}
-
-				const dataObj = {
-									'bot_id': deal.botId,
-									'bot_name': deal.botName,
-									'deal_id': deal.dealId,
-									'pair': deal.pair.toUpperCase(),
-									'date_start': new Date(deal.date),
-									'date_end': new Date(sellData.date),
-									'price': Number(sellData.price),
-									'profit': profitQuote,
-									'profit_base': profitBase,
-									'profit_percent': profitPerc,
-									'profit_currency': profitCurrency,
-									'minimum_movement_amount': minMoveAmount,
-									'safety_orders': orderCount - 1
-								};
-
-				dealsArr.push(dataObj);
-			}
-		}
-	}
-
-	dealsArr = shareData.Common.sortByKey(dealsArr, 'date_end');
-
-	let obj = { 'date': new Date(), 'data': dealsArr.reverse() };
+	const obj = { date: new Date(), data: dealsArr };
 
 	if (sendResponse) {
 
@@ -1472,6 +1357,10 @@ async function apiStartDealProcess(req, res, taskObj) {
 
 				let pairMax = config.pairMax;
 				let pairDealsMax = config.pairDealsMax;
+				let pairBotsDealsMax = config.pairBotsDealsMax;
+
+				// Check if this bot exceeds global pair limit
+				let globalPairLimitExceeded = await shareData.DCABot.checkGlobalPairLimit(pairBotsDealsMax, pair);
 
 				if (pairMax == undefined || pairMax == null || pairMax == '') {
 
@@ -1483,8 +1372,12 @@ async function apiStartDealProcess(req, res, taskObj) {
 					pairDealsMax = 0;
 				}
 
-				// Start bot if active and no deals currently running or pair deals is less than max set
-				if (dealsActive.length == 0 || dealsActive.length < pairDealsMax) {
+				if (globalPairLimitExceeded) {
+
+					success = false;
+					msg = `${pair} global max of ${pairBotsDealsMax} deals already running across all bots`;
+				}
+				else if (dealsActive.length == 0 || dealsActive.length < pairDealsMax) {
 
 					if (pairMax == 0 || pairCount < pairMax) {
 
@@ -1604,6 +1497,7 @@ async function calculateOrders(body) {
 	botData.profitCurrency = body.profitCurrency;
 	botData.pairMax = body.pairMax;
 	botData.pairDealsMax = body.pairDealsMax;
+	botData.pairBotsDealsMax = body.pairBotsDealsMax;
 	botData.volumeMin = body.volumeMin;
 	botData.firstOrderPrice = body.firstOrderPrice;
 	botData.firstOrderAmount = body.firstOrderAmount;
@@ -1633,6 +1527,11 @@ async function calculateOrders(body) {
 	if (botData.pairDealsMax == undefined || botData.pairDealsMax == null || botData.pairDealsMax == '') {
 
 		botData.pairDealsMax = 0;
+	}
+
+	if (botData.pairBotsDealsMax == undefined || botData.pairBotsDealsMax == null || botData.pairBotsDealsMax == '') {
+
+		botData.pairBotsDealsMax = 0;
 	}
 
 	if (botData.profitCurrency == undefined || botData.profitCurrency == null || botData.profitCurrency == '') {
@@ -1684,28 +1583,123 @@ async function calculateMaxFundsExchange(configObj) {
 }
 
 
+async function getProcessedDeals(deals) {
+
+	const processedDeals = [];
+
+	const extractQtyValues = obj => Object.entries(obj).flatMap(([k, v]) => k === 'qty' ? [v] : (typeof v === 'object' && v ? extractQtyValues(v) : []));
+
+	for (const deal of deals) {
+
+		const sellData = deal.sellData;
+		const orders = deal.orders;
+		const config = deal.config;
+		const profitCurrency = config?.profitCurrency || 'quote';
+
+		let orderCount = orders.filter(o => o.filled).length;
+
+		if (orderCount > 0 && sellData?.date) {
+
+			let profitBase, profitQuote, minMoveAmount;
+
+			const feeData = sellData.feeData;
+			const profitPerc = Number(sellData.profit);
+
+			const profitQuoteEstimate = shareData.Common.roundAmount(Number(orders[orderCount - 1]?.sum) * (profitPerc / 100));
+
+			minMoveAmount = feeData?.minMoveAmount ?? orders[orderCount - 1]?.orderMetadata?.minimum_movement_amount;
+
+			profitQuote = sellData.profitQuote ? Number(sellData.profitQuote) : profitQuoteEstimate;
+
+			if (sellData.profitBase) {
+
+				profitBase = Number(sellData.profitBase);
+			}
+			else {
+
+				let profitBaseEstimate = profitQuote / Number(sellData.price);
+				let adjusted = shareData.Common.adjustDecimals(profitBaseEstimate, minMoveAmount);
+
+				if (adjusted == 0) {
+
+					const qtyArr = extractQtyValues(orders);
+					adjusted = shareData.Common.adjustDecimals(profitBaseEstimate, minMoveAmount, qtyArr);
+				}
+
+				profitBase = Number(adjusted);
+			}
+
+			processedDeals.push({
+				bot_id: deal.botId,
+				bot_name: deal.botName,
+				deal_id: deal.dealId,
+				pair: deal.pair.toUpperCase(),
+				date_start: new Date(deal.date),
+				date_end: new Date(sellData.date),
+				price: Number(sellData.price),
+				profit: profitQuote,
+				profit_base: profitBase,
+				profit_percent: profitPerc,
+				profit_currency: profitCurrency,
+				minimum_movement_amount: minMoveAmount,
+				safety_orders: orderCount - 1
+			});
+		}
+	}
+
+	return shareData.Common.sortByKey(processedDeals, 'date_end').reverse();
+}
+
+
 function insertValueToMap(map, key, value) {
+
 	if(!map[key]) {
+
 		map[key] = Number(value);
-	} else {
+	}
+	else {
+
 		map[key] += Number(value);
 	}
 }
 
-async function getDashboardData({ duration }) {
-	const { year, month, day } = shareData.Common.getDateParts(new Date());
-	const today = new Date(`${year}-${month}-${day}` + 'T23:59:59');
-	const X_DAYS_AGO = new Date();
-	X_DAYS_AGO.setDate(X_DAYS_AGO.getDate() - duration);
-	X_DAYS_AGO.setHours(0, 0, 0);
+
+async function getDashboardData({ duration, timeZoneOffset }) {
+
+	const cleanedOffset = timeZoneOffset.replace(':', '');
+	const offsetSign = cleanedOffset.startsWith('-') ? -1 : 1;
+	const offsetHours = parseInt(cleanedOffset.slice(1, 3), 10);
+	const offsetMinutes = parseInt(cleanedOffset.slice(3), 10);
+	const totalOffsetMinutes = offsetSign * (offsetHours * 60 + offsetMinutes);
+
+	// Use current time adjusted for timezone
+	const localNow = new Date(Date.now() + totalOffsetMinutes * 60000);
+	const localDateOnly = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate());
+
+	// Shift local start of today back to UTC
+	const localMidnightUTC = new Date(localDateOnly.getTime() - totalOffsetMinutes * 60000);
+
+	// dateTo is the end of "today" in local time as UTC timestamp
+	const dateTo = new Date(localMidnightUTC.getTime() + 86400000 - 1);
+
+	// dateFrom is X days ago at local midnight UTC
+	const X_DAYS_AGO = new Date(localMidnightUTC.getTime() - duration * 86400000);
 
 	const botConfigFile = shareData.appData.bot_config;
 	const { data } = await shareData.Common.getConfig(botConfigFile);
+	const active_deals = await shareData.DCABot.getDeals({ 'status': 0 });
 
-	const active_deals = await shareData.DCABot.getDeals({ status: 0 });
-	const complete_deals = await shareData.DCABot.getDeals({ status: 1, "sellData.date": { $gte: X_DAYS_AGO, $lte: today } });
+	const raw_deals = await shareData.DCABot.getDeals({ 'status': 1, 'sellData.date': { '$gte': X_DAYS_AGO, '$lt': new Date(dateTo.getTime() + 1) } });
+	const complete_deals = await getProcessedDeals(raw_deals);
+
 	const deal_tracker = await shareData.DCABot.getDealTracker();
-	const period = `${X_DAYS_AGO.toLocaleDateString()} - ${today.toLocaleDateString()}`
+
+	const adjustedEndDate = new Date(dateTo.getTime() - 86400000);
+
+	const startParts = shareData.Common.getDateParts(X_DAYS_AGO, false);
+	const endParts = shareData.Common.getDateParts(adjustedEndDate, false);
+
+	const period = `${startParts.month}/${startParts.day}/${startParts.year} - ${endParts.month}/${endParts.day}/${endParts.year}`;
 
 	const isLoading = active_deals.length != Object.keys(deal_tracker).length;
 
@@ -1763,39 +1757,31 @@ async function getDashboardData({ duration }) {
 		return balance;
 	})();
 
+
 	complete_deals.forEach((deal) => {
-		let orderCount = 0;
+		
+		const { bot_name, profit, date_end, deal_id, date_start } = deal;
 
-		const { sellData, orders} = deal;
+		if (profit && typeof profit === 'number') {
 
-		for(let i = 0; i<orders.length;i++) {
-			const order = orders[i];
+			insertValueToMap(profit_by_bot_map, bot_name, profit);
+			insertValueToMap(profit_by_day_map, date_end.toDateString(), profit);
 
-			if (order['filled']) {
-
-				orderCount++;
-			}
+			total_profit += profit;
 		}
 
-		if (orderCount > 0 && (sellData.date != undefined && sellData.date != null)) {
-			if(sellData.profit && typeof sellData.profit == 'number') {
-				const profitPer = Number(sellData.profit);
-				const deal_profit = shareData.Common.roundAmount(Number((Number(orders[orderCount - 1]['sum']) * (profitPer / 100))));
-				insertValueToMap(profit_by_bot_map, deal.botName, deal_profit);
-				insertValueToMap(profit_by_day_map, deal.sellData.date.toDateString(), deal_profit);
-				total_profit += Number(deal_profit ?? 0);
-			}
+		const duration = shareData.Common.dealDurationMinutes(date_start, date_end);
+		
+		if (!bot_deal_duration_map[bot_name]) {
+			
+			bot_deal_duration_map[bot_name] = [duration];
 		}
+		else {
+			
+			bot_deal_duration_map[bot_name].push(duration);
+		}
+	});
 
-		// Add to Deal Duration Obj
-		const { date: dateStarted, sellData: { date: dateEnd } } = deal;
-		const duration = shareData.Common.dealDurationMinutes(dateStarted, dateEnd);
-		if(!bot_deal_duration_map[deal.botName]) {
-			bot_deal_duration_map[deal.botName] = [duration];
-		} else {
-			bot_deal_duration_map[deal.botName].push(duration);
-		}
-	})
 
 	for (const key in bot_deal_duration_map) {
 		const durations = bot_deal_duration_map[key];

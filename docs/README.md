@@ -203,7 +203,7 @@ These files are located in the `config` directory
 		- `pair_buttons` is an array of currencies that is used to automatically fill in pairs after clicking on one of these buttons when creating or updating bots.
 		-	`pair_blacklist` is an array of pairs that you don't want to trade. You can use full pairs such as BTC/USD or wildcards such as BTC/*. This can be useful to prevent bots from starting deals using stablecoin pairs such as USDT/USD as those will generally have little volatility in typical market conditions.
 
-	- `cron_backup` 
+	- `cron_backup`
 		- `schedule` this is a crontab format schedule of the days and time to process tasks.
 		- `password` is the password that will be used to encrypt database backups. It is required and is not a plain text password, but rather an encrypted form of it, so it should not be manually entered.
 		- `max` is the maximum number of backups to keep.
@@ -228,7 +228,7 @@ mongodb://localhost:27017/SymBot
 
 	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. You must have a 3CQS API key for these to work. You can get one by signing up for free at https://www.3CQS.com. Webhooks must also be enabled for these signals to work.
 
-	- `ai` contains a section to use artificial intelligent services with SymBot. 
+	- `ai` contains a section to use artificial intelligent services with SymBot.
 
 - **bot.json**
 
@@ -243,7 +243,7 @@ mongodb://localhost:27017/SymBot
 
 - **server.json**
 
-	- This file is created the very first time SymBot is started. It contains an automatically generated UUID v4 `server_id`. The primary purpose is to ensure if there are ever multiple instances of SymBot running, they do not accidentally conflict with the database used. When SymBot starts it will compare the `server_id` value in this file to the database entry. If they do not match, SymBot will shut down. 
+	- This file is created the very first time SymBot is started. It contains an automatically generated UUID v4 `server_id`. The primary purpose is to ensure if there are ever multiple instances of SymBot running, they do not accidentally conflict with the database used. When SymBot starts it will compare the `server_id` value in this file to the database entry. If they do not match, SymBot will shut down.
 	- This file should never be copied to another folder or server if you plan to run additional instances of SymBot, or manually edited unless you have a good reason to do so.
 
 
@@ -262,7 +262,7 @@ You just need to create a Telegram bot with `@BotFather`. Here are some simple s
 7. Open a chat with your new bot **MySymBotServer123_bot** (use the actual name of your bot)
 8. Type or click on `/start`
 9. Copy your Telegram bot token into the SymBot **app.json** configuration file. You must also enter your own Telegram id or SymBot will not allow messages to be sent. If you don't know your Telegram id, open a chat with `@userinfobot`
-10. Restart SymBot 
+10. Restart SymBot
 
 ## Advanced Setup
 
@@ -282,7 +282,7 @@ You can use the `swapon` command to check swap space on Linux. Just type `swapon
 Another option is to use the `free` command with the `-h` option, which provides a human-readable summary of memory usage, including swap space.
 
 ### Heap size
-The Node.js heap size is the memory allocated for storing data in an application. You typically don't need to change the default size, but you might increase it if your app needs more memory due to lots of data or for performance reasons. You can adjust it with the `--max-old-space-size` flag when running your app, but be cautious about using too much memory. 
+The Node.js heap size is the memory allocated for storing data in an application. You typically don't need to change the default size, but you might increase it if your app needs more memory due to lots of data or for performance reasons. You can adjust it with the `--max-old-space-size` flag when running your app, but be cautious about using too much memory.
 
 For example, if you wanted to increase the heap size to 4GB, you would start SymBot like this:
 
@@ -368,10 +368,10 @@ sudo a2enmod proxy proxy_http proxy_wstunnel rewrite
 
 6. Create a virtual host configuration file for your domain:
 ```
-# Debian based systems 
+# Debian based systems
 sudo nano /etc/apache2/sites-available/your-domain-name.com.conf
 
-# Redhat based systems 
+# Redhat based systems
 sudo nano /etc/httpd/conf.d/your-domain-name.com.conf
 ```
 
@@ -386,7 +386,7 @@ sudo nano /etc/httpd/conf.d/your-domain-name.com.conf
 	RewriteCond ${HTTP:Upgrade} websocket [NC]
 	RewriteCond ${HTTP:Connection} upgrade [NC]
 	RewriteRule .* "ws:/127.0.0.1:3000/$1" [P,L]
-  
+
 	ProxyPass / http://127.0.0.1:3000/
 	ProxyPassReverse / http://127.0.0.1:3000/
 	ProxyRequests off
@@ -394,11 +394,11 @@ sudo nano /etc/httpd/conf.d/your-domain-name.com.conf
 ```
 8. Restart Apache:
 ```
-# Debian based systems 
+# Debian based systems
 sudo a2ensite your-domain-name.com
 sudo systemctl restart apache2
 
-# Redhat based systems 
+# Redhat based systems
 sudo systemctl restart httpd
 ```
 
@@ -505,6 +505,7 @@ Take more control of your bots and deals using SymBot APIs. You can easily enabl
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
+| pairBotsDealsMax              | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently including all other active bots. Default is unlimited in relation to other bots when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | dealCoolDown                  | integer  | NO            |                      | Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair. |
 | profitCurrency                | string   | NO            | quote                | Currency used for the profit when trading with this bot. Can be set to "base" or "quote". |
@@ -531,6 +532,7 @@ POST /api/bots/create
 | dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
+| pairBotsDealsMax              | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently including all other active bots. Default is unlimited in relation to other bots when empty or set to 0. |
 | volumeMin                     | number   | NO            |                      | Minimum 24h volume (specified in millions) symbol must have to start    |
 | dealCoolDown                  | integer  | NO            |                      | Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair. |
 | profitCurrency                | string   | NO            | quote                | Currency used for the profit when trading with this bot. Can be set to "base" or "quote". |
@@ -654,6 +656,7 @@ GET /api/deals
 |----------|----------|---------------|----------------------|-----------------|
 | from     | string   | NO            |                      | Returns most recent completed deals if start from date is not specified |
 | to       | string   | NO            |                      | Returns all completed deals up to end of date specified |
+| timeZoneOffset      | string        | NO                   |                      | Query results based on a timezone offset. Default is UTC |
 | botId    | string   | NO            |                      | Returns completed deals for specified bot id |
 
 ```
@@ -889,7 +892,7 @@ curl -i -X GET \
 curl -i -X GET \
 -H 'Accept: application/json' \
 -H 'api-key: {API-KEY}' \
-'http://127.0.0.1:3000/api/deals/completed?from=2023-03-01'
+'http://127.0.0.1:3000/api/deals/completed?from=2023-03-01&timeZoneOffset=-00:00'
 ```
 
 #### Start deal
@@ -1107,7 +1110,7 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 - SymBot is the software used for trading, while SymBot Hub serves as a central platform to manage multiple SymBot instances, offering a simplified and more efficient way to access them. While SymBot Hub is optional, it is highly recommended if you're running multiple SymBot instances.
 
 #### How can I disable logging to file to save disk space?
-- While we do not recommend disabling logging to file, you have the option to do so by running adding the argument `clglite` when starting the application. 
+- While we do not recommend disabling logging to file, you have the option to do so by running adding the argument `clglite` when starting the application.
 	- `npm start clglite`
 
 ## Disclaimer
