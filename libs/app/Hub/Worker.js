@@ -21,14 +21,44 @@ async function processWorkerTask(instanceData) {
 		const prefData = `[WORKER-LOG] [${instanceName}] `;
 
 		// Override all console methods to send messages back to the main thread
+		function sendLog(level, msg) {
+			
+			parentPort.postMessage({
+				type: 'log',
+				level,
+				data: prefData + msg
+			});
+		}
+
+		// Override console methods
 		['log', 'error', 'warn', 'info', 'debug'].forEach((method) => {
 
-			console[method] = (...args) => parentPort.postMessage({
-				type: 'log',
-				level: method, // 'log', 'error', 'warn', etc.
-				data: prefData + args.join(' ')
-			});
+			console[method] = (...args) => {
+
+				let text = args.join(' ');
+				if (method === 'error') text = 'ERROR: ' + text;
+
+				sendLog(method, text);
+			};
 		});
+
+		// Override stream writes
+		function overrideWrite(stream, level, prefix = '') {
+
+			const origWrite = stream.write.bind(stream);
+
+			stream.write = (chunk, encoding, callback) => {
+
+				const text = Buffer.isBuffer(chunk) ? chunk.toString(encoding) : chunk;
+
+				sendLog(level, prefix + text);
+
+				return origWrite(chunk, encoding, callback);
+			};
+		}
+
+		overrideWrite(process.stdout, 'log');
+		overrideWrite(process.stderr, 'error', 'ERROR: ');
 
 		console.log(colors.bgBlack.brightYellow.bold(`Starting Instance: ${instanceName}`));
 

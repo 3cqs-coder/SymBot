@@ -1000,7 +1000,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 						const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
 
-						if (!buy.success) {
+						if (!buy.success || (buy.success && !buy.success_verify)) {
 
 							buySuccess = false;
 							buyError = buy.message;

@@ -161,10 +161,15 @@ async function viewHistoryDeals(req, res) {
 }
 
 
-async function apiGetMarkets(req, res) {
+async function apiGetMarkets(req, res, sendResponse = true) {
+
+	const apiPath = req.params.path;
 
 	let pair = req.query.pair;
 	let exchangeName = req.query.exchange;
+	let timeframe = req.query.timeframe ?? '5m';
+	let since = req.query.since || undefined;
+	let limit = req.query.limit || undefined;
 
 	let success = true;
 	let data;
@@ -182,8 +187,8 @@ async function apiGetMarkets(req, res) {
 		const exchange = await shareData.DCABot.connectExchange(config);
 
 		// Get all market symbols
-		if (pair == undefined || pair == null || pair == '') {
-		
+		if (!apiPath && (pair == undefined || pair == null || pair == '')) {
+
 			data = await shareData.DCABot.getSymbolsAll(exchange);
 
 			if (!data['success']) {
@@ -203,23 +208,56 @@ async function apiGetMarkets(req, res) {
 		else {
 
 			// Get pair information
-			pair = pair.replace(/[_-]/g, '/');
+			pair = (pair ?? '').replace(/[_-]/g, '/');
 
-			data = await shareData.DCABot.getSymbol(exchange, pair.toUpperCase());
+			if (apiPath != undefined && apiPath != null && apiPath != '') {
 
-			if (data['invalid'] || (data['error'] != undefined && data['error'] != null && data['error'] != '')) {
+				if (apiPath == 'ohlcv' && exchange.has['fetchOHLCV']) {
 
-				success = false;
-				data = data['error'];
+					try {
+
+						data = await exchange.fetchOHLCV(pair, timeframe, since, limit);
+					}
+					catch (e) {
+
+						success = false;
+
+						data = e.name + ': ' + e.message;
+					}
+				}
+				else {
+
+					success = false;
+					data = 'Invalid path or unable to retrieve data';
+				}
 			}
 			else {
 
-				data = data['data'];
+				data = await shareData.DCABot.getSymbol(exchange, pair.toUpperCase());
+
+				if (data['invalid'] || (data['error'] != undefined && data['error'] != null && data['error'] != '')) {
+
+					success = false;
+					data = data['error'];
+				}
+				else {
+
+					data = data['data'];
+				}
 			}
 		}
 	}
 
-	res.send( { 'date': new Date(), 'success': success, 'data': data } );
+	const obj = { 'date': new Date(), 'success': success, 'data': data };
+
+	if (sendResponse) {
+
+		res.send(obj);
+	}
+	else {
+
+		return obj;
+	}
 }
 
 
@@ -374,7 +412,7 @@ async function apiShowDeal(req, res, dealId) {
 }
 
 
-async function apiGetActiveDeals(req, res) {
+async function apiGetActiveDeals(req, res, sendResponse = true) {
 
 	const body = req.query;
 
@@ -382,7 +420,16 @@ async function apiGetActiveDeals(req, res) {
 
 	const deals = await shareData.DCABot.getActiveDeals(active);
 
-	res.send( { 'date': new Date(), 'data': deals } );
+	const obj = { 'date': new Date(), 'data': deals };
+
+	if (sendResponse) {
+
+		res.send(obj);
+	}
+	else {
+
+		return obj;
+	}
 }
 
 

@@ -321,7 +321,7 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.get('/api/markets', (req, res) => {
+	router.get([ '/api/markets', '/api/markets/:path' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
@@ -631,6 +631,80 @@ async function processWebHook(req, res, next) {
 }
 
 
+async function processWebSocketApi(client, data) {
+
+	const sendRoom = 'api';
+
+	const metaData = data.meta || {};
+
+	const api = metaData.api;
+	const appId = metaData.appId;
+	const messageId = metaData.id;
+
+	let message;
+
+	let req = {
+				'params': {
+							'path': ''
+						},
+				'query': {}
+	};
+
+	// Check if the client is in the 'api' room
+	const rooms = Array.from(client.rooms);
+
+	if (!rooms.includes(sendRoom)) {
+
+		//console.log(`Client ${client.id} tried to use api_action but is not in room '${sendRoom}'`);
+		return;
+	}
+
+	if (api == 'deals') {
+
+		req.query['active'] = true;
+
+		const dealsData = await shareData.DCABotManager.apiGetActiveDeals(req, undefined, false);
+
+		message = dealsData;
+	}
+
+	if (api == 'markets') {
+
+		req.query['exchange'] = data.exchange;
+		req.query['pair'] = data.pair;
+
+		const marketData = await shareData.DCABotManager.apiGetMarkets(req, undefined, false);
+
+		message = marketData;
+	}
+
+	if (api == 'markets/ohlcv') {
+
+		req.params['path'] = 'ohlcv';
+
+		req.query['exchange'] = data.exchange;
+		req.query['pair'] = data.pair;
+		req.query['timeframe'] = data.timeframe;
+		req.query['since'] = data.since;
+		req.query['limit'] = data.limit;
+
+		const marketData = await shareData.DCABotManager.apiGetMarkets(req, undefined, false);
+
+		message = marketData;
+	}
+
+	// Send only to this client
+	client.emit('data', {
+		'type': 'api',
+		'api': api,
+		'app_id': appId,
+		'message_id': shareData.Common.uuidv4(),
+		'message_id_client': messageId,
+		'message': message
+	});
+}
+
+
 function isLoggedIn(req, res) {
 
 	if (!req.session.loggedIn) {
@@ -699,6 +773,7 @@ function start(router, upload) {
 module.exports = {
 
 	start,
+	processWebSocketApi,
 
 	init: function(obj) {
 

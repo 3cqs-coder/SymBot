@@ -9,7 +9,6 @@ pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
 const crypto = require('crypto');
 const Convert = require('ansi-to-html');
 const fetch = require('node-fetch-commonjs');
-const { v4: uuidv4 } = require('uuid');
 const packageJson = require(pathRoot + '/package.json');
 
 const convertAnsi = new Convert();
@@ -1257,6 +1256,27 @@ function adjustDecimals(value, ...arr) {
 function getPrecision(arr) {
 
 	return 10 ** -Math.max(...arr.map(n => (n.toString().split('.')[1] || '').length));
+}
+
+
+function uuidv4() {
+
+	if (crypto.randomUUID) return crypto.randomUUID();
+
+	const bytes = crypto.randomBytes(16);
+
+	bytes[6] = (bytes[6] & 0x0f) | 0x40;
+	bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+	const hex = bytes.toString('hex');
+
+	return (
+		hex.substr(0, 8) + '-' +
+		hex.substr(8, 4) + '-' +
+		hex.substr(12, 4) + '-' +
+		hex.substr(16, 4) + '-' +
+		hex.substr(20, 12)
+	);
 }
 
 

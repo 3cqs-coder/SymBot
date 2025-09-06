@@ -1,5 +1,6 @@
 'use strict';
 
+const os = require('os');
 const fs = require('fs');
 const fsp = require('fs').promises;
 const path = require('path');
@@ -10,7 +11,7 @@ const mongoose = require('mongoose');
 const archiver = require('archiver');
 const unzipper = require('unzipper');
 const fetch = require('node-fetch-commonjs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 
 const prompt = require('prompt-sync')({
 	sigint: true
@@ -1525,13 +1526,165 @@ async function resetConsole(serverIdError, resetServerId) {
 }
 
 
+async function spawnCommand(command, options = {}) {
+
+	const {
+		logFile = null,
+		timeout = null,
+		onData = null,
+		capture = false,
+		killSignal = 'SIGTERM'
+	} = options;
+
+	let p, logStream;
+
+	if (logFile) {
+
+		logStream = fs.createWriteStream(logFile, {
+			flags: 'a'
+		});
+	}
+
+	try {
+
+		if (Array.isArray(command)) {
+
+			const [cmd, ...args] = command;
+
+			p = spawn(cmd, args, {
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+		}
+		else {
+
+			const shell = os.platform() === 'win32' ? 'cmd.exe' : 'sh';
+			const args = os.platform() === 'win32' ? ['/c', command] : ['-c', command];
+
+			p = spawn(shell, args, {
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+		}
+	}
+	catch (err) {
+	
+		if (logStream) logStream.end();
+
+		return {
+			success: false,
+			code: 'SPAWN_FAILED',
+			stdout: '',
+			stderr: '',
+			error: err.message
+		};
+	}
+
+	// Only buffer output if explicitly requested
+	let stdoutData = capture ? '' : null;
+	let stderrData = capture ? '' : null;
+	let timer = null;
+
+	return new Promise(resolve => {
+
+		if (timeout) {
+
+			timer = setTimeout(() => {
+
+				p.kill(killSignal);
+
+				setTimeout(() => {
+
+					if (!p.killed) p.kill('SIGKILL');
+
+				}, 500);
+
+				if (logStream) logStream.end();
+
+				resolve({
+					success: false,
+					code: 'ETIMEDOUT',
+					stdout: stdoutData,
+					stderr: stderrData,
+					error: `Command timed out after ${timeout}ms`
+				});
+			}, timeout);
+		}
+
+		const handleChunk = (chunk, type) => {
+
+			const text = chunk.toString();
+
+			if (capture) {
+
+				if (type === 'stdout') stdoutData += text;
+				else stderrData += text;
+			}
+
+			if (logStream) logStream.write(text);
+			if (onData) onData(text, type);
+		};
+
+		p.stdout.on('data', chunk => handleChunk(chunk, 'stdout'));
+		p.stderr.on('data', chunk => handleChunk(chunk, 'stderr'));
+
+		p.on('error', err => {
+
+			if (timer) clearTimeout(timer);
+			if (logStream) logStream.end();
+
+			resolve({
+				success: false,
+				code: 'SPAWN_ERROR',
+				stdout: stdoutData,
+				stderr: stderrData,
+				error: err.message
+			});
+		});
+
+		p.on('exit', code => {
+
+			if (timer) clearTimeout(timer);
+			if (logStream) logStream.end();
+
+			resolve({
+				success: code === 0,
+				code,
+				stdout: stdoutData,
+				stderr: stderrData,
+				error: code === 0 ? null : `Command failed with exit code ${code}`
+			});
+		});
+	});
+}
+
+
+async function pingHost(host, count) {
+
+	count = count ?? 4;
+
+	const isWin = process.platform === 'win32';
+	const countFlag = isWin ? '-n' : '-c';
+
+	const result = await spawnCommand(['ping', countFlag, count, host], {
+		onData: (data, type) => {
+			if (type === 'stdout') process.stdout.write(`${data}`);
+			if (type === 'stderr') process.stdout.write(`[stderr] ${data}`);
+		},
+		timeout: undefined,
+		logFile: undefined,
+		capture: false
+	});
+
+	return result;
+}
+
+
 async function start(url) {
 
 	dbUrl = url;
 
 	const cronEnabled = shareData.appData['cron_backup']['enabled'];
 	const cronSchedule = shareData.appData['cron_backup']['schedule'];
-
+  
 	if (cronEnabled && (cronSchedule != undefined && cronSchedule != null && cronSchedule != '')) {
 
 		cronBackupStart(cronSchedule, true);
@@ -1558,6 +1711,7 @@ module.exports = {
 	routeUpdateSystem,
 	cronJobToggle,
 	cronBackupStart,
+	spawnCommand,
 	get shutDown() {
         return shutDownFunction;
     },

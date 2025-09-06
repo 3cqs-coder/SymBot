@@ -698,6 +698,21 @@ POST /api/accounts/balances
 GET /api/markets
 ```
 
+### Get market OHLCV
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| exchange | string   | YES           |                      | Exchange to retrieve market data for |
+| pair     | string   | YES           |                      | Symbol pair data to retrieve |
+| timeframe| string   | NO            |                      | Timeframe or interval to use. Default is 5m |
+| since    | integer  | NO            |                      | Starting timestamp in milliseconds from which to retrieve data |
+| limit    | integer  | NO            |                      | Limit the number of results to return |
+
+
+```
+GET /api/markets/ohlcv
+```
+
 
 ### Show TradingView chart
 
@@ -919,6 +934,14 @@ curl -i -X GET \
 -H 'Accept: application/json' \
 -H 'api-key: {API-KEY}' \
 'http://127.0.0.1:3000/api/markets?exchange=binance&pair=BTC_USDT'
+```
+
+#### Get market OHLCV
+```
+curl -i -X GET \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+'http://127.0.0.1:3000/api/markets/ohlcv?exchange=binance&pair=BTC_USDT'
 ```
 
 #### TradingView chart

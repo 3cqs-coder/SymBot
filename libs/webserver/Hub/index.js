@@ -269,8 +269,11 @@ async function initSocket(sessionMiddleware, server) {
 
 			if (query.room == undefined || query.room == null || query.room == '') {
 
-				client.join(roomAuth);
-			} else {
+				//const roomAuth = 'notifications';
+
+				//client.join(roomAuth);
+			}
+			else {
 
 				client.join(query.room);
 			}

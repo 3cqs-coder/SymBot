@@ -201,7 +201,14 @@ function initSocket(sessionMiddleware, server) {
 
 		let clientId = client.id;
 		let loggedIn = client.request.session.loggedIn;
+		let apiKey = client.handshake.headers['api-key'];
+		let userAgent = client.handshake.headers['user-agent'];
 		let query = client.handshake.query;
+
+		if (apiKey && shareData.Common.validateApiKey(apiKey)) {
+
+			loggedIn = true;
+		}
 
 		//console.log('Connected ID:', clientId, loggedIn);
 
@@ -214,19 +221,38 @@ function initSocket(sessionMiddleware, server) {
 
 			if (query.room == undefined || query.room == null || query.room == '') {
 
-				client.join(roomAuth);
+				//const roomAuth = 'notifications';
+
+				//client.join(roomAuth);
 			}
 			else {
 
 				client.join(query.room);
 			}
 
-			client.on('joinRooms', (data) => {
+			client.on('register_api_client', (data) => {
 
-				data.rooms.forEach(room => {
-					
+				const apiRoom = 'api';
+
+				client.join(apiRoom);
+			});
+
+			client.on('joinRooms', ({ rooms }) => {
+
+				if (!rooms) return;
+
+				const roomList = Array.isArray(rooms) ? rooms : [rooms];
+
+				roomList.forEach(room => {
+
+					if (room === 'api') {
+
+						//console.log(`Client ${client.id} attempted to join forbidden room: ${room}`);
+						return;
+					}
+
 					client.join(room);
-					//console.log(`Client joined room: ${room}`);
+					//console.log(`Client ${client.id} joined room: ${room}`);
 				});
 			});
 
@@ -239,6 +265,11 @@ function initSocket(sessionMiddleware, server) {
 			client.on('notifications_history', function (data) {
 
 				shareData.Common.getNotificationHistory(client, data);
+			});
+
+			client.on('api_action', async (data) => {
+
+				Routes.processWebSocketApi(client, data);
 			});
 		}
 	});
@@ -294,6 +325,7 @@ function start(port) {
 		Routes.start(router, upload);
 	}
 }
+
 
 
 module.exports = {
