@@ -17,9 +17,7 @@ const prompt = require('prompt-sync')({
 	sigint: true
 });
 
-
-let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
-pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
+const pathRoot = path.resolve(__dirname, ...Array(2).fill('..'));
 
 let shareData;
 let shutDownFunction;
@@ -425,18 +423,16 @@ async function processBackupDb(password) {
 async function processRestoreDb(tempPath, targetPath, password, convertData, resetServerId) {
 
 	await pause(true, 'Database Restore Processing');
-
-	// Wait short delay for data to stop processing
 	await shareData.Common.delay(5000);
 
 	const dir = tempDir + '/' + shareData.Common.uuidv4();
 
 	let targetPathDec;
 	let success = true;
+	let caughtError = null;
 
 	try {
 
-		// Move uploaded backup file
 		await fsp.rename(tempPath, targetPath);
 
 		targetPathDec = targetPath + '.zip';
@@ -448,7 +444,6 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 		if (!decryptObj.success) {
 
 			let msg = 'Decryption failed: ' + decryptObj.error;
-
 			shareData.Common.logger(msg);
 
 			throw new Error(msg);
@@ -456,10 +451,8 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 
 		shareData.Common.logger('Decompressing: ' + targetPathDec);
 
-		// Decompress backup file
 		await decompress(targetPathDec, dir);
 
-		// Restore database
 		let res = await restoreDb(dir);
 
 		if (!res.success) {
@@ -471,11 +464,10 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 
 		success = false;
 
-		throw new Error('An error occurred during restore: ' + err.message);
+		caughtError = new Error('An error occurred during restore: ' + err.message);
 	}
 	finally {
 
-		// Remove files
 		removeDirectorySync(dir);
 
 		fs.unlinkSync(targetPath);
@@ -493,7 +485,6 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 				await resetDatabase(false, true);
 			}
 
-			// Shutdown
 			shutDownFunction();
 		}
 		else {
@@ -501,6 +492,8 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 			await pause(false);
 		}
 	}
+
+	if (caughtError) throw caughtError;
 }
 
 

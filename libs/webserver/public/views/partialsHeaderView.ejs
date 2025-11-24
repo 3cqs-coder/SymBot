@@ -307,6 +307,49 @@
 	}
 
 
+	function convertNotation(input, maxDecimals = null) {
+
+		let str = String(input).trim();
+
+		if (/e/i.test(str)) {
+
+			let [base, exp] = str.split('e');
+			let exponent = parseInt(exp, 10);
+			let [intPart, fracPart = ''] = base.split('.');
+
+			if (exponent < 0) {
+
+				let zeros = Math.abs(exponent) - intPart.length;
+
+				str = zeros >= 0 ?
+					'0.' + '0'.repeat(zeros) + intPart + fracPart :
+					intPart.slice(0, exponent) + '.' + intPart.slice(exponent) + fracPart;
+			}
+			else {
+
+				if (fracPart.length <= exponent) {
+
+					str = intPart + fracPart + '0'.repeat(exponent - fracPart.length);
+				}
+				else {
+
+					str = intPart + fracPart.slice(0, exponent) + '.' + fracPart.slice(exponent);
+				}
+			}
+		}
+
+		str = str.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/\.$/, '');
+
+		if (maxDecimals !== null && str.includes('.')) {
+
+			const [whole, frac] = str.split('.');
+			str = whole + '.' + frac.slice(0, maxDecimals);
+		}
+
+		return str;
+	}
+
+
 	function getTimeZone(date) {
 
 		let timeZoneOffset;
@@ -721,7 +764,7 @@
 
 			row.append($('<td style="' + style + '">' + count + '.</td>'));
 			row.append($('<td>' + dateFilled + '</td>'));
-			row.append($('<td>$' + data['price'] + '</td>'));
+			row.append($('<td>$' + convertNotation(data['price']) + '</td>'));
 			row.append($('<td>' + data['qty'] + '</td>'));
 			row.append($('<td>$' + data['amount'] + '</td>'));
 			row.append($('<td>' + data['qtySum'] + '</td>'));

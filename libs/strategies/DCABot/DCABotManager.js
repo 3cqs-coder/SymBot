@@ -3,8 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
-pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/', pathRoot.lastIndexOf('/') - 1));
+const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
 let shareData;
 let queueStartDeal;
@@ -1322,6 +1321,7 @@ async function apiStartDeal(req, res) {
 async function apiStartDealProcess(req, res, taskObj) {
 
 	let msg;
+	let dealId;
 	let startDelayConfig;
 
 	let success = true;
@@ -1463,6 +1463,9 @@ async function apiStartDealProcess(req, res, taskObj) {
 
 	if (startDelayConfig != undefined && startDelayConfig != null) {
 
+		let delayMs = 500;
+		let maxRetries = 20;
+
 		let finished = false;
 
 		const startId = await shareData.DCABot.startDelay({ 'config': startDelayConfig, 'delay': startDelaySec, 'notify': false });
@@ -1481,6 +1484,27 @@ async function apiStartDealProcess(req, res, taskObj) {
 				await shareData.Common.delay(500);
 			}
 		}
+
+		for (let i = 0; i < maxRetries; i++) {
+
+			const dealTracker = await shareData.DCABot.getDealTracker();
+
+			if (dealTracker && typeof dealTracker === 'object') {
+
+				dealId = Object.keys(dealTracker).find(id => dealTracker[id].meta?.start_id === startId);
+			}
+
+			if (dealId) {
+
+				msg = { 'deal_id': dealId };
+
+				break;
+			}
+			else {
+
+				await shareData.Common.delay(delayMs);
+			}
+  		}
 	}
 
 	const resObj = { 'date': new Date(), 'success': success, 'data': msg };

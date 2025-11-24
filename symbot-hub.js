@@ -130,6 +130,8 @@ async function startHub() {
 					'workerMap': workerMap
 		};
 
+		Common.freezeProperty(shareData['appData'], [ 'path_root', 'hub_filename' ]);
+
 		HubMain.init(Worker, shareData, shutDown);
 
 		Common.init(shareData);

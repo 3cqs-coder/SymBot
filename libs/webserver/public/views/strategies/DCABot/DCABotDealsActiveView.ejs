@@ -98,11 +98,11 @@
 		openModal(modalId, '#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
   	}
 
-	function openAiChat(modalId, divId, dealId, content) {
+	function openAiChat(modalId, divId, header, content) {
 
 		let url = './chat/deal/view';
 
-		openModal(modalId, '#' + divId, 'AI Analysis ' + dealId, 'Processing...');
+		openModal(modalId, '#' + divId, header, 'Processing...');
 
 		let data = {
 						'message': {
@@ -236,6 +236,16 @@
 
 	function renderAIContent(dealId) {
 
+		const header = 'AI Analysis ' + dealId;
+
+		const htmlContent = `
+			<div class="aiChatContainer">
+				<div id="aiChatSpinner" class="spinner-dynamic-container" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"><div class="spinner-dynamic"></div></div>
+
+				Please wait...
+			</div>
+		`;
+
 		const aiDealTemplate = <%- JSON.stringify(aiDealTemplate) %>;
 		const template = aiDealTemplate;
 
@@ -243,27 +253,98 @@
 		let qtySumTotal = 0;
 
 		const orders = dealTracker[dealId]['orders'];
+		const pair = dealTracker[dealId]['config']['pair'];
+		const exchange = dealTracker[dealId]['config']['exchange'];
 
 		orders.forEach(order => {
-
 			if (order.filled) {
-
 				sumTotal += order.amount || 0;
 				qtySumTotal += order.qty || 0;
 			}
 		});
 
-		// Render the template with the required data
-		const renderedTemplate = ejs.render(template, {
-			'dealId': dealId,
-			'dealInfo': dealTracker[dealId]['info'],
-			'config': dealTracker[dealId]['config'],
-			'orders': orders,
-			'sumTotal': sumTotal,
-			'qtySumTotal': qtySumTotal
-		});
+		// Open modal immediately with spinner
+		openModal(modalId, '#modal', header, htmlContent);
 
-		openAiChat(modalId, 'modal', dealId, renderedTemplate);
+		// Params for OHLCV fetch
+		const params = {
+			exchange,
+			pair,
+			timeframe: '1h',
+			limit: 200
+		};
+
+		// Fetch OHLCV first
+		getMarketOHLCV(params).then(ohlcvData => {
+
+			const renderedTemplate = ejs.render(template, {
+				dealId,
+				dealInfo: dealTracker[dealId]['info'],
+				config: dealTracker[dealId]['config'],
+				orders,
+				sumTotal,
+				qtySumTotal,
+				ohlcvData: JSON.stringify(ohlcvData),
+				timeframe: params.timeframe
+			});
+
+			openAiChat(modalId, 'modal', header, renderedTemplate);
+		});
+	}
+
+
+	function getMarketOHLCV(params) {
+
+		return new Promise((resolve) => {
+
+			$.ajax({
+				type: 'GET',
+				url: './api/markets/ohlcv',
+				data: params,
+				dataType: 'json',
+				timeout: 10000,
+				success: function(data) {
+					try {
+						if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
+
+							const ohlcv = data.data;
+
+							let formatted = '';
+
+							//formatted += "Date | Open | High | Low | Close | Volume\n";
+							//formatted += "------------------------------------------------------\n";
+
+							ohlcv.forEach(row => {
+
+								const [ts, open, high, low, close, volume] = row;
+								const date = dateConvertLocal(new Date(ts));
+
+								formatted += `Date: ${date} | Close Price: $${close}\n`;
+
+								//formatted += `${date} | ${open} | ${high} | ${low} | ${close} | ${volume}\n`;
+							});
+
+							//resolve(formatted);
+							resolve(ohlcv);
+						}
+						else {
+
+							resolve('');
+						}
+					}
+					catch (err) {
+
+						//alertBox('Error formatting OHLCV: ' + err.message);
+						resolve('');
+					}
+				},
+				error: function(err) {
+
+					//alertBox('Error fetching OHLCV: ' + JSON.stringify(err));
+					resolve('');
+				}
+			});
+		});
 	}
 
 
@@ -924,8 +1005,8 @@
 			contentArr.push('<td id="dealid-cell">' + dealId + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');
-			contentArr.push('<td>$' + deal['info']['price_last'] + '</td>');
-			contentArr.push('<td>$' + deal['info']['price_target'] + '</td>');
+			contentArr.push('<td>$' + convertNotation(deal['info']['price_last']) + '</td>');
+			contentArr.push('<td>$' + convertNotation(deal['info']['price_target']) + '</td>');
 			contentArr.push('<td>$' + dealVolume.toFixed(2) + '</td>')
 			contentArr.push('<td style="color: ' + profitPercColor+ '">$' + profit + '</td>');
 			contentArr.push('<td style="color: ' + profitPercColor+ '">' + profitBase + '</td>');
@@ -1015,10 +1096,10 @@
 				const estimates = JSON.parse($(this).closest('tr').attr('data-estimates'));
 
 				const [base, quote] = pair.split('/');
-				const amountNet = estimates['amount_net'];
-				const priceAvgNet = estimates['price_average_net'];
-				const priceTargetNet = estimates['price_target_net'];
-				const priceTargetChangePerc = estimates['price_target_change_percent'];
+				const amountNet = convertNotation(estimates['amount_net']);
+				const priceAvgNet = convertNotation(estimates['price_average_net']);
+				const priceTargetNet = convertNotation(estimates['price_target_net']);
+				const priceTargetChangePerc = convertNotation(estimates['price_target_change_percent']);
 
 				if (priceTargetChangePerc > 0) {
 					

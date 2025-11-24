@@ -271,6 +271,7 @@ async function init() {
 										'bot_config': botConfigFile,
 										'server_config': serverConfigFile,
 										'server_id': '',
+										'path_root': __dirname,
 										'app_filename': __filename,
 										'console_log': consoleLog,
 										'max_log_days': appConfig['data']['max_log_days'],
@@ -307,6 +308,8 @@ async function init() {
 						'WebServer': WebServer,
 						'Ollama': Ollama,
 					};
+
+	Common.freezeProperty(shareData['appData'], [ 'path_root', 'app_filename' ]);
 
 	// Apply config overrides from hub
 	if (Object.keys(workerDataObj).length > 0 && typeof workerDataObj['overrides'] === 'object') {

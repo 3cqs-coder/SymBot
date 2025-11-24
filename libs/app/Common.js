@@ -3,8 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
-pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/'));
+const pathRoot = path.resolve(__dirname, ...Array(2).fill('..'));
 
 const crypto = require('crypto');
 const Convert = require('ansi-to-html');
@@ -1113,6 +1112,26 @@ function dealDurationMinutes(dateStart, dateEnd) {
 }
 
 
+function freezeProperty(obj, keys) {
+
+	const list = Array.isArray(keys) ? keys : [keys];
+
+	for (const key of list) {
+
+		const value = obj[key];
+
+		Object.defineProperty(obj, key, {
+			value,
+			writable: false,
+			configurable: false,
+			enumerable: true
+		});
+	}
+
+	return obj;
+}
+
+
 function convertBoolean(param, defaultVal) {
 
 	let paramBool;
@@ -1707,6 +1726,7 @@ module.exports = {
 	convertBoolean,
 	convertToCamelCase,
 	convertStringToNumeric,
+	freezeProperty,
 	isNumeric,
 	sortByKey,
 	getConfig,

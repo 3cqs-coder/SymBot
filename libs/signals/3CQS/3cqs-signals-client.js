@@ -8,8 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
-pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/', pathRoot.lastIndexOf('/') - 1));
+const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
 const signalsFile = path.dirname(fs.realpathSync(__filename)) + '/signals.json';
 const signalsJson = require(signalsFile);

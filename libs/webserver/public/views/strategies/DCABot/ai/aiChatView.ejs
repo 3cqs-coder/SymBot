@@ -16,7 +16,11 @@
         </div>
     </div>
     
-    <script src="./js/vendor/marked/marked.min.js"></script>
+	<script type="module">
+		import { marked } from './js/vendor/marked/marked.min.js';
+		window.marked = marked;
+	</script>
+
 	<script>
 		$(document).ready(function() {
 	
@@ -118,7 +122,7 @@
 					}
 	
 					messageBuffer += content;
-					$currentMessageElement.html(marked.parse(messageBuffer));
+					$currentMessageElement.html(marked.parse(messageBuffer, { breaks: true }));
 				}
 	
 				scrollToBottom();

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
+const pathRoot = path.resolve(__dirname, ...Array(1).fill('..'));
 
 const crypto = require('crypto');
 const express = require('express');

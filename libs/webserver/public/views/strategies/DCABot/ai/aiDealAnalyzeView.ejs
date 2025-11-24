@@ -1,56 +1,229 @@
-<% 
-let ordersContent = '';
-let lastOrderDate = '';
-let sumTotal = 0;
-let qtySumTotal = 0;
-let averagePrice = 0;
-let allOrderDates = [];
+<%
+const fmt = (n, dp = 2) => {
+    if (n === null || n === undefined || isNaN(n)) return 'N/A';
+    return Number(n).toFixed(dp);
+};
 
-const duration = timeDiff(new Date(), new Date(dealTracker[dealId].date));
+const formatDate = (d) => {
+    if (!d) return 'Date not available';
+    try {
+        const dateObj = new Date(d);
+        if (isNaN(dateObj.getTime())) return 'Invalid date';
+        return dateConvertLocal(dateObj);
+    } catch(e) {
+        return 'Date format error';
+    }
+};
 
-// Calculate totals, collect all order dates, and determine the last order date and average price
-dealTracker[dealId].orders.forEach(order => {
-    if (order.filled) {
-        const dateFilled = order.dateFilled ? dateConvertLocal(new Date(order.dateFilled)) : '';
-        if (dateFilled) {
-            allOrderDates.push(dateFilled);
-            if (!lastOrderDate || new Date(dateFilled) > new Date(lastOrderDate)) {
-                lastOrderDate = dateFilled;
-                averagePrice = order.average || 0;
+const deal = dealTracker && dealTracker[dealId];
+if (!deal) {
+    print('ERROR: Deal data not available for ID: ' + dealId);
+    return;
+}
+
+const orders = (deal.orders || []).filter(o => o && o.filled);
+const dealInfo = deal.info || {};
+const dealConfig = deal.config || {};
+
+const currentPrice = Number(dealInfo.price_last) || 0;
+const baseTarget = Number(dealInfo.price_target) || 0;
+const profitPct = Number(dealInfo.profit_percentage) || 0;
+const currentNetProfit = Number(dealInfo.profit) || 0;
+const profitQuoteProjected = Number(dealInfo.profit_quote_projected) || 0;
+
+const estimates = dealInfo.estimates || {};
+const addedAmount = Number(estimates.amount_net) || 0;
+const priceAverageNet = Number(estimates.price_average_net) || 0;
+const priceTargetNet = Number(estimates.price_target_net) || 0;
+const priceTargetChangePerc = Number(estimates.price_target_change_percent) || 0;
+
+// === OHLCV Handling ===
+let avgDailyMove = null;
+let parsedOhlcv = [];
+let usedOhlcv = false;
+
+try {
+    parsedOhlcv = JSON.parse(ohlcvData || "[]");
+} catch(e) {
+    parsedOhlcv = [];
+}
+
+if (Array.isArray(parsedOhlcv) && parsedOhlcv.length > 1) {
+    try {
+        let totalMove = 0;
+        for (let i = 1; i < parsedOhlcv.length; i++) {
+            const prevClose = Number(parsedOhlcv[i-1][4]);
+            const currClose = Number(parsedOhlcv[i][4]);
+            if (prevClose > 0 && currClose > 0) {
+                totalMove += Math.abs((currClose - prevClose) / prevClose * 100);
             }
         }
-        ordersContent += `
-Order #${order.orderNo || ''}: Date: ${dateFilled}. Order Price: $${order.price !== undefined ? order.price : ''}. 
-Order Amount: $${order.amount !== undefined ? order.amount : ''}. Order Quantity: ${order.qty !== undefined ? order.qty : ''}.
-        `;
-        sumTotal += order.amount || 0;
-        qtySumTotal += order.qty || 0;
+        avgDailyMove = totalMove / (parsedOhlcv.length - 1);
+        if (avgDailyMove && avgDailyMove > 0) {
+            usedOhlcv = true;
+        }
+    } catch(e) {
+        avgDailyMove = null;
     }
-});
+}
+
+// Find last order with validation
+let lastOrderTime = Date.now();
+let lastOrderDisplay = formatDate(lastOrderTime);
+if (orders.length > 0) {
+    orders.forEach(order => {
+        const orderDate = order.dateFilled || order.date;
+        if (orderDate) {
+            const orderTime = new Date(orderDate).getTime();
+            if (!isNaN(orderTime) && orderTime > lastOrderTime) {
+                lastOrderTime = orderTime;
+                lastOrderDisplay = formatDate(orderDate);
+            }
+        }
+    });
+}
+
+function calculateScenario(startPrice, targetPrice, startTimestamp) {
+    if (!isFinite(startPrice) || startPrice <= 0 || !isFinite(targetPrice) || targetPrice <= 0) {
+        return {
+            profitGap: 'N/A',
+            closingDate: 'N/A',
+            estimatedDays: 'N/A',
+            estimatedHours: 'N/A'
+        };
+    }
+
+    const requiredMove = ((targetPrice - startPrice) / startPrice) * 100;
+    if (requiredMove <= 0) {
+        return {
+            profitGap: '0.00% (target already met)',
+            closingDate: formatDate(startTimestamp) + ' (immediate)',
+            estimatedDays: '0',
+            estimatedHours: '0'
+        };
+    }
+
+    let baseDays;
+    if (avgDailyMove && avgDailyMove > 0) {
+        baseDays = requiredMove / avgDailyMove;
+    } else {
+        baseDays = Math.max(requiredMove / 3, 0.1);
+    }
+
+    const baseHours = baseDays * 24;
+    const completionDate = new Date(startTimestamp + (baseDays * 24 * 3600000));
+
+    return {
+        profitGap: fmt(requiredMove, 2) + '%',
+        closingDate: formatDate(completionDate),
+        estimatedDays: fmt(baseDays, 1),
+        estimatedHours: fmt(baseHours, 1)
+    };
+}
+
+const scenario1 = calculateScenario(currentPrice, baseTarget, lastOrderTime);
+const scenario2 = calculateScenario(currentPrice, priceTargetNet || baseTarget, lastOrderTime);
+
+const additionalQty = (addedAmount > 0 && currentPrice > 0) ? (addedAmount / currentPrice) : 0;
+const totalInvested = orders.reduce((sum, o) => sum + Number(o.amount || 0), 0);
+const totalQuantity = orders.reduce((sum, o) => sum + Number(o.qty || 0), 0);
+const averagePrice = totalQuantity > 0 ? totalInvested / totalQuantity : 0;
+const pairName = dealConfig.pair || 'Unknown pair';
+
+let targetChangeDescription = '';
+if (priceTargetChangePerc > 0) {
+    targetChangeDescription = `This is a ${fmt(Math.abs(priceTargetChangePerc), 1)}% reduction from the current target price.`;
+} else {
+    targetChangeDescription = `Adding funds may increase the target price for this deal.`;
+}
+
+let scenario2ProjectedProfit = 0;
+if (addedAmount > 0 && priceTargetNet > 0) {
+    scenario2ProjectedProfit = profitQuoteProjected + ((priceTargetNet - currentPrice) * additionalQty);
+}
+
+const currentPositionValue = currentPrice * totalQuantity;
 %>
-Below is the buy orders history for cryptocurrency pair: <%= dealTracker[dealId].config.pair %> under the DCA (Dollar Cost Average) deal ID <%= dealId %>.
 
-<%= ordersContent %>
+TRADING ANALYSIS REPORT  
+Deal ID: <%= dealId %>  
+Trading Pair: <%= pairName %>  
+Report Date: <%= formatDate(new Date()) %>  
 
-The current price for <%= dealTracker[dealId].config.pair %> as of <%= dateConvertLocal(new Date(dealTracker[dealId].info.updated)) %> is: $<%= dealTracker[dealId].info.price_last %>. Current profit at this price is <%= dealTracker[dealId].info.profit_percentage %>%.
-The total amount spent is $<%= sumTotal.toFixed(2) %>, and the total quantity bought is <%= qtySumTotal %>.  
-The deal started on <%= dateConvertLocal(new Date(dealTracker[dealId].date)) %> and has been active for a total duration of <%= duration %>.  
-The last buy order date is <%= lastOrderDate %>, and the average price is $<%= parseFloat(averagePrice.toFixed(10)) %>.  
+<% if (usedOhlcv) { %>
+NOTE: This report used OHLCV market data to estimate daily movements and timeframe projections.  
+<% } else { %>
+NOTE: This report did not use OHLCV data (fallback estimates applied).  
+<% } %>
 
-Upon closing, the deal will sell the entire quantity at the final target sell price of $<%= dealTracker[dealId].info.price_target %>, achieving a profit margin of <%= dealTracker[dealId].config.dcaTakeProfitPercent %>%.
+CURRENT PORTFOLIO STATUS:  
+- Current Market Price: $<%= fmt(currentPrice, 6) %>  
+- Current Profit/Loss Percentage: <%= fmt(profitPct, 2) %>%  
+- Real-Time Net Profit/Loss Amount: $<%= fmt(currentNetProfit, 2) %>  
+- Projected Profit at Target: $<%= fmt(profitQuoteProjected, 2) %>  
+- Average Purchase Price: $<%= fmt(averagePrice, 6) %>  
+- Total Invested Capital: $<%= fmt(totalInvested, 2) %>  
+- Total Holdings Quantity: <%= fmt(totalQuantity, 4) %>  
+- Current Portfolio Value: $<%= fmt(currentPositionValue, 2) %>  
+- Last Investment Date: <%= lastOrderDisplay %>  
 
-The estimated final profit is calculated as follows:  
-**(Target Sell Price × Total Quantity) - Total Amount Spent**
+SCENARIO 1 ANALYSIS - MAINTAIN CURRENT POSITION:  
+- Target Sell Price: $<%= fmt(baseTarget, 6) %>  
+- Required Price Increase: <%= scenario1.profitGap %>  
+- Estimated Timeframe: <%= scenario1.estimatedDays %> days (~<%= scenario1.estimatedHours %> hours)  
+- Expected Completion Date: <%= scenario1.closingDate %>  
+- Projected Profit at Target: $<%= fmt(profitQuoteProjected, 2) %> (same as current projection)  
 
-Estimated Profit = ($<%= dealTracker[dealId].info.price_target %> × <%= qtySumTotal %>) - $<%= sumTotal %>  
-= **$<%= (dealTracker[dealId].info.price_target * qtySumTotal - sumTotal).toFixed(2) %>**
+SCENARIO 2 ANALYSIS - WITH ADDITIONAL INVESTMENT:  
+- Additional Capital: $<%= fmt(addedAmount, 2) %>  
+- Additional Quantity: <%= fmt(additionalQty, 4) %>  
+- New Average Price: $<%= fmt(priceAverageNet, 6) %>  
+- New Target Price: $<%= fmt(priceTargetNet, 6) %>  
+- Required Price Increase: <%= scenario2.profitGap %>  
+- Estimated Timeframe: <%= scenario2.estimatedDays %> days (~<%= scenario2.estimatedHours %> hours)  
+- Expected Completion Date: <%= scenario2.closingDate %>  
+- Projected Profit with Additional Funds: $<%= fmt(scenario2ProjectedProfit, 2) %>  
+- Target Change Note: <%= targetChangeDescription %>  
 
-Use the above data, including all order dates and pricing details, to provide a realistic, factual, and accurate estimation of the deal's future closing date. Highlight key dates and the profit estimate clearly.
+COMPREHENSIVE TRADING ANALYSIS:  
 
-Also provide a second estimated date if $<%= dealTracker[dealId].info.estimates.amount_net %> were added to the deal. This should close sooner than the first in profit since we're lowering the average and target prices.
-This results in buying <%= (Number(dealTracker[dealId].info.estimates.amount_net) / Number(dealTracker[dealId].info.price_last)) %> additional quantity for the deal at the current price of $<%= dealTracker[dealId].info.price_last %>, decreasing the average price to $<%= dealTracker[dealId].info.estimates.price_average_net %> and decreasing the target sell price to $<%= dealTracker[dealId].info.estimates.price_target_net %>.
-This will also increase the final take profit of the deal because of the additional funds added to the deal.
+SCENARIO BREAKDOWN:  
 
-Since today is <%= dateConvertLocal(new Date()) %>, the estimated closing dates and times must be after that.
+- Scenario 1: Current Investment Strategy (Identical to Current Portfolio)  
+  * Maintain current investment of $<%= fmt(totalInvested, 2) %>  
+  * Target price: $<%= fmt(baseTarget, 6) %>  
+  * Required price increase: <%= scenario1.profitGap %>  
+  * Estimated timeframe: <%= scenario1.estimatedDays %> days  
+  * Projected completion: <%= scenario1.closingDate %>  
+  * Projected profit at target: $<%= fmt(profitQuoteProjected, 2) %>  
 
-Separate both estimates clearly showing scenario one and two. Provide a final summary at the end in just a few sentences.
+- Scenario 2: Additional Capital Strategy  
+  * Add $<%= fmt(addedAmount, 2) %> to current position  
+  * New average price: $<%= fmt(priceAverageNet, 6) %>  
+  * New target price: $<%= fmt(priceTargetNet, 6) %>  
+  * Required price increase: <%= scenario2.profitGap %>  
+  * Estimated timeframe: <%= scenario2.estimatedDays %> days  
+  * Projected completion: <%= scenario2.closingDate %>  
+  * Projected profit: $<%= fmt(scenario2ProjectedProfit, 2) %>  
+  * <%= targetChangeDescription %>  
+
+- Key Comparison Metrics:  
+  * Current real-time profit/loss: $<%= fmt(currentNetProfit, 2) %>  
+  * Projected profit at current target: $<%= fmt(profitQuoteProjected, 2) %>  
+  * Time reduction with additional funds: <%= fmt((parseFloat(scenario1.estimatedDays) - parseFloat(scenario2.estimatedDays)) / parseFloat(scenario1.estimatedDays) * 100, 1) %>% faster  
+  * Required gain reduction: <%= fmt((parseFloat(scenario1.profitGap) - parseFloat(scenario2.profitGap)) / parseFloat(scenario1.profitGap) * 100, 1) %>% less price movement needed  
+  * Additional capital required: $<%= fmt(addedAmount, 2) %>  
+
+SUMMARY:  
+
+This financial report analyzes two investment strategies for Deal ID <%= dealId %> trading <%= pairName %>.  
+
+- Your current investment of $<%= fmt(totalInvested, 2) %> shows a <%= fmt(profitPct, 2) %>% return, which equals $<%= fmt(currentNetProfit, 2) %> in real-time profit/loss.  
+
+- Scenario 1 represents maintaining your current position. If the price reaches the target of $<%= fmt(baseTarget, 6) %>, your projected profit would be $<%= fmt(profitQuoteProjected, 2) %>, with an estimated timeframe of <%= scenario1.estimatedDays %> days (completing around <%= scenario1.closingDate %>).  
+
+- Scenario 2 involves adding $<%= fmt(addedAmount, 2) %> more capital. This would lower your average cost to $<%= fmt(priceAverageNet, 6) %> and potentially reduce the timeframe to <%= scenario2.estimatedDays %> days (completing around <%= scenario2.closingDate %>), which is <%= fmt((parseFloat(scenario1.estimatedDays) - parseFloat(scenario2.estimatedDays)) / parseFloat(scenario1.estimatedDays) * 100, 1) %>% faster than Scenario 1.  
+
+The analysis provides a clear comparison of both approaches to help you make an informed investment decision.  
+
+Show a full analysis with bullet points for both scenarios with summary and describe it as a trading analysis report in simple terms with deal ID <%= dealId %> mentioned at the top. Do not show each order history.

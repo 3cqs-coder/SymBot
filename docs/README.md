@@ -35,7 +35,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 ## Requirements
 
 - Linux, MacOS, or Windows based system
-- [Node.js](https://nodejs.org) v19+ must be installed on your system
+- [Node.js](https://nodejs.org) v20.19 or later must be installed on your system
 - [MongoDB](https://www.mongodb.com) installed or a cloud host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection

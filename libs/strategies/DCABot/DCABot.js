@@ -3,8 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let pathRoot = path.dirname(fs.realpathSync(__dirname)).split(path.sep).join(path.posix.sep);
-pathRoot = pathRoot.substring(0, pathRoot.lastIndexOf('/', pathRoot.lastIndexOf('/') - 1));
+const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
 const crypto = require('crypto');
 const colors = require('colors');
@@ -4038,7 +4037,10 @@ async function createDealTracker(data) {
 	dealTracker[dealId] = {};
 	dealTracker[dealId]['deal'] = {};
 	dealTracker[dealId]['info'] = {};
+	dealTracker[dealId]['meta'] = {};
 	dealTracker[dealId]['update'] = {};
+
+	dealTracker[dealId]['meta']['start_id'] = startId;
 
 	dealTracker[dealId]['deal'] = JSON.parse(JSON.stringify(data['deal']));
 
@@ -5991,7 +5993,7 @@ async function startDelay(dataObj) {
 	// Check for any resuming deals before continuing
 	await processResumeDealTracker();
 
-	const startId = await Common.uuidv4();
+	const startId = Common.uuidv4();
 
 	startDealTracker[startId] = {};
 	startDealTracker[startId]['date'] = new Date();
