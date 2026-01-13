@@ -98,29 +98,6 @@
 		openModal(modalId, '#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
   	}
 
-	function openAiChat(modalId, divId, header, content) {
-
-		let url = './chat/deal/view';
-
-		openModal(modalId, '#' + divId, header, 'Processing...');
-
-		let data = {
-						'message': {
-										'content': content
-									}
-		};
-
-		$.ajax({
-					url: url,
-				    method: 'POST',
-					contentType: 'application/json',
-					data: JSON.stringify(data),
-					success: function(response) {
-						
-						$('#' + divId).html(response);
-					}
-		});
-	}
 
 	function panicSellConfirm(dealId) {
 
@@ -236,6 +213,8 @@
 
 	function renderAIContent(dealId) {
 
+		const tz = getTimeZone(new Date());
+
 		const header = 'AI Analysis ' + dealId;
 
 		const htmlContent = `
@@ -246,22 +225,9 @@
 			</div>
 		`;
 
-		const aiDealTemplate = <%- JSON.stringify(aiDealTemplate) %>;
-		const template = aiDealTemplate;
-
-		let sumTotal = 0;
-		let qtySumTotal = 0;
-
 		const orders = dealTracker[dealId]['orders'];
 		const pair = dealTracker[dealId]['config']['pair'];
 		const exchange = dealTracker[dealId]['config']['exchange'];
-
-		orders.forEach(order => {
-			if (order.filled) {
-				sumTotal += order.amount || 0;
-				qtySumTotal += order.qty || 0;
-			}
-		});
 
 		// Open modal immediately with spinner
 		openModal(modalId, '#modal', header, htmlContent);
@@ -270,23 +236,13 @@
 		const params = {
 			exchange,
 			pair,
+			dealId,
 			timeframe: '1h',
-			limit: 200
+			limit: 200,
+			timeZoneOffset: tz.offset
 		};
 
-		// Fetch OHLCV first
-		getMarketOHLCV(params).then(ohlcvData => {
-
-			const renderedTemplate = ejs.render(template, {
-				dealId,
-				dealInfo: dealTracker[dealId]['info'],
-				config: dealTracker[dealId]['config'],
-				orders,
-				sumTotal,
-				qtySumTotal,
-				ohlcvData: JSON.stringify(ohlcvData),
-				timeframe: params.timeframe
-			});
+		getAiAnalyzeDealPrompt(params).then(renderedTemplate => {
 
 			openAiChat(modalId, 'modal', header, renderedTemplate);
 		});
@@ -343,6 +299,36 @@
 					//alertBox('Error fetching OHLCV: ' + JSON.stringify(err));
 					resolve('');
 				}
+			});
+		});
+	}
+
+
+	function getAiAnalyzeDealPrompt(params) {
+
+		return new Promise((resolve) => {
+
+			$.ajax({
+						type: 'GET',
+						url: './api/ai/analyze_deal_prompt',
+						data: params,
+						dataType: 'json',
+						success: function(data) {
+
+							if (data.success) {
+
+								resolve(data.data);
+							}
+							else {
+
+								resolve(data.error);
+							}
+						},
+						error: function(data) {
+
+							// Some error in ajax call
+							resolve('Error: ' + JSON.stringify(data));
+					}
 			});
 		});
 	}

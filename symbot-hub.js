@@ -4,7 +4,7 @@
 /*
 
 	SymBot Hub
-	Copyright © 2023 - 2025 3CQS.com All Rights Reserved
+	Copyright © 2023 - 2026 3CQS.com All Rights Reserved
 	Licensed under Creative Commons Attribution-NonCommerical-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 */
@@ -117,7 +117,7 @@ async function startHub() {
 							'path_root': __dirname,
 							'hub_filename': __filename,
 							'web_server_ports': undefined,
-							'web_socket_path': 'wsHub_',
+							'web_socket_path': 'ws',
 							'hub_config': hubConfigFile,
 							'shutdown_timeout': shutdownTimeout,
 							'sig_int': false,

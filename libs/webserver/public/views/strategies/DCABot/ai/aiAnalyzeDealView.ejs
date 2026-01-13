@@ -1,0 +1,250 @@
+<%
+
+const fmt = (n, dp = 2) => {
+    if (n === null || n === undefined || isNaN(n)) return 'N/A';
+    return Number(n).toFixed(dp);
+};
+
+function dateConvertLocalOffset(dateString, offset) {
+    const date = new Date(dateString);
+    const match = offset.match(/([+-])(\d{2}):(\d{2})/);
+    if (!match) throw new Error('Invalid offset format, expected ±HH:MM');
+
+    const sign = match[1] === '+' ? 1 : -1;
+    const offsetHours = parseInt(match[2], 10);
+    const offsetMinutes = parseInt(match[3], 10);
+    const offsetMs = sign * ((offsetHours * 60 + offsetMinutes) * 60 * 1000);
+    const shiftedDate = new Date(date.getTime() + offsetMs);
+
+    const parts = getDateParts(shiftedDate, true);
+    return `${parts.date} ${parts.timeAmPm}`;
+}
+
+const formatDate = (d) => {
+    if (!d) return 'Date not available';
+    try {
+        const dateObj = new Date(d);
+        if (isNaN(dateObj.getTime())) return 'Invalid date';
+        return dateConvertLocalOffset(dateObj, timeZoneOffset);
+    } catch(e) {
+        return 'Date format error';
+    }
+};
+
+const currentPrice = Number(dealInfo.price_last) || 0;
+const baseTarget = Number(dealInfo.price_target) || 0;
+const profitPct = Number(dealInfo.profit_percentage) || 0;
+const currentNetProfit = Number(dealInfo.profit) || 0;
+const profitQuoteProjected = Number(dealInfo.profit_quote_projected) || 0;
+
+const estimates = dealInfo.estimates || {};
+const addedAmount = Number(estimates.amount_net) || 0;
+const priceAverageNet = Number(estimates.price_average_net) || 0;
+const priceTargetNet = Number(estimates.price_target_net) || 0;
+const priceTargetChangePerc = Number(estimates.price_target_change_percent) || 0;
+
+// --- OHLCV Handling ---
+let avgDailyMove = null;
+let parsedOhlcv = [];
+let usedOhlcv = false;
+
+try {
+    parsedOhlcv = JSON.parse(ohlcvData || "[]");
+} catch(e) {}
+
+if (Array.isArray(parsedOhlcv) && parsedOhlcv.length > 1) {
+    try {
+        let totalMove = 0;
+        for (let i = 1; i < parsedOhlcv.length; i++) {
+            const prevClose = Number(parsedOhlcv[i-1][4]);
+            const currClose = Number(parsedOhlcv[i][4]);
+            if (prevClose > 0 && currClose > 0) {
+                totalMove += Math.abs((currClose - prevClose) / prevClose * 100);
+            }
+        }
+        avgDailyMove = totalMove / (parsedOhlcv.length - 1);
+        if (avgDailyMove > 0) usedOhlcv = true;
+    } catch(e) {}
+}
+
+// Last order timestamp
+let lastOrderTime = null;
+let lastOrderDisplay = formatDate(lastOrderTime);
+orders.forEach(order => {
+    const t = new Date(order.dateFilled || order.date).getTime();
+    if (!isNaN(t) && t > lastOrderTime) {
+        lastOrderTime = t;
+        lastOrderDisplay = formatDate(order.dateFilled || order.date);
+    }
+});
+
+function calculateScenario(startPrice, targetPrice, startTimestamp, indicators = {}) {
+
+    let profitGap = 'N/A';
+    let closingDate = 'N/A';
+    let estimatedDays = 'N/A';
+    let estimatedHours = 'N/A';
+
+    const validInputs =
+        isFinite(startPrice) &&
+        isFinite(targetPrice) &&
+        startPrice > 0 &&
+        targetPrice > 0 &&
+        startTimestamp;
+
+    if (validInputs) {
+
+        const requiredMove = ((targetPrice - startPrice) / startPrice) * 100;
+
+        if (requiredMove <= 0) {
+
+            profitGap = '0.00% (target already met)';
+            closingDate = formatDate(startTimestamp) + ' (immediate)';
+            estimatedDays = '0';
+            estimatedHours = '0';
+
+        } else {
+
+            let baseDays;
+
+            if (avgDailyMove) {
+                baseDays = requiredMove / avgDailyMove;
+            } else if (indicators.atrDailyPct) {
+                baseDays = requiredMove / indicators.atrDailyPct;
+            } else if (indicators.atrPct) {
+                baseDays = requiredMove / indicators.atrPct;
+            } else {
+                baseDays = Math.max(requiredMove / 3, 0.1);
+            }
+
+            if (indicators.trendMultiplier) {
+                baseDays /= indicators.trendMultiplier;
+            }
+
+            const baseHours = baseDays * 24;
+            const startTime = Number(startTimestamp);
+
+            const now = Date.now();
+            const rawCompletionTime = startTime + baseDays * 24 * 3600000;
+
+            // If estimate has already elapsed, rebase from now
+            const effectiveCompletionTime =
+                rawCompletionTime < now
+                    ? now + baseDays * 24 * 3600000
+                    : rawCompletionTime;
+
+            const completionDate = new Date(effectiveCompletionTime);
+
+            const remainingMs = effectiveCompletionTime - now;
+            const remainingDays = remainingMs / (24 * 3600000);
+            const remainingHours = remainingDays * 24;
+
+            profitGap = fmt(requiredMove, 2) + '%';
+            closingDate = formatDate(completionDate);
+            estimatedDays = fmt(remainingDays, 1);
+            estimatedHours = fmt(remainingHours, 1);
+        }
+    }
+
+    return {
+        profitGap,
+        closingDate,
+        estimatedDays,
+        estimatedHours,
+        indicators
+    };
+}
+
+const scenarioIndicators = indicators || {};
+const scenario1 = calculateScenario(currentPrice, baseTarget, lastOrderTime, scenarioIndicators);
+const scenario2 = calculateScenario(currentPrice, priceTargetNet || baseTarget, lastOrderTime, scenarioIndicators);
+
+const additionalQty = addedAmount > 0 ? addedAmount / currentPrice : 0;
+const totalInvested = orders.reduce((s,o)=>s+Number(o.amount||0),0);
+const totalQuantity = orders.reduce((s,o)=>s+Number(o.qty||0),0);
+const averagePrice = totalQuantity ? totalInvested / totalQuantity : 0;
+const pairName = pair || 'Unknown pair';
+const currentPositionValue = currentPrice * totalQuantity;
+
+// Context interpretation
+const contextScore = Number(scenarioIndicators.marketContextScore);
+let contextLabel = 'N/A';
+if (Number.isFinite(contextScore)) {
+    if (contextScore >= 70) contextLabel = 'Strong market conditions';
+    else if (contextScore >= 45) contextLabel = 'Neutral market conditions';
+    else contextLabel = 'Weak market conditions';
+}
+
+const confidenceNotes = (scenarioIndicators.confidenceWarnings || []).map(w => {
+    if (w === 'low_timeframe_noise') return 'Short timeframe data may introduce market noise';
+    if (w === 'limited_candle_history') return 'Limited historical data reduces confidence';
+    return w;
+});
+%>
+
+---
+
+## TRADING ANALYSIS REPORT  
+**Deal ID:** <%= dealId %>  
+**Trading Pair:** <%= pairName %>  
+**Report Date:** <%= formatDate(new Date()) %>  
+
+<% if (usedOhlcv) { %>
+**Data Source:** OHLCV market data with technical indicators  
+<% } else { %>
+**Data Source:** OHLCV market data not available. Fallback estimates (limited market data)  
+<% } %>
+
+---
+
+### MARKET SNAPSHOT
+
+- **Market Context Score:** <%= fmt(contextScore,0) %> / 100  
+- **Market Condition:** <%= contextLabel %>  
+- **Trend Direction:** <%= scenarioIndicators.trend || 'N/A' %>  
+- **Trend Multiplier:** <%= fmt(scenarioIndicators.trendMultiplier,2) %>  
+- **Indicator Timeframe:** <%= scenarioIndicators.timeframe || 'N/A' %>  
+
+**Volatility**
+- ATR (raw): <%= fmt(scenarioIndicators.atrPct,2) %>%  
+- ATR (daily-normalized): <%= fmt(scenarioIndicators.atrDailyPct,2) %>%  
+- Volatility State: <%= scenarioIndicators.volatilityState || 'N/A' %>  
+
+<% if (confidenceNotes.length) { %>
+**Confidence Notes**
+<% confidenceNotes.forEach(n => { %>
+- <%= n %>
+<% }) %>
+<% } %>
+
+---
+
+### SCENARIO 1 — HOLD CURRENT POSITION
+- Target Price: $<%= fmt(baseTarget,6) %>  
+- Required Move: <%= scenario1.profitGap %>  
+- Estimated Timeframe: <%= scenario1.estimatedDays %> days (~<%= scenario1.estimatedHours %> hours)  
+- Estimated Completion: <%= scenario1.closingDate %>  
+
+---
+
+### SCENARIO 2 — ADD ADDITIONAL FUNDS
+- Additional Capital: $<%= fmt(addedAmount,2) %>  
+- New Average Price: $<%= fmt(priceAverageNet,6) %>  
+- New Target Price: $<%= fmt(priceTargetNet,6) %>  
+- Estimated Timeframe: <%= scenario2.estimatedDays %> days (~<%= scenario2.estimatedHours %> hours)  
+- Estimated Completion: <%= scenario2.closingDate %>  
+
+---
+
+### SUMMARY
+
+This report evaluates **Deal ID <%= dealId %>** using price action, volatility, and trend structure.
+
+- Market conditions are assessed as **<%= contextLabel.toLowerCase() %>**
+- Estimates dynamically adjust for volatility and trend strength
+- Scenario 2 reduces recovery time at the cost of increased exposure
+- Time estimates are **probabilistic**, not guarantees
+
+This analysis is designed to support decision-making — not predict outcomes.
+
+Show a full analysis with bullet points for both scenarios, including the note whether OHCLV and indicators were used or not at the top, along with summary and describe it as a trading analysis report in simple terms with deal ID <%= dealId %> mentioned at the top. Do not show each order history.

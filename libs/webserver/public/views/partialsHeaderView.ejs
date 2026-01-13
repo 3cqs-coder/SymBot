@@ -21,7 +21,7 @@
 
 	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 
-	<script src="/js/vendor/socket.io/socket.io.min.js"></script>
+	<script src="/<%- appData.web_socket_path %>/socket.io.min.js"></script>
 	<script src="/js/vendor/jquery/jquery.min.js"></script>
 	<script src="/js/vendor/jquery-ui/jquery-ui.min.js"></script>
 	<script src="/js/vendor/jquery-ui-timepicker-addon/jquery-ui-timepicker-addon.min.js"></script>
@@ -63,7 +63,7 @@
 
 			$('#divLogo').append(hubSuperscript);
 
-			const hideElements = [ '#btcPrice', '#notifications', '#liveLogs' ];
+			const hideElements = [ '#btcPrice', '#aiChat', '#notifications', '#liveLogs' ];
 
 			for (let i = 0; i < hideElements.length; i++) {
 
@@ -103,6 +103,47 @@
 				}
 			}
 		}));
+
+
+		$('#aiChat').on('click', function () {
+
+			const modalId = 'aiChatView';
+			const header = 'AI Chat';
+
+			const dialog = modalTracker?.[modalId];
+
+			if (dialog && dialog.dialog('isOpen')) {
+
+				$.confirm({
+					title: false,
+					boxWidth: '50%',
+					useBootstrap: false,
+					content:
+						'<div style="font-size: 1.2rem; text-align: left;">' +
+						'Do you want to close chat?' +
+						'</div>',
+					buttons: {
+							ok: {
+								btnClass: 'btn-default',
+								text: '<div style="color:#c62828;">Close Chat</div>',
+								action: function () {
+									dialog.dialog('close');
+								}
+							},
+							cancel: {
+								btnClass: 'btn-default',
+								text: '<div style="color:#000;">Cancel</div>',
+								action: function () {}
+							}
+					}
+				});
+
+				return;
+			}
+
+			openAiChat(modalId, 'modal', header);
+		});
+
 
 		$('#mode').on('click', function() {
 
@@ -179,6 +220,35 @@
 		dataTracker['mode'] = mode;
 
 		updateDataTracker();
+	}
+
+
+	function openAiChat(modalId, divId, header, content) {
+
+		let url = './api/ai/chat/view';
+		let data;
+
+		openModal(modalId, '#' + divId, header, 'Processing...');
+
+		if (content) {
+
+			data = {
+						'message': {
+										'content': content
+									}
+			};
+		}
+
+		$.ajax({
+					url: url,
+				    method: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify(data),
+					success: function(response) {
+						
+						$('#' + divId).html(response);
+					}
+		});
 	}
 
 
@@ -920,6 +990,7 @@
 
 	<div class="headerButtons">
 		<div id="mode" class="modeButton"></div>
+		<div id="aiChat" class="modeButton">&#128172;</div>
 		<div id="notifications" class="notificationButton">&#128276;</div>
 	</div>
 </div>

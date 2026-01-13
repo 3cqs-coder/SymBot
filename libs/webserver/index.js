@@ -180,7 +180,7 @@ function initSocket(sessionMiddleware, server) {
 				credentials: false
 		},
 		path: '/' + shareData.appData['web_socket_path'],
-		serveClient: false,
+		serveClient: true,
 		pingInterval: 10000,
 		pingTimeout: 5000,
 		maxHttpBufferSize: 1e6,
@@ -204,6 +204,7 @@ function initSocket(sessionMiddleware, server) {
 		let apiKey = client.handshake.headers['api-key'];
 		let userAgent = client.handshake.headers['user-agent'];
 		let query = client.handshake.query;
+		const ip = shareData.Common.getClientIp(client);
 
 		if (apiKey && shareData.Common.validateApiKey(apiKey)) {
 
@@ -214,10 +215,19 @@ function initSocket(sessionMiddleware, server) {
 
 		if (!loggedIn) {
 
+			if (apiKey) {
+
+				const msg = `Invalid API KEY used by ${ip} (WebSocket)`;
+
+				shareData.Common.sendNotification({ 'message': msg, 'type': 'info', 'telegram_id': shareData.appData.telegram_id });
+			}
+
 			client.emit('error', 'Unauthorized');
 			client.disconnect();			
 		}
 		else {
+
+			const API_ROOM = 'api';
 
 			if (query.room == undefined || query.room == null || query.room == '') {
 
@@ -230,11 +240,9 @@ function initSocket(sessionMiddleware, server) {
 				client.join(query.room);
 			}
 
-			client.on('register_api_client', (data) => {
+			client.on('register_client', (data) => {
 
-				const apiRoom = 'api';
-
-				client.join(apiRoom);
+				client.join(API_ROOM);
 			});
 
 			client.on('joinRooms', ({ rooms }) => {
@@ -245,7 +253,7 @@ function initSocket(sessionMiddleware, server) {
 
 				roomList.forEach(room => {
 
-					if (room === 'api') {
+					if (room === API_ROOM) {
 
 						//console.log(`Client ${client.id} attempted to join forbidden room: ${room}`);
 						return;
@@ -273,6 +281,18 @@ function initSocket(sessionMiddleware, server) {
 			});
 		}
 	});
+}
+
+
+async function disconnectAllClients() {
+
+	try {
+
+		socket.disconnectSockets();
+	}
+	catch(e) {
+
+	}
 }
 
 
@@ -333,6 +353,7 @@ module.exports = {
 	app,
 	start,
 	getSocket,
+	disconnectAllClients,
 
 	init: function(obj) {
 

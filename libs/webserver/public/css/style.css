@@ -141,6 +141,14 @@ a:visited {
 }
 
 
+.divHr {
+
+	height: 1px;
+	margin: 20px 0;
+	background-color: #cccccc;
+}
+
+
 #tradingViewSettings {
 
 	font-size: 1.8rem;

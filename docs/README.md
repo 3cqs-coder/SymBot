@@ -25,6 +25,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Artificial Intelligence (AI)](#artificial-intelligence-ai)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
+- [WebSocket API](#websocket-api)
 - [Webhooks](#webhooks)
 - [Backup and Restore Features](#backup-and-restore-features)
 - [Reset or Configure SymBot](#reset-or-configure-symbot)
@@ -208,6 +209,15 @@ These files are located in the `config` directory
 		- `password` is the password that will be used to encrypt database backups. It is required and is not a plain text password, but rather an encrypted form of it, so it should not be manually entered.
 		- `max` is the maximum number of backups to keep.
 		- `enabled` is whether the cron scheduler will run and automatically process database backups.
+		- `sftp`
+				- `host` is the SFTP host to upload backups
+				- `port` is the port to connect to (defaults to 22)
+				- `username` to login as
+				- `password` associated with the username. This is an encrypted value so it should not be manually entered.
+				- `private_key` is the full path to your private key which will be used instead of a password
+				- `passphrase` an optional passphrase for your private key. This is an encrypted value so it should not be manually entered.
+				- `remote_directory` is the path on the remote host where your backups will be uploaded. This must be unique as files will be automatically removed according to the value set for maximum backups
+				- `enabled` is whether the backups will be automatically uploaded after being processed via cron
 
 	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see [Telegram Setup](#telegram-setup)).
 
@@ -713,6 +723,19 @@ GET /api/markets
 GET /api/markets/ohlcv
 ```
 
+### AI analyze deal
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| dealId   | string   | YES           |                      | Deal ID to analyze using AI |
+| prompt   | string   | NO            |                      | Prompt to use for analysis |
+| template | string   | NO            |                      | Template to use for analysis |
+
+
+```
+POST /api/ai/analyze_deal
+```
+
 
 ### Show TradingView chart
 
@@ -742,6 +765,10 @@ POST /api/system/backup
 ```
 
 ## API Sample Usage
+
+Below are examples demonstrating how to use SymBot APIs. When using [SymBot Hub](#symbot-hub), you should replace the base URL with the appropriate Hub instance path, such as `/instance/3000`.
+
+For **SymBot WebSocket APIs**, the default endpoint path is `/ws`. When accessed through **SymBot Hub**, the WebSocket path is prefixed with the instance path, such as `/instance/3000/ws`.
 
 #### Create bot
 ```
@@ -944,6 +971,16 @@ curl -i -X GET \
 'http://127.0.0.1:3000/api/markets/ohlcv?exchange=binance&pair=BTC_USDT'
 ```
 
+#### AI analyze deal
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{ "dealId": "BTC_USD-79P3J27-1762835040" }' \
+http://127.0.0.1:3000/api/ai/analyze_deal
+```
+
 #### TradingView chart
 ```
 http://127.0.0.1:3000/api/tradingview?script=true&exchange=binance&pair=BTC_USDT&theme=dark&width=1000&height=600
@@ -957,6 +994,67 @@ curl -X POST http://127.0.0.1:3000/api/system/backup \
 -d '{"password": "encryption_password"}' \
 -o SymBot_Backup_DB.zip.enc
 ```
+
+## WebSocket API
+
+
+WebSocket APIs use the same parameters as the REST APIs, so the same requests can be reused without any changes.
+
+WebSockets are useful when you want a continuous, live connection to the server. After connecting once, updates can be sent automatically in real time, instead of the client having to make repeated requests. This is especially helpful for live deal activity, market data, and notifications, and can be more efficient than using REST alone.
+
+Before using the WebSocket APIs, the application must first connect using your SymBot API key and register itself by emitting the `register_client` command. Only after successful registration can the client access the available APIs.
+
+Currently available WebSocket APIs are:
+
+- `deals`    
+- `markets`
+- `markets/ohlcv`
+
+Below is a simple Node.js example demonstrating how to connect to the server and use the WebSocket APIs.
+
+```
+const { io } = require("socket.io-client");
+const crypto = require("crypto");
+
+const apiKey = "{API-KEY}";
+const appId = "App-" + crypto.randomUUID().slice(0, 6);
+
+const useHub = false; // set to true when using SymBot Hub
+
+const host = useHub
+  ? "http://127.0.0.1:3100"
+  : "http://127.0.0.1:3000";
+
+const path = useHub
+  ? "/instance/3000/ws"
+  : "/ws";
+
+const socket = io(host, {
+  path,
+  extraHeaders: { "api-key": apiKey },
+  transports: ["websocket", "polling"]
+});
+
+socket.on("connect", () => {
+  socket.emit("register_client", { appId });
+  socket.emit("joinRooms", { rooms: ["logs", "notifications"] });
+
+  socket.emit("api_action", {
+    meta: {
+      id: crypto.randomUUID(),
+      appId,
+      api: "deals"
+    }
+  });
+});
+
+socket.on("data", (msg) => {
+  if (msg.type === "api") {
+    console.log(msg);
+  }
+});
+```
+
 
 ## Webhooks
 

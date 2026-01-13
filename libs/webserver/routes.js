@@ -1,10 +1,14 @@
 'use strict';
 
+const routesWebSocket = require(__dirname + '/routesWebSocket.js');
 
 let shareData;
 
 
+
 function initRoutes(router, upload) {
+
+	routesWebSocket.init(shareData);
 
 	router.post([ '/webhook/api/*wildcard' ], (req, res, next) => {
 
@@ -143,11 +147,11 @@ function initRoutes(router, upload) {
 
 		const { duration, timeZoneOffset } = req.query;
 
-		const { kpi, charts, currencies, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7'), timeZoneOffset });
+		const { kpi, charts, botIdNameMap, currencies, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7'), timeZoneOffset });
 
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, currencies, isLoading, period });
+		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, botIdNameMap, currencies, isLoading, period });
 	})
 
 
@@ -211,44 +215,6 @@ function initRoutes(router, upload) {
 		req.session.destroy((err) => {});
 
 		res.redirect('/login');
-	});
-
-
-	router.post('/chat/deal/view', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		const body = req.body;
-
-		if (req.session.loggedIn) {
-
-			res.render( 'strategies/DCABot/ai/aiChatView', { 'appData': shareData.appData, 'bodyData': body } );
-		}
-		else {
-
-			res.redirect('/login');
-		}
-	});
-
-
-	router.post('/chat/deal/prompt', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		const body = req.body;
-
-		if (req.session.loggedIn) {
-
-			shareData.Ollama.streamChat(JSON.stringify(body));
-
-			let obj = { 'success': true };
-
-			res.status(200).send(obj);
-		}
-		else {
-
-			res.redirect('/login');
-		}
 	});
 
 
@@ -366,6 +332,74 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.post([ '/api/ai/analyze_deal' ], (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiAiAnalyzeDeal(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get([ '/api/ai/analyze_deal_prompt' ], (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiAiAnalyzeDealPrompt(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/api/ai/chat/view', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		const body = req.body;
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			res.render( 'aiChatView', { 'appData': shareData.appData, 'bodyData': body } );
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/api/ai/chat/prompt', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		const body = req.body;
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.Ollama.streamChat(JSON.stringify(body));
+
+			let obj = { 'success': true };
+
+			res.status(200).send(obj);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get([ '/api/deals', '/api/deals/completed', '/api/deals/:dealId/show' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -397,6 +431,7 @@ function initRoutes(router, upload) {
 			res.redirect('/login');
 		}
 	});
+
 
 	router.get('/app-version', async (req, res) => {
 
@@ -566,6 +601,12 @@ async function processConfig(req, res) {
 		const cronBackupPasswordEnc = services['cron_backup']['password'];
 		services['cron_backup']['password'] = '';
 
+		const sftpPasswordEnc = services['cron_backup']['sftp']['password'];
+		services['cron_backup']['sftp']['password'] = '';
+
+		const sftpPassphraseEnc = services['cron_backup']['sftp']['passphrase'];
+		services['cron_backup']['sftp']['passphrase'] = '';
+
 		if (cronBackupPasswordEnc) {
 
 			const cronBackupPasswordDecObj = await shareData.System.decrypt(cronBackupPasswordEnc, shareData.appData.password);
@@ -573,6 +614,26 @@ async function processConfig(req, res) {
 			if (cronBackupPasswordDecObj.success) {
 
 				services['cron_backup']['password'] = Buffer.from(cronBackupPasswordDecObj.data, 'utf8').toString('base64');
+			}
+		}
+
+		if (sftpPasswordEnc) {
+
+			const sftpPasswordDecObj = await shareData.System.decrypt(sftpPasswordEnc, shareData.appData.password);
+
+			if (sftpPasswordDecObj.success) {
+
+				services['cron_backup']['sftp']['password'] = Buffer.from(sftpPasswordDecObj.data, 'utf8').toString('base64');
+			}
+		}
+
+		if (sftpPassphraseEnc) {
+
+			const sftpPassphraseDecObj = await shareData.System.decrypt(sftpPassphraseEnc, shareData.appData.password);
+
+			if (sftpPassphraseDecObj.success) {
+
+				services['cron_backup']['sftp']['passphrase'] = Buffer.from(sftpPassphraseDecObj.data, 'utf8').toString('base64');
 			}
 		}
 
@@ -633,75 +694,7 @@ async function processWebHook(req, res, next) {
 
 async function processWebSocketApi(client, data) {
 
-	const sendRoom = 'api';
-
-	const metaData = data.meta || {};
-
-	const api = metaData.api;
-	const appId = metaData.appId;
-	const messageId = metaData.id;
-
-	let message;
-
-	let req = {
-				'params': {
-							'path': ''
-						},
-				'query': {}
-	};
-
-	// Check if the client is in the 'api' room
-	const rooms = Array.from(client.rooms);
-
-	if (!rooms.includes(sendRoom)) {
-
-		//console.log(`Client ${client.id} tried to use api_action but is not in room '${sendRoom}'`);
-		return;
-	}
-
-	if (api == 'deals') {
-
-		req.query['active'] = true;
-
-		const dealsData = await shareData.DCABotManager.apiGetActiveDeals(req, undefined, false);
-
-		message = dealsData;
-	}
-
-	if (api == 'markets') {
-
-		req.query['exchange'] = data.exchange;
-		req.query['pair'] = data.pair;
-
-		const marketData = await shareData.DCABotManager.apiGetMarkets(req, undefined, false);
-
-		message = marketData;
-	}
-
-	if (api == 'markets/ohlcv') {
-
-		req.params['path'] = 'ohlcv';
-
-		req.query['exchange'] = data.exchange;
-		req.query['pair'] = data.pair;
-		req.query['timeframe'] = data.timeframe;
-		req.query['since'] = data.since;
-		req.query['limit'] = data.limit;
-
-		const marketData = await shareData.DCABotManager.apiGetMarkets(req, undefined, false);
-
-		message = marketData;
-	}
-
-	// Send only to this client
-	client.emit('data', {
-		'type': 'api',
-		'api': api,
-		'app_id': appId,
-		'message_id': shareData.Common.uuidv4(),
-		'message_id_client': messageId,
-		'message': message
-	});
+	routesWebSocket.api(client, data);
 }
 
 
@@ -731,6 +724,8 @@ function redirectNotFound(res) {
 function validApiKey(req) {
 
 	let success = false;
+	let apiKeyInvalid = false;
+	let apiTokenInvalid = false;
 
 	const headers = req.headers;
 
@@ -747,6 +742,10 @@ function validApiKey(req) {
 	
 				success = true;
 			}
+			else {
+
+				apiKeyInvalid = true;
+			}
 		}
 	}
 	else if (apiToken != undefined && apiToken != null && apiToken != '') {
@@ -757,7 +756,22 @@ function validApiKey(req) {
 
 				success = true;
 			}
+			else {
+
+				apiTokenInvalid = true;
+			}
 		}
+	}
+
+	if (apiKeyInvalid || apiTokenInvalid) {
+
+		const ip = shareData.Common.getClientIp(req);
+
+		const authType = apiKeyInvalid ? 'API KEY' : 'API TOKEN';
+
+		const msg = `Invalid ${authType} used by ${ip}`;
+
+		shareData.Common.sendNotification({ 'message': msg, 'type': 'info', 'telegram_id': shareData.appData.telegram_id });
 	}
 
 	return success;

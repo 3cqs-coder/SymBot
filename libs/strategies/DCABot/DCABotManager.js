@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const ejs = require('ejs');
 
 const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
@@ -112,9 +113,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	const aiDealTemplate = await shareData.Common.getData(pathRoot + '/libs/webserver/public/views/strategies/DCABot/ai/aiDealAnalyzeView.ejs');
-
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'aiDealTemplate': aiDealTemplate.data, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
 }
 
 
@@ -157,6 +156,218 @@ async function viewBots(req, res) {
 async function viewHistoryDeals(req, res) {
 
 	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData } );
+}
+
+
+async function apiAiAnalyzeDeal(req, res, sendResponse = true) {
+
+	let dataOut;
+	let prompt = {};
+	let success = false;
+
+	const body = req.body;
+
+	const queryOverride = {			
+		'dealId': body.dealId,
+		'timeframe': body.timeframe ?? '1h',
+		'limit': body.limit ?? 200,
+		'prompt': body.prompt,
+		'template': body.template,
+		'timeZoneOffset': body.timeZoneOffset ?? '+00:00'
+	}
+
+	req.queryOverride = queryOverride;
+
+	if (queryOverride.prompt && queryOverride.prompt != '') {
+
+		const data = await shareData.DCABot.getDeals({ 'dealId': queryOverride.dealId });
+
+		if (data && data.length > 0) {
+
+			prompt.success = true;
+			prompt.data = queryOverride.prompt;
+
+			success = true;
+		}
+		else {
+
+			prompt.error = 'Deal ID ' + queryOverride.dealId + ' not found';
+
+			success = false;
+		}
+	}
+	else {
+
+		prompt = await apiAiAnalyzeDealPrompt(req, res, false);
+	}
+
+	if (prompt.success) {
+
+		const aiBody = {
+						'message': {
+							'content': prompt.data,
+ 							'room': 'aiAnalyze' + Math.floor(1000 + Math.random() * 90000),
+							'stream': false
+						}
+					};
+
+		const aiOut = await shareData.Ollama.streamChat(JSON.stringify(aiBody));
+
+		if (aiOut.success) {
+
+			success = true;
+		}
+
+		dataOut = aiOut.data;
+	}
+	else {
+
+		success = false;
+
+		dataOut = prompt.error;
+	}
+
+	const obj = { 'date': new Date(), 'success': success, 'data': dataOut };
+
+	if (sendResponse) {
+
+		res.send(obj);
+	}
+	else {
+
+		return obj;
+	}
+}
+
+
+async function apiAiAnalyzeDealPrompt(req, res, sendResponse = true) {
+
+	let success = true;
+	let error = null;
+
+	let sumTotal = 0;
+	let qtySumTotal = 0;
+	let ohlcvData = null;
+	let indicators = null;
+	let renderedHtml = null;
+
+	const query = req.queryOverride ?? req.query;
+
+	const dealId = query.dealId;
+	const timeframe = query.timeframe;
+	const since = query.since;
+	const limit = query.limit;
+	const timeZoneOffset = query.timeZoneOffset;
+
+	const template = (typeof query.template === 'string' && query.template.trim())
+		? query.template
+		: 'aiAnalyzeDealView.ejs';
+
+	try {
+
+		const dealTracker = await shareData.DCABot.getDealTracker();
+		const dealEntry = dealTracker?.[dealId];
+
+		if (!dealEntry?.deal) {
+
+			throw new Error(`Deal ID not found: ${dealId}`);
+		}
+
+		const deal = dealEntry.deal;
+		const pair = deal.config.pair;
+		const exchangeName = deal.exchange;
+		const orders = deal.orders;
+
+		const filledOrders = (orders || []).filter(o => o && o.filled);
+
+		const exchange = await shareData.DCABot.connectExchange({
+			exchange: exchangeName.toLowerCase()
+		});
+
+		const dataObj = await shareData.DCABot.getOHLCV(
+			exchange,
+			pair,
+			timeframe,
+			since,
+			limit
+		);
+
+		if (dataObj.success) {
+
+			ohlcvData = dataObj.data;
+		}
+
+		if (Array.isArray(ohlcvData)) {
+
+			try {
+
+				indicators = shareData.TradingSignals.computeMarketIndicators(ohlcvData, { timeframe });
+			}
+			catch {
+
+				indicators = null;
+			}
+		}
+
+		for (const order of filledOrders) {
+
+			sumTotal += order.amount || 0;
+			qtySumTotal += order.qty || 0;
+		}
+
+		// ---------- RENDER ----------
+		const renderData = {
+			dealId,
+			dealInfo: dealTracker[dealId].info,
+			config: deal.config,
+			pair,
+			orders: filledOrders,
+			sumTotal,
+			qtySumTotal,
+			ohlcvData: JSON.stringify(ohlcvData),
+			indicators,
+			timeframe,
+			timeZoneOffset,
+			getDateParts: shareData.Common.getDateParts
+		};
+
+		// Inline template support
+		if (template && template.includes('<%')) {
+
+			renderedHtml = await ejs.render(template, renderData, {
+				async: true
+			});
+		}
+		else {
+
+			const viewPath = pathRoot + '/libs/webserver/public/views/strategies/DCABot/ai/' + template;
+
+			renderedHtml = await ejs.renderFile(viewPath, renderData, {
+				async: true
+			});
+		}
+	}
+	catch (err) {
+
+		success = false;
+		error = err?.message || err.toString();
+	}
+
+	const obj = {
+		date: new Date(),
+		success,
+		error,
+		data: renderedHtml
+	};
+
+	if (sendResponse) {
+
+		res.send(obj);
+	}
+	else {
+
+		return obj;
+	}
 }
 
 
@@ -206,23 +417,14 @@ async function apiGetMarkets(req, res, sendResponse = true) {
 		}
 		else {
 
-			// Get pair information
-			pair = (pair ?? '').replace(/[_-]/g, '/');
-
 			if (apiPath != undefined && apiPath != null && apiPath != '') {
 
 				if (apiPath == 'ohlcv' && exchange.has['fetchOHLCV']) {
 
-					try {
+					const dataObj = await shareData.DCABot.getOHLCV(exchange, pair, timeframe, since, limit);
 
-						data = await exchange.fetchOHLCV(pair, timeframe, since, limit);
-					}
-					catch (e) {
-
-						success = false;
-
-						data = e.name + ': ' + e.message;
-					}
+					data = dataObj.data;
+					success = dataObj.success;
 				}
 				else {
 
@@ -1737,202 +1939,179 @@ function insertValueToMap(map, key, value) {
 
 async function getDashboardData({ duration, timeZoneOffset }) {
 
-	const cleanedOffset = timeZoneOffset.replace(':', '');
-	const offsetSign = cleanedOffset.startsWith('-') ? -1 : 1;
-	const offsetHours = parseInt(cleanedOffset.slice(1, 3), 10);
-	const offsetMinutes = parseInt(cleanedOffset.slice(3), 10);
-	const totalOffsetMinutes = offsetSign * (offsetHours * 60 + offsetMinutes);
+    const cleanedOffset = timeZoneOffset.replace(':', '');
+    const offsetSign = cleanedOffset.startsWith('-') ? -1 : 1;
+    const offsetHours = parseInt(cleanedOffset.slice(1, 3), 10);
+    const offsetMinutes = parseInt(cleanedOffset.slice(3), 10);
+    const totalOffsetMinutes = offsetSign * (offsetHours * 60 + offsetMinutes);
 
-	// Use current time adjusted for timezone
-	const localNow = new Date(Date.now() + totalOffsetMinutes * 60000);
-	const localDateOnly = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate());
+    // Current time adjusted for timezone
+    const localNow = new Date(Date.now() + totalOffsetMinutes * 60000);
+    const localDateOnly = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate());
 
-	// Shift local start of today back to UTC
-	const localMidnightUTC = new Date(localDateOnly.getTime() - totalOffsetMinutes * 60000);
+    // Local midnight UTC
+    const localMidnightUTC = new Date(localDateOnly.getTime() - totalOffsetMinutes * 60000);
 
-	// dateTo is the end of "today" in local time as UTC timestamp
-	const dateTo = new Date(localMidnightUTC.getTime() + 86400000 - 1);
+    const dateTo = new Date(localMidnightUTC.getTime() + 86400000 - 1);
+    const X_DAYS_AGO = new Date(localMidnightUTC.getTime() - duration * 86400000);
 
-	// dateFrom is X days ago at local midnight UTC
-	const X_DAYS_AGO = new Date(localMidnightUTC.getTime() - duration * 86400000);
+    const botConfigFile = shareData.appData.bot_config;
+    const { data } = await shareData.Common.getConfig(botConfigFile);
 
-	const botConfigFile = shareData.appData.bot_config;
-	const { data } = await shareData.Common.getConfig(botConfigFile);
-	const active_deals = await shareData.DCABot.getDeals({ 'status': 0 });
+    const active_deals = await shareData.DCABot.getDeals({ status: 0 });
+    const raw_deals = await shareData.DCABot.getDeals({
+        status: 1,
+        'sellData.date': { $gte: X_DAYS_AGO, $lt: new Date(dateTo.getTime() + 1) }
+    });
+    const complete_deals = await getProcessedDeals(raw_deals);
 
-	const raw_deals = await shareData.DCABot.getDeals({ 'status': 1, 'sellData.date': { '$gte': X_DAYS_AGO, '$lt': new Date(dateTo.getTime() + 1) } });
-	const complete_deals = await getProcessedDeals(raw_deals);
+    const max_funds_deals = await shareData.DCABot.getDealsMaxUsedFunds();
+    const deal_tracker = await shareData.DCABot.getDealTracker();
 
-	const deal_tracker = await shareData.DCABot.getDealTracker();
+    const adjustedEndDate = new Date(dateTo.getTime() - 86400000);
 
-	const adjustedEndDate = new Date(dateTo.getTime() - 86400000);
+    const startParts = shareData.Common.getDateParts(X_DAYS_AGO, false);
+    const endParts = shareData.Common.getDateParts(adjustedEndDate, false);
 
-	const startParts = shareData.Common.getDateParts(X_DAYS_AGO, false);
-	const endParts = shareData.Common.getDateParts(adjustedEndDate, false);
+    const period = `${startParts.month}/${startParts.day}/${startParts.year} - ${endParts.month}/${endParts.day}/${endParts.year}`;
 
-	const period = `${startParts.month}/${startParts.day}/${startParts.year} - ${endParts.month}/${endParts.day}/${endParts.year}`;
+    const isLoading = active_deals.length !== Object.keys(deal_tracker).length;
 
-	const isLoading = active_deals.length != Object.keys(deal_tracker).length;
+    let max_funds_deals_map = {};
+    let profit_by_bot_map = {};
+    let active_pl_map = {};
+    let profit_by_day_map = {};
+    let adjusted_pl_map = {};
+    let bot_deal_duration_map = {};
+    let bot_funds_in_use_map = {};
+    let total_profit = 0;
+    let total_in_deals = 0;
+    let total_pl = 0;
 
-	let profit_by_bot_map = {};
-	let active_pl_map = {};
-	let profit_by_day_map = {};
-	let adjusted_pl_map = {};
-	let bot_deal_duration_map = {};
-	let bot_funds_in_use_map = {};
-	let total_profit = 0;
-	let total_in_deals = 0;
-	let total_pl = 0;
+    let currencies = [];
 
-	let currencies = [];
+    const available_balance = await (async () => {
+        const exchangeObj = shareData.appData.bots?.exchange;
+        if (exchangeObj) {
+            for (let exchangeName in exchangeObj) {
+                if (exchangeName.toLowerCase() === 'default') {
+                    const exchangeSingleObj = exchangeObj[exchangeName];
+                    const currenciesArr = exchangeSingleObj['account_balance_currencies'];
+                    if (Array.isArray(currenciesArr)) currencies = currenciesArr;
+                }
+            }
+        }
 
-	const available_balance = await (async () => {
+        if (data.sandBox) {
+            return Object.fromEntries(currencies.map(c => [c, data.sandBoxWallet]));
+        }
 
-		if (shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
+        const exchange = await shareData.DCABot.connectExchange(data);
+        const { success, balance } = await shareData.DCABot.getBalance(exchange);
+        return success ? balance : {};
+    })();
 
-			const exchangeObj = shareData.appData.bots['exchange'];
-	
-			for (let exchangeName in exchangeObj) {
-	
-				if (exchangeName.toLowerCase() == 'default') {
-	
-					const exchangeSingleObj = exchangeObj[exchangeName];
-	
-					const currenciesArr = exchangeSingleObj['account_balance_currencies'];
+    // Fetch all bots to build botIdNameMap
+    const allBots = await shareData.DCABot.getBots();
+    const botIdNameMap = {};
+    allBots.forEach(bot => {
+        botIdNameMap[bot.botId] = bot.botName || `Bot (${bot.botId})`;
+    });
 
-					if (typeof currenciesArr == 'object') {
+    // Process deals
+    complete_deals.forEach(deal => {
+        const { botId, bot_name, profit, date_end, date_start } = deal;
 
-						currencies = currenciesArr;
-					}
-				}
-			}
-		}
+        if (profit && typeof profit === 'number') {
+            const mapKey = botId || bot_name;
+            insertValueToMap(profit_by_bot_map, mapKey, profit);
+            insertValueToMap(profit_by_day_map, date_end.toDateString(), profit);
+            total_profit += profit;
+        }
 
-		if (data.sandBox) {
+        const duration = shareData.Common.dealDurationMinutes(date_start, date_end);
+        const mapKey = botId || bot_name;
+        if (!bot_deal_duration_map[mapKey]) {
+            bot_deal_duration_map[mapKey] = [duration];
+        } else {
+            bot_deal_duration_map[mapKey].push(duration);
+        }
+    });
 
-			let resObj = {};
+    // Average durations
+    for (const key in bot_deal_duration_map) {
+        const durations = bot_deal_duration_map[key];
+        bot_deal_duration_map[key] = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    }
 
-			for (let i = 0; i < currencies.length; i++) {
+    // Sort profit by day
+    profit_by_day_map = Object.fromEntries(
+        Object.entries(profit_by_day_map).sort((a, b) => new Date(a[0]) - new Date(b[0]))
+    );
 
-				let currency = currencies[i];
+    // Process deal_tracker for active P/L and funds in use
+    for (const key in deal_tracker) {
+        const { deal: { botId, botName, orders }, info: { profit } } = deal_tracker[key];
+        if (!profit || !botId) continue;
+        insertValueToMap(active_pl_map, botId, profit);
+        total_pl += profit;
 
-				resObj[currency] = data.sandBoxWallet;
-			}
+        let in_deal = 0;
+        for (let order of orders) {
+            if (order.filled) in_deal = Number(order.sum);
+            else break;
+        }
+        insertValueToMap(bot_funds_in_use_map, botId, in_deal);
+        total_in_deals += in_deal;
+    }
 
-			return resObj;
-		}
+    // Adjusted P/L
+    for (const key in profit_by_bot_map) {
+        const total = profit_by_bot_map[key] + (active_pl_map[key] || 0);
+        if (total) adjusted_pl_map[key] = total;
+    }
 
-		const exchange = await shareData.DCABot.connectExchange(data);
-		const { success, balance } = await shareData.DCABot.getBalance(exchange);
-		if(!success) return {};
-		return balance;
-	})();
-
-
-	complete_deals.forEach((deal) => {
-		
-		const { bot_name, profit, date_end, deal_id, date_start } = deal;
-
-		if (profit && typeof profit === 'number') {
-
-			insertValueToMap(profit_by_bot_map, bot_name, profit);
-			insertValueToMap(profit_by_day_map, date_end.toDateString(), profit);
-
-			total_profit += profit;
-		}
-
-		const duration = shareData.Common.dealDurationMinutes(date_start, date_end);
-		
-		if (!bot_deal_duration_map[bot_name]) {
-			
-			bot_deal_duration_map[bot_name] = [duration];
-		}
-		else {
-			
-			bot_deal_duration_map[bot_name].push(duration);
-		}
-	});
-
-
-	for (const key in bot_deal_duration_map) {
-		const durations = bot_deal_duration_map[key];
-		const average = durations.reduce((acc, curr) => acc + curr, 0) / durations.length;
-		bot_deal_duration_map[key] = Math.round(average);
+    // Max funds deals
+	for (const row of max_funds_deals.data) {
+		if (profit_by_bot_map[row.botId] || active_pl_map[row.botId] || adjusted_pl_map[row.botId]) {
+    	    max_funds_deals_map[row.botId] = row.maxLastSum;
+    	}
 	}
 
-	// Sort the object by date
-	profit_by_day_map = Object.fromEntries(Object.entries(profit_by_day_map).sort((a, b) => new Date(a[0]) - new Date(b[0])));
+    // Sort all maps
+    const sortMapDesc = obj => Object.fromEntries(Object.entries(obj).sort((a, b) => b[1] - a[1]));
+    const sortMapAsc = obj => Object.fromEntries(Object.entries(obj).sort((a, b) => a[1] - b[1]));
 
+    profit_by_bot_map = sortMapDesc(profit_by_bot_map);
+    active_pl_map = sortMapAsc(active_pl_map);
+    adjusted_pl_map = sortMapDesc(adjusted_pl_map);
+    bot_deal_duration_map = sortMapDesc(bot_deal_duration_map);
+    bot_funds_in_use_map = sortMapDesc(bot_funds_in_use_map);
 
-	for(const key in deal_tracker) {
-		const { deal: { botName }, info: { profit } } = deal_tracker[key];
-		if(!profit || !botName) { continue; };
-		insertValueToMap(active_pl_map, botName, profit);
-		total_pl += profit;
-
-		const orders = deal_tracker[key].deal.orders;
-		let in_deal = 0;
-		for(let i=0; i < orders.length; i++) {
-			if(orders[i].filled) {
-				in_deal = Number(orders[i].sum);
-			} else {
-				break;
-			}
-		}
-		insertValueToMap(bot_funds_in_use_map, botName, in_deal);
-		total_in_deals += in_deal;
-	}
-
-	for(const key in profit_by_bot_map) {
-		const total = profit_by_bot_map[key] + active_pl_map[key];
-		if(total) {
-			adjusted_pl_map[key] = total;
-		}
-	}
-
-	// -- Sort Maps -- //
-	const bot_profit_array = Object.entries(profit_by_bot_map);
-	bot_profit_array.sort((a,b) =>  b[1] - a[1]);
-	profit_by_bot_map = Object.fromEntries(bot_profit_array)
-
-	const active_profit_array = Object.entries(active_pl_map);
-	active_profit_array.sort((a,b) =>  a[1] - b[1] );
-	active_pl_map = Object.fromEntries(active_profit_array);
-
-	const adjusted_pl_array = Object.entries(adjusted_pl_map);
-	adjusted_pl_array.sort((a,b) =>  b[1] - a[1]);
-	adjusted_pl_map = Object.fromEntries(adjusted_pl_array);
-
-	const bot_deal_duration_array = Object.entries(bot_deal_duration_map);
-	bot_deal_duration_array.sort((a,b) =>  b[1] - a[1]);
-	bot_deal_duration_map = Object.fromEntries(bot_deal_duration_array);
-
-	const bot_funds_in_use_array = Object.entries(bot_funds_in_use_map);
-	bot_funds_in_use_array.sort((a,b) =>  b[1] - a[1]);
-	bot_funds_in_use_map = Object.fromEntries(bot_funds_in_use_array);
-
-
-	return {
-		kpi: {
-			active_deals: Object.keys(deal_tracker).length,
-			total_in_deals,
-			available_balance,
-			total_profit,
-			total_pl
-		},
-		charts: {
-			profit_by_bot_map,
-			profit_by_day_map,
-			active_pl_map,
-			adjusted_pl_map,
-			bot_deal_duration_map,
-			bot_funds_in_use_map
-		},
-		currencies: currencies,
-		isLoading,
-		period
-	}
+    return {
+        kpi: {
+            active_deals: Object.keys(deal_tracker).length,
+            total_in_deals,
+            available_balance,
+            total_profit,
+            total_pl
+        },
+        charts: {
+            profit_by_bot_map,
+            profit_by_day_map,
+            active_pl_map,
+            adjusted_pl_map,
+            bot_deal_duration_map,
+            bot_funds_in_use_map,
+            max_funds_deals_map
+        },
+        botIdNameMap,
+        currencies,
+        isLoading,
+        period
+    };
 }
+
 
 
 async function initApp() {
@@ -1957,6 +2136,8 @@ module.exports = {
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
 	apiGetBalances,
+	apiAiAnalyzeDeal,
+	apiAiAnalyzeDealPrompt,
 	viewBots,
 	viewCreateUpdateBot,
 	viewActiveDeals,

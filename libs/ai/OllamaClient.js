@@ -16,6 +16,7 @@ const hoursInterval = 1;
 // Map to store conversation history for each room
 const conversationHistory = new Map();
 
+let ollamaStarted = false;
 
 setInterval(() => {
 
@@ -24,126 +25,126 @@ setInterval(() => {
 }, (hoursInterval * (60 * 60 * 1000)));
 
 
-const streamChatResponse = async ({ room, model, message, abortSignal, reset }) => {
+const streamChatResponse = async ({ room, model, message, abortSignal, reset, stream = true }) => {
 
 	let fullResponse = '';
 
 	// Reset conversation context if requested
 	if (reset) {
 
-		const resetMessage = {
+		conversationHistory.set(room, [{
 			role: 'system',
 			content: 'Reset the conversation context.',
 			timestamp: Date.now(),
-		};
-
-		// Reset the history for the room
-		conversationHistory.set(room, [resetMessage]);
-		//console.log('History reset for room:', room);
+		}]);
 	}
 
-	// Get the current conversation history for the room
 	const history = conversationHistory.get(room) || [];
 
-	// Append user message to history
-	const userMessage = {
+	history.push({
 		role: 'user',
 		content: message.content,
 		timestamp: Date.now(),
-	};
+	});
 
-	history.push(userMessage);
+	if (history.length > maxHistory) history.shift();
 
-	// Ensure the history is not more than maxHistory
-	if (history.length > maxHistory) {
-
-        history.shift();
-	}
-
-	// Proceed with chat response generation
 	try {
-		const response = await ollama.chat({
-			model: model,
-			stream: true,
+
+		const result = await ollama.chat({
+			model,
+			stream,
 			messages: history,
 		});
 
-		for await (const part of response) {
+		if (!stream) {
+
+			// NON-STREAMING MODE
 
 			if (abortSignal.aborted) {
 
-				throw new Error('Stream aborted due to timeout');
+				throw new Error('Request aborted due to timeout');
 			}
 
-			const content = part.message.content;
+			fullResponse = result.message.content;
+		}
+		else {
 
-			// Accumulate content for the full response
-			fullResponse += content;
+			// STREAMING MODE
 
-			sendMessage(room, content);
+			for await (const part of result) {
+
+				if (abortSignal.aborted) {
+
+					throw new Error('Stream aborted due to timeout');
+				}
+
+				const content = part?.message?.content;
+				if (!content) continue;
+
+				fullResponse += content;
+				sendMessage(room, content);
+			}
+
+			sendMessage(room, 'END_OF_CHAT');
 		}
 
-		// Add the assistant's response to the conversation history
-		const assistantMessage = {
+		// Store assistant response
+		history.push({
 			role: 'assistant',
 			content: fullResponse,
 			timestamp: Date.now(),
-		};
+		});
 
-		history.push(assistantMessage);
-
-		// Ensure the history is not more than maxHistory after adding the assistant's message
-		if (history.length > maxHistory) {
-
-			history.shift();
-		}
-
-		// Signal end of chat for the current conversation
-		sendMessage(room, 'END_OF_CHAT');
-
-		const logObj = {
-			room,
-			message,
-			response: fullResponse,
-		};
-
-		shareData.Common.logger('Ollama Request: ' + JSON.stringify(logObj));
-
-		// Update the conversation history for the room
+		if (history.length > maxHistory) history.shift();
 		conversationHistory.set(room, history);
+
+		shareData.Common.logger(
+			'Ollama Request: ' + JSON.stringify({
+				room,
+				message,
+				response: fullResponse,
+			})
+		);
+
+		return stream ? undefined : fullResponse;
 	}
-    catch (err) {
+	catch (err) {
 
-        if (abortSignal.aborted) {
+		if (abortSignal.aborted && stream) {
 
-            sendMessage(room, 'Stream aborted due to timeout');
+			sendMessage(room, 'Stream aborted due to timeout');
+
+			return;
 		}
-        else {
-            
-            throw err;
-		}
+
+		throw err;
 	}
 };
 
 
-const streamChatResponseWithTimeout = async ({ room, model, message, reset }) => {
+const streamChatResponseWithTimeout = async ({ room, model, message, reset, stream, }) => {
 
 	const abortController = new AbortController();
 
-	const timeout = setTimeout(() => { abortController.abort(); }, TIMEOUT_MS);
+	const timeout = setTimeout(() => abortController.abort(),
+		TIMEOUT_MS
+	);
 
 	try {
-		await streamChatResponse({
+
+		return await streamChatResponse({
 			room,
 			model,
 			message,
 			abortSignal: abortController.signal,
 			reset,
+			stream,
 		});
 	}
-    finally {
+	finally {
 
-        clearTimeout(timeout);
+		clearTimeout(timeout);
 	}
 };
 
@@ -151,9 +152,14 @@ const streamChatResponseWithTimeout = async ({ room, model, message, reset }) =>
 async function streamChat(data) {
 
 	let room;
+	let reset;
+	let stream;
 	let model = modelCurrent;
+	let success = false;
+	let dataOut = null;
 
 	try {
+
 		const parsedData = JSON.parse(data);
 
 		room = parsedData.message.room;
@@ -168,19 +174,41 @@ async function streamChat(data) {
 			content: parsedData.message.content,
 		};
 
-		const reset = parsedData.message.reset || false; // Check for reset flag
+		reset = parsedData.message.reset || false;
+		stream = parsedData.message.stream ?? true;
 
-		await streamChatResponseWithTimeout({
+		if (!ollamaStarted) {
+
+			throw new Error('Ollama not started or is not enabled');
+		}
+
+		const result = await streamChatResponseWithTimeout({
 			room,
 			model,
 			message,
 			reset,
+			stream,
 		});
-	}
-    catch (err) {
 
-        sendError(room, err.message);
+		success = true;
+
+		if (!stream) {
+
+			dataOut = result;
+		}
 	}
+	catch (err) {
+
+		success = false;
+		dataOut = err.message;
+
+		if (room && stream) {
+
+			sendError(room, dataOut);
+		}
+	}
+
+	return { success, data: dataOut };
 }
 
 
@@ -215,11 +243,16 @@ function start(host, model) {
 	}
 
 	try {
+
+		ollamaStarted = true;
+
 		ollama = new Ollama({
 			'host': host,
 		});
 	}
     catch (err) {
+
+		ollamaStarted = false;
 
         sendError('', err.message);
 	}
@@ -229,6 +262,8 @@ function start(host, model) {
 function stop() {
 
     if (ollama) {
+
+		ollamaStarted = false;
 
         try {
 			ollama.abort();

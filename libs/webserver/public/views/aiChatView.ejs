@@ -27,19 +27,22 @@
 			let $currentMessageElement = null;
 			let messageBuffer = '';
 			let canSendMessage = true;
-	
+
 			const room = 'chat' + Math.random().toString(36).slice(2) + Math.floor(Date.now() / 1000);
-			const content = <%- JSON.stringify(bodyData) %>;
-	
-			// Add room to payload
-			try {
-				content.message.room = room;
-			} catch (e) {}
-	
-			const contentOrigObj = content;
+			const content = <%- JSON.stringify(bodyData) %> || {};
+			const contentOrigObj = { ...content };
+
+			if (!contentOrigObj.message || typeof contentOrigObj.message !== 'object') {
+				
+				contentOrigObj.message = {};
+			}
+
+			contentOrigObj.message.room = room;
+
 			const $chatBox = $('#aiChatBox');
 	
 			if (typeof socketGlobal !== 'undefined') {
+
 				const socket = socketGlobal;
 	
 				// Join chat room
@@ -84,7 +87,7 @@
 	
 				$.ajax({
 					type: 'POST',
-					url: './chat/deal/prompt',
+					url: './api/ai/chat/prompt',
 					data: content,
 					dataType: 'json',
 					success: function(data) {},
@@ -172,20 +175,33 @@
 				$chatBox.append($userMessage);
 				$('#chatInput').val('');
 	
-				const userContent = {
-					...contentOrigObj
-				};
-	
+				const userContent = { ...contentOrigObj };
+
+				if (!userContent.message || typeof userContent.message !== 'object') {
+
+				    userContent.message = {};
+				}
+
 				userContent.message.content = userMessage;
+
 				postChatPrompt(userContent);
 	
 				scrollToBottom();
 			}
 	
-			// Enable input and send button once chat is ready
 			toggleInputState(false);
-	
-			postChatPrompt(content);
+
+			const hasRealContent = content && Object.keys(content).length > 0;
+
+			if (hasRealContent) {
+
+				postChatPrompt(contentOrigObj);
+			}
+			else {
+
+				$('#aiChatSpinner').hide();
+				$('#aiChatBox').empty();
+			}
 		});
 	</script>
 </body>

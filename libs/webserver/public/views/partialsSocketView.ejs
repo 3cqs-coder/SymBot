@@ -27,7 +27,7 @@ $(document).ready(function() {
 	if (wslastPart !== 'ws') {
 
 		// Use polling only to avoid potential WebSocket conflicts for instances
-		wsTranports = wsTranports.filter(transport => transport !== 'websocket');
+		// wsTranports = wsTranports.filter(transport => transport !== 'websocket');
 	}
 
 	try {

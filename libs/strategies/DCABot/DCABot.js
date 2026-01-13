@@ -12,6 +12,7 @@ const Table = require('easy-table');
 const Percentage = require('percentagejs');
 const Common = require(pathRoot + '/libs/app/Common.js');
 const Schema = require(pathRoot + '/libs/mongodb/DCABotSchema');
+const DbQueries = require(__dirname + '/DCABotDbQueries.js');
 
 const Bots = Schema.Bots;
 const Deals = Schema.Deals;
@@ -1856,28 +1857,53 @@ const checkActiveDeal = async (botId, pair) => {
 };
 
 
-const getDeals = async (query, options, projection) => {
+const getDealsMaxUsedFunds = async () => {
 
-	if (query == undefined || query == null) {
+	let results;
+	let botIds = [];
 
-		query = {};
+	let success = true;
+
+	const bots = await getBots();
+
+	if (bots && bots.length > 0) {
+
+		for (let i in bots) {
+
+			botIds.push(bots[i].botId)
+		}
+
+		const pipeline = DbQueries.dealsMaxUsedFundsPipeline({ status: [ null, 0, 1 ] }, botIds);
+
+		results = await getDeals(null, null, null, pipeline);
+	}
+	else {
+
+		success = false;
 	}
 
-	if (options == undefined || options == null) {
+	let dataObj = { 'success': success, 'data': results };
 
-		options = {};
-	}
+	return dataObj;
+};
 
-	if (projection == undefined || projection == null) {
 
-		projection = {};
-	}
+const getDeals = async (query, options, projection, aggregatePipeline = null) => {
+
+	query = query || {};
+	options = options || {};
+	projection = projection || {};
 
 	try {
 
-		const deals = await Deals.find(query, projection, options);
+		if (aggregatePipeline && Array.isArray(aggregatePipeline)) {
 
-		return deals;
+			return await Deals.aggregate(aggregatePipeline);
+		}
+		else {
+
+			return await Deals.find(query, projection, options);
+		}
 	}
 	catch (e) {
 
@@ -1998,6 +2024,49 @@ const getBalance = async (exchange, symbol) => {
 
 	return { 'success': success, 'balance': balance, 'error': errMsg };
 };
+
+
+const getOHLCV = async (exchange, pair, timeframe, since, limit) => {
+
+	let data;
+	let success = false;
+
+	pair = (pair ?? '').replace(/[_-]/g, '/');
+
+	// Only try if exchange supports fetchOHLCV
+	if (exchange != undefined && exchange != null && exchange.has['fetchOHLCV']) {
+
+		try {
+
+			success = true;
+
+			data = await exchange.fetchOHLCV(pair, timeframe, since, limit);
+		}
+		catch(e) {
+
+			success = false;
+
+			data = 'ERROR: ' + e.name + ' ' + e.message;
+		}
+	}
+	else {
+		
+		data = 'fetchOHLCV not supported by exchange';
+	}
+
+	const dataObj = { 
+						'success': success,
+						'pair': pair,
+						'data': data
+					};
+
+	if (shareData.appData.verboseLog) {
+		
+		Common.logger(dataObj);
+	}
+
+	return dataObj;
+}
 
 
 const getOrder = async (exchange, orderId, pair, dealId) => {
@@ -6094,6 +6163,7 @@ module.exports = {
 	initBot,
 	getBots,
 	getDeals,
+	getDealsMaxUsedFunds,
 	getDealInfo,
 	getDealTracker,
 	getStartDealTracker,
@@ -6106,6 +6176,7 @@ module.exports = {
 	applyConfigData,
 	startDelay,
 	resumeDeal,
+	getOHLCV,
 	getBalance,
 	getPairData,
 	calculateMaxFunds,

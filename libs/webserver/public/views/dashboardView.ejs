@@ -1,227 +1,274 @@
 <%- include('./partialsHeaderView'); %>
 
-<script src="/js/vendor/chart.js/chart.js"></script>
+<script src="./js/vendor/chart.js/chart.js"></script>
 
 <script>
-       <% const { active_deals, total_in_deals, available_balance, total_profit, total_pl } = kpi; %>
+    <% const { active_deals, total_in_deals, available_balance, total_profit, total_pl } = kpi; %>
+    const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map } = <%- JSON.stringify(charts) %>;
+    const balances = <%- JSON.stringify(available_balance) %>;
+    const currencies = <%- '[' + currencies.map(currency => `'${currency}'`).join(',') + ']'; %>;
+    const botIdNameMap = <%- JSON.stringify(botIdNameMap) %>;
 
-       const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map } = <%- JSON.stringify(charts) %>
+    const bgColors = [
+        'rgba(255, 99, 132, 0.2)',
+        'rgba(54, 162, 235, 0.2)',
+        'rgba(255, 206, 86, 0.2)',
+        'rgba(75, 192, 192, 0.2)',
+        'rgba(153, 102, 255, 0.2)',
+        'rgba(255, 159, 64, 0.2)'
+    ];
 
-       const balances = <%- JSON.stringify(available_balance) %>;
+    const borderColors = [
+        'rgba(255, 99, 132, 1)',
+        'rgba(54, 162, 235, 1)',
+        'rgba(255, 206, 86, 1)',
+        'rgba(75, 192, 192, 1)',
+        'rgba(153, 102, 255, 1)',
+        'rgba(255, 159, 64, 1)'
+    ];
 
-       const currencies = <%- '[' + currencies.map(currency => `'${currency}'`).join(',') + ']'; %>;
+    function remapLabels(data) {
+        const remapped = {};
+        for (const key in data) {
+            const label = botIdNameMap[key] || key;
+            remapped[label] = data[key];
+        }
+        return remapped;
+    }
 
-       const bgColors = [
-                            'rgba(255, 99, 132, 0.2)',
-                            'rgba(54, 162, 235, 0.2)',
-                            'rgba(255, 206, 86, 0.2)',
-                            'rgba(75, 192, 192, 0.2)',
-                            'rgba(153, 102, 255, 0.2)',
-                            'rgba(255, 159, 64, 0.2)'
-                        ];
-        
-        const borderColors = [
-                            'rgba(255, 99, 132, 1)',
-                            'rgba(54, 162, 235, 1)',
-                            'rgba(255, 206, 86, 1)',
-                            'rgba(75, 192, 192, 1)',
-                            'rgba(153, 102, 255, 1)',
-                            'rgba(255, 159, 64, 1)'
-                        ]
-
-     $(document).ready(function () {
+    $(document).ready(function () {
 
         function populateBalance(currency) {
-
             let balance = Number(balances[currency]);
-
-            if (isNaN(balance)) {
-
-                balance = 0;
-            }
-
-            $('#balance').html('$' + balance.toString());
+            if (isNaN(balance)) balance = 0;
+            $('#balance').html('$' + balance.toLocaleString());
         }
 
-        const period_map = {
-                'week': 7,
-                '2-weeks': 14,
-                'month': 30,
-            }
+        const period_map = { 'week': 7, '2-weeks': 14, 'month': 30 };
 
-        // Populate currencies
         $.each(currencies, function(index, currency) {
             $('#currencies').append($('<option></option>').val(currency).html(currency));
         });
 
-        // Populate balance
         populateBalance(currencies[0]);
 
         $('#currencies').change(function() {
-            const currency = $(this).val();
-            populateBalance(currency);
+            populateBalance($(this).val());
         });
 
         $('#period-select').change(function() {
-
             const tzData = getTimeZone();
-		    const timeZoneOffset = tzData['offset'];
-
+            const timeZoneOffset = tzData['offset'];
             const period = $(this).val();
             window.location.href = `./dashboard?duration=${encodeURIComponent(period_map[period])}&timeZoneOffset=${encodeURIComponent(timeZoneOffset)}`;
         });
 
-
-    const period = new URLSearchParams(window.location.search).get('duration');
-    if (period) {
-        const keys = Object.keys(period_map);
-        let isCustom = true;
-        for (let i = 0; i < keys.length; i++) {
-            if (period_map[keys[i]] == period) {
-                $(`#period-select option[value=${keys[i]}]`).prop('selected', true);
-                isCustom = false;
-                break;
+        const period = new URLSearchParams(window.location.search).get('duration');
+        if (period) {
+            const keys = Object.keys(period_map);
+            let isCustom = true;
+            for (let i = 0; i < keys.length; i++) {
+                if (period_map[keys[i]] == period) {
+                    $(`#period-select option[value=${keys[i]}]`).prop('selected', true);
+                    isCustom = false;
+                    break;
+                }
             }
+            if (isCustom) {
+                $('#custom-date-range').css('display', 'block');
+                $('#period-select option[value=custom]').prop('selected', true);
+            }
+        } else {
+            $(`#period-select option[value=week]`).prop('selected', true);
         }
-        if (isCustom) {
-            $('#custom-date-range').css('display', 'block');
-            $('#period-select option[value=custom]').prop('selected', true);
-        }
-    } else {
-        $(`#period-select option[value=week]`).prop('selected', true);
-    }
-
 
         <% if (isLoading) { %>
             alertBox('Deals are being loaded. Please wait a few minutes and refresh the page.');
         <% } %>
 
-        function createChart(ctx, label, data) {
+        function createChart(ctx, label, data, showMaxOnTop=false, maxData={}) {
+            const moneyCharts = [
+                'Bot Profit',
+                'Active P/L',
+                'Adjusted P/L',
+                'Profit Per Day',
+                'Funds in Use'
+            ];
+
+            const isMoney = moneyCharts.includes(label);
+            const labels = Object.keys(data);
+            const values = Object.values(data);
+
             return new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: Object.keys(data),
+                    labels: labels,
                     datasets: [{
                         label: label,
-                        data: Object.values(data),
+                        data: values,
                         backgroundColor: bgColors,
                         borderColor: borderColors,
-                        borderWidth: 1,
+                        borderWidth: 1
                     }]
                 },
                 options: {
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw.toLocaleString();
+                                    return isMoney ? `${label}: $${value}` : `${label}: ${value}`;
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: {
                             ticks: {
                                 callback: function(value) {
-                                    if(window.matchMedia("only screen and (max-width: 768px)").matches) {
-                                        return this.getLabelForValue(value).substring(0, 10) + "..";
-                                    }
-                                    return this.getLabelForValue(value).substring(0, 20) + "..";
+                                    const str = this.getLabelForValue(value);
+                                    return window.matchMedia("only screen and (max-width: 768px)").matches
+                                        ? str.substring(0, 10) + ".."
+                                        : str.substring(0, 20) + "..";
+                                }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return isMoney ? '$' + value.toLocaleString() : value;
                                 }
                             }
                         }
                     }
-                }
-            })
+                },
+                plugins: [{
+                    id: 'maxValueLabels',
+                    afterDatasetsDraw: chart => {
+                        if (!showMaxOnTop) return;
+                        const ctx = chart.ctx;
+                        chart.data.datasets.forEach((dataset, i) => {
+                            chart.getDatasetMeta(i).data.forEach((bar, index) => {
+                                const botLabel = chart.data.labels[index];
+                                const maxValue = maxData[botLabel] || 0;
+                                const valueText = '$' + maxValue.toLocaleString();
+                                ctx.save();
+                                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-color') || '#999';
+                                ctx.font = 'bold 12px Arial';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'bottom';
+                                ctx.fillText(valueText, bar.x, bar.y - 5);
+                                ctx.restore();
+                            });
+                        });
+                    }
+                }]
+            });
         }
 
-        const profit_chart = document.getElementById('botProfitChart').getContext('2d');
-        const activePL_chart = document.getElementById('activePLChart').getContext('2d');
-        const adjustedPL_chart = document.getElementById('adjustedPLChart').getContext('2d');
-        const profitPerDay_chart = document.getElementById('profitPerDayChart').getContext('2d');
-        const botDealDuration_chart = document.getElementById('botDealDurationChart').getContext('2d');
-        const botFundsInUse_chart = document.getElementById('fundsInUseChart').getContext('2d');
+        createChart(document.getElementById('botProfitChart').getContext('2d'), 'Bot Profit', remapLabels(profit_by_bot_map));
+        createChart(document.getElementById('activePLChart').getContext('2d'), 'Active P/L', remapLabels(active_pl_map));
+        createChart(document.getElementById('adjustedPLChart').getContext('2d'), 'Adjusted P/L', remapLabels(adjusted_pl_map));
+        createChart(document.getElementById('profitPerDayChart').getContext('2d'), 'Profit Per Day', profit_by_day_map);
 
-        createChart(profit_chart, 'Bot Profit', profit_by_bot_map);
-        createChart(activePL_chart, 'Active P/L', active_pl_map);
-        createChart(adjustedPL_chart, 'Adjusted P/L', adjusted_pl_map);
-        createChart(profitPerDay_chart, 'Profit Per Day', profit_by_day_map);
-        createChart(botDealDuration_chart, 'Deal Duration (Minutes)', bot_deal_duration_map);
-        createChart(botFundsInUse_chart, 'Funds in Use', bot_funds_in_use_map);
+        // Responsive Deal Duration + Funds in Use charts
+        createChart(document.getElementById('botDealDurationChart').getContext('2d'), 'Deal Duration (Minutes)', remapLabels(bot_deal_duration_map));
+        createChart(
+            document.getElementById('fundsInUseChart').getContext('2d'),
+            'Funds in Use',
+            remapLabels(bot_funds_in_use_map),
+            true,
+            remapLabels(max_funds_deals_map)
+        );
+
+        // Hide the Max Deal Exposure chart
+        document.getElementById('maxDealsFundsChart').parentElement.style.display = 'none';
     });
 </script>
 
 <main style="margin-top: 10px">
-	<div id="contentBox" style="display: flex; flex-wrap: wrap;">
-		<div style="flex: 1;">
-			<div style="display: flex; flex-direction: column; justify-content: center; gap: 5px;">
-				<select class="form-field" id="period-select" style="width: 100px;">
-					<option value="week">Week</option>
-					<option value="2-weeks">2 Weeks</option>
-					<option value="month" selected>Month</option>
-					<option value="custom" id="custom-date-range" style="display: none;">Custom</option>
-				</select>
-				<span><b>Period:</b> <%- period %></span>
-			</div>
-		</div>
+    <div id="contentBox" style="display: flex; flex-wrap: wrap;">
+        <div style="flex: 1;">
+            <div style="display: flex; flex-direction: column; justify-content: center; gap: 5px;">
+                <select class="form-field" id="period-select" style="width: 100px;">
+                    <option value="week">Week</option>
+                    <option value="2-weeks">2 Weeks</option>
+                    <option value="month" selected>Month</option>
+                    <option value="custom" id="custom-date-range" style="display: none;">Custom</option>
+                </select>
+                <span><b>Period:</b> <%- period %></span>
+            </div>
+        </div>
         <div style="flex: 1; display: flex; align-items: flex-start; justify-content: flex-end;">
             <div id="rightBox" style="display: flex; align-items: center;">
                 <b>Balance:</b>
-                <select class="form-field" id="currencies" style="width: 100px; margin-left: 5px;">
-                </select>
+                <select class="form-field" id="currencies" style="width: 100px; margin-left: 5px;"></select>
             </div>
         </div>
-		<div id="belowContentBox" style="flex-basis: 100%; display: flex; justify-content: center; margin-top: 20px;">
-			<div id="innerContent" style="flex: 1;">
-				<!-- KPI -->
-				<div class="kpi-container">
-					<div class="performance-kpi">
-						<span style="font-size: 11px">Active Deals</span>
-						<span style="font-size: 20px;"><%- active_deals %></span>
-					</div>
-					<div class="performance-kpi">
-						<span style="font-size: 11px">Total In Deals</span>
-						<span style="font-size: 20px;">$<%- total_in_deals.toLocaleString() %></span>
-					</div>
-					<div class="performance-kpi">
-						<span style="font-size: 11px">Available Funds</span>
-						<span id="balance" style="font-size: 20px;"></span>
-					</div>
-					<div class="performance-kpi">
-						<span style="font-size: 11px">Profit</span>
-						<span style="font-size: 20px;">$<%- total_profit.toLocaleString() %></span>
-					</div>
-					<div class="performance-kpi">
-						<span style="font-size: 11px">Active P/L</span>
-						<span style="font-size: 20px;">$<%- total_pl.toLocaleString() %></span>
-					</div>
-				</div>
-				<!-- Charts -->
-				<div class="dashboard-container">
-					<!-- Bot Profit -->
-					<div class="chart-container">
-						<canvas id="botProfitChart"></canvas>
-					</div>
-					<!-- Active P/L -->
-					<div class="chart-container">
-						<canvas  id="activePLChart"></canvas>
-					</div>
-				</div>
-				<div class="dashboard-container">
-					<!-- Adjusted P/L -->
-					<div class="chart-container" style="margin-top:40px">
-						<canvas  id="adjustedPLChart"></canvas>
-					</div>
-					<!-- Profit Per Day -->
-					<div class="chart-container" style="margin-top:40px">
-						<canvas id="profitPerDayChart"></canvas>
-					</div>
-				</div>
-				<div class="dashboard-container">
-					<!-- Deal Duration  -->
-					<div class="chart-container" style="margin-top:40px; width: 50%;">
-						<canvas  id="botDealDurationChart"></canvas>
-					</div>
-					<!-- Funds in Use  -->
-					<div class="chart-container" style="margin-top:40px; width: 50%;">
-						<canvas  id="fundsInUseChart"></canvas>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-</main>
+        <div id="belowContentBox" style="flex-basis: 100%; display: flex; justify-content: center; margin-top: 20px;">
+            <div id="innerContent" style="flex: 1;">
+                <div class="kpi-container">
+                    <div class="performance-kpi">
+                        <span style="font-size: 11px">Active Deals</span>
+                        <span style="font-size: 20px;"><%- active_deals %></span>
+                    </div>
+                    <div class="performance-kpi">
+                        <span style="font-size: 11px">Total In Deals</span>
+                        <span style="font-size: 20px;">$<%- total_in_deals.toLocaleString() %></span>
+                    </div>
+                    <div class="performance-kpi">
+                        <span style="font-size: 11px">Available Funds</span>
+                        <span id="balance" style="font-size: 20px;"></span>
+                    </div>
+                    <div class="performance-kpi">
+                        <span style="font-size: 11px">Profit</span>
+                        <span style="font-size: 20px;">$<%- total_profit.toLocaleString() %></span>
+                    </div>
+                    <div class="performance-kpi">
+                        <span style="font-size: 11px">Active P/L</span>
+                        <span style="font-size: 20px;">$<%- total_pl.toLocaleString() %></span>
+                    </div>
+                </div>
 
+                <div class="dashboard-container">
+                    <div class="chart-container">
+                        <canvas id="botProfitChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="activePLChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-container">
+                    <div class="chart-container" style="margin-top:40px">
+                        <canvas id="adjustedPLChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="margin-top:40px">
+                        <canvas id="profitPerDayChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-container" style="margin-top:40px; display:flex; flex-wrap:wrap; gap:20px;">
+                    <div class="chart-container" style="flex:1 1 300px; min-width:300px;">
+                        <canvas id="botDealDurationChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="flex:1 1 300px; min-width:300px; display:flex; flex-direction:column; align-items:center;">
+                        <p style="font-size:12px; text-align:center; margin-bottom:5px;">
+                            Max deal exposure ever per bot shown
+                        </p>
+                        <canvas id="fundsInUseChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-container">
+                    <div class="chart-container" style="margin-top:40px; width: 100%;">
+                        <canvas id="maxDealsFundsChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</main>
 
 <%- include('./partialsFooterView'); %>

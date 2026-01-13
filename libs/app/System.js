@@ -11,6 +11,7 @@ const mongoose = require('mongoose');
 const archiver = require('archiver');
 const unzipper = require('unzipper');
 const fetch = require('node-fetch-commonjs');
+const sftpClient = require('ssh2-sftp-client');
 const { exec, spawn } = require('child_process');
 
 const prompt = require('prompt-sync')({
@@ -1207,6 +1208,7 @@ async function cronBackupStart(cronSchedule, start) {
 async function cronBackup() {
 
 	let error;
+	let backupFile;
 	let attempts = 0;
 	let success = false;
 	let appStillStarting = true;
@@ -1255,7 +1257,9 @@ async function cronBackup() {
 
 					try {
 
-						await fsp.rename(resBackup.full_path, backupDir + '/' + resBackup.file_name);
+						backupFile = backupDir + '/' + resBackup.file_name;
+
+						await fsp.rename(resBackup.full_path, backupFile);
 
 						success = true;
 					}
@@ -1281,6 +1285,20 @@ async function cronBackup() {
 
 	// Remove files in backupDir matching appName beyond maxFiles
 	await trimFiles(backupDir, shareData.appData.name, maxFiles);
+
+	if (shareData.appData['cron_backup']['sftp']['enabled'] && shareData.appData['cron_backup']['sftp']['host']) {
+
+		// Upload backup file in the background
+		sftpUploadFile(backupFile, false)
+			.then(() => {
+
+				shareData.Common.logger('SFTP upload success: ' + backupFile);
+			})
+			.catch(err => {
+
+				shareData.Common.logger('SFTP upload failed: ' + JSON.stringify(err));
+			});
+	}
 
 	return { 'success': success, 'error': error };
 }
@@ -1358,6 +1376,111 @@ async function cronJobToggle(name, schedule, task, shouldStart) {
 	}
 
 	return { success, error, message };
+}
+
+
+async function sftpUploadBackup(configObj, localFile, remoteDir, maxBackups, isTest) {
+
+	let success = false;
+	let error = null;
+
+	maxBackups = Number(maxBackups);
+
+	const sftp = new sftpClient();
+
+	try {
+
+		let config = JSON.parse(JSON.stringify(configObj));
+
+		if (config.private_key) {
+
+			if (fs.existsSync(config.private_key)) {
+
+				config.privateKey = fs.readFileSync(config.private_key, 'utf8');
+			}
+
+			delete config.private_key;
+		}
+
+		await sftp.connect(config);
+
+		try {
+
+			await sftp.stat(remoteDir);
+		}
+		catch {
+
+			await sftp.mkdir(remoteDir, true);
+		}
+
+		const fileName = path.basename(localFile);
+		const remotePath = `${remoteDir}/${fileName}`;
+
+		//console.log(`Uploading backup: ${remotePath}`);
+
+		await sftp.fastPut(localFile, remotePath);
+
+		//console.log("Upload OK");
+
+		if (isTest) {
+
+			try {
+
+				await sftp.delete(remotePath);
+			}
+			catch(e) {}
+		}
+		else if (maxBackups && maxBackups > 0) {
+
+			await sftpRotateBackups(sftp, remoteDir, shareData.appData.name, maxBackups);
+		}
+
+		success = true;
+	}
+	catch (err) {
+
+		success = false;
+		error = err.message;
+
+		//console.error("SFTP Error:", error);
+	}
+	finally {
+
+		await sftp.end();
+	}
+
+	const resObj = { success, error };
+
+	shareData.Common.logger('SFTP Backup: ' + JSON.stringify(resObj));
+
+	return resObj;
+}
+
+
+async function sftpRotateBackups(sftp, remoteDir, name, maxBackups) {
+
+	try {
+
+		const list = await sftp.list(remoteDir);
+
+		const matchingFiles = list.filter(
+			f => f.type === '-' && f.name.startsWith(name)
+		);
+
+		if (matchingFiles.length <= Number(maxBackups)) return;
+
+		matchingFiles.sort((a, b) => a.modifyTime - b.modifyTime);
+
+		const filesToDelete = matchingFiles.slice(0, matchingFiles.length - Number(maxBackups));
+
+		for (const f of filesToDelete) {
+
+			await sftp.delete(`${remoteDir}/${f.name}`);
+		}
+	}
+	catch (e) {
+
+	}
 }
 
 
@@ -1671,6 +1794,52 @@ async function pingHost(host, count) {
 }
 
 
+async function sftpUploadFile(localFile, isTest) {
+
+	let password = '';
+	let passphrase = '';
+
+	const sftpPasswordEnc = shareData['appData']['cron_backup']['sftp']['password'];
+	const sftpPassphraseEnc = shareData['appData']['cron_backup']['sftp']['passphrase'];
+
+	if (sftpPasswordEnc) {
+
+		const sftpPasswordDecObj = await decrypt(sftpPasswordEnc, shareData.appData.password);
+
+		if (sftpPasswordDecObj.success) {
+
+			password = sftpPasswordDecObj.data;
+		}
+	}
+
+	if (sftpPassphraseEnc) {
+
+		const sftpPassphraseDecObj = await decrypt(sftpPassphraseEnc, shareData.appData.password);
+
+		if (sftpPassphraseDecObj.success) {
+
+			passphrase = sftpPassphraseDecObj.data;
+		}
+	}
+
+	const config = {
+        'host': shareData.appData['cron_backup']['sftp']['host'],
+        'port': shareData.appData['cron_backup']['sftp']['port'],
+        'username': shareData.appData['cron_backup']['sftp']['username'],
+        'password': password,
+        'private_key': shareData.appData['cron_backup']['sftp']['private_key'],
+        'passphrase': passphrase
+    };
+
+    const remoteDir = shareData.appData['cron_backup']['sftp']['remote_directory'];
+    const maxBackups = shareData.appData['cron_backup']['max'];
+
+	const res = await sftpUploadBackup(config, localFile, remoteDir, maxBackups, isTest);
+
+	return res;
+}
+
+
 async function start(url) {
 
 	dbUrl = url;
@@ -1705,6 +1874,7 @@ module.exports = {
 	cronJobToggle,
 	cronBackupStart,
 	spawnCommand,
+	sftpUploadFile,
 	get shutDown() {
         return shutDownFunction;
     },

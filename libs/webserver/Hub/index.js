@@ -16,7 +16,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 const router = express.Router();
 
-const proxyMap = new Map();
+const httpProxyMap = new Map();
 
 let socket;
 let shareData;
@@ -57,27 +57,18 @@ async function initApp() {
 		console.log(`Request Body:`, req.body);
 		*/
 
-		const proxyMiddleware = await getProxyMiddleware(appId);
+		const proxy = await getHttpProxy(appId);
 
-		if (proxyMiddleware.success) {
+		if (!proxy) {
 
-			const proxy = proxyMiddleware.proxy;
-
-			return proxy(req, res, next);
-		}
-		else {
-
-			const err = proxyMiddleware.error;
-
-			const msg = 'Error during proxying: ' + err;
-
+			const msg = `No matching port found for appId: ${appId}`;
+			
 			shareData.Hub.logger('error', msg);
+			
+			return res.status(500).send(msg);
+		}
 
-			if (!res.headersSent) {
-	
-				return res.status(500).send(msg);
-			}
-		}		
+		return proxy(req, res, next);
 	});
 
 	app.use(sessionMiddleware);
@@ -112,102 +103,85 @@ async function initApp() {
 }
 
 
-// Create or get the proxy middleware for an appId
-const getProxyMiddleware = async (appId) => {
+async function getHttpProxy(appId) {
 
-	let success = true;
+	if (httpProxyMap.has(appId)) {
 
-	let isError;
-	let proxyFound;
-
-	if (!proxyMap.has(appId)) {
-
-		const port = await getAppPort(appId);
-
-		if (!port) {
-
-			success = false;
-
-			isError = `No matching port found for appId: ${appId}`;
-		}
-
-		if (success) {
-
-			const targetUrl = `http://127.0.0.1:${port}`;
-
-			//console.log(`Creating proxy middleware for ${appId} targeting ${targetUrl}`);
-
-			const proxyMiddleware = createProxyMiddleware({
-				target: targetUrl,
-				changeOrigin: true,
-				followRedirects: false,
-				autoRewrite: true,
-				hostRewrite: true,
-				cookieDomainRewrite: true,
-				ws: true,
-				pathRewrite: (path) => path.replace(`/instance/${appId}`, ''),
-				timeout: 120000,
-				proxyTimeout: 120000,
-				on: {
-					proxyReq: (proxyReq, req) => {
-
-						//console.log('Proxy Request:', req.method, req.originalUrl);
-
-						const realIp = req.headers['x-forwarded-for'] 
-							? `${req.headers['x-forwarded-for']}, ${req.socket.remoteAddress}`
-							: req.socket.remoteAddress;
-
-						proxyReq.setHeader('X-Forwarded-For', realIp);
-
-						if (req.headers.cookie) {
-
-							proxyReq.setHeader('Cookie', req.headers.cookie);
-						}
-					},
-					proxyRes: (proxyRes, req, res) => {
-
-						//console.log('Response received:', proxyRes.statusCode);
-
-						if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400) {
-
-							const location = proxyRes.headers['location'];
-							const newLocation = `/instance/${appId}${location}`;
-
-							//console.log(`Redirecting to: ${location}`);
-
-							return res.redirect(proxyRes.statusCode, newLocation);
-						}
-					},
-					error: (err, req, res) => {
-
-						let msg = 'Proxy Error: ' + JSON.stringify(err.message);
-
-						shareData.Hub.logger('error', msg);
-
-						if (res && res.status && !res.headersSent) {
-
-							return res.status(500).send(msg);
-						}
-						else {
-
-							//console.error('Proxy response object is not valid:', res);
-							shareData.Hub.logger('error', 'Proxy response object is not valid');
-						}
-					},
-				},
-			});
-
-			proxyMap.set(appId, proxyMiddleware);
-		}
+		return httpProxyMap.get(appId);
 	}
 
-	if (success) {
+	const port = await getAppPort(appId);
 
-		proxyFound = proxyMap.get(appId);
-	}
+	if (!port) return null;
 
-	return ( { 'success': success, 'error': isError, 'proxy': proxyFound } );
-};
+	const targetUrl = `http://127.0.0.1:${port}`;
+	const proxy = createBaseProxy(appId, targetUrl, false); // ws: false
+
+	httpProxyMap.set(appId, proxy);
+
+	return proxy;
+}
+
+
+async function getWsProxy(appId) {
+
+	const port = await getAppPort(appId);
+
+	if (!port) return null;
+
+	const targetUrl = `http://127.0.0.1:${port}`;
+
+	return createBaseProxy(appId, targetUrl, true); // ws: true
+}
+
+
+function createBaseProxy(appId, targetUrl, ws) {
+
+	return createProxyMiddleware({
+		target: targetUrl,
+		changeOrigin: true,
+		xfwd: true,
+		ws,
+		followRedirects: false,
+		autoRewrite: true,
+		hostRewrite: true,
+		cookieDomainRewrite: true,
+		pathRewrite: (path) => path.replace(`/instance/${appId}`, ''),
+		timeout: 120000,
+		proxyTimeout: 120000,
+		on: {
+			proxyReq: (proxyReq, req) => {
+
+				if (req.headers.cookie) {
+
+					proxyReq.setHeader('Cookie', req.headers.cookie);
+				}
+			},
+			proxyRes: (proxyRes, req, res) => {
+
+				if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400) {
+
+					const location = proxyRes.headers.location;
+					return res.redirect(proxyRes.statusCode, `/instance/${appId}${location}`);
+				}
+			},
+			error: (err, req, res) => {
+
+				const msg = 'Proxy Error: ' + err.message;
+				shareData.Hub.logger('error', msg);
+
+				try {
+
+					if (res && !res.headersSent) {
+
+						res.status(500).send(msg);
+					}
+				}
+				catch(e) {}
+			}
+		}
+	});
+}
 
 
 async function getAppPort(appId) {
@@ -236,7 +210,7 @@ async function initSocket(sessionMiddleware, server) {
 			credentials: false
 		},
 		path: '/' + shareData.appData['web_socket_path'],
-		serveClient: false,
+		serveClient: true,
 		pingInterval: 10000,
 		pingTimeout: 5000,
 		maxHttpBufferSize: 1e6,
@@ -334,23 +308,41 @@ async function start(port) {
 		}
 	});
 
-	/*
-		server.on('upgrade', async (req, socket, head) => {
+	server.on('upgrade', async (req, socket, head) => {
+
+		try {
+
+			// Only proxy WS connections for /instance/*
+			if (!req.url.startsWith('/instance/')) {
+		
+				return;
+			}
 
 			const segments = req.url.split('/');
-	    
 			const appId = segments[2];
-		
-			try {
-				const proxyMiddleware = await getProxyMiddleware(appId);
-				// Call the proxy middleware for WebSocket upgrade
-				proxyMiddleware.upgrade(req, socket, head);
-			} catch (err) {
-				console.error('Error during WebSocket upgrade:', err);
-				socket.destroy(); // Close the socket on error
+
+			if (!appId) {
+
+				socket.destroy();
+				return;
 			}
-		});
-	*/
+
+			const proxy = await getWsProxy(appId);
+
+			if (!proxy) {
+
+				socket.destroy();
+				return;
+			}
+
+			proxy.upgrade(req, socket, head);
+		}
+		catch (err) {
+
+			shareData.Hub.logger('error', 'WS Upgrade Error: ' + err.message);
+			socket.destroy();
+		}
+	});
 
 	if (isError == undefined || isError == null) {
 
@@ -359,7 +351,6 @@ async function start(port) {
 		Routes.start(router);
 	}
 }
-
 
 
 module.exports = {

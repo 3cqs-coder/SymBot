@@ -5,6 +5,7 @@
 	const token = '<%= token %>';
 	const telegramEnabled = '<%= appData['telegram_enabled_config'] %>';
 	const signals3CQSEnabled = '<%= appData['signals_3cqs_enabled'] %>';
+	const ollamaEnabled = '<%= services['ai']['ollama']['enabled'] %>';
 	const configMode = '<%= appData['config_mode'] %>';
 	const pairButtons = <%- '[' + appData.bots['pair_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
 	const pairBlackList = <%- '[' + appData.bots['pair_blacklist'].map(pair => `'${pair}'`).join(',') + ']'; %>;
@@ -183,6 +184,18 @@
 		// Set other fields
 		if (data.maxBackups !== undefined) $('#backup_max').val(data.maxBackups);
 		if (data.password !== undefined) $('#backup_password').val(data.password);
+		if (data.sftpPassword !== undefined) $('#sftp_password').val(data.sftpPassword);
+		if (data.sftpPassphrase !== undefined) $('#sftp_passphrase').val(data.sftpPassphrase);
+
+		if (data.sftpEnabled !== undefined) {
+
+			if (data.sftpEnabled) {
+
+				$('#toggleSftp').click();
+			} 
+
+		}
+
 		if (data.enabled !== undefined) {
 
 			//$('#toggleBackup').prop('checked', data.enabled === '1' || data.enabled === 1 || data.enabled === true);
@@ -284,8 +297,26 @@
 		});
   
 		$('#showPassword').on('click', function () {
-			
+
 			const input = $('#backup_password');
+			const type = input.attr('type') === 'password' ? 'text' : 'password';
+			
+			input.attr('type', type);
+			$(this).text(type === 'password' ? 'Show' : 'Hide');
+		});
+
+		$('#showSftpPassword').on('click', function () {
+
+			const input = $('#sftp_password');
+			const type = input.attr('type') === 'password' ? 'text' : 'password';
+			
+			input.attr('type', type);
+			$(this).text(type === 'password' ? 'Show' : 'Hide');
+		});
+
+		$('#showSftpPassphrase').on('click', function () {
+
+			const input = $('#sftp_passphrase');
 			const type = input.attr('type') === 'password' ? 'text' : 'password';
 			
 			input.attr('type', type);
@@ -296,12 +327,25 @@
 			"cronSchedule": "<%= services['cron_backup']['schedule'] %>",
 			"maxBackups": "<%= services['cron_backup']['max'] %>",
 			"password": "<%= services['cron_backup']['password'] %>",
-			"enabled": convertBoolean("<%= services['cron_backup']['enabled'] %>")
+			"enabled": convertBoolean("<%= services['cron_backup']['enabled'] %>"),
+			"sftpPassword": "<%= services['cron_backup']['sftp']['password'] %>",
+			"sftpPassphrase": "<%= services['cron_backup']['sftp']['passphrase'] %>",
+			"sftpEnabled": convertBoolean("<%= services['cron_backup']['sftp']['enabled'] %>"),
 		};
 
 		if (cronObj.password != undefined && cronObj.password != null && cronObj.password != '') {
 
 			cronObj.password = window.atob(cronObj.password);
+		}
+
+		if (cronObj.sftpPassword != undefined && cronObj.sftpPassword != null && cronObj.sftpPassword != '') {
+
+			cronObj.sftpPassword = window.atob(cronObj.sftpPassword);
+		}
+
+		if (cronObj.sftpPassphrase != undefined && cronObj.sftpPassphrase != null && cronObj.sftpPassphrase != '') {
+
+			cronObj.sftpPassphrase = window.atob(cronObj.sftpPassphrase);
 		}
 
 		populateBackupSchedule(cronObj);
@@ -375,6 +419,11 @@
 		if (convertBoolean(telegramEnabled)) {
 
 			$('#toggleTelegram').click();
+		}
+
+		if (convertBoolean(ollamaEnabled)) {
+
+			$('#toggleOllama').click();
 		}
 
 		$('#configChangePass').on('click', function(e) {
@@ -482,7 +531,9 @@
 				<span id="apitoken" style="display: none; overflow-wrap: break-word;"></span>
 			</div>
 
-			<div style="padding-top: 10px; padding-bottom: 5px;">
+			<div class="divHr"></div>
+
+			<div>
 				<label for="pairbuttons"><b>Pair Buttons</b>
 					<span class="toolTip">?<span class="toolTipText">
 						These are buttons used to automatically fill in all pairs after clicking on one when creating or updating bots.
@@ -501,6 +552,7 @@
 				<select id="pairblacklist" name="pairblacklist" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>
 			</div>
 
+			<div class="divHr"></div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
 
@@ -533,6 +585,8 @@
 
 				</table>
 			</div>
+
+			<div class="divHr"></div>
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
 
@@ -578,6 +632,8 @@
 				</table>
 			</div>
 
+			<div class="divHr"></div>
+
 			<div style="padding-top: 10px; padding-bottom: 5px;">
 
 				<b>Artificial Intelligence (AI)</b>
@@ -617,9 +673,17 @@
 					</td>
 				</tr>
 
+				<tr>
+					<td>Enabled:</td>
+
+					<td>
+						<input id="toggleOllama" name="ollama_enabled" type=checkbox>
+					</td>
+				</tr>
 				</table>
 			</div>
 
+			<div class="divHr"></div>
 
 			<div id="scheduleBox" style="padding-top: 10px; padding-bottom: 5px;">
 
@@ -725,6 +789,125 @@
 
 					<td>
 						<input id="toggleBackup" name="backup_enabled" type=checkbox>
+					</td>
+				</tr>
+				</table>
+			</div>
+
+			<div class="divHr"></div>
+
+			<div style="padding-top: 10px; padding-bottom: 5px;">
+
+				<b>SFTP Credentials For Backups</b>
+				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
+
+				<tr>
+					<td>
+						<label for="backups">Host:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the SFTP host to upload backups
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input name="sftp_host" id="sftp_host" class="form-field" style="width: 250px;" value="<%= services['cron_backup']['sftp']['host'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Port:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the SFTP port
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input name="sftp_port" id="sftp_port" class="form-field" style="width: 50px;" value="<%= services['cron_backup']['sftp']['port'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Username:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the SFTP username
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input name="sftp_username" id="sftp_username" class="form-field" style="width: 250px;" value="<%= services['cron_backup']['sftp']['username'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Password:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the SFTP password
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input type="password" name="sftp_password" id="sftp_password" class="form-field" style="width: 250px;" value="">
+						<span id="showSftpPassword" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Private Key:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the full path to your private key which will be used instead of a password
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input name="sftp_private_key" id="sftp_private_key" class="form-field" style="width: 250px;" value="<%= services['cron_backup']['sftp']['private_key'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Passphrase:
+							<span class="toolTip">?<span class="toolTipText">
+								This an optional passphrase for your private key
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input type="password" name="sftp_passphrase" id="sftp_passphrase" class="form-field" style="width: 250px;" value="">
+						<span id="showSftpPassphrase" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backups">Upload Directory:
+							<span class="toolTip">?<span class="toolTipText">
+								This is the path on the remote host where your backups will be uploaded.
+								<br><br>
+								NOTE: This should be a unique and empty directory as files will be automatically removed according to the value set for maximum backups
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input name="sftp_remote_directory" id="sftp_remote_directory" class="form-field" style="width: 250px;" value="<%= services['cron_backup']['sftp']['remote_directory'] %>">
+					</td>
+				</tr>
+
+				<tr>
+					<td>Enabled:</td>
+
+					<td>
+						<input id="toggleSftp" name="sftp_enabled" type=checkbox>
 					</td>
 				</tr>
 				</table>

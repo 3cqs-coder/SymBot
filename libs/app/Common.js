@@ -84,26 +84,44 @@ async function updateConfig(req, res) {
 	const password = body.password;
 	const passwordNew = body.passwordnew;
 	const apiKey = body.apikey;
+
 	const telegram = body.telegram_enabled;
 	const telegramTokenId = body.telegram_token_id;
 	const telegramUserId = body.telegram_user_id;
+
 	const signals3CQS = body.signals_3cqs_enabled;
 	const signals3CQSApiKey = body.signals_3cqs_api_key;
+
+	const ollama = body.ollama_enabled;
 	const ollamaHost = body.ollama_host;
 	const ollamaModel = body.ollama_model;
+
 	const cronBackup = body.cron_backup_enabled;
 	const cronBackupSchedule = body.cron_backup_schedule;
 	const cronBackupPassword = body.cron_backup_password;
 	const cronBackupMax = Number(body.cron_backup_max ?? 1) || 1;
 
+	const sftp = body.sftp_enabled;
+ 	const sftpHost = body.sftp_host;
+	const sftpPort = Number(body.sftp_port ?? 22) || 22;
+	const sftpUsername = body.sftp_username;
+	const sftpPassword = body.sftp_password;
+	const sftpPrivateKey = body.sftp_private_key;
+	const sftpPassphrase = body.sftp_passphrase;
+	const sftpRemoteDirectory = body.sftp_remote_directory;
+
 	let pairButtons = body.pairbuttons;
 	let pairBlacklist = body.pairblacklist;
 
+	let sftpEnabled = convertBoolean(sftp, false);
 	let telegramEnabled = convertBoolean(telegram, false);
+	let ollamaEnabled = convertBoolean(ollama, false);
 	let signals3CQSEnabled = convertBoolean(signals3CQS, false);
 	let cronBackupEnabled = convertBoolean(cronBackup, false);
 
 	let dbErr;
+	let sftpPasswordFinal;
+	let sftpPassphraseFinal;
 	let cronBackupPasswordFinal;
 	let hubInstance = false;
 	let dataMessage = 'Configuration Updated';
@@ -144,11 +162,15 @@ async function updateConfig(req, res) {
 
 	if (success) {
 
+		let disconnectClients = false;
+
 		let data = await getConfig(appConfigFile);
 
 		let appConfig = data.data;
 
 		if (passwordNew != undefined && passwordNew != null && passwordNew != '') {
+
+			disconnectClients = true;
 
 			const dataPassNew = await genPasswordHash({ 'data': passwordNew });
 
@@ -166,6 +188,8 @@ async function updateConfig(req, res) {
 
 		if (apiKey != undefined && apiKey != null && apiKey != '') {
 
+			disconnectClients = true;
+
 			const apiKeyHashed = await genApiKey(apiKey);
 
 			appConfig['api']['key'] = apiKeyHashed;
@@ -173,6 +197,39 @@ async function updateConfig(req, res) {
 
 			// Set API token
 			await setToken();
+		}
+
+		if (disconnectClients) {
+
+			await shareData.WebServer.disconnectAllClients();
+		}
+
+		if (sftpPassword) {
+
+			const sftpPasswordEncObj = await shareData.System.encrypt(sftpPassword, shareData.appData.password);
+
+			if (sftpPasswordEncObj.success) {
+
+				sftpPasswordFinal = sftpPasswordEncObj.data;
+			}
+		}
+		else {
+
+			sftpPasswordFinal = '';
+		}
+
+		if (sftpPassphrase) {
+
+			const sftpPassphraseEncObj = await shareData.System.encrypt(sftpPassphrase, shareData.appData.password);
+
+			if (sftpPassphraseEncObj.success) {
+
+				sftpPassphraseFinal = sftpPassphraseEncObj.data;
+			}
+		}
+		else {
+
+			sftpPassphraseFinal = '';
 		}
 
 		const cronBackupPasswordEncObj = await shareData.System.encrypt(cronBackupPassword, shareData.appData.password);
@@ -204,6 +261,16 @@ async function updateConfig(req, res) {
 		appConfig['cron_backup']['password'] = cronBackupPasswordFinal;
 		appConfig['cron_backup']['max'] = cronBackupMax;
 
+		appConfig['cron_backup']['sftp']['enabled'] = sftpEnabled;
+		appConfig['cron_backup']['sftp']['host'] = sftpHost;
+		appConfig['cron_backup']['sftp']['port'] = sftpPort;
+		appConfig['cron_backup']['sftp']['username'] = sftpUsername;
+		appConfig['cron_backup']['sftp']['password'] = sftpPasswordFinal;
+		appConfig['cron_backup']['sftp']['private_key'] = sftpPrivateKey;
+		appConfig['cron_backup']['sftp']['passphrase'] = sftpPassphraseFinal;
+		appConfig['cron_backup']['sftp']['remote_directory'] = sftpRemoteDirectory;
+
+		appConfig['ai']['ollama']['enabled'] = ollamaEnabled;
 		appConfig['ai']['ollama']['host'] = ollamaHost;
 		appConfig['ai']['ollama']['model'] = ollamaModel;
 
@@ -255,9 +322,13 @@ async function updateConfig(req, res) {
 
 			await saveConfig(appConfigFile, appConfig);
 
-			// Restart Ollama
+			// Stop / Restart Ollama
 			shareData.Ollama.stop();
-			shareData.Ollama.start(ollamaHost, ollamaModel);
+
+			if (ollamaEnabled) {
+
+				shareData.Ollama.start(ollamaHost, ollamaModel);
+			}
 
 			// Restart Signals
 			startSignals();
@@ -282,6 +353,48 @@ async function updateConfig(req, res) {
 			if (cronBackupEnabled && (cronBackupSchedule != undefined && cronBackupSchedule != null && cronBackupSchedule != '')) {
 
 				await shareData.System.cronBackupStart(cronBackupSchedule, true);
+			}
+
+			if (sftpEnabled && sftpHost && sftpPort) {
+
+				const tempDir = path.join(pathRoot, 'temp');
+
+				if (!fs.existsSync(tempDir)) {
+
+					fs.mkdirSync(tempDir, {
+						recursive: true
+					});
+				}
+
+				const tempFileName = `sftp-test-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.bin`;
+				const localFilePath = path.join(tempDir, tempFileName);
+
+				try {
+
+					const kBytes = 1;
+
+					const randomData = crypto.randomBytes(kBytes * 1024);
+
+					fs.writeFileSync(localFilePath, randomData);
+
+					const res = await shareData.System.sftpUploadFile(localFilePath, true);
+
+					if (!res.success) {
+						
+						dataMessage = 'WARNING (SFTP): ' + res.error;
+					}
+				}
+				catch (err) {
+
+					dataMessage = 'WARNING (SFTP): ' + err;
+				}
+				finally {
+
+					if (fs.existsSync(localFilePath)) {
+		
+						fs.unlinkSync(localFilePath);
+					}
+				}
 			}
 		}
 
@@ -1465,11 +1578,8 @@ async function verifyLogin(req, res, isHub) {
 	const body = req.body;
 	const password = body.password;
 	const userAgent = req.headers['user-agent'];
-	const rawIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
-	.split(',')[0]
-	.trim();
 
-	const ip = rawIp.startsWith('::ffff:') ? rawIp.substring(7) : rawIp;
+	const ip = getClientIp(req);
 
 	const dataPass = shareData.appData.password.split(':');
 
@@ -1549,6 +1659,31 @@ function validateApiKey(key) {
 	}
 
 	return success;
+}
+
+
+function getClientIp(ctx) {
+
+	const headers = ctx?.handshake?.headers || ctx?.headers || {};
+
+	const socket =
+		ctx?.request?.socket ||
+		ctx?.socket ||
+		ctx?.connection;
+
+	const rawIp = (
+			headers['cf-connecting-ip'] ||
+			headers['x-forwarded-for'] ||
+			socket?.remoteAddress ||
+			ctx?.handshake?.address ||
+			''
+		)
+		.split(',')[0]
+		.trim();
+
+	return rawIp.startsWith('::ffff:') ?
+		rawIp.substring(7) :
+		rawIp;
 }
 
 
@@ -1764,6 +1899,7 @@ module.exports = {
 	getNotificationHistory,
 	showTradingView,
 	fetchURL,
+	getClientIp,
 	getProcessInfo,
 	validateAppVersion,
 	dealDurationMinutes,

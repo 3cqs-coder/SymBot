@@ -4,7 +4,7 @@
 /*
 
 	SymBot
-	Copyright © 2023 - 2025 3CQS.com All Rights Reserved
+	Copyright © 2023 - 2026 3CQS.com All Rights Reserved
 	Licensed under Creative Commons Attribution-NonCommerical-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 */
@@ -14,6 +14,7 @@ const DB = require(__dirname + '/libs/mongodb');
 const ServerDB = require(__dirname + '/libs/mongodb/ServerSchema');
 const DCABot = require(__dirname + '/libs/strategies/DCABot/DCABot.js');
 const DCABotManager = require(__dirname + '/libs/strategies/DCABot/DCABotManager.js');
+const TradingSignals = require(__dirname + '/libs/signals/TradingSignals.js');
 const Signals3CQS = require(__dirname + '/libs/signals/3CQS/3cqs-signals-client.js');
 const Common = require(__dirname + '/libs/app/Common.js');
 const Queue = require(__dirname + '/libs/app/Queue.js');
@@ -277,7 +278,7 @@ async function init() {
 										'max_log_days': appConfig['data']['max_log_days'],
 										'mongo_db_url': appConfig['data']['mongo_db_url'],
 										'web_server_port': appConfig['data']['web_server']['port'],
-										'web_socket_path': 'ws' + instanceName,
+										'web_socket_path': 'ws',
 										'exchanges': {},
 										'api_key': apiKey,
 										'api_enabled': appConfig['data']['api']['enabled'],
@@ -298,6 +299,7 @@ async function init() {
 										'started': new Date()
 								   },
 						'DB': DB,
+						'TradingSignals': TradingSignals,
 						'Signals3CQS': Signals3CQS,
 						'DCABot': DCABot,
 						'DCABotManager': DCABotManager,
@@ -351,6 +353,7 @@ async function init() {
 	Queue.init(shareData);
 	DB.init(shareData);
 	System.init(shareData, shutDown);
+	TradingSignals.init(shareData);
 	Signals3CQS.init(shareData);
 	DCABot.init(shareData);
 	DCABotManager.init(shareData);
@@ -465,10 +468,14 @@ async function init() {
 		WebServer.start(appDataConfig['web_server_port']);
 
 		// Start AI / Ollama client
+		const ollamEnabled = appConfig['data']['ai']['ollama']['enabled'];
 		const ollamaHost = appConfig['data']['ai']['ollama']['host'];
 		const ollamaModel = appConfig['data']['ai']['ollama']['model'];
 
-		Ollama.start(ollamaHost, ollamaModel);
+		if (ollamEnabled) {
+
+			Ollama.start(ollamaHost, ollamaModel);
+		}
 
 		const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
