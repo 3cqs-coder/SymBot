@@ -210,14 +210,14 @@ These files are located in the `config` directory
 		- `max` is the maximum number of backups to keep.
 		- `enabled` is whether the cron scheduler will run and automatically process database backups.
 		- `sftp`
-				- `host` is the SFTP host to upload backups
-				- `port` is the port to connect to (defaults to 22)
-				- `username` to login as
-				- `password` associated with the username. This is an encrypted value so it should not be manually entered.
-				- `private_key` is the full path to your private key which will be used instead of a password
-				- `passphrase` an optional passphrase for your private key. This is an encrypted value so it should not be manually entered.
-				- `remote_directory` is the path on the remote host where your backups will be uploaded. This must be unique as files will be automatically removed according to the value set for maximum backups
-				- `enabled` is whether the backups will be automatically uploaded after being processed via cron
+			- `host` is the SFTP host to upload backups
+			- `port` is the port to connect to (defaults to 22)
+			- `username` to login as
+			- `password` associated with the username. This is an encrypted value so it should not be manually entered.
+			- `private_key` is the full path to your private key which will be used instead of a password
+			- `passphrase` an optional passphrase for your private key. This is an encrypted value so it should not be manually entered.
+			- `remote_directory` is the path on the remote host where your backups will be uploaded. This must be unique as files will be automatically removed according to the value set for maximum backups
+			- `enabled` is whether the backups will be automatically uploaded after being processed via cron
 
 	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see [Telegram Setup](#telegram-setup)).
 
