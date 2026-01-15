@@ -578,7 +578,7 @@ async function compress(source, out) {
 
 			if (fs.lstatSync(sourcePath).isDirectory()) {
 
-                archive.directory(sourcePath, false);
+				archive.directory(sourcePath, false, { dot: true });
             }
 			else {
 
@@ -597,20 +597,49 @@ async function compress(source, out) {
 
 async function decompress(zipPath, outDir) {
 
-    try {
+	try {
 
-        await new Promise((resolve, reject) => {
+		const directory = await unzipper.Open.file(zipPath);
 
-            fs.createReadStream(zipPath)
-                .pipe(unzipper.Extract({ path: outDir }))
-                .on('error', reject) // Handle stream errors
-                .on('finish', resolve); // Resolve when extraction is complete
-        });
-    }
-	catch (error) {
+		for (const entry of directory.files) {
 
-		throw new Error('Error during decompression: ' + err.message);
-    }
+			try {
+
+				const fullPath = path.join(outDir, entry.path);
+
+				if (entry.type === 'Directory') {
+
+					await fsp.mkdir(fullPath, {
+						recursive: true
+					});
+				}
+				else {
+
+					await fsp.mkdir(path.dirname(fullPath), {
+						recursive: true
+					});
+
+					await new Promise((resolve, reject) => {
+
+						entry.stream()
+							.pipe(fs.createWriteStream(fullPath))
+							.on('finish', resolve)
+							.on('error', reject);
+					});
+				}
+			}
+			catch (entryErr) {
+
+				//console.error(`Error extracting entry "${entry.path}":`, entryErr);
+			}
+		}
+
+	}
+	catch (err) {
+
+		//console.error(`Failed to decompress "${zipPath}" to "${outDir}":`, err);
+		throw err;
+	}
 }
 
 
@@ -1109,34 +1138,43 @@ async function moveFiles(originalDir, newDir) {
 
 		for (const item of items) {
 
-			// Skip "backups" and "config" directory
+			// Preserve live data
 			if (item === 'backups' || item === 'config') {
 
 				continue;
 			}
 
-			const newItemPath = path.join(newDir, item);
-			const originalItemPath = path.join(originalDir, item);
+			const src = path.join(newDir, item);
+			const dest = path.join(originalDir, item);
+			const stats = await fsp.stat(src);
 
-			const stats = await fsp.stat(newItemPath);
+			if (stats.isDirectory()) {
 
-			if (stats.isFile()) {
+				// Replace whole directory atomically
+				const tmp = dest + '.new';
 
-				// File
-				await fsp.unlink(originalItemPath).catch(() => {});
-				await fsp.rename(newItemPath, originalItemPath);
+				if (fs.existsSync(tmp)) {
+
+					removeDirectorySync(tmp);
+				}
+
+				await fsp.rename(src, tmp);
+				removeDirectorySync(dest);
+				await fsp.rename(tmp, dest);
 			}
-			else if (stats.isDirectory()) {
+			else {
 
-				// Directory
-				removeDirectorySync(originalItemPath);
-				await fsp.rename(newItemPath, originalItemPath);
+				// Replace file safely even if running
+				const tmp = dest + '.new';
+
+				await fsp.copyFile(src, tmp);
+				await fsp.rename(tmp, dest);
 			}
 		}
 	}
 	catch (e) {
 
-		throw new Error(e.message);
+		throw new Error(`moveFiles failed: ${e.message}`);
 	}
 }
 
