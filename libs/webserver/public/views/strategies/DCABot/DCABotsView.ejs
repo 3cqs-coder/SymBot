@@ -272,7 +272,7 @@
 
 					<thead style="position: sticky; top: 0; z-index: 1000;">
 						<tr class="tableHeader">
-							<th>Created</th> <th>Updated</th> <th>Bot Name</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
+							<th>Created</th> <th>Updated</th> <th>Bot Name</th> <th>Exchange</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>Deviation</th> <th>Volume Scale</th> <th>Step Scale</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th>Active</th>
 						</tr>
 					</thead>
 
@@ -289,6 +289,7 @@
 			let bot = bots[i];
 
 			let active = bot['active'];
+			let exchange = (bot['config']['exchange'] || '').toUpperCase();
 			let dealMax = bot['config']['dealMax'];
 			let pairMax = bot['config']['pairMax'];
 			let maxFunds = Math.round(bot['config']['maxFunds']);
@@ -370,6 +371,7 @@
 						<td class="date-cell" data-date="<%= bot['createdAt'] %>"></td>
 						<td class="date-cell" data-date="<%= bot['updatedAt'] %>"></td>						
 						<td><%- bot['botName'] %></td>
+						<td><%- exchange %></td>
 						<td style="max-width: 150px;"><%- pair.toUpperCase() %></td>
 						<td><%- bot['config']['firstOrderAmount'] %></td>
 						<td><%- bot['config']['dcaOrderAmount'] %></td>

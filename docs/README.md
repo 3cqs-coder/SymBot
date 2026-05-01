@@ -129,6 +129,16 @@ SymBot Hub makes it easy to manage multiple SymBot instances from a single codeb
 
 With SymBot Hub's simple web interface, you can easily add, update, restart, or disable any instance. It also combines all instances into one system using an internal proxy server, so you only need one port to access everything. Plus, SymBot Hub helps you monitor system resources like memory usage, making instance management straightforward and efficient.
 
+### Hub Unified Views
+
+In addition to instance management, SymBot Hub provides two unified views that aggregate data across all running instances:
+
+- **Active Deals** — view all active deals across every instance in a single table. Filter by instance or bot, adjust the refresh interval, and take actions directly from the Hub including closing, pausing, resuming, cancelling deals, and stopping bots. Clicking on a pair opens a TradingView chart for that symbol.
+
+- **Bots** — view all bots across every instance in a single table, including the exchange each bot is assigned to. Toggle bots on or off directly from the Hub without navigating to each instance individually.
+
+Both views refresh automatically and pause when a confirmation dialog is open to prevent stale data from overwriting pending actions.
+
 ### Starting SymBot Hub
 
 Before starting SymBot Hub, make sure your first SymBot configuration is set up and working as expected. The initial instance will be created automatically using your default configuration files.
@@ -250,6 +260,7 @@ mongodb://localhost:27017/SymBot
 		- Set the exchange fee percentage
 		- Set the sandbox wallet balance used for paper trading
 		- Toggle between **Sandbox (paper trading)** and **Live trading** modes — switching modes requires password confirmation to prevent accidental changes
+	- **Important:** Exchange settings are saved to `bot.json` only and apply to newly created bots. Existing bots retain the exchange they were created with, which is visible in the **Exchange** column of the Manage Bots view. When saving exchange settings, a confirmation dialog will offer the option to update all existing bots that have no active deals to use the new exchange. Bots with active deals are skipped and must be updated manually once their deals complete.
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the [CCXT](https://github.com/ccxt/ccxt) library so if the exchange is supported, you should be able to connect to it. When saving exchange settings the credentials are validated against the exchange before being written to disk.
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web interface
 	- Set your exchange fee appropriately:

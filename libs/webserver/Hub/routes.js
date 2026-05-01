@@ -128,6 +128,21 @@ function initRoutes(router) {
 	});
 
 
+	router.post('/remove_instance', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			await shareData.Hub.routeRemoveInstance(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get('/news', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -197,6 +212,190 @@ function initRoutes(router) {
 		else {
 
 			res.redirect('/login');
+		}
+	});
+
+
+	// ── TradingView chart — served directly by Hub (no instance proxy needed) ──
+	router.get('/api/tradingview', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.Common.showTradingView(req, res);
+		}
+		else {
+
+			res.status(401).send('Unauthorized');
+		}
+	});
+
+
+	// ── Hub unified deals view ──────────────────────────────────────────────
+	router.get('/deals', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			res.render('Hub/dealsView', { 'isHub': true, 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() });
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	// ── Hub unified bots view ────────────────────────────────────────────────
+	router.get('/bots', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			res.render('Hub/botsView', { 'isHub': true, 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() });
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	// ── Hub JSON API — deals (aggregated across all instances) ───────────────
+	router.get('/api/hub/deals', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (!req.session.loggedIn) {
+
+			return res.status(401).json({ 'success': false, 'data': 'Unauthorized' });
+		}
+
+		try {
+
+			const instancesData = await shareData.Hub.getActiveDeals();
+
+			const deals = [];
+
+			for (const instance of instancesData) {
+
+				const instanceName = instance.name;
+				const instanceId   = instance.instanceId;
+				const instanceDeals = instance.deals || [];
+
+				for (const deal of instanceDeals) {
+
+					deals.push({ ...deal, instanceName, instanceId });
+				}
+			}
+
+			res.json({ 'date': new Date(), 'success': true, 'data': deals });
+		}
+		catch (err) {
+
+			res.json({ 'success': false, 'data': err.message });
+		}
+	});
+
+
+	// ── Hub JSON API — bots (aggregated across all instances) ────────────────
+	router.get('/api/hub/bots', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (!req.session.loggedIn) {
+
+			return res.status(401).json({ 'success': false, 'data': 'Unauthorized' });
+		}
+
+		try {
+
+			const instancesData = await shareData.Hub.getActiveBots();
+
+			const bots = [];
+
+			for (const instance of instancesData) {
+
+				const instanceName = instance.name;
+				const instanceId   = instance.instanceId;
+				const instanceBots = instance.bots || [];
+
+				for (const bot of instanceBots) {
+
+					bots.push({ ...bot, instanceName, instanceId });
+				}
+			}
+
+			res.json({ 'date': new Date(), 'success': true, 'data': bots });
+		}
+		catch (err) {
+
+			res.json({ 'success': false, 'data': err.message });
+		}
+	});
+
+
+	// ── Hub JSON API — deal actions (routed to correct instance) ─────────────
+	router.post('/api/hub/deals/:dealId/action', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (!req.session.loggedIn) {
+
+			return res.status(401).json({ 'success': false, 'data': 'Unauthorized' });
+		}
+
+		const { dealId } = req.params;
+		const { instanceId, action, botId, data } = req.body;
+
+		if (!instanceId || !action) {
+
+			return res.json({ 'success': false, 'data': 'instanceId and action are required' });
+		}
+
+		try {
+
+			const result = await shareData.Hub.performDealAction(instanceId, action, dealId, botId, data);
+
+			res.json(result);
+		}
+		catch (err) {
+
+			res.json({ 'success': false, 'data': err.message });
+		}
+	});
+
+
+	// ── Hub JSON API — bot actions ───────────────────────────────────────────
+	router.post('/api/hub/bots/:botId/action', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (!req.session.loggedIn) {
+
+			return res.status(401).json({ 'success': false, 'data': 'Unauthorized' });
+		}
+
+		const { botId } = req.params;
+		const { instanceId, action, data } = req.body;
+
+		if (!instanceId || !action) {
+
+			return res.json({ 'success': false, 'data': 'instanceId and action are required' });
+		}
+
+		try {
+
+			const result = await shareData.Hub.performDealAction(instanceId, action, null, botId, data);
+
+			res.json(result);
+		}
+		catch (err) {
+
+			res.json({ 'success': false, 'data': err.message });
 		}
 	});
 

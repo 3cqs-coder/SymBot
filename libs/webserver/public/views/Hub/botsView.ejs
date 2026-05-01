@@ -1,0 +1,413 @@
+<%- include('../partialsHeaderView'); %>
+
+<script>
+
+	let timeOutId;
+	let activeInstances = [];
+	let confirmWaiting = false;
+
+	const refreshIntervals = [
+		{ label: '15s',    ms: 15000 },
+		{ label: '30s',    ms: 30000 },
+		{ label: '60s',    ms: 60000 },
+		{ label: 'Paused', ms: 0 }
+	];
+	const defaultRefreshMs = 30000;
+
+
+	// ── Refresh management ────────────────────────────────────────────────────
+
+	function getRefreshMs() {
+
+		try {
+
+			const stored = parseInt(localStorage.getItem('hubBotsRefreshMs'), 10);
+
+			if (!isNaN(stored) && refreshIntervals.some(r => r.ms === stored)) {
+
+				return stored;
+			}
+		}
+		catch(e) {}
+
+		return defaultRefreshMs;
+	}
+
+
+	function saveRefreshMs(ms) {
+
+		try {
+
+			localStorage.setItem('hubBotsRefreshMs', ms);
+		}
+		catch(e) {}
+	}
+
+
+	function isDialogOpen() {
+
+		return $('.jconfirm').length > 0 || $('.ui-dialog:visible').length > 0;
+	}
+
+
+	function setReloadTimeout() {
+
+		if (timeOutId) {
+
+			clearTimeout(timeOutId);
+		}
+
+		const ms = getRefreshMs();
+
+		if (ms > 0) {
+
+			timeOutId = setTimeout(() => {
+
+				if (isDialogOpen()) {
+
+					setReloadTimeout();
+				}
+				else {
+
+					getActiveBots();
+				}
+			}, ms);
+		}
+	}
+
+
+	function initRefreshSelector() {
+
+		const $sel = $('#hubRefreshInterval');
+
+		$sel.empty();
+
+		refreshIntervals.forEach(r => {
+
+			$sel.append('<option value="' + r.ms + '">' + r.label + '</option>');
+		});
+
+		$sel.val(getRefreshMs());
+
+		$sel.on('change', function() {
+
+			const ms = parseInt($(this).val(), 10);
+
+			saveRefreshMs(ms);
+
+			if (timeOutId) clearTimeout(timeOutId);
+
+			if (ms > 0) setReloadTimeout();
+		});
+	}
+
+
+	// ── Bot actions ───────────────────────────────────────────────────────────
+
+	function toggleBotConfirm(instanceId, botId, botName, enable) {
+
+		const action  = enable ? 'bot_enable' : 'bot_disable';
+		const btnText = enable ? 'Enable' : 'Disable';
+		const btnColor = enable ? '#4aa602' : '#d80f08';
+
+		if (confirmWaiting) return;
+
+		confirmWaiting = true;
+
+		if (timeOutId) clearTimeout(timeOutId);
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">' + btnText + ' ' + botName + '?</div>',
+			buttons: {
+				ok: {
+					btnClass: 'btn-default',
+					text: '<div style="color: ' + btnColor + ';">' + btnText + ' Bot</div>',
+					action: function() {
+
+						$('#spinner-overlay').fadeIn(100);
+
+						$.ajax({
+							type: 'POST',
+							url: './api/hub/bots/' + botId + '/action',
+							contentType: 'application/json',
+							data: JSON.stringify({ instanceId, action }),
+							dataType: 'json',
+							success: function(res) {
+
+								$('#spinner-overlay').fadeOut(100);
+								confirmWaiting = false;
+
+								if (!res.success) {
+
+									alertBox('Error: ' + (res.data || 'Unknown error'), function() { setReloadTimeout(); });
+								}
+								else {
+
+									// Update toggle state immediately without waiting for next refresh
+									const $row = $('[data-botid="' + botId + '"]');
+									$row.attr('data-active', enable);
+									$('#toggle' + botId).prop('checked', enable).switchToggle(enable);
+
+									alertBox(botName + ' ' + (enable ? 'enabled' : 'disabled'), function() { setReloadTimeout(); });
+								}
+							},
+							error: function(err) {
+
+								$('#spinner-overlay').fadeOut(100);
+								confirmWaiting = false;
+
+								if (err.status === 401) { window.location.href = './login'; return; }
+
+								alertBox('Error: ' + JSON.stringify(err), function() { setReloadTimeout(); });
+							}
+						});
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #000000;">Cancel</div>',
+					action: function() {
+
+						confirmWaiting = false;
+						setReloadTimeout();
+					}
+				}
+			}
+		});
+	}
+
+
+	// ── Data fetching and rendering ───────────────────────────────────────────
+
+	function getActiveBots() {
+
+		$.ajax({
+			type: 'GET',
+			url: './api/hub/bots',
+			data: {},
+			dataType: 'json',
+			success: function(data) {
+
+				populateBots(data.data || []);
+
+				setReloadTimeout();
+			},
+			error: function(err) {
+
+				if (err.status === 401) { window.location.href = './login'; return; }
+
+				alertBox('Error fetching bots: ' + JSON.stringify(err), function() { setReloadTimeout(); });
+			}
+		});
+	}
+
+
+	function populateBots(bots) {
+
+		const maxPairs     = 8;
+		const selectedInst = $('#hub-instance-filter').val();
+
+		let contentArr = [];
+		let totalBots  = 0;
+		let activeBots = 0;
+
+		for (let i = 0; i < bots.length; i++) {
+
+			const bot          = bots[i];
+			const instanceName = bot.instanceName || '';
+			const instanceId   = bot.instanceId || '';
+			const botId        = bot.botId;
+			const botName      = bot.botName;
+			const active       = bot.active;
+			const sandBox      = bot.sandBox;
+
+			if (!activeInstances.includes(instanceName)) {
+
+				activeInstances.push(instanceName);
+				$('#hub-instance-filter').append('<option value="' + instanceName + '">' + instanceName + '</option>');
+			}
+
+			if (selectedInst !== 'all' && instanceName !== selectedInst) continue;
+
+			totalBots++;
+
+			if (active) activeBots++;
+
+			// Pairs display
+			let pairDisplay = '';
+
+			const pairsArr = typeof bot.pair !== 'string' ? bot.pair : [bot.pair];
+			const pairsShow = pairsArr.slice(0, maxPairs);
+
+			pairDisplay = pairsShow.join(', ').toUpperCase();
+
+			if (pairsArr.length > maxPairs) pairDisplay += ' ...';
+
+			const dealMax  = (bot.dealMax  == 0) ? '&#8734;' : bot.dealMax;
+			const pairMax  = (bot.pairMax  == 0) ? '&#8734;' : bot.pairMax;
+			const maxFunds = '$' + Math.round(bot.botMaxFunds || bot.maxFunds || 0);
+
+			let startCondition = 'ASAP';
+
+			if (bot.startConditions && bot.startConditions.length > 0) {
+
+				startCondition = bot.startConditions[0].toUpperCase();
+			}
+
+			const checkedAttr = active ? 'checked' : '';
+			const exchange    = (bot.exchange || '').toUpperCase();
+
+			contentArr.push(
+				'<tr data-botid="' + botId + '" data-botname="' + botName + '" data-instanceid="' + instanceId + '" data-instancename="' + instanceName + '" data-active="' + active + '">' +
+				'<td>' + instanceName + '</td>' +
+				'<td>' + botName + '</td>' +
+				'<td>' + exchange + '</td>' +
+				'<td style="max-width: 160px;">' + pairDisplay + '</td>' +
+				'<td>' + (bot.firstOrderAmount || '') + '</td>' +
+				'<td>' + (bot.dcaOrderAmount   || '') + '</td>' +
+				'<td>' + (bot.dcaMaxOrder      || '') + '</td>' +
+				'<td>' + (bot.dcaTakeProfitPercent || '') + '%</td>' +
+				'<td>' + dealMax + '</td>' +
+				'<td>' + pairMax + '</td>' +
+				'<td>' + maxFunds + '</td>' +
+				'<td>' + startCondition + '</td>' +
+				'<td>' + (sandBox ? 'Yes' : 'No') + '</td>' +
+				'<td><input id="toggle' + botId + '" type=checkbox ' + checkedAttr + ' disabled></td>' +
+				'</tr>'
+			);
+		}
+
+		$('#hubBots tbody').empty().append(contentArr.join(''));
+
+		$('#totalBots').html(totalBots);
+		$('#activeBots').html(activeBots);
+
+		// Re-init simpleSwitch on new rows (read-only — actions via confirm)
+		$('[id*="toggle"]').simpleSwitch();
+		$('[id*="toggle"]').prop('disabled', true);
+
+		$('#hubBots').trigger('update');
+
+		resizeBotsDeals();
+	}
+
+
+	// ── Document ready ────────────────────────────────────────────────────────
+
+	$(document).ready(function() {
+
+		$(window).resize(function() {
+
+			resizeBotsDeals();
+		});
+
+
+		// Row click — last column toggles bot, other columns reserved for future detail view
+		$(document).on('click', '#hubBots tbody tr td', function() {
+
+			const col        = $(this).index();
+			const row        = $(this).closest('tr');
+			const colCount   = row.find('td').length;
+			const botId      = row.data('botid');
+			const botName    = row.data('botname');
+			const instanceId = row.data('instanceid');
+			const active     = row.attr('data-active') === 'true';
+
+			if (col === colCount - 1) {
+
+				// Toggle column — confirm enable/disable
+				toggleBotConfirm(instanceId, botId, botName, !active);
+			}
+			// Note: non-toggle columns are read-only for now.
+			// Bot detail navigation requires a Hub-level bot detail page (future).
+		});
+
+
+		$('#hub-instance-filter').change(() => { getActiveBots(); });
+
+
+		$('#hubBots').tablesorter({
+			widgets: ['saveSort', 'stickyHeaders', 'uitheme', 'columnSelector'],
+			widgetOptions: {
+				saveSort: true,
+				stickyHeaders_attachTo: '',
+				columnSelector_mediaqueryHidden: true,
+				columnSelector_mediaqueryName: 'Show Default',
+				columnSelector_container: $('#botDealSelector')
+			}
+		});
+
+		$('#botDealSelectorShow').click(function() {
+
+			$('.botDealSelectorWrapper').toggleClass('is-visible');
+		});
+
+		initRefreshSelector();
+
+		getActiveBots();
+	});
+
+</script>
+
+
+<center>
+<main>
+
+	<div class="botDealSelectorWrapper">
+		<div id="botDealSelector" class="botDealSelector">
+		  <!-- column selector -->
+		</div>
+		<div class="botDealSelectorHidden">
+			<div id="popover-botdeals"></div>
+		</div>
+	</div>
+
+	<div id="contentBox">
+
+		<div style="position: relative;">
+
+			<div class="contentHeaderBox">
+
+				<b class="contentHeader">Hub Bots</b>
+
+				<span class="viewSettings">
+					<select id="hubRefreshInterval" class="form-field" style="width: auto; cursor: pointer;" title="Refresh interval"></select>
+					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
+				</span>
+
+				<div class="summary-bar">
+					<p>Bots: <span id="totalBots"></span></p>
+					<p>Active: <span id="activeBots"></span></p>
+					<div class="active-filter">
+						<p>Instance:</p>
+						<select class="form-field" id="hub-instance-filter">
+							<option value="all"></option>
+						</select>
+					</div>
+				</div>
+			</div>
+
+			<div class="botsDealsBox" style="margin-top: 20px;">
+
+				<table id="hubBots" border=0 cellspacing=0 cellpadding=0>
+
+				<thead style="position: sticky; top: 0; z-index: 1000;">
+					<tr class="tableHeader">
+						<th>Instance</th> <th>Bot Name</th> <th>Exchange</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th data-sorter="false" class="columnSelector-disable">Active</th>
+					</tr>
+				</thead>
+
+				<tbody></tbody>
+
+				</table>
+			</div>
+		</div>
+	</div>
+
+</main>
+</center>
+
+<%- include('../partialsFooterView'); %>

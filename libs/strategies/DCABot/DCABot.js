@@ -56,6 +56,12 @@ let resumeDealTracker = {};
 let balanceTracker = {};
 let exchangeMarkets = {};
 
+// Serial queue for all new deal starts — single entry point, single path.
+// Ensures no two deal-creation attempts run concurrently regardless of
+// whether the trigger is an API call, a signal, or an internal ASAP/cooldown.
+let dealStartQueue = null;
+
+
 let shareData;
 
 
@@ -76,23 +82,12 @@ async function start(dataObj, startId) {
 	const config = Object.freeze(JSON.parse(JSON.stringify(data)));
 
 	let dealIdMain;
-	let botConfigDb;
-
-	let botActive = true;
-	let botFoundDb = false;
-	let pairFoundDb = false;
-	let dealLast = false;
-	let dealStop = false;
-	let pairDealsLast = false;
 	let checkActivePairOverride = false;
-
-	let totalOrderSize = 0;
-	let totalAmount = 0;
+	let isNewDeal = false;
 
 	let pair = '';
 	let pairConfig = config.pair;
 	let botIdMain = config.botId;
-	let botNameMain = config.botName;
 	let dealCount = config.dealCount;
 	let dealMax = config.dealMax;
 	let pairMax = config.pairMax;
@@ -265,38 +260,7 @@ async function start(dataObj, startId) {
 				dealIdMain = dealResumeId;
 			}
 
-			// Config reloaded from db so continue
-			//await Common.delay(1000);
-
-			let followSuccess = false;
-			let followFinished = false;
-			let followConfig = config;
-
-			while (!followFinished) {
-
-				let followRes = await dcaFollow(followConfig, exchange, dealIdMain);
-
-				let followConfigRes = followRes['config'];
-
-				// Refresh config without stopping bot
-				if (followConfigRes != undefined && followConfigRes != null && followConfigRes != '') {
-
-					followConfig = JSON.parse(JSON.stringify(followConfigRes));
-				}
-
-				followSuccess = followRes['success'];
-				followFinished = followRes['finished'];
-
-				if (!followSuccess) {
-
-					await Common.delay(1000);
-				}
-			}
-
-			if (followFinished) {
-
-				//break;
-			}
+			await runFollowLoop(config, exchange, dealIdMain);
 		}
 		else {
 
@@ -349,9 +313,6 @@ async function start(dataObj, startId) {
 					return false;
 				}
 				else {
-
-					totalOrderSize = firstOrderSize;
-					totalAmount = config.firstOrderAmount;
 
 					const price = await filterPrice(exchange, pair, askPrice);
 
@@ -624,37 +585,23 @@ async function start(dataObj, startId) {
 
 					dealIdMain = dealId;
 
+					// Commit point — deal is now in the database. createDealTracker removes
+					// the startDealTracker entry, which signals the queue that the next
+					// requestDealStart task can safely run its canStartDeal check.
 					await createDealTracker({ 'deal_id': dealId, 'deal': deal, 'start_id': startId });
 
-					let followSuccess = false;
-					let followFinished = false;
-					let followConfig = config;
+					// Run the follow loop detached so start() returns after the commit
+					// point rather than holding the call stack for the entire deal lifetime.
+					// Set isNewDeal flag so the post-try section skips for this path —
+					// the setImmediate block runs its own post-deal logic after the loop.
+					isNewDeal = true;
+					setImmediate(async () => {
 
-					while (!followFinished) {
+						await runFollowLoop(config, exchange, dealId);
 
-						let followRes = await dcaFollow(followConfig, exchange, dealId);
-
-						let followConfigRes = followRes['config'];
-
-						// Refresh config without stopping bot
-						if (followConfigRes != undefined && followConfigRes != null && followConfigRes != '') {
-		
-							followConfig = JSON.parse(JSON.stringify(followConfigRes));
-						}
-
-						followSuccess = followRes['success'];
-						followFinished = followRes['finished'];
-
-						if (!followSuccess) {
-
-							await Common.delay(1000);
-						}
-					}
-
-					if (followFinished) {
-
-						//break;
-					}
+						// Follow loop finished — run post-deal logic
+						await onDealComplete({ dealId, botIdMain, pair, dealCount, config });
+					});
 				}
 				else {
 /*
@@ -678,76 +625,124 @@ async function start(dataObj, startId) {
 	}
 
 
-	// Refresh bot config in case any settings changed
+	// Post-deal logic — runs for the isActive path (existing deal followed to
+	// completion). Skipped for new deals — their setImmediate block calls this.
+	if (!isNewDeal) {
 
+		await onDealComplete({ dealId: dealIdMain, botIdMain, pair, dealCount, config });
+	}
+}
+
+
+// Drives the dcaFollow loop for a running deal until it finishes.
+// Used by both the isActive resume path and the new deal setImmediate path.
+async function runFollowLoop(config, exchange, dealId) {
+
+	let followSuccess = false;
+	let followFinished = false;
+	let followConfig = config;
+
+	while (!followFinished) {
+
+		const followRes = await dcaFollow(followConfig, exchange, dealId);
+
+		const followConfigRes = followRes['config'];
+
+		// Refresh config without stopping bot
+		if (followConfigRes != undefined && followConfigRes != null && followConfigRes != '') {
+
+			followConfig = JSON.parse(JSON.stringify(followConfigRes));
+		}
+
+		followSuccess = followRes['success'];
+		followFinished = followRes['finished'];
+
+		if (!followSuccess) {
+
+			await Common.delay(1000);
+		}
+	}
+}
+
+
+// Runs after a deal's follow loop finishes — refreshes bot config from the
+// database, handles deactivation/deal-stop/chain-restart decisions, and cleans
+// up the deal tracker. Called from both the new-deal setImmediate path and the
+// isActive inline path so the logic lives in exactly one place.
+async function onDealComplete({ dealId, botIdMain, pair, dealCount, config }) {
+
+	let botNameMain  = config.botName;
+	let botFoundDb   = false;
+	let pairFoundDb  = false;
+	let botActive    = true;
+	let botConfigDb  = null;
+	let dealMax      = Number(config.dealMax)      || 0;
+	let pairMax      = Number(config.pairMax)      || 0;
+	let pairDealsMax = Number(config.pairDealsMax) || 0;
+	let dealLast     = false;
+	let dealStop     = false;
+	let pairDealsLast = false;
+
+	// Refresh bot config in case any settings changed
 	try {
 
 		const bot = await getBots({ 'botId': botIdMain });
 
 		if (bot && bot.length > 0) {
 
-			botFoundDb = true;
-
+			botFoundDb  = true;
 			botNameMain = bot[0]['botName'];
 
-			let botPairsDb = bot[0]['config']['pair'];
+			const botPairsDb = bot[0]['config']['pair'];
 
-			// Make sure pair was not removed from bot configuration
-			for (let pairDb of botPairsDb) {
+			for (const pairDb of botPairsDb) {
 
 				if (pair.toUpperCase() == pairDb.toUpperCase()) {
 
 					pairFoundDb = true;
 				}
- 			}
- 
+			}
+
 			if (!bot[0]['active']) {
 
 				botActive = false;
 			}
 			else {
 
-				botConfigDb = bot[0]['config'];
-
-				dealMax = botConfigDb['dealMax'];
-				pairMax = botConfigDb['pairMax'];
-				pairDealsMax = botConfigDb['pairDealsMax'];
-				pairBotsDealsMax = botConfigDb['pairBotsDealsMax'];
+				botConfigDb   = bot[0]['config'];
+				dealMax       = botConfigDb['dealMax'];
+				pairMax       = botConfigDb['pairMax'];
+				pairDealsMax  = botConfigDb['pairDealsMax'];
 			}
 		}
 	}
-	catch(e) {
-
-	}
-
+	catch(e) {}
 
 	// Deactivate bot if max deals reached
 	if (dealCount >= dealMax && dealMax > 0) {
 
-		const data = await updateBot(botIdMain, { 'active': false });
-		
+		const deactivateData = await updateBot(botIdMain, { 'active': false });
+
 		if (shareData.appData.verboseLog) {
-			
-			Common.logger( colors.bgYellow.bold(config.botName + ': Max deal count reached. Bot will not start another deal.') );
+
+			Common.logger(colors.bgYellow.bold(config.botName + ': Max deal count reached. Bot will not start another deal.'));
 		}
 
-		const statusObj = await sendBotStatus({ 'bot_id': botIdMain, 'bot_name': botNameMain, 'active': false, 'success': data.success });
+		await sendBotStatus({ 'bot_id': botIdMain, 'bot_name': botNameMain, 'active': false, 'success': deactivateData.success });
 	}
 
 	// Check if deal stop was requested
 	try {
 
-		if (dealTracker[dealIdMain]['update']['deal_stop']) {
+		if (dealTracker[dealId]['update']['deal_stop']) {
 
 			dealStop = true;
 		}
 	}
-	catch(e) {
-
-	}
+	catch(e) {}
 
 	// Check for any resuming deals before continuing
-	await processResumeDealTracker({ 'deal_id': dealIdMain });
+	await processResumeDealTracker({ 'deal_id': dealId });
 
 	// Get active deals for limit checks
 	const pairDealsActive = await getDeals({ 'botId': botIdMain, 'pair': pair, 'status': 0 });
@@ -761,7 +756,7 @@ async function start(dataObj, startId) {
 	}
 
 	// dealLast — this deal was flagged as the last one for the pair
-	const botDealCurrent = await getDeals({ 'botId': botIdMain, 'dealId': dealIdMain });
+	const botDealCurrent = await getDeals({ 'botId': botIdMain, 'dealId': dealId });
 
 	if (botDealCurrent && botDealCurrent.length > 0) {
 
@@ -790,17 +785,14 @@ async function start(dataObj, startId) {
 	// Start another bot deal if all conditions are met
 	if (canStart && !pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast) {
 
-		let configObj = JSON.parse(JSON.stringify(config));
+		const configObj = JSON.parse(JSON.stringify(config));
 
 		if (pairFoundDb && (dealCount < dealMax || dealMax == 0)) {
 
-			botConfigDb['pair'] = pair; // Set single pair
+			botConfigDb['pair']      = pair;
 			botConfigDb['dealCount'] = configObj['dealCount'];
-
-			// Increment deal count
 			botConfigDb['dealCount']++;
 
-			// Apply config data again
 			botConfigDb = await applyConfigData({ 'signal_id': configObj.signalId, 'bot_id': botIdMain, 'bot_name': botNameMain, 'config': botConfigDb });
 
 			if (shareData.appData.verboseLog) {
@@ -808,31 +800,25 @@ async function start(dataObj, startId) {
 				Common.logger(colors.bgGreen('Starting new bot deal for ' + pair.toUpperCase() + ' ' + botConfigDb['dealCount'] + ' / ' + botConfigDb['dealMax']));
 			}
 
-			if (botConfigDb['dealCoolDown'] == 0) {
+			const coolDown = botConfigDb['dealCoolDown'] || 0;
 
-				start({ 'create': true, 'config': botConfigDb });
+			if (coolDown > 0 && shareData.appData.verboseLog) {
+
+				Common.logger(colors.bgYellow.bold('Waiting ' + coolDown + ' seconds for ' + pair.toUpperCase() + ' cooldown before starting new deal.'));
 			}
-			else {
 
-				if (shareData.appData.verboseLog) {
-
-					Common.logger(colors.bgYellow.bold('Waiting ' + botConfigDb['dealCoolDown'] + ' seconds for ' + pair.toUpperCase() + ' cooldown before starting new deal.'));
-				}
-
-				startDelay({ 'config': botConfigDb, 'delay': botConfigDb['dealCoolDown'], 'notify': false });
-			}
+			requestDealStart(botConfigDb, coolDown, 'deal complete');
 		}
 		else {
 
 			// Check for another pair to start if deal max reached above on current pair
 			// Deal max will be reset so current pair could still begin again at some point
-
 			startAsap(pair);
 		}
 	}
 
-	// Ensure deal tracker is removed
-	deleteDealTracker(dealIdMain);
+	// Clean up deal tracker
+	deleteDealTracker(dealId);
 }
 
 
@@ -4458,6 +4444,12 @@ async function deleteDealTracker(dealId) {
 }
 
 
+async function createStartDealTracker(startId, botId) {
+
+	startDealTracker[startId] = { 'date': new Date(), 'botId': botId };
+}
+
+
 async function deleteStartDealTracker(id) {
 
 	if (id != undefined && id != null && id != '') {
@@ -5253,7 +5245,7 @@ async function volumeValid(startBot, pair, symbol, config) {
 			if (shareData.appData.verboseLog) { Common.logger( colors.bgCyan.bold(msg) ); }
 
 			timerTracker[timerKey]['id'] = setTimeout(() => {
-																startVerify(configObj);
+																requestDealStart(configObj, 0, 'volume delay');
 
 															}, (60000 * 1));
 		}
@@ -5415,40 +5407,145 @@ async function createDeal(pair, pairMax, dealCount, dealMax, config, orders) {
 }
 
 
-async function startVerify(config, startId) {
+// ── Single entry point for all new deal starts ───────────────────────────────
+//
+// Every path that wants to create a new deal — API, webhook, signal, ASAP,
+// Single entry point for all new deal starts — API, webhook, signal, ASAP,
+// cooldown restart, internal loop — calls requestDealStart(). It enqueues
+// the work onto a serial queue so only one deal-start attempt runs at a time,
+// eliminating all race conditions regardless of call origin.
+//
+// delaySec: optional cooldown/stagger delay before the attempt runs.
+// Returns { success, data, startId } where:
+//   success  — true if successfully enqueued, false if queue not initialised
+//   data     — error message if success is false, otherwise null
+//   startId  — ID callers (e.g. apiStartDealProcess) can poll to confirm commit
+async function requestDealStart(config, delaySec = 0, source = '') {
 
-	// Re-verify start conditions at execution time — config may have changed
-	// while this start was queued or delayed.
+	let success = false;
+	let data    = null;
+	let startId = null;
 
-	const pair      = config.pair;
-	const botId     = config.botId;
-	const dealCount = config.dealCount;
+	if (!dealStartQueue) {
 
-	if (botId == undefined || botId == null || botId == '') return;
-
-	const bot = await getBots({ 'botId': botId });
-
-	if (!bot || bot.length === 0 || !bot[0].active) return;
-
-	const botConfigDb    = bot[0].config;
-	const botDealsActive = await getDeals({ 'botId': botId, 'status': 0 });
-	const pairCount      = botDealsActive.length;
-
-	const { allowed } = await canStartDeal({
-		pair,
-		config: botConfigDb,
-		pairCount,
-		dealsActive: [] // startVerify only gates on pairMax + globalPairLimit
-	});
-
-	if (allowed) {
-
-		botConfigDb['pair']      = pair;
-		botConfigDb['botId']     = botId;
-		botConfigDb['dealCount'] = dealCount;
-
-		start({ 'create': true, 'config': botConfigDb }, startId);
+		data = 'requestDealStart called before queue initialised';
+		Common.logger(data);
 	}
+	else {
+
+		success = true;
+		startId = Common.uuidv4();
+
+		await createStartDealTracker(startId, config.botId);
+
+		// Fast pre-enqueue check — count pending starts already queued for this botId.
+		// If pending starts alone already meet or exceed pairMax there is no point
+		// enqueueing another task that is guaranteed to be blocked when it runs.
+		// This uses only in-memory state so it never touches the database.
+		// The authoritative canStartDeal check inside the queue task still runs —
+		// this is purely an optimisation to avoid wasteful queue drain.
+		const pairMaxFast = Number(config.pairMax) || 0;
+
+		if (pairMaxFast > 0) {
+
+			const pendingForBot = Object.values(startDealTracker)
+				.filter(entry => entry && entry.botId === config.botId)
+				.length;
+
+			// pendingForBot includes the current startId (added above),
+			// so block only when count exceeds pairMax — meaning there are
+			// already pairMax other pending starts ahead of this one.
+			if (pendingForBot > pairMaxFast) {
+
+				deleteStartDealTracker(startId);
+				return { success: false, data: 'pairMax pre-check: too many pending starts', startId: null };
+			}
+		}
+
+		dealStartQueue.enqueue(async () => {
+
+			let taskSuccess = false;
+			let taskData    = null;
+
+			try {
+
+				// Apply optional stagger/cooldown delay
+				if (delaySec > 0) {
+
+					await Common.delay(delaySec * 1000);
+				}
+
+				// Wait for any resuming deals before proceeding
+				await processResumeDealTracker();
+
+				const pair      = config.pair;
+				const botId     = config.botId;
+				const dealCount = config.dealCount;
+
+				if (!botId || !pair) {
+
+					taskData = 'Missing botId or pair';
+				}
+				else {
+
+					const bot = await getBots({ 'botId': botId });
+
+					if (!bot || bot.length === 0 || !bot[0].active) {
+
+						taskData = 'Bot not found or inactive';
+					}
+					else {
+
+						const botConfigDb    = bot[0].config;
+						const botDealsActive  = await getDeals({ 'botId': botId, 'status': 0 });
+						const pairDealsActive = await getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
+						const pairCount       = botDealsActive.length;
+
+						const { allowed, reason } = await canStartDeal({
+							pair,
+							config: botConfigDb,
+							pairCount,
+							dealsActive: pairDealsActive
+						});
+
+						if (!allowed) {
+
+							taskData = reason;
+
+							if (shareData.appData.verboseLog) {
+
+								const sourceLabel = source ? ' (' + source + ')' : '';
+								Common.logger(colors.bgYellow('requestDealStart blocked for ' + pair + sourceLabel + ': ' + reason));
+							}
+						}
+						else {
+
+							botConfigDb['pair']      = pair;
+							botConfigDb['botId']     = botId;
+							botConfigDb['dealCount'] = dealCount;
+
+							await start({ 'create': true, 'config': botConfigDb }, startId);
+							taskSuccess = true;
+						}
+					}
+				}
+			}
+			catch (err) {
+
+				taskData = err?.message || String(err);
+				Common.logger('requestDealStart error: ' + taskData);
+			}
+
+			if (!taskSuccess) {
+
+				deleteStartDealTracker(startId);
+			}
+
+			return { 'success': taskSuccess, 'data': taskData };
+		});
+	}
+
+	return { success, data, startId };
 }
 
 
@@ -5477,7 +5574,12 @@ async function startAsap(pairIgnore) {
 		const botDealsActive = await getDeals({ 'botId': botId, 'status': 0 });
 		let pairCount = botDealsActive.length;
 
+		const pairMax = Number(config.pairMax) || 0;
+
 		for (let x = 0; x < pairs.length; x++) {
+
+			// Early exit — no point iterating further once the pair limit is reached
+			if (pairMax > 0 && pairCount >= pairMax) break;
 
 			const pair = pairs[x];
 
@@ -5497,7 +5599,11 @@ async function startAsap(pairIgnore) {
 
 			if (allowed) {
 
-				startDelay({ 'config': config, 'delay': count + 1, 'notify': false });
+				// Stagger multiple simultaneous starts by 1 second per pair.
+				// notify is not passed — startAsap is an internal background restart,
+				// not a user-triggered action. Deal start notifications are sent
+				// by sendNotificationStart inside start() when the deal is created.
+				requestDealStart(config, count + 1, 'asap');
 
 				count++;
 				pairCount++;
@@ -5570,6 +5676,9 @@ async function resumeDeal(dealObj) {
 
 	Common.logger( colors.bgGreen.bold('Resuming Deal ID ' + dealId) );
 
+	// Resuming an existing deal — bypass requestDealStart/queue intentionally.
+	// The deal already exists in the database (dealResumeId is set) so
+	// canStartDeal checks do not apply. start() handles resume logic directly.
 	start({ 'create': true, 'config': config });
 
 	await Common.delay(1000);
@@ -6272,40 +6381,33 @@ async function applyConfigData(data) {
 }
 
 
+// startDelay is a compatibility shim — all work delegated to requestDealStart.
+// External callers (DCABotManager, signals) pass { config, delay, notify }.
+// Returns the startId string directly so apiStartDealProcess polling still works.
 async function startDelay(dataObj) {
 
-	const data = JSON.parse(JSON.stringify(dataObj));
-
+	const data   = JSON.parse(JSON.stringify(dataObj));
 	const config = data['config'];
 	const notify = data['notify'];
+	const delay  = data['delay'] || 0;
 
-	// Check for any resuming deals before continuing
-	await processResumeDealTracker();
+	if (notify) {
 
-	const startId = Common.uuidv4();
+		const msg = config.botName + ' (' + (config.pair || '').toUpperCase() + ') Start command received.';
+		Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
+	}
 
-	startDealTracker[startId] = {};
-	startDealTracker[startId]['date'] = new Date();
+	const result = await requestDealStart(config, delay, 'api/signal');
 
-	// Start bot
-	setTimeout(() => {
-						if (notify) {
-
-							let msg = config.botName + ' (' + config.pair.toUpperCase() + ') Start command received.';
-
-							Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
-						}
-
-						startVerify(config, startId);
-						//start({ 'create': true, 'config': config });
-
-					 }, (1000 * (data['delay'])));
-
-	return startId;
+	return result.startId;
 }
 
 
 async function initApp() {
+
+	// Initialise the serial deal-start queue — single path for all new deals
+	dealStartQueue = await shareData.Queue.create();
+
 
 	shareData.appData.starting_dca = true;
 
@@ -6396,6 +6498,7 @@ module.exports = {
 	canStartDeal,
 	applyConfigData,
 	startDelay,
+	requestDealStart,
 	resumeDeal,
 	getOHLCV,
 	getBalance,

@@ -1,0 +1,833 @@
+<%- include('../partialsHeaderView'); %>
+
+<script>
+
+	let timeOutId;
+	let dealTracker = {};
+	let dealTrackerErrors = {};
+	let activeBots = [];
+	let activeInstances = [];
+	let modalId = 'hubDealsView';
+
+	const tooltipDelayMs = 250;
+	const tooltipDisplayDelayMs = 1000;
+
+	// Selectable refresh intervals (ms). Stored in localStorage.
+	const refreshIntervals = [
+		{ label: '5s',     ms: 5000 },
+		{ label: '15s',    ms: 15000 },
+		{ label: '30s',    ms: 30000 },
+		{ label: '60s',    ms: 60000 },
+		{ label: 'Paused', ms: 0 }
+	];
+	const defaultRefreshMs = 15000;
+
+	const actionButtons = {
+		'cancel': {
+			'button': '<span class="pill-btn pill-danger" title="Cancel deal"><span class="icon icon-cancel" style="width:13px;height:13px;pointer-events:none;"></span></span>',
+			'tooltip': 'Cancel deal'
+		},
+		'panic': {
+			'button': '<span class="pill-btn" title="Close deal"><span class="icon icon-close" style="width:13px;height:13px;pointer-events:none;"></span></span>',
+			'tooltip': 'Close deal'
+		},
+		'pause': {
+			'button': '<span class="pill-btn pill-warn" title="Pause deal"><span class="icon icon-pause" style="width:13px;height:13px;pointer-events:none;"></span></span>',
+			'tooltip': 'Pause deal'
+		},
+		'resume': {
+			'button': '<span class="pill-btn pill-warn" title="Resume deal"><span class="icon icon-resume" style="width:13px;height:13px;pointer-events:none;"></span></span>',
+			'tooltip': 'Resume deal'
+		},
+		'stop': {
+			'button': '<span class="pill-btn pill-danger" title="Stop bot"><span class="icon icon-stop" style="width:13px;height:13px;pointer-events:none;"></span></span>',
+			'tooltip': 'Stop bot'
+		}
+	};
+
+	const convertBoolean = new Function('return ' + `<%- convertBoolean %>`)();
+
+
+	// ── Refresh management ────────────────────────────────────────────────────
+
+	function getRefreshMs() {
+
+		try {
+
+			const stored = parseInt(localStorage.getItem('hubDealsRefreshMs'), 10);
+
+			if (!isNaN(stored) && refreshIntervals.some(r => r.ms === stored)) {
+
+				return stored;
+			}
+		}
+		catch(e) {}
+
+		return defaultRefreshMs;
+	}
+
+
+	function saveRefreshMs(ms) {
+
+		try {
+
+			localStorage.setItem('hubDealsRefreshMs', ms);
+		}
+		catch(e) {}
+	}
+
+
+	function isDialogOpen() {
+
+		return $('.jconfirm').length > 0 || $('.ui-dialog:visible').length > 0;
+	}
+
+
+	function setReloadTimeout() {
+
+		if (timeOutId) {
+
+			clearTimeout(timeOutId);
+		}
+
+		const ms = getRefreshMs();
+
+		if (ms > 0) {
+
+			timeOutId = setTimeout(() => {
+
+				// Auto-pause refresh while any confirm/modal is open
+				if (isDialogOpen()) {
+
+					setReloadTimeout();
+				}
+				else {
+
+					getActiveDeals();
+				}
+			}, ms);
+		}
+	}
+
+
+	function initRefreshSelector() {
+
+		const $sel = $('#hubRefreshInterval');
+
+		$sel.empty();
+
+		refreshIntervals.forEach(r => {
+
+			$sel.append('<option value="' + r.ms + '">' + r.label + '</option>');
+		});
+
+		$sel.val(getRefreshMs());
+
+		$sel.on('change', function() {
+
+			const ms = parseInt($(this).val(), 10);
+
+			saveRefreshMs(ms);
+
+			if (timeOutId) {
+
+				clearTimeout(timeOutId);
+			}
+
+			if (ms > 0) {
+
+				setReloadTimeout();
+			}
+		});
+	}
+
+
+	// ── Deal actions ──────────────────────────────────────────────────────────
+
+	function dealAction(instanceId, action, dealId, botId, data, successMsg) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+			type: 'POST',
+			url: './api/hub/deals/' + dealId + '/action',
+			contentType: 'application/json',
+			data: JSON.stringify({ instanceId, action, botId, data: data || {} }),
+			dataType: 'json',
+			success: function(res) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+				if (!res.success) {
+
+					alertBox('Error: ' + (res.data || 'Unknown error'), function() { setReloadTimeout(); });
+				}
+				else {
+
+					alertBox(successMsg || 'Done', function() { setReloadTimeout(); });
+				}
+			},
+			error: function(err) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+				if (err.status === 401) { window.location.href = './login'; return; }
+
+				alertBox('Error: ' + JSON.stringify(err), function() { setReloadTimeout(); });
+			}
+		});
+	}
+
+
+	function botAction(instanceId, action, botId, successMsg) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+			type: 'POST',
+			url: './api/hub/bots/' + botId + '/action',
+			contentType: 'application/json',
+			data: JSON.stringify({ instanceId, action }),
+			dataType: 'json',
+			success: function(res) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+				if (!res.success) {
+
+					alertBox('Error: ' + (res.data || 'Unknown error'), function() { setReloadTimeout(); });
+				}
+				else {
+
+					alertBox(successMsg || 'Done', function() { setReloadTimeout(); });
+				}
+			},
+			error: function(err) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+				if (err.status === 401) { window.location.href = './login'; return; }
+
+				alertBox('Error: ' + JSON.stringify(err), function() { setReloadTimeout(); });
+			}
+		});
+	}
+
+
+	// ── Confirm dialogs ───────────────────────────────────────────────────────
+
+	function panicSellConfirm(instanceId, dealId) {
+
+		let randNum = Math.floor(1000 + Math.random() * 9000);
+
+		if (timeOutId) clearTimeout(timeOutId);
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">Close deal ' + dealId + ' at current market price?<br><br>' +
+				'Type <b>' + randNum + '</b> to confirm: ' +
+				'<form action="" style="display: inline;"><input type="text" id="confirmNum" class="form-field" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;" required /></form></div>',
+			buttons: {
+				formSubmit: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #d80f08;">Close Deal</div>',
+					action: function() {
+
+						const confirmNum = this.$content.find('#confirmNum').val();
+
+						if (!confirmNum || confirmNum != randNum) {
+
+							alertBox('Confirmation number incorrect');
+							return false;
+						}
+
+						dealAction(instanceId, 'panic_sell', dealId, null, {}, 'Deal ' + dealId + ' close requested');
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #000000;">Cancel</div>',
+					action: function() { setReloadTimeout(); }
+				}
+			},
+			onContentReady: function() {
+
+				let jc = this;
+
+				this.$content.find('form').on('submit', function(e) {
+
+					e.preventDefault();
+					jc.$$formSubmit.trigger('click');
+				});
+			}
+		});
+	}
+
+
+	function cancelDealConfirm(instanceId, dealId, pair) {
+
+		if (timeOutId) clearTimeout(timeOutId);
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">Cancel deal ' + dealId + '?<br><br>' +
+				'This will cancel the deal without selling assets already bought.<br><br>' +
+				'<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check to confirm <span style="color: #d80f08;">CANCEL</span> deal</b></div>',
+			buttons: {
+				formSubmit: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #d80f08;">Cancel Deal</div>',
+					action: function() {
+
+						if (!$('#confirmBox').prop('checked')) {
+
+							alertBox('You must check the box to confirm');
+							return false;
+						}
+
+						dealAction(instanceId, 'cancel', dealId, null, {}, 'Deal ' + dealId + ' cancelled');
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #000000;">Cancel</div>',
+					action: function() { setReloadTimeout(); }
+				}
+			},
+			onContentReady: function() {
+
+				$('#confirmBox').prop('checked', false);
+			}
+		});
+	}
+
+
+	function pauseDealConfirm(instanceId, dealId, pair, botId, pause, pauseBuy, pauseSell) {
+
+		if (timeOutId) clearTimeout(timeOutId);
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">Pause / Resume deal ' + dealId + '?<br><br>' +
+				'<form action="" style="display: inline;">' +
+				'<input id="dealPauseBuy" type=checkbox class="form-field"> &nbsp; <b>Pause Buy</b><br>' +
+				'<input id="dealPauseSell" type=checkbox class="form-field"> &nbsp; <b>Pause Sell</b><br><br>' +
+				'<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check to confirm <span style="color: #d80f08;">PAUSE / RESUME</span></b>' +
+				'</form></div>',
+			buttons: {
+				formSubmit: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #d80f08;">Pause / Resume Deal</div>',
+					action: function() {
+
+						if (!$('#confirmBox').prop('checked')) {
+
+							alertBox('You must check the box to confirm');
+							return false;
+						}
+
+						const pb = convertBoolean($('#dealPauseBuy').prop('checked'), false);
+						const ps = convertBoolean($('#dealPauseSell').prop('checked'), false);
+
+						dealAction(instanceId, 'pause', dealId, botId, { pauseBuy: pb, pauseSell: ps }, 'Deal ' + dealId + ' pause updated');
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #000000;">Cancel</div>',
+					action: function() { setReloadTimeout(); }
+				}
+			},
+			onOpenBefore: function() {
+
+				if (pause) { pauseBuy = true; pauseSell = true; }
+
+				$('#dealPauseBuy').simpleSwitch();
+				$('#dealPauseSell').simpleSwitch();
+				$('#dealPauseBuy').prop('checked', pauseBuy).switchToggle(pauseBuy);
+				$('#dealPauseSell').prop('checked', pauseSell).switchToggle(pauseSell);
+			},
+			onContentReady: function() {
+
+				$('#confirmBox').prop('checked', false);
+			}
+		});
+	}
+
+
+	function stopBotConfirm(instanceId, botId, botName) {
+
+		if (timeOutId) clearTimeout(timeOutId);
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">Disable ' + botName + '? Current deals will continue running until they complete.</div>',
+			buttons: {
+				ok: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #d80f08;">Disable Bot</div>',
+					action: function() {
+
+						botAction(instanceId, 'bot_disable', botId, botName + ' disabled');
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #000000;">Cancel</div>',
+					action: function() { setReloadTimeout(); }
+				}
+			}
+		});
+	}
+
+
+	// ── Data fetching and rendering ───────────────────────────────────────────
+
+	function getActiveDeals() {
+
+		$.ajax({
+			type: 'GET',
+			url: './api/hub/deals',
+			data: {},
+			dataType: 'json',
+			success: function(data) {
+
+				populateDeals(data.date, data.data || []);
+
+				setReloadTimeout();
+			},
+			error: function(err) {
+
+				if (err.status === 401) { window.location.href = './login'; return; }
+
+				alertBox('Error fetching deals: ' + JSON.stringify(err), function() { setReloadTimeout(); });
+			}
+		});
+	}
+
+
+	function populateDeals(date, deals) {
+
+		const maxMins = 2;
+
+		let totalProfit = 0;
+		let activeDeals = 0;
+		let inDeals = 0;
+		let dealDataErrors = 0;
+
+		const selectedBot      = $('#hub-bot-filter').val();
+		const selectedInstance = $('#hub-instance-filter').val();
+
+		let msgBox = '';
+		let dealsErrorArr = [];
+		let contentArr = [];
+
+		dealTracker = {};
+
+		// Strip any invalid options that may have been added in previous cycles
+		$('#hub-bot-filter option').filter(function() {
+			const v = $(this).val();
+			return v && v !== 'all' && (!v || v === 'undefined' || v === 'null' || v.trim() === '');
+		}).remove();
+
+		$('#hub-instance-filter option').filter(function() {
+			const v = $(this).val();
+			return v && v !== 'all' && (!v || v === 'undefined' || v === 'null' || v.trim() === '');
+		}).remove();
+
+		for (let i = 0; i < deals.length; i++) {
+
+			const deal         = deals[i];
+			const instanceName = deal.instanceName || '';
+			const instanceId   = deal.instanceId || '';
+			const config       = deal['config'];
+			const dealId       = deal['dealId'];
+			const pause        = deal['info']['pause'];
+			const pauseBuy     = deal['info']['pause_buy'];
+			const pauseSell    = deal['info']['pause_sell'];
+			const dealError    = deal['info']['error'];
+			const lastUpdated  = deal['info']['updated'];
+			const botActive    = deal['info']['bot_active'];
+			const profit       = deal['info']['profit'];
+			const profitPerc   = deal['info']['profit_percentage'];
+			const botId        = deal['info']['bot_id'];
+			const botName      = deal['info']['bot_name'];
+
+			// Populate filter dropdowns (once per unique value)
+			if (botName && botName !== 'undefined' && !activeBots.includes(botName)) {
+
+				activeBots.push(botName);
+				$('#hub-bot-filter').append('<option value="' + botName + '">' + botName + '</option>');
+			}
+
+			if (instanceName && instanceName !== 'undefined' && !activeInstances.includes(instanceName)) {
+
+				activeInstances.push(instanceName);
+				$('#hub-instance-filter').append('<option value="' + instanceName + '">' + instanceName + '</option>');
+			}
+
+			// Apply filters
+			if (selectedBot      !== 'all' && botName      !== selectedBot)      continue;
+			if (selectedInstance !== 'all' && instanceName !== selectedInstance) continue;
+
+			activeDeals++;
+
+			// Deal data error handling
+			if (isNaN(deal['info']['deal_count']) || (dealError != undefined && dealError != null && dealError != '')) {
+
+				const maxSec = 30;
+
+				if (!dealTrackerErrors[dealId]) {
+
+					dealTrackerErrors[dealId] = { date: new Date() };
+					continue;
+				}
+				else {
+
+					const diffSec = (new Date().getTime() - new Date(dealTrackerErrors[dealId].date).getTime()) / 1000;
+
+					if (diffSec <= maxSec) continue;
+
+					dealDataErrors++;
+				}
+			}
+			else {
+
+				delete dealTrackerErrors[dealId];
+			}
+
+			const dealVolume = deal['orders'].filter(o => o.filled).reduce((acc, o) => acc + Number(o.amount), 0);
+
+			inDeals += dealVolume;
+
+			if (!isNaN(profit)) totalProfit += profit;
+
+			// Stale deal check
+			const diffSec = (new Date(date).getTime() - new Date(lastUpdated).getTime()) / 1000;
+
+			if (diffSec > (60 * maxMins)) {
+
+				dealsErrorArr.push(dealId);
+			}
+
+			dealTracker[dealId] = {
+				instanceId,
+				instanceName,
+				date:   deal['date'],
+				info:   deal['info'],
+				config: config,
+				orders: deal['orders']
+			};
+
+			// Button state
+			let { cancel: { button: cancelBtn }, panic: { button: panicBtn },
+			      pause:  { button: pauseBtn },  stop:  { button: stopBtn } } = actionButtons;
+
+			if (pause || pauseBuy || pauseSell) {
+
+				pauseBtn = actionButtons['resume']['button'];
+			}
+
+			if (!botActive) {
+
+				stopBtn = '<span class="pill-btn pill-disabled" title="Stop bot (bot inactive)"><span class="icon icon-stop" style="width:13px;height:13px;pointer-events:none;"></span></span>';
+			}
+
+			const profitPercClass = profitPerc <= 0 ? 'profit-negative' : 'profit-positive';
+
+			let dealMax = deal['info']['deal_max'];
+
+			if (dealMax == 0) dealMax = '&#8734;';
+
+			const dealCount  = deal['info']['deal_count'] + ' / ' + dealMax;
+			const duration   = timeDiff(new Date(), new Date(deal['date']));
+			const safetyUsed = deal['info']['safety_orders_used'];
+			const safetyMax  = config['dcaMaxOrder'];
+			const priceLast  = deal['info']['price_last'];
+			const priceTarget = deal['info']['price_target'];
+
+			const pillContent = panicBtn + pauseBtn + cancelBtn + (stopBtn || '');
+
+			contentArr.push(
+				'<tr data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '" data-instanceid="' + instanceId + '" data-botid="' + botId + '" data-botname="' + botName + '" data-exchange="' + (config['exchange'] || '') + '">' +
+				'<td>' + instanceName + '</td>' +
+				'<td>' + botName + '</td>' +
+				'<td>' + deal['pair'] + '</td>' +
+				'<td>' + duration + '</td>' +
+				'<td>$' + convertNotation(priceLast) + '</td>' +
+				'<td>$' + convertNotation(priceTarget) + '</td>' +
+				'<td>$' + dealVolume.toFixed(2) + '</td>' +
+				'<td class="' + profitPercClass + '">$' + profit + '</td>' +
+				'<td class="' + profitPercClass + '">' + profitPerc + '%</td>' +
+				'<td>' + safetyUsed + ' / ' + safetyMax + '</td>' +
+				'<td>' + dealCount + '</td>' +
+				'<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '">' +
+				'<div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>' +
+				'</tr>'
+			);
+		}
+
+		// Warnings
+		if (dealsErrorArr.length > 0) {
+
+			msgBox += '<div>WARNING: ' + dealsErrorArr.length + ' deal(s) exceed last updated time of ' + maxMins + ' minutes.</div>';
+		}
+
+		if (dealDataErrors > 0) {
+
+			msgBox += '<div>WARNING: ' + dealDataErrors + ' deal(s) have errors or invalid data.</div>';
+		}
+
+		$('#msgBox').html(msgBox ? '<div style="color: #386ec2;">' + msgBox + '</div>' : '');
+		$('#hubDeals tbody').empty().append(contentArr.join(''));
+
+		$('#totalProfit').removeClass('profit-positive profit-negative')
+			.addClass(totalProfit <= 0 ? 'profit-negative' : 'profit-positive')
+			.html('$' + totalProfit.toFixed(2));
+
+		$('#inDeals').html('$' + inDeals.toFixed(2));
+		$('#totalDeals').html(activeDeals);
+
+		$('#hubDeals').trigger('update');
+
+		resizeBotsDeals();
+	}
+
+
+	// ── Document ready ────────────────────────────────────────────────────────
+
+	$(document).ready(function() {
+
+		let tooltipDisplayTime = {};
+
+		function getTooltipText(id) {
+
+			for (let key in actionButtons) {
+
+				if (id.startsWith(key)) return actionButtons[key]['tooltip'];
+			}
+
+			return null;
+		}
+
+		$(document).on('mouseenter', '[id]', function() {
+
+			let $this = $(this);
+			let tooltipText = getTooltipText($this.attr('id'));
+
+			if (tooltipText) {
+
+				let now = Date.now();
+				let lastDisplay = tooltipDisplayTime[$this.attr('id')];
+
+				if (!lastDisplay || now - lastDisplay >= tooltipDisplayDelayMs) {
+
+					$this.data('tooltipTimeout', setTimeout(function() {
+
+						let tooltip = $('<div class="toolTipButtons"></div>').appendTo('body');
+
+						tooltip.text(tooltipText).css({
+							'top':  $this.offset().top - tooltip.outerHeight() - 10,
+							'left': $this.offset().left + ($this.outerWidth() / 2) - (tooltip.outerWidth() / 2)
+						}).fadeIn(200);
+
+						tooltipDisplayTime[$this.attr('id')] = now;
+
+					}, tooltipDelayMs));
+				}
+			}
+		});
+
+		$(document).on('mouseleave click', '[id]', function() {
+
+			clearTimeout($(this).data('tooltipTimeout'));
+			$('.toolTipButtons').fadeOut(200);
+		});
+
+		$(window).resize(function() {
+
+			resizeBotsDeals();
+		});
+
+
+		// Pill button clicks
+		$(document).on('click', '#hubDeals .pill-btn', function(e) {
+
+			e.stopPropagation();
+
+			const $btn       = $(this);
+			const $td        = $btn.closest('td');
+			const row        = $btn.closest('tr');
+			const dealId     = row.data('dealid');
+			const pair       = row.data('pair');
+			const instanceId = row.data('instanceid');
+			const botId      = row.data('botid');
+			const botName    = row.data('botname');
+			const btnTitle   = $btn.attr('title');
+			const pause      = $td.data('pause');
+			const pauseBuy   = $td.data('pausebuy');
+			const pauseSell  = $td.data('pausesell');
+
+			if (btnTitle === 'Close deal') {
+
+				if (dealId) panicSellConfirm(instanceId, dealId);
+			}
+			else if (btnTitle === 'Pause deal' || btnTitle === 'Resume deal') {
+
+				if (dealId) pauseDealConfirm(instanceId, dealId, pair, botId, pause, pauseBuy, pauseSell);
+			}
+			else if (btnTitle === 'Cancel deal') {
+
+				if (dealId) cancelDealConfirm(instanceId, dealId, pair);
+			}
+			else if (btnTitle === 'Stop bot') {
+
+				if (botId) stopBotConfirm(instanceId, botId, botName);
+			}
+		});
+
+
+		// Row click — col 3 (Pair) opens TradingView, any other data col opens order history
+		$(document).on('click', '#hubDeals tbody tr td', function() {
+
+			const col      = $(this).index();
+			const row      = $(this).closest('tr');
+			const colCount = row.find('td').length;
+			const dealId   = row.data('dealid');
+
+			// Last column is actions — skip
+			if (col >= colCount - 1) return;
+
+			if (col === 2) {
+
+				// Pair column — open TradingView chart
+				const pair     = $(this).text().trim();
+				const exchange = row.attr('data-exchange') || '';
+
+				if (pair && exchange) {
+
+					showTradingView(modalId, 'modal', false, false, pair, exchange);
+				}
+			}
+			else {
+
+				// Any other data column — order history
+				if (!dealTracker[dealId]) return;
+
+				showOrderHistory(modalId, dealId, dealTracker[dealId]['info']['active'], dealTracker[dealId]['orders']);
+			}
+		});
+
+
+		$('#hub-bot-filter').change(() => { getActiveDeals(); });
+		$('#hub-instance-filter').change(() => { getActiveDeals(); });
+
+
+		$('#hubDeals').tablesorter({
+			widgets: ['saveSort', 'stickyHeaders', 'uitheme', 'columnSelector'],
+			widgetOptions: {
+				saveSort: true,
+				stickyHeaders_attachTo: '',
+				columnSelector_mediaqueryHidden: true,
+				columnSelector_mediaqueryName: 'Show Default',
+				columnSelector_container: $('#botDealSelector')
+			},
+			durationLength: 4,
+			durationLabels: '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
+			headers: {
+				3: { sorter: 'duration' },
+				4: { sorter: 'currency' },
+				5: { sorter: 'currency' },
+				6: { sorter: 'currency' },
+				7: { sorter: 'currency' }
+			}
+		});
+
+		$('#botDealSelectorShow').click(function() {
+
+			$('.botDealSelectorWrapper').toggleClass('is-visible');
+		});
+
+		initRefreshSelector();
+
+		getActiveDeals();
+	});
+
+</script>
+
+
+<center>
+<main>
+
+	<div class="botDealSelectorWrapper">
+		<div id="botDealSelector" class="botDealSelector">
+		  <!-- column selector populated by tablesorter -->
+		</div>
+		<div class="botDealSelectorHidden">
+			<div id="popover-botdeals"></div>
+		</div>
+	</div>
+
+	<div id="contentBox">
+
+		<div style="position: relative;">
+
+			<div class="contentHeaderBox">
+
+				<b class="contentHeader">Hub Active Deals</b>
+
+				<span class="viewSettings">
+					<select id="hubRefreshInterval" class="form-field" style="width: auto; cursor: pointer;" title="Refresh interval"></select>
+					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
+				</span>
+
+				<div class="summary-bar">
+					<p>Active P/L: <span id="totalProfit"></span></p>
+					<p>In Deals: <span id="inDeals"></span></p>
+					<p>Deals: <span id="totalDeals"></span></p>
+					<div class="active-filter">
+						<p>Instance:</p>
+						<select class="form-field" id="hub-instance-filter">
+							<option value="all"></option>
+						</select>
+					</div>
+					<div class="active-filter">
+						<p>Bot:</p>
+						<select class="form-field" id="hub-bot-filter">
+							<option value="all"></option>
+						</select>
+					</div>
+				</div>
+			</div>
+
+			<span id="msgBox" style="position: relative; display: flex; justify-content: center;"></span>
+
+			<div class="botsDealsBox">
+
+				<table id="hubDeals" border=0 cellspacing=0 cellpadding=0>
+
+				<thead style="position: sticky; top: 0; z-index: 1000;">
+					<tr class="tableHeader">
+						<th>Instance</th> <th>Bot Name</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th>
+					</tr>
+				</thead>
+
+				<tbody></tbody>
+
+				</table>
+			</div>
+		</div>
+	</div>
+
+</main>
+</center>
+
+<%- include('../partialsFooterView'); %>

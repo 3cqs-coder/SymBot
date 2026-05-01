@@ -733,5 +733,8 @@ module.exports = {
     },
 	get System() {
         return System;
+    },
+	get DCABotManager() {
+        return DCABotManager;
     }
 }

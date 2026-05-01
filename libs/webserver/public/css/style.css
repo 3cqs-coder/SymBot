@@ -395,20 +395,22 @@ a:visited {
 }
 
 
-#hub-showMemoryButton {
-    color: #000000;
-    background-color: beige;
-    cursor: pointer;
-    padding: 3px 7px;
-    border: 1px solid #a0a0a0;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    transition: all 0.3s;
+.hub-memory-btn {
+	background-color: var(--table-header-background-color);
+	color: var(--text-color);
+	font-size: 1.0rem;
+	padding: 4px 10px;
+	border: 1px solid #5d5d5d;
+	border-radius: 5px;
+	vertical-align: middle;
+	cursor: pointer;
+	transition: opacity 0.15s;
+	display: inline-flex;
+	align-items: center;
 }
 
-
-#hub-showMemoryButton:hover {
-    background-color: #e0e0e0;
+.hub-memory-btn:hover {
+	opacity: 0.8;
 }
 
 
@@ -460,6 +462,47 @@ a:visited {
 #hub-memoryContent {
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE and Edge */
+}
+
+
+.hub-remove-btn {
+	background-color: #8b0000;
+	color: white;
+	font-size: 1.0rem;
+	width: 30px;
+	height: 30px;
+	border: none;
+	border-radius: 5px;
+	vertical-align: middle;
+	justify-content: center;
+	align-items: center;
+	cursor: pointer;
+	transition: opacity 0.15s;
+}
+
+.hub-remove-btn:hover {
+	opacity: 0.8;
+}
+
+
+.hub-toggle-cell {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	margin-right: 8px;
+	vertical-align: middle;
+	gap: 3px;
+}
+
+.hub-toggle-cell:last-of-type {
+	margin-right: 0;
+}
+
+.hub-toggle-label {
+	font-size: 0.9rem;
+	color: var(--content-box-color);
+	opacity: 0.75;
+	white-space: nowrap;
 }
 
 
@@ -1064,7 +1107,7 @@ table#botsCreate td {
 }
 
 
-table#botsDeals {
+table#botsDeals, table#hubDeals, table#hubBots {
 
 	position: relative;
 	font-size: 1.0rem;
@@ -1075,43 +1118,46 @@ table#botsDeals {
 }
 
 
-table#botsDeals th {
+table#botsDeals th, table#hubDeals th, table#hubBots th {
 
 	padding-top: 8px;
 	padding-bottom: 8px;
 	padding-left: 5px;
 	padding-right: 5px;
 	font-size: 1.1rem;
+	text-align: left;
 	background: #3d3d3d;
 }
 
 
-table#botsDeals th:first-child {
+table#botsDeals th:first-child, table#hubDeals th:first-child, table#hubBots th:first-child {
 
 	border-radius: 5px 0 0 0;
 }
 
 
-table#botsDeals th:last-child {
+table#botsDeals th:last-child, table#hubDeals th:last-child, table#hubBots th:last-child {
 
 	border-radius: 0 5px 0 0;
 }
 
 
-table#botsDeals td:first-child {
+table#botsDeals td:first-child, table#hubDeals td:first-child, table#hubBots td:first-child {
 
 	border-left: 0;
 }
 
 
-table#botsDeals td:last-child {
+table#botsDeals td:last-child, table#hubDeals td:last-child, table#hubBots td:last-child {
 
 	border-right: 0;
+	width: 1%;
+	white-space: nowrap;
 }
 
 
 
-table#botsDeals td {
+table#botsDeals td, table#hubDeals td, table#hubBots td {
 
 	padding: 5px;
 	color: var(--table-content-color);
@@ -1120,24 +1166,24 @@ table#botsDeals td {
 }
 
 
-table#botsDeals tr:nth-child(even) {
+table#botsDeals tr:nth-child(even), table#hubDeals tr:nth-child(even), table#hubBots tr:nth-child(even) {
 
 	background: var(--table-background-color);
 }
 
 
-table#botsDeals tr:nth-child(odd) {
+table#botsDeals tr:nth-child(odd), table#hubDeals tr:nth-child(odd), table#hubBots tr:nth-child(odd) {
 
 	background: var(--table-background-color);
 }
 
 
-table#botsDeals tr:nth-child(1) {
+table#botsDeals tr:nth-child(1), table#hubDeals tr:nth-child(1), table#hubBots tr:nth-child(1) {
 
 }
 
 
-table#botsDeals tr:hover {
+table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 
 	background-color: var(--table-background-hover-color);
 	cursor: pointer;
@@ -1221,6 +1267,7 @@ table#botsDeals tr:hover {
 
 	position: relative;
 	min-height: 400px;
+	max-height: calc(100vh - 280px);
 	overflow: auto;
 	scrollbar-width: thin;
 }
@@ -1675,21 +1722,25 @@ table#botsDeals tr:hover {
 /* Defined here so they respect the current theme rather than being hardcoded.  */
 
 table#botsDeals td.profit-positive,
+table#hubDeals td.profit-positive,
 #totalProfit.profit-positive {
 	color: #1a9f00 !important;
 }
 
 table#botsDeals td.profit-negative,
+table#hubDeals td.profit-negative,
 #totalProfit.profit-negative {
 	color: #d82715 !important;
 }
 
 [data-theme="dark"] table#botsDeals td.profit-positive,
+[data-theme="dark"] table#hubDeals td.profit-positive,
 [data-theme="dark"] #totalProfit.profit-positive {
 	color: #3ec43e !important;
 }
 
 [data-theme="dark"] table#botsDeals td.profit-negative,
+[data-theme="dark"] table#hubDeals td.profit-negative,
 [data-theme="dark"] #totalProfit.profit-negative {
 	color: #f05040 !important;
 }
@@ -1975,4 +2026,6 @@ body.popout-body #chatInputContainer {
 
 	flex-shrink: 0;
 }
+
+
 

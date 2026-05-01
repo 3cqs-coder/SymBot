@@ -511,7 +511,15 @@
 				title: false,
 				boxWidth: '40%',
 				useBootstrap: false,
-				content: '<div style="font-size: 1.2rem;">Enter your current password to save exchange settings:</div><br><input type="password" id="botConfigPassword" class="form-field" style="width: 250px;" placeholder="Password">',
+				content: '<div style="font-size: 1.2rem;">Enter your current password to save exchange settings:</div>' +
+					'<br><input type="password" id="botConfigPassword" class="form-field" style="width: 250px;" placeholder="Password">' +
+					'<br><br>' +
+					'<div style="font-size: 1.2rem; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+					'<b>&#9888; Exchange settings are saved to ' + ('<%= appData.bot_config %>'.split('/').pop().split('\\\\').pop()) + ' only.</b> Existing bots retain their original exchange. ' +
+					'If you changed the exchange, bots with no active deals can be updated below. ' +
+					'<b>Bots with active deals will be skipped</b> — update them manually once deals complete.' +
+					'</div>' +
+					'<br><div style="font-size: 1.2rem; margin-top: 6px;"><input type="checkbox" id="updateBotsExchange" class="form-field" style="width:20px;" /> <b>Update existing bots (no active deals) to use the new exchange</b></div>',
 				buttons: {
 					confirm: {
 						btnClass: 'btn-default',
@@ -554,6 +562,27 @@
 									alertBox(data.data);
 
 									if (data.success) {
+
+										// If checkbox checked, propagate new exchange to bots with no active deals
+										if ($('#updateBotsExchange').prop('checked')) {
+
+											const newExchange = $('#bot_exchange').val().trim();
+
+											$.ajax({
+												type: 'POST',
+												url: './api/bots/update-exchange',
+												data: { exchange: newExchange },
+												dataType: 'json',
+												success: function(upd) {
+
+													let msg = 'Exchange settings saved.';
+													if (upd.updated > 0) msg += ' ' + upd.updated + ' bot(s) updated to ' + newExchange.toUpperCase() + '.';
+													if (upd.skipped > 0) msg += ' ' + upd.skipped + ' bot(s) skipped (active deals).';
+													alertBox(msg);
+												},
+												error: function() { alertBox('Exchange settings saved. Bot update request failed.'); }
+											});
+										}
 
 										// Clear input fields and reset clear flags, then re-fetch to get fresh status
 										['apiKey', 'apiSecret', 'apiPassphrase', 'apiPassword'].forEach(function(field) {

@@ -203,9 +203,19 @@ async function processConfig(configsArr) {
 			const mongoDbUrl = appConfig['data']['mongo_db_url'];
 			const webServerPort = appConfig['data']['web_server']['port'];
 
+			let exchange = '';
+
+			const botConfig = await shareData.Common.getConfig(instance['bot_config']);
+
+			if (botConfig.success && botConfig['data']['exchange']) {
+
+				exchange = botConfig['data']['exchange'];
+			}
+
 			instance['server_id'] = serverId;
 			instance['mongo_db_url'] = mongoDbUrl;
 			instance['web_server_port'] = webServerPort;
+			instance['exchange'] = exchange;
 
 			if (isUpdated) {
 
@@ -892,6 +902,7 @@ async function getActiveDeals() {
 
 					resolve({
 						id,
+						instanceId: instance.id,
 						data: msg.data
 					});
 				}
@@ -922,7 +933,7 @@ async function getActiveDeals() {
 
 		if (result.status === 'fulfilled') {
 
-			aggregated.push(result.value.data);
+			aggregated.push({ ...result.value.data, instanceId: result.value.instanceId });
 		}
 		else {
 
@@ -932,6 +943,117 @@ async function getActiveDeals() {
 
 	return aggregated;
 }
+
+
+async function getActiveBots() {
+
+	const promises = [];
+	const aggregated = [];
+
+	for (const [id, { worker, instance }] of shareData.workerMap.entries()) {
+
+		const p = new Promise((resolve, reject) => {
+
+			let botsTimeout;
+
+			const onMessage = (msg) => {
+
+				if (msg.type === WORKER_TO_HUB.BOTS_ACTIVE_RECEIVED && msg.id === instance.id) {
+
+					clearTimeout(botsTimeout);
+					worker.off('message', onMessage);
+
+					resolve({
+						id,
+						instanceId: instance.id,
+						data: msg.data
+					});
+				}
+			};
+
+			worker.on('message', onMessage);
+
+			worker.postMessage({
+				type: HUB_TO_WORKER.BOTS_ACTIVE,
+				id: instance.id,
+				name: instance.name
+			});
+
+			botsTimeout = setTimeout(() => {
+
+				worker.off('message', onMessage);
+				reject(new Error(`Timeout waiting for bots from worker ${id}`));
+			}, 5000);
+		});
+
+		promises.push(p);
+	}
+
+	const results = await Promise.allSettled(promises);
+
+	for (const result of results) {
+
+		if (result.status === 'fulfilled') {
+
+			aggregated.push({ ...result.value.data, instanceId: result.value.instanceId });
+		}
+		else {
+
+			logger('error', 'Worker bots failed: ' + result.reason);
+		}
+	}
+
+	return aggregated;
+}
+
+
+async function performDealAction(instanceId, action, dealId, botId, data) {
+
+	const instanceResult = await getInstance(instanceId);
+
+	if (!instanceResult.success) {
+
+		return { 'success': false, 'data': 'Instance not found or not running' };
+	}
+
+	const { worker } = instanceResult;
+
+	const requestId = shareData.Common.uuidv4();
+
+	return new Promise((resolve) => {
+
+		let actionTimeout;
+
+		const onMessage = (msg) => {
+
+			if (msg.type === WORKER_TO_HUB.DEAL_ACTION_RECEIVED && msg.requestId === requestId) {
+
+				clearTimeout(actionTimeout);
+				worker.off('message', onMessage);
+
+				resolve(msg.data);
+			}
+		};
+
+		worker.on('message', onMessage);
+
+		worker.postMessage({
+			type: HUB_TO_WORKER.DEAL_ACTION,
+			requestId,
+			action,
+			dealId,
+			botId,
+			data: data || {}
+		});
+
+		actionTimeout = setTimeout(() => {
+
+			worker.off('message', onMessage);
+			resolve({ 'success': false, 'data': 'Timeout waiting for action response' });
+		}, 30000);
+	});
+}
+
 
 
 async function getInstance(instanceId) {
@@ -1113,6 +1235,68 @@ async function routeStartWorker(req, res) {
 }
 
 
+async function routeRemoveInstance(req, res) {
+
+	let success = false;
+	let message = '';
+
+	try {
+
+		const hubData = await shareData.Common.getConfig(shareData.appData.hub_config);
+
+		if (!hubData.success) {
+
+			message = 'Failed to retrieve hub configuration.';
+		}
+		else {
+
+			const configs = hubData.data.instances;
+			const { id: instanceId } = req.body;
+
+			const instanceConfig = configs.find(c => c.id === instanceId);
+
+			if (!instanceConfig) {
+
+				message = 'Instance not found.';
+			}
+			else {
+
+				// Shut down the worker first if it is running
+				const { success: running, worker } = await getInstance(instanceId);
+
+				if (running && worker) {
+
+					logger('info', `Shutting down instance ${instanceConfig.name} before removal...`);
+
+					await terminateInstance(instanceId);
+				}
+
+				// Remove instance from hub.json
+				const updatedInstances = configs.filter(c => c.id !== instanceId);
+
+				const hubDataNew = hubData.data;
+				hubDataNew.instances = updatedInstances;
+
+				await shareData.Common.saveConfig(shareData.appData.hub_config, hubDataNew);
+
+				logger('info', `Instance ${instanceConfig.name} removed from Hub.`);
+
+				success = true;
+				message = `Instance '${instanceConfig.name}' removed from Hub. Its data and config files have not been deleted.`;
+			}
+		}
+	}
+	catch (error) {
+
+		console.error('Error removing instance:', error);
+
+		message = 'Server error: ' + error.message;
+	}
+
+	res.json({ success, message });
+}
+
+
 async function routeUpdateConfig(req, res) {
 
 	const body = req.body;
@@ -1164,7 +1348,7 @@ async function routeShowNews(req, res) {
 		articles = news.data;
 	}
 
-	res.render( 'Hub/newsView', { 'isHub': true, 'appData': shareData.appData, 'articles': articles } );
+	res.render( 'Hub/newsView', { 'isHub': true, 'appData': shareData.appData, 'articles': articles, 'hubNavActive': 'news' } );
 }
 
 
@@ -1334,6 +1518,7 @@ module.exports = {
 	routeUpdateInstances,
 	routeUpdateConfig,
 	routeStartWorker,
+	routeRemoveInstance,
 	routeShowNews,
 	processConfig,
 	validateConfig,
@@ -1341,6 +1526,8 @@ module.exports = {
 	setProxyPorts,
 	logMemoryUsage,
 	getActiveDeals,
+	getActiveBots,
+	performDealAction,
 
 	init: function(obj) {
 

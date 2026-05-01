@@ -137,6 +137,94 @@ async function processWorkerTaskMessage(SymBot, message) {
 		await SymBot.System.pause(isPause, pauseMessage);
 	}
 
+	// Get worker instance bots
+	if (message.type === HUB_TO_WORKER.BOTS_ACTIVE) {
+
+		const botsRaw = await SymBot.DCABot.getBots({});
+		const bots = [];
+
+		if (botsRaw && botsRaw.length > 0) {
+
+			for (let i = 0; i < botsRaw.length; i++) {
+
+				let bot = JSON.parse(JSON.stringify(botsRaw[i]));
+
+				bot = await SymBot.DCABot.removeDbKeys(bot);
+
+				const config = JSON.parse(JSON.stringify(bot.config || {}));
+				const maxFundsObj = await SymBot.DCABot.calculateMaxFunds(config);
+
+				delete bot.date;
+				delete bot.config;
+
+				const botData = Object.assign({}, bot, config, maxFundsObj);
+
+				bots.push(botData);
+			}
+		}
+
+		parentPort.postMessage({
+
+			type: WORKER_TO_HUB.BOTS_ACTIVE_RECEIVED,
+			id: message.id,
+			data: {
+					'name': message.name,
+					'bots': bots
+				  }
+		});
+	}
+
+	// Deal action received — cancel, stop, pause, close, update, add_funds, bot_enable, bot_disable
+	if (message.type === HUB_TO_WORKER.DEAL_ACTION) {
+
+		const { requestId, action, dealId, botId, data } = message;
+
+		let result = { 'success': false, 'data': 'Unknown action' };
+
+		try {
+
+			if (action === 'cancel') {
+
+				result = await SymBot.DCABot.cancelDeal(dealId);
+			}
+			else if (action === 'stop') {
+
+				result = await SymBot.DCABot.stopDeal(dealId);
+			}
+			else if (action === 'panic_sell') {
+
+				result = await SymBot.DCABot.panicSellDeal(dealId);
+			}
+			else if (action === 'pause') {
+
+				result = await SymBot.DCABot.pauseDeal(botId, dealId, data.pause, data.pauseBuy, data.pauseSell);
+			}
+			else if (action === 'update_deal') {
+
+				result = await SymBot.DCABotManager.apiUpdateDeal(null, null, false, dealId, data);
+			}
+			else if (action === 'bot_disable') {
+
+				result = await SymBot.DCABotManager.apiEnableDisableBot(null, null, false, botId, false);
+			}
+			else if (action === 'bot_enable') {
+
+				result = await SymBot.DCABotManager.apiEnableDisableBot(null, null, false, botId, true);
+			}
+		}
+		catch (err) {
+
+			result = { 'success': false, 'data': err?.message || String(err) };
+		}
+
+		parentPort.postMessage({
+
+			type: WORKER_TO_HUB.DEAL_ACTION_RECEIVED,
+			requestId,
+			data: result
+		});
+	}
+
 	// Shutdown received for SymBot worker
 	if (message.type === HUB_TO_WORKER.SHUTDOWN) {
 	

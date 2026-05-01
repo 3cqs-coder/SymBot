@@ -7,7 +7,7 @@ const ejs = require('ejs');
 const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
 let shareData;
-let queueStartDeal;
+// Deal starts are serialised by DCABot.requestDealStart via dealStartQueue
 let symbolList = {};
 
 
@@ -663,7 +663,7 @@ async function apiGetActiveDeals(req, res, sendResponse = true) {
 }
 
 
-async function apiUpdateDeal(req, res) {
+async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null, directData = null) {
 
 	let success = true;
 	let isUpdate = false;
@@ -671,13 +671,14 @@ async function apiUpdateDeal(req, res) {
 
 	let content;
 
-	const body = req.body;
-	const dealId = req.params.dealId;
+	// Extract params from req for HTTP path, or from direct params for Worker path
+	const dealId          = directDealId   ?? req?.params?.dealId;
+	const body            = directData     ?? req?.body ?? {};
 
-	let dealLast = body.dealLast;
-	const dcaMaxOrder = body.dcaMaxOrder;
+	let dealLast              = body.dealLast;
+	const dcaMaxOrder         = body.dcaMaxOrder;
 	const dcaTakeProfitPercent = body.dcaTakeProfitPercent;
-	const profitCurrency = body.profitCurrency;
+	const profitCurrency      = body.profitCurrency;
 
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
 
@@ -890,7 +891,14 @@ async function apiUpdateDeal(req, res) {
 
 	shareData.Common.logger('API Update Deal: ' + JSON.stringify(resObj));
 
-	res.send(resObj);
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+	else {
+
+		return resObj;
+	}
 }
 
 
@@ -1259,7 +1267,8 @@ async function apiCreateUpdateBot(req, res) {
 					let pairCount = 0;
 					let notify = true;
 
-					// canStartDeal handles blacklist, pairMax, globalPairLimit
+					// requestDealStart handles all checks (blacklist, pairMax, globalPairLimit)
+					// inside the serial queue — no pre-check needed here
 					for (let i = 0; i < pairs.length; i++) {
 
 						const pair = pairs[i];
@@ -1267,21 +1276,13 @@ async function apiCreateUpdateBot(req, res) {
 						let config = JSON.parse(JSON.stringify(configObj));
 						config['pair'] = pair;
 
-						const { allowed } = await shareData.DCABot.canStartDeal({
-							pair,
-							config,
-							pairCount,
-							dealsActive: []
-						});
+						if (i === 0 && notify) {
 
-						if (allowed) {
-
-							if (pairCount > 0) notify = false;
-
-							pairCount++;
-
-							shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': notify });
+							const msg = config.botName + ' (' + pair.toUpperCase() + ') Start command received.';
+							shareData.Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
 						}
+
+						shareData.DCABot.requestDealStart(config, i + 1, 'bot create');
 					}
 				}
 			}
@@ -1343,19 +1344,9 @@ async function apiCreateUpdateBot(req, res) {
 
 						if (bot && bot.length > 0 && bot[0]['active'] && startCondition == 'asap') {
 
-							const { allowed } = await shareData.DCABot.canStartDeal({
-								pair,
-								config,
-								pairCount,
-								dealsActive
-							});
-
-							if (allowed) {
-
-								pairCount++;
-
-								shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
-							}
+							// requestDealStart handles all checks inside the serial queue
+							shareData.DCABot.requestDealStart(config, i + 1, 'bot update');
+							pairCount++;
 						}
 					}
 				}
@@ -1403,24 +1394,23 @@ async function apiCreateUpdateBot(req, res) {
 }
 
 
-async function apiEnableDisableBot(req, res) {
+async function apiEnableDisableBot(req, res, sendResponse = true, directBotId = null, directActive = null) {
 
 	let msg;
 	let active;
 	let success = true;
 
-	const body = req.body;
+	// Extract params from req for HTTP path, or from direct params for Worker path
+	if (directActive !== null && directActive !== undefined) {
 
-	if (req.path.indexOf('enable') > -1) {
-
-		active = true;
+		active = directActive;
 	}
 	else {
-	
-		active = false;
+
+		active = req?.path?.indexOf('enable') > -1;
 	}
 
-	const botId = req.params.botId;
+	const botId = directBotId ?? req?.params?.botId;
 
 	const bots = await shareData.DCABot.getBots({ 'botId': botId });
 
@@ -1450,7 +1440,12 @@ async function apiEnableDisableBot(req, res) {
 
 			let pairCount = botDealsActive.length;
 
+			const pairMax = Number(bot['config']['pairMax']) || 0;
+
 			for (let i = 0; i < pairs.length; i++) {
+
+				// Early exit — no point enqueueing starts that are guaranteed to be blocked
+				if (pairMax > 0 && pairCount >= pairMax) break;
 
 				const pair = pairs[i];
 				const dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
@@ -1462,21 +1457,11 @@ async function apiEnableDisableBot(req, res) {
 				const startCondition = config['startConditions']?.[0]?.toLowerCase() || 'asap';
 
 				// Only start if first condition is asap
+				// requestDealStart handles all checks inside the serial queue
 				if (startCondition === 'asap') {
 
-					const { allowed } = await shareData.DCABot.canStartDeal({
-						pair,
-						config,
-						pairCount,
-						dealsActive
-					});
-
-					if (allowed) {
-
-						pairCount++;
-
-						shareData.DCABot.startDelay({ 'config': config, 'delay': i + 1, 'notify': false });
-					}
+					shareData.DCABot.requestDealStart(config, i + 1, 'bot enable');
+					pairCount++;
 				}
 			}
 		}
@@ -1520,19 +1505,18 @@ async function apiEnableDisableBot(req, res) {
 
 	shareData.Common.logger('API Enable / Disable Bot: ' + JSON.stringify(resObj));
 
-	res.send(resObj);
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+	else {
+
+		return resObj;
+	}
 }
 
 
 async function apiStartDeal(req, res) {
-
-	// Enqueue the start — queue is serial so concurrent requests are
-	// processed one at a time, preventing limit-check race conditions.
-	queueStartDeal.enqueue(() => apiStartDealProcess(req, res));
-}
-
-
-async function apiStartDealProcess(req, res) {
 
 	let msg;
 	let dealId;
@@ -1594,43 +1578,15 @@ async function apiStartDealProcess(req, res) {
 				msg = 'Pair is not in bot configuration';
 			}
 
-			if (pairFound) {
-
-				const isPairBlackListed = await shareData.Common.pairBlackListed(pair);
-
-				if (isPairBlackListed) {
-
-					success = false;
-					msg = 'Pair is blacklisted';
-				}
-			}
-
-			if (success) {
-
-				const dealsActive    = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
-				const botDealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
-				const pairCount      = botDealsActive.length;
+			if (pairFound && success) {
 
 				let config = bot['config'];
 				config['pair'] = pair;
 				config = await shareData.DCABot.applyConfigData({ 'signal_id': signalId, 'bot_id': botId, 'bot_name': botName, 'config': config });
 
-				const { allowed, reason } = await shareData.DCABot.canStartDeal({
-					pair,
-					config,
-					pairCount,
-					dealsActive
-				});
-
-				if (allowed) {
-
-					startDelayConfig = config;
-				}
-				else {
-
-					success = false;
-					msg = reason;
-				}
+				// All further checks (blacklist, pairMax, globalPairLimit, active deals)
+				// are handled authoritatively inside requestDealStart on the serial queue.
+				startDelayConfig = config;
 			}
 		}
 	}
@@ -2079,13 +2035,75 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
 async function initApp() {
 
-	queueStartDeal = await shareData.Queue.create();
+	// queueStartDeal removed — deal serialisation handled by DCABot.dealStartQueue
+}
+
+
+
+
+async function apiUpdateBotsExchange(req, res) {
+
+	const body     = req.body;
+	const exchange = (body.exchange || '').trim().toLowerCase();
+
+	let updated = 0;
+	let skipped = 0;
+	let success = exchange !== '';
+
+	if (success) {
+
+		try {
+
+			const bots = await shareData.DCABot.getBots({});
+
+			if (bots && bots.length > 0) {
+
+				for (const bot of bots) {
+
+					const botId = bot.botId;
+
+					// Check for active deals — skip bots that have live trading
+					const activeDeals = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
+
+					if (activeDeals && activeDeals.length > 0) {
+
+						skipped++;
+						continue;
+					}
+
+					// No active deals — safe to update exchange
+					const result = await shareData.DCABot.updateBot(botId, { 'config.exchange': exchange });
+
+					if (result.success) {
+
+						updated++;
+					}
+					else {
+
+						skipped++;
+					}
+				}
+			}
+		}
+		catch (err) {
+
+			success = false;
+			shareData.Common.logger('apiUpdateBotsExchange error: ' + err.message);
+		}
+	}
+
+	const resObj = { 'success': success, 'updated': updated, 'skipped': skipped };
+
+	shareData.Common.logger('API Update Bots Exchange: ' + JSON.stringify(resObj));
+
+	res.send(resObj);
 }
 
 
 module.exports = {
 
 	apiStartDeal,
+	apiUpdateBotsExchange,
 	apiGetMarkets,
 	apiGetBots,
 	apiGetActiveDeals,

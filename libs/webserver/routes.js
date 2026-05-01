@@ -523,6 +523,21 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.post('/api/bots/update-exchange', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiUpdateBotsExchange(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.post([ '/api/bots/create', '/api/bots/update' ], (req, res) => {
 
 		if (req.session.loggedIn || validApiKey(req)) {

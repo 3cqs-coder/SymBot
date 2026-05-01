@@ -36,12 +36,17 @@ async function initApp() {
 		'name': sessionCookieName,
 		'resave': false,
 		'saveUninitialized': false,
+		'rolling': true,
 		'store': new FileStore({
 			'path': shareData.appData.path_root + '/sessions',
+			'ttl': sessionExpireMins * 60,
+			'reapInterval': sessionExpireMins * 60,
+			'reapAsync': true,
 			'logFn': function() {}
 		}),
 		'cookie': {
-			'expires': (sessionExpireMins * 60) * 1000
+			'maxAge': (sessionExpireMins * 60) * 1000,
+			'sameSite': 'lax'
 		}
 	});
 

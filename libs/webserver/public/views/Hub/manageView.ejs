@@ -11,7 +11,10 @@
 										},
 								'restart': {
 											'tooltip': 'Restart Instance'
-											}
+										},
+								'remove': {
+											'tooltip': 'Remove from Hub'
+										}
 							};
 
 		const exchanges = <%- JSON.stringify(exchanges) %>;
@@ -585,7 +588,8 @@
 					stickyHeaders_attachTo: '',
 					columnSelector_mediaqueryHidden: true,
 					columnSelector_mediaqueryName: 'Show Default',
-					columnSelector_container: $('#botDealSelector')
+					columnSelector_container: $('#botDealSelector'),
+					columnSelector_saveState: true
 				},
 				durationLength: 4,
 				durationLabels: '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
@@ -926,6 +930,116 @@
 				}
 			});
 
+			// Toggle Add Instance form
+			$('#toggle-add-form').on('click', function() {
+
+				$('#add-instance-form-wrapper').slideToggle(250);
+				const isVisible = $('#add-instance-form-wrapper').is(':visible');
+				$(this).text(isVisible ? '− Add Instance' : '+ Add Instance');
+			});
+
+			$('#cancel-add-btn').on('click', function() {
+
+				$('#add-instance-form-wrapper').slideUp(250);
+				$('#toggle-add-form').text('+ Add Instance');
+			});
+
+			// Collapse form on successful add (already reloads page, but set text on close)
+			function removeInstance(instanceId) {
+
+				$('#spinner-overlay').fadeIn(100);
+
+				$.ajax({
+					url: './remove_instance',
+					method: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify({ id: instanceId }),
+					success: function(response) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						if (response.success) {
+
+							alertBox(response.message, function() { window.location.reload(true); });
+						}
+						else {
+
+							alertBox('Failed: ' + response.message);
+						}
+					},
+					error: function(xhr) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox('Error: ' + xhr.responseText);
+					}
+				});
+			}
+
+			function removeInstanceConfirm(instanceId, instanceName) {
+
+				$.confirm({
+					title: false,
+					boxWidth: '50%',
+					useBootstrap: false,
+					content: '<div style="font-size: 1.2rem; text-align: left;">' +
+						'<b style="color: #d80f08;">Remove ' + instanceName + ' from Hub?</b><br><br>' +
+						'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+						'The instance will be shut down and removed from Hub. Its config files and database will <b>not</b> be deleted.' +
+						'</div><br><br>' +
+						'Type <b>' + instanceName + '</b> to confirm: ' +
+						'<br><input type="text" id="removeConfirmName" class="form-field" style="width: 100%; margin-top: 6px; box-sizing: border-box;" required />' +
+						'</div>',
+					buttons: {
+						remove: {
+							btnClass: 'btn-default',
+							text: '<div style="color: #d80f08;">Remove from Hub</div>',
+							action: function() {
+
+								const typed = this.$content.find('#removeConfirmName').val().trim();
+
+								if (typed !== instanceName) {
+
+									alertBox('Instance name does not match.');
+									return false;
+								}
+
+								removeInstance(instanceId);
+							}
+						},
+						cancel: {
+							btnClass: 'btn-default',
+							text: '<div style="color: #000000;">Cancel</div>',
+							action: function() {}
+						}
+					},
+					onContentReady: function() {
+
+						let jc = this;
+
+						this.$content.find('form').on('submit', function(e) {
+
+							e.preventDefault();
+							jc.$$remove.trigger('click');
+						});
+					}
+				});
+			}
+
+			$(document).on('click', '#removeButton', function() {
+
+				const instanceId   = $(this).closest('tr').data('instanceid');
+				const instanceName = $(this).closest('tr').find('td[data-field="name"]').text().trim();
+
+				if (!instanceId || !instanceName) {
+
+					alertBox('Instance ID or name not found.');
+					return;
+				}
+
+				removeInstanceConfirm(instanceId, instanceName);
+			});
+
 			// Update existing instances
 			$('#update-button').on('click', function () {
 
@@ -970,7 +1084,7 @@
 				</div>
 			</div>
 		
-			<div id="contentBox" style="width: 90%; margin: 20px auto;">
+			<div id="contentBox">
 				<!-- Header -->
 				<div class="contentHeaderBox" style="position: relative;">
 					<b id="headerText" class="contentHeader">Hub Instance Manager</b>
@@ -979,10 +1093,10 @@
 					</span>
 				</div>
 				<!-- Add New Instance Form -->
-				<div class="hub-add-instance-form" style="text-align: left; width: 100%; max-width: 600px; margin: 20px 0;">
-					<center>
-						<h3>Add New Instance Configuration</h3>
-					</center>
+				<div style="margin: 12px 0 0 0;">
+					<button id="toggle-add-form" type="button" class="hub-primary-btn" style="width: auto; padding: 5px 14px; font-size: 1.1rem;">+ Add Instance</button>
+				</div>
+				<div class="hub-add-instance-form" id="add-instance-form-wrapper" style="display: none; text-align: left; width: 100%; max-width: 600px; margin: 16px 0 0 0;">
 					<form class="hub-form" action="" method="POST">
 						<div class="hub-form-group">
 							<label for="instanceName">Instance Name:
@@ -1034,9 +1148,10 @@
 						</div>
 						<br>
 						<br>
-						<center>
-							<button id="add-button" type="button" class="hub-primary-btn" style="width: auto; padding: 5px 10px;">Add Instance</button>
-						</center>
+						<div style="margin-top: 10px;">
+							<button id="add-button" type="button" class="hub-primary-btn" style="width: auto; padding: 5px 14px;">Add Instance</button>
+							<button id="cancel-add-btn" type="button" class="hub-stop-btn" style="width: auto; padding: 5px 14px; margin-left: 8px; font-size: 1.0rem;">Cancel</button>
+						</div>
 					</form>
 				</div>
 
@@ -1049,7 +1164,9 @@
 				<div class="hub-middle-container">
 					<h3 class="hub-middle-header">Existing Instances</h3>
 					<div class="hub-show-memorybutton-wrapper">
-						<span id="hub-showMemoryButton">Show Memory Usage</span>
+						<button id="hub-showMemoryButton" type="button" class="hub-memory-btn">
+							<span class="icon icon-memory" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-right:4px;"></span>Memory
+						</button>
 					</div>
 				</div>
 				
@@ -1059,17 +1176,18 @@
 							<tr>
 								<th data-sorter="false" class="columnSelector-disable"></th>
 								<th>Instance</th>
-								<th>Server ID</th>
+								<th>Exchange</th>
 								<th>Mongo DB URL</th>
-								<th>Web Server Port</th>
-								<th>App Config</th>
+								<th>Port</th>
 								<th>Bot Config</th>
-								<th>Server Config</th>
-								<th>Server ID Override</th>
-								<th>Mongo DB URL Override</th>
-								<th>Web Server Port Override</th>
-								<th>Telegram Override</th>
-								<th>3CQS Signals Override</th>
+								<th class="columnSelector-false">Server ID</th>
+								<th class="columnSelector-false">App Config</th>
+								<th class="columnSelector-false">Server Config</th>
+								<th class="columnSelector-false">Server ID Override</th>
+								<th>DB URL Override</th>
+								<th class="columnSelector-false">Port Override</th>
+								<th>Telegram</th>
+								<th>3CQS</th>
 								<th data-sorter="false" class="columnSelector-disable"></th>
 							</tr>
 						</thead>
@@ -1083,8 +1201,8 @@
 										<td class="editable" data-field="name">
 											<%= config.name %>
 										</td>
-										<td class="editable" data-field="server_id">
-											<%= config.server_id %>
+										<td>
+											<%= (config.exchange || '').toUpperCase() %>
 										</td>
 										<td class="editable" data-field="mongo_db_url">
 											<%= config.mongo_db_url %>
@@ -1092,11 +1210,14 @@
 										<td class="editable" data-field="web_server_port">
 											<%= config.web_server_port %>
 										</td>
-										<td class="editable" data-field="app_config">
-											<%= config.app_config %>
-										</td>
 										<td class="editable" data-field="bot_config">
 											<%= config.bot_config %>
+										</td>
+										<td class="editable" data-field="server_id">
+											<%= config.server_id %>
+										</td>
+										<td class="editable" data-field="app_config">
+											<%= config.app_config %>
 										</td>
 										<td class="editable" data-field="server_config">
 											<%= config.server_config %>
@@ -1132,14 +1253,16 @@
 											<span id="restartButton" style="display: inline-block; margin-right: 5px;">
 												<button class="hub-stop-btn" id="restartInstance" data-instanceid="<%= config.id %>" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-restart" style="width:13px;height:13px;"></span></button>
 											</span>
-											
 											<span style="display: inline-block; margin-right: 5px;">
-												Start Boot<br>
-												<input type="checkbox" id="start_boot" data-field="start_boot" value="" <%= config.start_boot ? 'checked' : '' %>>
+												<button class="hub-remove-btn" id="removeButton" title="Remove from Hub" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-cancel" style="width:13px;height:13px;pointer-events:none;"></span></button>
 											</span>
 											
-											<span style="display: inline-block; margin-right: 5px;">
-												Enabled<br>
+											<span class="hub-toggle-cell">
+												<span class="hub-toggle-label">Boot</span>
+												<input type="checkbox" id="start_boot" data-field="start_boot" value="" <%= config.start_boot ? 'checked' : '' %>>
+											</span>
+											<span class="hub-toggle-cell" style="margin-right: 0;">
+												<span class="hub-toggle-label">Active</span>
 												<input type="checkbox" id="enabled" data-field="enabled" value="" <%= config.enabled ? 'checked' : '' %>>
 											</span>
 										</td>
@@ -1147,7 +1270,7 @@
 									<% }) %>
 										<% } else { %>
 											<tr>
-												<td colspan="13">No instances found</td>
+												<td colspan="14">No instances found</td>
 											</tr>
 											<% } %>
 						</tbody>
