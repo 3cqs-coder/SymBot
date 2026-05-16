@@ -817,6 +817,13 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 					}
 					else {
 
+						// Reserve the pair slot in startDealTracker before stopping the deal.
+						// This prevents the fast pre-enqueue pairMax check in requestDealStart
+						// from allowing a competing signal or ASAP start to claim the slot
+						// during the gap between stopDeal and resumeDeal.
+						const editReserveId = shareData.Common.uuidv4();
+						await shareData.DCABot.createStartDealTracker(editReserveId, botId);
+
 						let stopData = await shareData.DCABot.stopDeal(dealId);
 
 						// Verify deal is stopped
@@ -860,6 +867,9 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 							success = false;
 							content = stopData['data'];
 						}
+
+						// Release the reservation once resumeDeal has completed (or failed)
+						await shareData.DCABot.deleteStartDealTracker(editReserveId);
 					}
 				}
 				else {
@@ -902,7 +912,7 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 }
 
 
-async function apiPanicSellDeal(req, res) {
+async function apiPanicSellDeal(req, res, sendResponse = true) {
 
 	let success = true;
 
@@ -944,11 +954,16 @@ async function apiPanicSellDeal(req, res) {
 
 	shareData.Common.logger('API Panic Sell Deal: ' + JSON.stringify(resObj));
 
-	res.send(resObj);
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+
+	return resObj;
 }
 
 
-async function apiPauseDeal(req, res) {
+async function apiPauseDeal(req, res, sendResponse = true) {
 
 	let success = true;
 
@@ -984,7 +999,8 @@ async function apiPauseDeal(req, res) {
 				pauseSell = false;
 			}
 
-			const pauseData = await shareData.DCABot.pauseDeal(botId, dealId, pause, pauseBuy, pauseSell);
+			// Clear pauseReason on manual pause/resume — user is taking control
+			const pauseData = await shareData.DCABot.pauseDeal(botId, dealId, pause, pauseBuy, pauseSell, '');
 
 			if (!pauseData['success']) {
 
@@ -1003,11 +1019,16 @@ async function apiPauseDeal(req, res) {
 
 	shareData.Common.logger('API Pause Deal: ' + JSON.stringify(resObj));
 
-	res.send(resObj);
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+
+	return resObj;
 }
 
 
-async function apiCancelDeal(req, res) {
+async function apiCancelDeal(req, res, sendResponse = true) {
 
 	let success = true;
 
@@ -1049,11 +1070,16 @@ async function apiCancelDeal(req, res) {
 
 	shareData.Common.logger('API Cancel Deal: ' + JSON.stringify(resObj));
 
-	res.send(resObj);
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+
+	return resObj;
 }
 
 
-async function apiAddFundsDeal(req, res) {
+async function apiAddFundsDeal(req, res, sendResponse = true) {
 
 	let success = true;
 	let isValid = true;
@@ -1130,7 +1156,12 @@ async function apiAddFundsDeal(req, res) {
 
 	shareData.Common.logger('API Add Funds: ' + JSON.stringify(resObj));
 
-	res.send(resObj);
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+
+	return resObj;
 }
 
 
@@ -1516,7 +1547,61 @@ async function apiEnableDisableBot(req, res, sendResponse = true, directBotId = 
 }
 
 
-async function apiStartDeal(req, res) {
+async function apiDeleteBot(req, res) {
+
+	let success = false;
+	let message = '';
+
+	try {
+
+		const botId = req?.params?.botId;
+
+		if (!botId) {
+
+			message = 'Bot ID is required.';
+		}
+		else {
+
+			// Check for active deals
+			const activeDeals = await shareData.DCABot.getDeals({ 'botId': botId, 'status': 0 });
+
+			if (activeDeals && activeDeals.length > 0) {
+
+				message = `Cannot delete bot: ${activeDeals.length} active deal(s) exist. Close or cancel all deals before deleting.`;
+			}
+			else {
+
+				// Delete all deal history for this bot
+				const dealsDeleted = await shareData.DCABot.deleteDeals({ 'botId': botId });
+
+				// Delete the bot
+				const botDeleted = await shareData.DCABot.deleteBot({ 'botId': botId });
+
+				if (botDeleted) {
+
+					success = true;
+					message = 'Bot and all associated deal history deleted successfully.';
+
+					shareData.Common.logger(`Bot deleted: ${botId} — ${dealsDeleted} deal history records removed.`);
+				}
+				else {
+
+					message = 'Bot not found.';
+				}
+			}
+		}
+	}
+	catch (error) {
+
+		message = 'Error deleting bot: ' + error.message;
+		shareData.Common.logger(message);
+	}
+
+	res.json({ success, message });
+}
+
+
+async function apiStartDeal(req, res, sendResponse = true) {
 
 	let msg;
 	let dealId;
@@ -1638,7 +1723,12 @@ async function apiStartDeal(req, res) {
 
 	shareData.Common.logger('API Start Deal: ' + JSON.stringify(resObj));
 
-	res.send(resObj);
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+
+	return resObj;
 }
 
 
@@ -1893,6 +1983,9 @@ async function getDashboardData({ duration, timeZoneOffset }) {
     let bot_deal_duration_map = {};
     let bot_funds_in_use_map = {};
     let max_funds_deals_map = {};
+    let win_rate_map = {};
+    let pair_profit_map = {};
+    let so_utilisation_map = {};
     let total_profit = 0;
     let total_in_deals = 0;
     let total_pl = 0;
@@ -1944,6 +2037,19 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         const durationMinutes = shareData.Common.dealDurationMinutes(deal.date_start, deal.date_end);
         if (!bot_deal_duration_map[botKey]) bot_deal_duration_map[botKey] = [];
         bot_deal_duration_map[botKey].push(durationMinutes);
+
+        // Win rate
+        if (!win_rate_map[botKey]) win_rate_map[botKey] = { wins: 0, total: 0 };
+        win_rate_map[botKey].total++;
+        if ((deal.profit || 0) > 0) win_rate_map[botKey].wins++;
+
+        // Profit by pair
+        const pairKey = deal.pair || 'Unknown';
+        pair_profit_map[pairKey] = (pair_profit_map[pairKey] || 0) + (deal.profit || 0);
+
+        // Safety order utilisation
+        if (!so_utilisation_map[botKey]) so_utilisation_map[botKey] = [];
+        so_utilisation_map[botKey].push(deal.safety_orders || 0);
     });
 
     // Average deal durations
@@ -1952,9 +2058,30 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         bot_deal_duration_map[key] = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
     }
 
+    // Average SO utilisation
+    for (const key in so_utilisation_map) {
+        const sos = so_utilisation_map[key];
+        so_utilisation_map[key] = Number((sos.reduce((a, b) => a + b, 0) / sos.length).toFixed(1));
+    }
+
+    // Win rate as percentage
+    for (const key in win_rate_map) {
+        const { wins, total } = win_rate_map[key];
+        win_rate_map[key] = total > 0 ? Math.round((wins / total) * 100) : 0;
+    }
+
     // Sort profit by day
     profit_by_day_map = Object.fromEntries(
         Object.entries(profit_by_day_map).sort((a, b) => new Date(a[0]) - new Date(b[0]))
+    );
+
+    // Equity curve — cumulative profit over time
+    let running = 0;
+    const equity_curve_map = Object.fromEntries(
+        Object.entries(profit_by_day_map).map(([day, profit]) => {
+            running += profit;
+            return [day, Number(running.toFixed(2))];
+        })
     );
 
     // Active P/L and Funds in Use
@@ -2007,6 +2134,22 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
     bot_deal_duration_map = sortDesc(bot_deal_duration_map);
     bot_funds_in_use_map = sortDesc(bot_funds_in_use_map);
+    so_utilisation_map = sortDesc(so_utilisation_map);
+    win_rate_map = sortDesc(win_rate_map);
+    // Split pair profit into profitable and losing
+    const pair_profit_pos_map = Object.fromEntries(
+        Object.entries(pair_profit_map)
+            .filter(([, v]) => v > 0)
+            .sort((a, b) => b[1] - a[1])
+    );
+
+    const pair_profit_neg_map = Object.fromEntries(
+        Object.entries(pair_profit_map)
+            .filter(([, v]) => v <= 0)
+            .sort((a, b) => a[1] - b[1])
+    );
+
+    pair_profit_map = sortDesc(pair_profit_map);
 
     return {
         kpi: {
@@ -2023,7 +2166,13 @@ async function getDashboardData({ duration, timeZoneOffset }) {
             adjusted_pl_map,
             bot_deal_duration_map,
             bot_funds_in_use_map,
-            max_funds_deals_map
+            max_funds_deals_map,
+            equity_curve_map,
+            win_rate_map,
+            pair_profit_map,
+            pair_profit_pos_map,
+            pair_profit_neg_map,
+            so_utilisation_map
         },
         botIdNameMap,
         currencies,
@@ -2116,6 +2265,7 @@ module.exports = {
 	apiPanicSellDeal,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
+	apiDeleteBot,
 	apiGetBalances,
 	apiAiAnalyzeDeal,
 	apiAiAnalyzeDealPrompt,

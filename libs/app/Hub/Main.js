@@ -11,6 +11,13 @@ let Worker;
 let shutDownFunction;
 let shareData;
 
+const crashRestartMap = new Map();
+const CRASH_RESTART_BASE_DELAY_MS  = 5000;
+const CRASH_RESTART_MAX_DELAY_MS   = 300000; // 5 minutes
+const CRASH_RESTART_MAX_ATTEMPTS   = 10;
+
+let isShuttingDown = false;
+
 
 
 function processWorkerMessage(workerId, instanceName) {
@@ -83,11 +90,41 @@ function processWorkerMessage(workerId, instanceName) {
 }
 
 
+function scheduleRestart(instance, attempt) {
+
+	const instanceId   = instance.id;
+	const instanceName = instance.name;
+
+	if (attempt > CRASH_RESTART_MAX_ATTEMPTS) {
+
+		shareData.Hub.logger('error', colors.red.bold(`Instance ${instanceName} has exceeded maximum restart attempts (${CRASH_RESTART_MAX_ATTEMPTS}). Giving up.`));
+
+		crashRestartMap.delete(instanceId);
+
+		return;
+	}
+
+	const delay = Math.min(CRASH_RESTART_BASE_DELAY_MS * Math.pow(2, attempt - 1), CRASH_RESTART_MAX_DELAY_MS);
+
+	shareData.Hub.logger('info', colors.yellow.bold(`Scheduling restart for ${instanceName} (attempt ${attempt}/${CRASH_RESTART_MAX_ATTEMPTS}) in ${Math.round(delay / 1000)}s...`));
+
+	crashRestartMap.set(instanceId, { attempt, timer: setTimeout(() => {
+
+		shareData.Hub.logger('info', colors.yellow.bold(`Restarting instance ${instanceName} (attempt ${attempt})...`));
+
+		crashRestartMap.delete(instanceId);
+
+		startWorker({ ...instance, _crashAttempt: attempt });
+
+	}, delay) });
+}
+
+
 function processWorkerExit(workerId) {
 
 	return (code) => {
 
-		shareData.Hub.logger('info', colors.red.bold(`Instance exited with code ${code}, Worker ID: ${workerId}`));
+		shareData.Hub.logger('info', `Instance exited with code ${code}, Worker ID: ${workerId}`);
 
 		const workerInfo = shareData.workerMap.get(workerId);
 
@@ -96,19 +133,47 @@ function processWorkerExit(workerId) {
 			const { instance } = workerInfo;
 
 			const instanceName = instance.name;
+			const instanceId   = instance.id;
 
 			shareData.workerMap.delete(workerId);
 
 			if (code !== 0) {
 
-				shareData.Hub.logger('error', colors.red.bold(`Instance for ${instanceName} exited with code ${code}.`));
+				// Skip restart if Hub is shutting down intentionally
+				if (isShuttingDown) {
 
-				// Optionally restart the instance
-				// startWorker(instance);
+					shareData.Hub.logger('info', `Instance ${instanceName} exited during shutdown — skipping auto-restart.`);
+					return;
+				}
+
+				shareData.Hub.logger('error', colors.red.bold(`Instance ${instanceName} crashed with exit code ${code}.`));
+
+				// Only restart if instance is still enabled
+				const enabled = instance['enabled'];
+
+				if (!enabled) {
+
+					shareData.Hub.logger('info', `Instance ${instanceName} is disabled — skipping auto-restart.`);
+					return;
+				}
+
+				const existing = crashRestartMap.get(instanceId);
+				const attempt  = existing ? existing.attempt + 1 : 1;
+
+				scheduleRestart(instance, attempt);
 			}
 			else {
 
-				shareData.Hub.logger('info', colors.green.bold(`Instance for ${instanceName} completed successfully.`));
+				// Clean exit — clear any pending restart
+				const existing = crashRestartMap.get(instanceId);
+
+				if (existing) {
+
+					clearTimeout(existing.timer);
+					crashRestartMap.delete(instanceId);
+				}
+
+				shareData.Hub.logger('info', colors.green.bold(`Instance ${instanceName} shut down cleanly.`));
 			}
 		}
 		else {
@@ -148,6 +213,22 @@ function startWorker(instanceData) {
 			instance: instanceData,
 			threadId: worker.threadId
 		});
+
+		// Clear any pending crash restart now that the worker is online
+		const instanceId = instanceData.id;
+		const existing   = crashRestartMap.get(instanceId);
+
+		if (existing) {
+
+			clearTimeout(existing.timer);
+			crashRestartMap.delete(instanceId);
+		}
+
+		// Log if this was a crash recovery restart
+		if (instanceData._crashAttempt) {
+
+			shareData.Hub.logger('info', colors.green.bold(`Instance ${instanceName} recovered successfully after crash (attempt ${instanceData._crashAttempt}).`));
+		}
 	});
 }
 
@@ -200,6 +281,18 @@ module.exports = {
 	get shutDown() {
         return shutDownFunction;
     },
+
+	setShuttingDown: function() {
+
+		isShuttingDown = true;
+
+		// Cancel all pending crash restart timers
+		for (const [id, { timer }] of crashRestartMap.entries()) {
+
+			clearTimeout(timer);
+			crashRestartMap.delete(id);
+		}
+	},
 
 	init: function(WorkerInit, shareDataInit, shutDown) {
 

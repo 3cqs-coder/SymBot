@@ -17,6 +17,7 @@ const app = express();
 const router = express.Router();
 
 const httpProxyMap = new Map();
+const wsProxyMap = new Map();
 
 let socket;
 let shareData;
@@ -130,13 +131,35 @@ async function getHttpProxy(appId) {
 
 async function getWsProxy(appId) {
 
+	if (wsProxyMap.has(appId)) {
+
+		return wsProxyMap.get(appId);
+	}
+
 	const port = await getAppPort(appId);
 
 	if (!port) return null;
 
 	const targetUrl = `http://127.0.0.1:${port}`;
+	const proxy = createBaseProxy(appId, targetUrl, true); // ws: true
 
-	return createBaseProxy(appId, targetUrl, true); // ws: true
+	wsProxyMap.set(appId, proxy);
+
+	return proxy;
+}
+
+
+function clearProxyCache(appId) {
+
+	if (httpProxyMap.has(appId)) {
+
+		httpProxyMap.delete(appId);
+	}
+
+	if (wsProxyMap.has(appId)) {
+
+		wsProxyMap.delete(appId);
+	}
 }
 
 
@@ -152,10 +175,16 @@ function createBaseProxy(appId, targetUrl, ws) {
 		hostRewrite: true,
 		cookieDomainRewrite: true,
 		pathRewrite: (path) => path.replace(`/instance/${appId}`, ''),
-		timeout: 120000,
-		proxyTimeout: 120000,
 		on: {
 			proxyReq: (proxyReq, req) => {
+
+				// Prevent MaxListenersExceededWarning on reused keep-alive sockets.
+				// httpxy (http-proxy-middleware v4) adds listeners per request with
+				// no cleanup — setting to 0 disables the warning without masking leaks.
+				if (req.socket) {
+
+					req.socket.setMaxListeners(0);
+				}
 
 				if (req.headers.cookie) {
 
@@ -371,6 +400,7 @@ module.exports = {
 	app,
 	start,
 	getSocket,
+	clearProxyCache,
 
 	init: function(obj) {
 

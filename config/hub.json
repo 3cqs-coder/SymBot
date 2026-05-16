@@ -1,5 +1,7 @@
 {
     "port": 3100,
+    "max_log_days": 10,
+    "memory_poll_interval_ms": 30000,
     "password": "",
     "instances": []
 }

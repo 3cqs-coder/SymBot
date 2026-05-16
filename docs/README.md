@@ -133,7 +133,7 @@ With SymBot Hub's simple web interface, you can easily add, update, restart, or 
 
 In addition to instance management, SymBot Hub provides two unified views that aggregate data across all running instances:
 
-- **Active Deals** — view all active deals across every instance in a single table. Filter by instance or bot, adjust the refresh interval, and take actions directly from the Hub including closing, pausing, resuming, cancelling deals, and stopping bots. Clicking on a pair opens a TradingView chart for that symbol.
+- **Active Deals** — view all active deals across every instance in a single table. Filter by instance or bot, adjust the refresh interval, and take actions directly from the Hub including closing, pausing, resuming, cancelling deals, and stopping bots. Clicking on a pair opens a TradingView chart for that symbol. Deals paused automatically by SymBot due to order verification failures are highlighted distinctly from manually paused deals.
 
 - **Bots** — view all bots across every instance in a single table, including the exchange each bot is assigned to. Toggle bots on or off directly from the Hub without navigating to each instance individually.
 
@@ -171,6 +171,24 @@ Lastly, be aware that exchanges often impose connection limits, and if you’re 
 ## Upgrading
 
 SymBot offers a convenient, one-click upgrade feature within its web interface. This feature automatically checks for new updates, downloads necessary files, installs them, and updates any required packages. Although the automated upgrade process eliminates the need to follow the manual steps below, it's recommended to review them to ensure that any process manager in use restarts SymBot correctly and that all trading activities resume smoothly.
+
+Before applying an update, SymBot automatically creates a rollback snapshot of the current code files in the `rollbacks/` directory. Up to three snapshots are retained.
+
+If an update causes issues and SymBot is still running, you can restore a previous version using the **Rollback System** option in the System menu — no manual file management required.
+
+If SymBot will not start at all after an update, use the rollback command directly from your terminal — the same way you would run a reset:
+
+```
+node symbot.js rollback
+```
+
+This lists available snapshots with their version and date, prompts you to select one, restores the code files, runs `npm install`, and exits. Start SymBot normally afterwards with `npm start`. You can also pass a snapshot name directly to skip the prompt:
+
+```
+node symbot.js rollback <snapshot-name>
+```
+
+Note that rollback restores code files only; the database is not affected. If an update introduced database schema changes, rolling back the code may require reviewing the logs after restart to confirm compatibility.
 
 When upgrading to a new version of SymBot it is recommended to follow the basic steps below.
 
@@ -686,6 +704,26 @@ POST /api/bots/{botId}/enable
 
 ```
 POST /api/bots/{botId}/disable
+```
+
+### Delete bot
+
+Permanently deletes a bot and all of its deal history. The bot must have no active deals before it can be deleted. This action cannot be undone.
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| botId    | string   | YES           |                      |                 |
+
+```
+DELETE /api/bots/{botId}
+```
+
+#### Delete bot
+```
+curl -i -X DELETE \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/bots/{botId}
 ```
 
 ### Update deal
@@ -1339,7 +1377,7 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 - Yes. If you set up SymBot on a home network and your mobile device is connected to the same wireless network, you should be able to open a web browser on your device and access SymBot just fine. Keep in mind that you need to use the IP address of the server that SymBot is running on, such as http://192.168.1.10:3000. However, being able to access it from other locations depends if your system is accessible to the public internet. This generally requires either opening ports on your router and system, or setting up a [Reverse Proxy](#reverse-proxy-setup).
 
 #### Where should I host SymBot and how much does it cost?
-- While there are a lot of hosting providers to choose from, using one you trust is generally the best way to ensure SymBot runs smoothly at all times. Many providers offer free tier services or very low cost options. Although this is not a recommendation to use any of these providers, this [Cloud Free Tier Comparison](https://github.com/cloudcommunity/Cloud-Free-Tier-Comparison) list is a good place to start.
+- While there are a lot of hosting providers to choose from, using one you trust is generally the best way to ensure SymBot runs smoothly at all times. Many providers offer free tier services or very low cost options. A quick search for "VPS hosting" or "cloud server" will surface a wide range of providers at various price points. For personal use, a low-cost VPS with 1-2GB RAM and a single CPU core is generally sufficient to run SymBot with multiple bots.
 
 #### How many DCA bots can I run at the same time?
 - You can technically run an unlimited number of bots, however any limitations mostly come from how often your exchange allows APIs to be accessed, and the amount of resources your system (server) has such as CPU, memory, etc. The more bots you run generally requires additional API calls to your exchange and more system processing capability to manage all of your deals efficiently.
@@ -1402,6 +1440,12 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 
 #### Why did my bot get disabled or deal get paused?
 - A bot can be disabled or a deal can be paused several ways including manually through the web interface, programmatically using APIs or Webhooks, or even the usage of signals. SymBot also has some safety features built-in that may disable a bot or pause a deal automatically if an unknown error occurs as a precautionary measure to ensure there isn't something more problematic occurring. Sometimes it may just be the exchange does not allow a specific pair to be traded, so removing it from your bot is recommended. Since many errors are exchange specific, it is best to review the logs if you are unsure why your bot is disabled.
+
+#### Can I delete a bot?
+- Yes. You can permanently delete a bot and all of its deal history from the Manage Bots view using the delete button on any bot row. The bot must have no active deals — close or cancel all deals first. Deletion is irreversible and removes the bot and its complete deal history from the database. The action requires typing the bot name to confirm. Deletion is also available via the API using `DELETE /api/bots/{botId}`.
+
+#### How can I tell if a deal was paused automatically vs manually?
+- Deals paused automatically by SymBot due to an order verification failure are distinguished from manual pauses in the Active Deals view by a distinct row highlight color. When you attempt to resume a system-paused deal, the confirmation dialog will display a warning explaining the cause — either a buy order or sell order verification failure — and advise caution before resuming manually. The underlying issue should be investigated in the logs before resuming. If SymBot is restarted while a deal is mid-verification, the verification loop will resume automatically on startup without any manual intervention required.
 
 #### Why is my system suddenly using more CPU or memory?
 - SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience. See also [Advanced Setup](#advanced-setup) for additional tips.

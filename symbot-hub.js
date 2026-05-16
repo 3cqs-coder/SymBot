@@ -248,6 +248,9 @@ async function shutDown() {
 		Hub.logger('info', 'Received kill signal. Shutting down gracefully.');
 		Hub.logger('info', 'Cleaning up instances...');
 
+		// Signal Main to suppress crash-restart logic during intentional shutdown
+		HubMain.setShuttingDown();
+
 		const terminationPromises = [];
 
 		// Set timer to force shutdown if cleanup takes too long

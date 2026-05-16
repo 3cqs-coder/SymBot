@@ -831,6 +831,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 	let isDealPause = false;
 	let isDealPauseBuy = false;
 	let isDealPauseSell = false;
+	let isDealPauseReason = '';
 	let isDealVerifying = false;
 	let cancelOnly = false;
 
@@ -1048,6 +1049,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 												'pause': isDealPause,
 												'pause_buy': isDealPauseBuy,
 												'pause_sell': isDealPauseSell,
+												'pause_reason': isDealPauseReason,
 												'error': buyError
 											});
 
@@ -1251,7 +1253,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 										await sendDealMessage(msgType, msgErr);
 
-										const pauseData = await pauseDeal(config.botId, dealId, null, true, null);
+										isDealPauseReason = 'order_verify_buy';
+										const pauseData = await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
 									}
 								}
 								else {
@@ -1278,16 +1281,17 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 							}
 
 							await updateDealTracker({
-														'exchange': exchange,
-														'deal_id': dealId,
-														'price': price,
-														'config': config,
-														'orders': orders,
-														'pause': isDealPause,
-														'pause_buy': isDealPauseBuy,
-														'pause_sell': isDealPauseSell,
-														'error': buyError
-													});
+										'exchange': exchange,
+										'deal_id': dealId,
+										'price': price,
+										'config': config,
+										'orders': orders,
+										'pause': isDealPause,
+										'pause_buy': isDealPauseBuy,
+										'pause_sell': isDealPauseSell,
+										'pause_reason': isDealPauseReason,
+										'error': buyError
+									});
 
 							if (!buySuccess) {
 
@@ -1342,54 +1346,55 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								const handleSuccessfulSell = async () => {
 
 									await updateDealTracker({
-																									'exchange': exchange,
-																									'deal_id': dealId,
-																									'price': price,
-																									'config': config,
-																									'orders': orders,
-																									'pause': isDealPause,
-																									'pause_buy': isDealPauseBuy,
-																									'pause_sell': isDealPauseSell
-																								});
+										'exchange': exchange,
+										'deal_id': dealId,
+										'price': price,
+										'config': config,
+										'orders': orders,
+										'pause': isDealPause,
+										'pause_buy': isDealPauseBuy,
+										'pause_sell': isDealPauseSell,
+										'pause_reason': isDealPauseReason
+									});
 
 									if (shareData.appData.verboseLog) {
 
 										Common.logger(
-																								colors.blue.bold.italic(
-																								'Pair: ' + pair +
-																								'\tQty: ' + currentOrder.qtySum +
-																								'\tLast Price: $' + price +
-																								'\tDCA Price: $' + currentOrder.average +
-																								'\tSell Price: $' + currentOrder.target +
-																								'\tStatus: ' + colors.red('SELL') +
-																								'\tProfit: ' + profit
-																							));
+										colors.blue.bold.italic(
+										'Pair: ' + pair +
+										'\tQty: ' + currentOrder.qtySum +
+										'\tLast Price: $' + price +
+										'\tDCA Price: $' + currentOrder.average +
+										'\tSell Price: $' + currentOrder.target +
+										'\tStatus: ' + colors.red('SELL') +
+										'\tProfit: ' + profit
+										));
 									}
 
 									// orderId is stored as an array for partial fill retry compatibility.
 									// Single-order deals will have a one-element array.
 									// Legacy deals with a string orderId are handled transparently by consumers.
 									const sellData = {
-																									'date': new Date(),
-																									'orderId': sellOrderIds,
-																									'qtySum': currentOrder.qtySum,
-																									'qtySumSell': qtySumSell,
-																									'qtySumSellOrder': qtySumSellOrder,
-																									'price': price,
-																									'average': currentOrder.average,
-																									'target': currentOrder.target,
-																									'profit': profitPercFinal,
-																									'profitBase': profitBase,
-																									'profitQuote': profitQuote,
-																									'feeData': feeData
-																								 };
+										'date': new Date(),
+										'orderId': sellOrderIds,
+										'qtySum': currentOrder.qtySum,
+										'qtySumSell': qtySumSell,
+										'qtySumSellOrder': qtySumSellOrder,
+										'price': price,
+										'average': currentOrder.average,
+										'target': currentOrder.target,
+										'profit': profitPercFinal,
+										'profitBase': profitBase,
+										'profitQuote': profitQuote,
+										'feeData': feeData
+										 };
 
 									await Deals.updateOne({ dealId }, {
-																																	'sellData': sellData,
-																																	'panicSell': isDealPanicSell,
-																																	'canceled': isDealCancel,
-																																	'status': 1
-																																  });
+										'sellData': sellData,
+										'panicSell': isDealPanicSell,
+										'canceled': isDealCancel,
+										'status': 1
+										  });
 
 									finished = true;
 
@@ -1469,7 +1474,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										if (msgErr) {
 
 											await sendDealMessage(msgType, msgErr);
-											await pauseDeal(config.botId, dealId, null, null, true);
+											isDealPauseReason = 'order_verify_sell';
+											await pauseDeal(config.botId, dealId, null, null, true, isDealPauseReason);
 										}
 									}
 									else {
@@ -1624,16 +1630,17 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						else {
 
 							await updateDealTracker({
-														'exchange': exchange,
-														'deal_id': dealId,
-														'price': price,
-														'config': config,
-														'orders': orders,
-														'pause': isDealPause,
-														'pause_buy': isDealPauseBuy,
-														'pause_sell': isDealPauseSell,
-														'error': dcaError
-													});
+										'exchange': exchange,
+										'deal_id': dealId,
+										'price': price,
+										'config': config,
+										'orders': orders,
+										'pause': isDealPause,
+										'pause_buy': isDealPauseBuy,
+										'pause_sell': isDealPauseSell,
+										'pause_reason': isDealPauseReason,
+										'error': dcaError
+									});
 
 							//let nextOrder = currentOrder.price;
 							let nextOrder = unfilledOrders.find(order => Number(order.orderNo) == Number(currentOrder.orderNo) + 1) || null;
@@ -2168,6 +2175,36 @@ const getBots = async (query) => {
 	catch (e) {
 
 		Common.logger(JSON.stringify(e));
+	}
+};
+
+
+const deleteBot = async (query) => {
+
+	try {
+
+		const result = await Bots.deleteOne(query);
+		return result.deletedCount > 0;
+	}
+	catch (e) {
+
+		Common.logger('deleteBot error: ' + JSON.stringify(e));
+		return false;
+	}
+};
+
+
+const deleteDeals = async (query) => {
+
+	try {
+
+		const result = await Deals.deleteMany(query);
+		return result.deletedCount;
+	}
+	catch (e) {
+
+		Common.logger('deleteDeals error: ' + JSON.stringify(e));
+		return 0;
 	}
 };
 
@@ -2836,7 +2873,7 @@ const verifyInvalidOrder = ( count = 0, mins = 2, exchange, pair, botId, dealId,
 
 			if (pauseBeforeCallback) {
 				
-				await pauseDeal(botId, dealId, false);
+				await pauseDeal(botId, dealId, false, null, null, '');
 			}
 
 			if (typeof onSuccessCallback === 'function') {
@@ -2846,7 +2883,7 @@ const verifyInvalidOrder = ( count = 0, mins = 2, exchange, pair, botId, dealId,
 
 			if (!pauseBeforeCallback) {
 
-				await pauseDeal(botId, dealId, false);
+				await pauseDeal(botId, dealId, false, null, null, '');
 			}
 
 			return resolve({
@@ -4788,6 +4825,7 @@ async function getDealInfo(data) {
 	const pause = data['pause'];
 	const pauseBuy = data['pause_buy'];
 	const pauseSell = data['pause_sell'];
+	const pauseReason = data['pause_reason'] || '';
 
 	const config = JSON.parse(JSON.stringify(data['config']));
 	const orders = JSON.parse(JSON.stringify(data['orders']));
@@ -4832,6 +4870,7 @@ async function getDealInfo(data) {
 							'pause': pause,
 							'pause_buy': pauseBuy,
 							'pause_sell': pauseSell,
+							'pause_reason': pauseReason,
 							'error': error,
 							'bot_id': config.botId,
 							'bot_name': config.botName,
@@ -5676,6 +5715,48 @@ async function resumeDeal(dealObj) {
 
 	Common.logger( colors.bgGreen.bold('Resuming Deal ID ' + dealId) );
 
+	// If the deal was mid-verification when SymBot was terminated, restart
+	// verifyInvalidOrder so it continues polling rather than sitting paused forever.
+	const resumePauseReason = dealObj.pauseReason || '';
+
+	if (resumePauseReason === 'order_verify_buy' || resumePauseReason === 'order_verify_sell') {
+
+		const isSell = resumePauseReason === 'order_verify_sell';
+		const retryMins = 2;
+
+		// Find the pending order ID from the most recent unfilled order
+		const orders = dealObj.orders || [];
+		let pendingOrderId = null;
+
+		if (isSell) {
+
+			// Sell: look for a sell order ID stored on the deal
+			pendingOrderId = dealObj.sellData?.orderId?.[0] || null;
+		}
+		else {
+
+			// Buy: find the last unfilled order with an order ID
+			for (let i = orders.length - 1; i >= 0; i--) {
+
+				if (!orders[i].filled && orders[i].orderId) {
+
+					pendingOrderId = orders[i].orderId;
+					break;
+				}
+			}
+		}
+
+		Common.logger( colors.bgYellow.bold(`Deal ID ${dealId} was mid-${isSell ? 'sell' : 'buy'} verification at shutdown. Restarting verification loop.`) );
+
+		const exchange = await connectExchange(dealObj.config || config);
+
+		if (exchange) {
+
+			const verifyCallback = isSell ? null : null; // callbacks not available at startup — verifyInvalidOrder will clear pause on success
+			verifyInvalidOrder(0, retryMins, exchange, pair, botId, dealId, pendingOrderId, verifyCallback, !isSell);
+		}
+	}
+
 	// Resuming an existing deal — bypass requestDealStart/queue intentionally.
 	// The deal already exists in the database (dealResumeId is set) so
 	// canStartDeal checks do not apply. start() handles resume logic directly.
@@ -5685,7 +5766,7 @@ async function resumeDeal(dealObj) {
 }
 
 
-async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell) {
+async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell, pauseReason = null) {
 
 	let status;
 	let success;
@@ -5721,7 +5802,8 @@ async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell) {
 	const dbParams = {
 		'paused': pause,
 		'pausedBuy': pauseBuy,
-		'pausedSell': pauseSell
+		'pausedSell': pauseSell,
+		'pauseReason': pauseReason
 	};
 
 	// Update only if values are defined
@@ -6475,6 +6557,8 @@ module.exports = {
 	cancelDeal,
 	pauseDeal,
 	stopDeal,
+	createStartDealTracker,
+	deleteStartDealTracker,
 	updateDeal,
 	refreshUpdateDeal,
 	addFundsDeal,
@@ -6484,6 +6568,8 @@ module.exports = {
 	removeConfigData,
 	initBot,
 	getBots,
+	deleteBot,
+	deleteDeals,
 	getDeals,
 	getDealsMaxUsedFunds,
 	getDealInfo,

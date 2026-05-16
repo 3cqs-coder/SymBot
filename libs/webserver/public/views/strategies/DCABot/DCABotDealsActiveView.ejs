@@ -469,10 +469,18 @@
 	}
 
 
-	function pauseDeal(pair, dealId, pause, pauseBuy, pauseSell) {
+	function pauseDeal(pair, dealId, pause, pauseBuy, pauseSell, pauseReason) {
 
 		let pairSplit = pair.split('/');
 		let quote = pairSplit[1];
+
+		const isSystemPaused = pauseReason === 'order_verify_buy' || pauseReason === 'order_verify_sell';
+		const systemPauseType = pauseReason === 'order_verify_buy' ? 'buy order' : 'sell order';
+		const systemWarning = isSystemPaused
+			? '<div style="font-size: 1.0rem; padding: 8px; margin-bottom: 10px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+			  '<b>⚠ System paused:</b> This deal was automatically paused due to a ' + systemPauseType + ' verification failure. ' +
+			  'Resuming manually may cause issues if the underlying problem has not resolved.</div>'
+			: '';
 
 		$.confirm({
 			title: false,
@@ -480,6 +488,7 @@
 			useBootstrap: false,
 	 		content: `<div style="font-size: 1.2rem; text-align: left;">Pause / Resume deal ${dealId}?<br><br>
 			<form action="" style="display: inline;">
+			${systemWarning}
 			This will pause or resume any further buying and / or selling for this deal
 			<br><br>
 
@@ -843,6 +852,8 @@
 			const pause = deal['info']['pause'];
 			const pauseBuy = deal['info']['pause_buy'];
 			const pauseSell = deal['info']['pause_sell'];
+			const pauseReason = deal['info']['pause_reason'] || '';
+			const isSystemPaused = pauseReason === 'order_verify_buy' || pauseReason === 'order_verify_sell';
 			const dealError = deal['info']['error'];
 			const lastUpdated = deal['info']['updated'];
 			const botActive = deal['info']['bot_active'];
@@ -897,6 +908,12 @@
 
 				pauseButtonId = 'resume';
 				pauseButtonDeal = resumeButtonDeal;
+
+				// System-paused deals get a distinct orange tint to distinguish from manual pauses
+				if (isSystemPaused) {
+
+					dealBackground = '#7a4500';
+				}
 			}
 
 			if (profitPerc <= 0) {
@@ -1003,7 +1020,7 @@
 			contentArr.push('<td>$' + maxFunds + '</td>')
 			contentArr.push('<td>' + dealCount + '</td>');
 			const pillContent = aiButtonDeal + editButtonDeal + panicButtonDeal + addFundsButtonDeal + pauseButtonDeal + cancelButtonDeal + (stopButtonDeal || '');
-			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
+			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-pausereason="' + pauseReason + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
 			contentArr.push('</tr>');
 		}
 
@@ -1389,7 +1406,7 @@
 			}
 			else if (btnTitle === 'Pause deal' || btnTitle === 'Resume deal') {
 
-				if (dealId) pauseDeal(pair, dealId, $td.data('pause'), $td.data('pausebuy'), $td.data('pausesell'));
+				if (dealId) pauseDeal(pair, dealId, $td.data('pause'), $td.data('pausebuy'), $td.data('pausesell'), $td.data('pausereason'));
 			}
 			else if (btnTitle === 'Cancel deal') {
 

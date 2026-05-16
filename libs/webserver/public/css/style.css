@@ -64,20 +64,22 @@
 	--content-box-background-color: #ffffff;
 	--dialog-background-color: #ffffff;
 	--modify-buttons-color: 0 0 0 rgb(0, 0, 0);
+	--body-bg: linear-gradient(to bottom, #565656 0%, black 100%);
 }
 
 
 [data-theme="dark"] {
 
-	--link-color: #74caf8;
-	--table-content-color: #cccccc;
-	--table-background-color: #353535;
-	--table-background-hover-color: #585858;
-	--table-border: 1px solid #424242;
-	--content-box-color: #cccccc;
-	--content-box-background-color: #252525;
-	--dialog-background-color: #252525;
-	--modify-buttons-color: 0 0 0 rgb(208, 208, 202, 1);
+	--link-color: #5bc4f5;
+	--table-content-color: #b8b8b8;
+	--table-background-color: #222222;
+	--table-background-hover-color: #333333;
+	--table-border: 1px solid #3a3a3a;
+	--content-box-color: #b8b8b8;
+	--content-box-background-color: #222222;
+	--dialog-background-color: #222222;
+	--modify-buttons-color: 0 0 0 rgb(216, 216, 216, 1);
+	--body-bg: linear-gradient(to bottom, #4a4a4a 0%, #0d0d0d 100%);
 }
 
 
@@ -96,7 +98,7 @@ body {
 
 	background-repeat: no-repeat;
 	background-attachment: fixed;
-	background-image: linear-gradient(to bottom, #565656 0%, black 100%);
+	background-image: var(--body-bg);
 }
 
 a {
@@ -876,6 +878,131 @@ form textarea {
 	border-radius: 5px;
 }
 
+[data-theme="dark"] #contentBox {
+
+	border: 1px solid #303030;
+}
+
+[data-theme="dark"] .contentHeader,
+[data-theme="dark"] .contentHeaderBox {
+
+	color: #d0d0d0;
+}
+
+
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
+[data-theme="dark"] .form-field {
+
+	background-color: #2a2a2a;
+	color: #d8d8d8;
+	border-color: #444444;
+}
+
+[data-theme="dark"] select[id^='startCondition'],
+[data-theme="dark"] [id^='botValue'] {
+
+	background-color: #2a2a2a;
+	color: #d8d8d8;
+}
+
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="submit"]):not(.btn)::placeholder,
+[data-theme="dark"] textarea::placeholder {
+
+	color: #888888;
+}
+
+[data-theme="dark"] .btn,
+[data-theme="dark"] input[type="submit"] {
+
+	color: #424141 !important;
+	background: linear-gradient(0deg, #b8b8b8 0%, #f5f0f0 100%) !important;
+	border-color: #bfbfbf;
+}
+
+[data-theme="dark"] .btn:hover,
+[data-theme="dark"] input[type="submit"]:hover {
+
+	color: #3189e0 !important;
+	background: linear-gradient(0deg, #b8b8b8 0%, #f5f0f0 100%) !important;
+}
+
+
+/* Select2 dark mode overrides */
+[data-theme="dark"] .form-select-pair+.select2-container .select2-selection {
+
+	border-color: #444444;
+	background-color: #2a2a2a;
+}
+
+[data-theme="dark"] .form-select-pair+.select2.select2-container .select2-selection__choice {
+
+	color: #c8dde6;
+	background-color: #2a4a5a;
+	border-color: #3a6070;
+}
+
+[data-theme="dark"] .form-select-pair+.select2.select2-container .select2-selection__choice__remove {
+
+	color: #90b8c8;
+}
+
+[data-theme="dark"] .select2-container--default .select2-selection--single,
+[data-theme="dark"] .select2-container--default .select2-selection--multiple {
+
+	background-color: #2a2a2a;
+	border-color: #444444;
+	color: #d8d8d8;
+}
+
+[data-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__rendered {
+
+	color: #d8d8d8;
+}
+
+[data-theme="dark"] .select2-container--default .select2-selection--single .select2-selection__arrow b {
+
+	border-color: #888888 transparent transparent transparent;
+}
+
+[data-theme="dark"] .select2-dropdown {
+
+	background-color: #2a2a2a;
+	border-color: #444444;
+}
+
+[data-theme="dark"] .select2-results__option {
+
+	color: #d8d8d8;
+}
+
+[data-theme="dark"] .select2-container--default .select2-results__option--highlighted[aria-selected] {
+
+	background-color: #3a3a3a;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .select2-container--default .select2-results__option[aria-selected=true] {
+
+	background-color: #333333;
+	color: #d8d8d8;
+}
+
+[data-theme="dark"] .select2-search--dropdown .select2-search__field {
+
+	background-color: #222222;
+	border-color: #444444;
+	color: #d8d8d8;
+}
+
+[data-theme="dark"] .select2-container--default .select2-selection--multiple .select2-selection__choice {
+
+	background-color: #3a3a3a;
+	border-color: #555555;
+	color: #d8d8d8;
+}
+
 
 .aiChatContainer {
 	position: relative;
@@ -1127,6 +1254,15 @@ table#botsDeals th, table#hubDeals th, table#hubBots th {
 	font-size: 1.1rem;
 	text-align: left;
 	background: #3d3d3d;
+}
+
+[data-theme="dark"] table#botsDeals th,
+[data-theme="dark"] table#hubDeals th,
+[data-theme="dark"] table#hubBots th {
+
+	background: #3d3d3d;
+	color: #c8c8c8;
+	border-bottom: 1px solid #4a4a4a;
 }
 
 

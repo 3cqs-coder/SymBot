@@ -4,18 +4,24 @@
 
 <script>
     <% const { active_deals, total_in_deals, available_balance, total_profit, total_pl } = kpi; %>
-    const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map } = <%- JSON.stringify(charts) %>;
+    const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map, equity_curve_map = {}, win_rate_map = {}, pair_profit_map = {}, pair_profit_pos_map = {}, pair_profit_neg_map = {}, so_utilisation_map = {} } = <%- JSON.stringify(charts) %>;
     const balances = <%- JSON.stringify(available_balance) %>;
     const currencies = <%- '[' + currencies.map(currency => `'${currency}'`).join(',') + ']'; %>;
     const botIdNameMap = <%- JSON.stringify(botIdNameMap) %>;
 
+    const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
+    const chartGridColor = isDarkMode ? '#555555' : undefined;
+    const chartTickColor = isDarkMode ? '#aaaaaa' : undefined;
+    const chartLabelColor = isDarkMode ? '#d8d8d8' : undefined;
+
+    // In dark mode use higher opacity so bars are vivid against dark background
     const bgColors = [
-        'rgba(255, 99, 132, 0.2)',
-        'rgba(54, 162, 235, 0.2)',
-        'rgba(255, 206, 86, 0.2)',
-        'rgba(75, 192, 192, 0.2)',
-        'rgba(153, 102, 255, 0.2)',
-        'rgba(255, 159, 64, 0.2)'
+        isDarkMode ? 'rgba(255, 99, 132, 0.85)' : 'rgba(255, 99, 132, 0.2)',
+        isDarkMode ? 'rgba(54, 162, 235, 0.85)' : 'rgba(54, 162, 235, 0.2)',
+        isDarkMode ? 'rgba(255, 206, 86, 0.85)' : 'rgba(255, 206, 86, 0.2)',
+        isDarkMode ? 'rgba(75, 192, 192, 0.85)' : 'rgba(75, 192, 192, 0.2)',
+        isDarkMode ? 'rgba(153, 102, 255, 0.85)' : 'rgba(153, 102, 255, 0.2)',
+        isDarkMode ? 'rgba(255, 159, 64, 0.85)' : 'rgba(255, 159, 64, 0.2)'
     ];
 
     const borderColors = [
@@ -78,6 +84,56 @@
             alertBox('Deals are being loaded. Please wait a few minutes and refresh the page.');
         <% } %>
 
+        // --- Line chart helper (equity curve) ---
+        function createLineChart(ctx, label, data) {
+            const keys = Object.keys(data);
+            const values = keys.map(k => data[k] || 0);
+
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: keys,
+                    datasets: [{
+                        label: label,
+                        data: values,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: isDarkMode ? 'rgba(75, 192, 192, 0.4)' : 'rgba(75, 192, 192, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return label + ': $' + context.raw.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: chartTickColor, callback: function(value) {
+                                const str = this.getLabelForValue(value);
+                                return window.matchMedia('only screen and (max-width: 768px)').matches
+                                    ? str.substring(0, 6) : str.substring(0, 12);
+                            }},
+                            grid: { color: chartGridColor }
+                        },
+                        y: {
+                            ticks: { color: chartTickColor, callback: function(value) {
+                                return '$' + value.toLocaleString();
+                            }},
+                            grid: { color: chartGridColor }
+                        }
+                    }
+                }
+            });
+        }
+
         // --- Chart creation helper ---
         function createChart(ctx, label, data, showMaxOnTop=false, maxData={}) {
             const moneyCharts = ['Bot Profit','Active P/L','Adjusted P/L','Profit Per Day','Funds in Use'];
@@ -112,21 +168,19 @@
                     },
                     scales: {
                         x: {
-                            ticks: {
-                                callback: function(value) {
-                                    const str = this.getLabelForValue(value);
-                                    return window.matchMedia("only screen and (max-width: 768px)").matches
-                                        ? str.substring(0, 10) + ".."
-                                        : str.substring(0, 20) + "..";
-                                }
-                            }
+                            ticks: { color: chartTickColor, callback: function(value) {
+                                const str = this.getLabelForValue(value);
+                                return window.matchMedia("only screen and (max-width: 768px)").matches
+                                    ? str.substring(0, 10) + ".."
+                                    : str.substring(0, 20) + "..";
+                            }},
+                            grid: { color: chartGridColor }
                         },
                         y: {
-                            ticks: {
-                                callback: function(value) {
-                                    return isMoney ? '$' + value.toLocaleString() : value;
-                                }
-                            }
+                            ticks: { color: chartTickColor, callback: function(value) {
+                                return isMoney ? '$' + value.toLocaleString() : value;
+                            }},
+                            grid: { color: chartGridColor }
                         }
                     }
                 },
@@ -168,6 +222,27 @@
             true,
             max_funds_deals_map
         );
+
+        // New charts
+        if (Object.keys(equity_curve_map).length > 0) {
+            createLineChart(document.getElementById('equityCurveChart').getContext('2d'), 'Cumulative Profit', equity_curve_map);
+        } else {
+            document.getElementById('equityCurveChart').parentElement.style.display = 'none';
+        }
+
+        createChart(document.getElementById('winRateChart').getContext('2d'), 'Win Rate (%)', win_rate_map);
+        if (Object.keys(pair_profit_pos_map).length > 0) {
+            createChart(document.getElementById('pairProfitPosChart').getContext('2d'), 'Pair Profit', pair_profit_pos_map);
+        } else {
+            document.getElementById('pairProfitPosChart').parentElement.style.display = 'none';
+        }
+
+        if (Object.keys(pair_profit_neg_map).length > 0) {
+            createChart(document.getElementById('pairProfitNegChart').getContext('2d'), 'Pair Losses', pair_profit_neg_map);
+        } else {
+            document.getElementById('pairProfitNegChart').parentElement.style.display = 'none';
+        }
+        createChart(document.getElementById('soUtilisationChart').getContext('2d'), 'Avg Safety Orders Used', so_utilisation_map);
 
         // Hide the Max Deal Exposure chart
         document.getElementById('maxDealsFundsChart').parentElement.style.display = 'none';
@@ -251,6 +326,33 @@
                 <div class="dashboard-container">
                     <div class="chart-container" style="margin-top:40px; width: 100%;">
                         <canvas id="maxDealsFundsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-container" style="margin-top:40px;">
+                    <div class="chart-container" style="width: 100%;">
+                        <canvas id="equityCurveChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-container" style="margin-top:40px; display:flex; flex-wrap:wrap; gap:20px;">
+                    <div class="chart-container" style="flex:1 1 300px; min-width:300px;">
+                        <canvas id="winRateChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="flex:1 1 300px; min-width:300px;">
+                        <canvas id="soUtilisationChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-container" style="margin-top:40px;">
+                    <div class="chart-container" style="width: 100%;">
+                        <canvas id="pairProfitPosChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="dashboard-container" style="margin-top:40px;">
+                    <div class="chart-container" style="width: 100%;">
+                        <canvas id="pairProfitNegChart"></canvas>
                     </div>
                 </div>
 

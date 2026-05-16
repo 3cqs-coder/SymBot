@@ -284,6 +284,141 @@ $.confirm({
 }
 
 
+function loadRollbacks() {
+
+	$.ajax({
+		type: 'GET',
+		url: './system/rollbacks',
+		dataType: 'json',
+		success: function(data) {
+
+			const $list = $('#rollback-list');
+			$list.empty();
+
+			if (!data.data || data.data.length === 0) {
+
+				$list.append('<div style="font-size: 1.1rem; color: #888;">No rollback snapshots available. Snapshots are created automatically before each update.</div>');
+				return;
+			}
+
+			data.data.forEach(function(snap) {
+
+				const date = snap.date ? new Date(snap.date).toLocaleString() : 'Unknown date';
+				$list.append(
+					'<div style="display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #3e3e3e;">' +
+					'<span style="font-size: 1.1rem; flex: 1;">v' + snap.version + ' &mdash; ' + date + '</span>' +
+					'<a href="javascript:void(0);" onclick="rollbackSystem(' + JSON.stringify(snap.snapshotName) + ');" style="color: #d80f08; font-size: 1.0rem;">Rollback</a>' +
+					'</div>'
+				);
+			});
+		},
+		error: function() {
+
+			$('#rollback-list').html('<div style="color: #d80f08;">Failed to load rollback snapshots.</div>');
+		}
+	});
+}
+
+
+function rollbackSystem(snapshotName) {
+
+	$.confirm({
+		title: false,
+		boxWidth: '50%',
+		useBootstrap: false,
+		content: '<div style="font-size: 1.2rem; text-align: left;">Rollback to ' + snapshotName + '?<br><br>' +
+			'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+			'<b>Note:</b> Rollback restores code files only. The database is not affected. ' +
+			'If the update introduced database schema changes, rolling back the code may cause compatibility issues. ' +
+			'Review the logs after restart to confirm everything is working.</div><br>' +
+			'<input type="checkbox" id="rollbackConfirmBox" class="form-field" style="width: 20px;" /> ' +
+			'<b>Check the box to confirm <span style="color: #d80f08;">ROLLBACK</span></b>' +
+			'</div>',
+		buttons: {
+			formSubmit: {
+				btnClass: 'btn-default',
+				text: '<div style="color: #d80f08;">Rollback</div>',
+				action: function() {
+
+					if (!$('#rollbackConfirmBox').prop('checked')) {
+
+						alertBox('You must check the box to confirm rollback', function() {});
+						return false;
+					}
+
+					processRollback(snapshotName);
+				}
+			},
+			cancel: {
+				btnClass: 'btn-default',
+				text: '<div style="color: #000000;">Cancel</div>',
+				action: function() {}
+			}
+		},
+		onContentReady: function() {
+
+			$('#rollbackConfirmBox').prop('checked', false);
+		}
+	});
+}
+
+
+function processRollback(snapshotName) {
+
+	$('#spinner-overlay').fadeIn(100);
+
+	$.ajax({
+		type: 'POST',
+		url: './system/rollback',
+		contentType: 'application/json',
+		data: JSON.stringify({ snapshotName }),
+		dataType: 'json',
+		success: function(data) {
+
+			$('#spinner-overlay').fadeOut(100);
+
+			if (data.success) {
+
+				alertBox('Rollback successful! SymBot is shutting down. If you do not have a process manager it must be started manually.', function() {});
+			}
+			else {
+
+				alertBox('Rollback failed: ' + (data.error || 'Unknown error'), function() {});
+			}
+		},
+		error: function(data) {
+
+			$('#spinner-overlay').fadeOut(100);
+			alertBox('Error occurred during rollback.', function() {});
+		}
+	});
+}
+
+
+function showRollbacks() {
+
+	$.confirm({
+		title: false,
+		boxWidth: '60%',
+		useBootstrap: false,
+		content: '<div style="font-size: 1.2rem; text-align: left;">Rollback System<br><br>' +
+			'<div id="rollback-list" style="font-size: 1.1rem; min-height: 40px;">Loading...</div>' +
+			'</div>',
+		buttons: {
+			close: {
+				btnClass: 'btn-default',
+				text: '<div style="color: #000000;">Close</div>',
+				action: function() {}
+			}
+		},
+		onContentReady: function() {
+
+			loadRollbacks();
+		}
+	});
+}
+
+
 function processShutDown() {
 
     const requestBody = {};
@@ -486,6 +621,10 @@ function processRestoreDb(password, convertData, resetServerId) {
 
 		<div class="mainMenuItem">
 			<a href="javascript:void(0);" onclick="updateSystem();"><span class="menu-icon">&#9651;</span> Update System</a>
+		</div>
+
+		<div class="mainMenuItem">
+			<a href="javascript:void(0);" onclick="showRollbacks();"><span class="menu-icon">&#8635;</span> Rollback System</a>
 		</div>
 
 		<div class="mainMenuItem" style="border-bottom: 0;">

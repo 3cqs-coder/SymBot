@@ -596,10 +596,7 @@
 				extExtraction: {}
 			});
 
-			$('#botDealSelectorShow').click(function() {
-
-				$('.botDealSelectorWrapper').toggleClass('is-visible');
-			});
+			SymBot.UI.initColumnSelector();
 
 			// Handle inline editing of fields
 			$(document).on('click', 'td.editable', function () {
@@ -1074,15 +1071,7 @@
 	<center>
 		<main>
 
-			<div class="botDealSelectorWrapper">
-				<div id="botDealSelector" class="botDealSelector">
-				  <!-- this div is where the column selector is added -->
-				</div>
-			  
-				<div class="botDealSelectorHidden">
-					<div id="popover-botdeals"></div>
-				</div>
-			</div>
+			<%- include('../partialsColumnSelector') %>
 		
 			<div id="contentBox">
 				<!-- Header -->

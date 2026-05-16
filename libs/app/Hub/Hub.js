@@ -615,6 +615,43 @@ async function setProxyPorts(ports) {
 }
 
 
+async function renameInstanceBackups(oldName, newName) {
+
+	const backupPath = shareData.appData.path_root + '/backups';
+
+	try {
+
+		if (!fs.existsSync(backupPath)) return;
+
+		const files = fs.readdirSync(backupPath);
+		const prefix = oldName + '-backup-';
+		let renamed = 0;
+
+		for (const file of files) {
+
+			if (!file.startsWith(prefix)) continue;
+
+			const suffix = file.slice(prefix.length);
+			const newFile = newName + '-backup-' + suffix;
+			const oldPath = backupPath + '/' + file;
+			const newPath = backupPath + '/' + newFile;
+
+			fs.renameSync(oldPath, newPath);
+			renamed++;
+		}
+
+		if (renamed > 0) {
+
+			logger('info', `Renamed ${renamed} backup file(s) from '${oldName}' to '${newName}'.`);
+		}
+	}
+	catch (err) {
+
+		logger('error', `Failed to rename backup files for instance '${oldName}' → '${newName}': ${err.message}`);
+	}
+}
+
+
 async function routeUpdateInstances(req, res) {
 
 	let updatedAppConfigs = {};
@@ -785,6 +822,14 @@ async function routeUpdateInstances(req, res) {
 						await terminateInstance(instanceId);
 					}
 
+					// Rename backups for disabled instances that were renamed
+					const origName = originalConfig ? originalConfig.name : null;
+
+					if (origName && instanceName !== origName && !updatedConfig.enabled) {
+
+						await renameInstanceBackups(origName, instanceName);
+					}
+
 					// Only restart workers if the config has changed or portUpdated is true
 					if (configChanged || serverUpdated || portUpdated || mongoDbUrlUpdated) {
 
@@ -825,6 +870,12 @@ async function routeUpdateInstances(req, res) {
 							worker_id: workerId,
 							config
 						} = workerInstance;
+
+						// Rename backup files if instance was renamed
+						if (instanceNameOrig && instanceName !== instanceNameOrig) {
+
+							await renameInstanceBackups(instanceNameOrig, instanceName);
+						}
 
 						await terminateInstance(instanceId);
 
@@ -1090,6 +1141,12 @@ async function startInstance(instanceConfig) {
 
 
 async function terminateInstance(instanceId) {
+
+	// Clear cached proxy so next request gets a fresh connection
+	if (shareData.WebServer && shareData.WebServer.clearProxyCache) {
+
+		shareData.WebServer.clearProxyCache(instanceId);
+	}
 
 	try {
 

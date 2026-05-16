@@ -71,6 +71,8 @@ async function init() {
 	let isReset = false;
 	let resetServerId = false;
 	let resetSessions = false;
+	let isRollback = false;
+	let rollbackSnapshot = null;
 	let consoleLog = false;
 	let serverIdError = false;
 
@@ -106,6 +108,12 @@ async function init() {
 
 			resetSessions = true;
 		}
+	}
+
+	if (process.argv[2] && process.argv[2].toLowerCase() == 'rollback') {
+
+		isRollback = true;
+		rollbackSnapshot = process.argv[3] || null;
 	}
 
 	if (workerData && typeof workerData === 'object') {
@@ -465,6 +473,13 @@ async function init() {
 
 			await System.resetConsole(serverIdError, resetServerId);
 		}
+
+		return({ 'nostart': true });
+	}
+
+	if (isRollback) {
+
+		await System.rollbackConsole(rollbackSnapshot);
 
 		return({ 'nostart': true });
 	}

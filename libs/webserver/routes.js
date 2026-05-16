@@ -91,6 +91,36 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.get('/system/rollbacks', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.System.routeListRollbacks(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.post('/system/rollback', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.System.routeRollbackSystem(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.post('/system/shutdown', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -556,6 +586,21 @@ function initRoutes(router, upload) {
 		if (req.session.loggedIn || validApiKey(req)) {
 
 			shareData.DCABotManager.apiEnableDisableBot(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.delete('/api/bots/:botId', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiDeleteBot(req, res);
 		}
 		else {
 

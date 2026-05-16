@@ -19,6 +19,7 @@ const DealSchema = new Schema({
 	paused: Boolean,
 	pausedBuy: Boolean,
 	pausedSell: Boolean,
+	pauseReason: String,
 	panicSell: Boolean,
 	botId: String,
 	botName: String,

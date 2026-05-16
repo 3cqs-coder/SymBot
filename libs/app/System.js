@@ -8,7 +8,7 @@ const cron = require('node-cron');
 const bson = require('bson');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
-const archiver = require('archiver');
+const { ZipArchive: ArchiverZip } = require('archiver');
 const unzipper = require('unzipper');
 const fetch = require('node-fetch-commonjs');
 const sftpClient = require('ssh2-sftp-client');
@@ -28,6 +28,8 @@ const activeCrons = {};
 
 const tempDir = pathRoot + '/temp';
 const backupDir = pathRoot + '/backups';
+const rollbackDir = pathRoot + '/rollbacks';
+const MAX_ROLLBACKS = 3;
 
 
 const connectDb = async (url) => {
@@ -603,7 +605,7 @@ async function compress(source, out) {
     return new Promise((resolve, reject) => {
 
 		const output = fs.createWriteStream(out);
-        const archive = archiver('zip', { zlib: { level: 9 } });
+        const archive = new ArchiverZip({ zlib: { level: 9 } });
 
         output.on('close', () => resolve(archive.pointer()));
 
@@ -927,6 +929,302 @@ async function pause(bool, msg) {
 }
 
 
+async function createRollbackSnapshot(version) {
+
+	let success = false;
+	let snapshotNameResult = null;
+	let error = null;
+
+	const dateParts = shareData.Common.getDateParts(new Date());
+	const dateStr = dateParts.date.replace(/[^a-zA-Z0-9]/g, '') + '_' + dateParts.time.replace(/[^a-zA-Z0-9]/g, '');
+	const snapshotName = `${version}_${dateStr}`;
+	const snapshotDir = rollbackDir + '/' + snapshotName;
+
+	if (!fs.existsSync(rollbackDir)) fs.mkdirSync(rollbackDir, { recursive: true });
+
+	const exclude = new Set(['backups', 'config', 'node_modules', 'rollbacks', 'temp', 'downloads', 'sessions', 'logs']);
+
+	try {
+
+		const items = fs.readdirSync(pathRoot);
+
+		for (const item of items) {
+
+			if (exclude.has(item)) continue;
+
+			const src = path.join(pathRoot, item);
+			const dest = path.join(snapshotDir, item);
+			const stats = fs.statSync(src);
+
+			if (stats.isDirectory()) {
+
+				await fsp.cp(src, dest, { recursive: true });
+			}
+			else {
+
+				await fsp.mkdir(path.dirname(dest), { recursive: true });
+				await fsp.copyFile(src, dest);
+			}
+		}
+
+		// Write manifest
+		const manifest = { version, date: new Date().toISOString(), snapshotName };
+		await fsp.writeFile(snapshotDir + '/.rollback-manifest.json', JSON.stringify(manifest, null, 2));
+
+		shareData.Common.logger(`Rollback snapshot created: ${snapshotName}`);
+
+		// Trim old rollbacks — keep only MAX_ROLLBACKS
+		const snapshots = fs.readdirSync(rollbackDir)
+			.filter(f => fs.statSync(path.join(rollbackDir, f)).isDirectory())
+			.map(f => ({ name: f, mtime: fs.statSync(path.join(rollbackDir, f)).mtime }))
+			.sort((a, b) => a.mtime - b.mtime);
+
+		while (snapshots.length > MAX_ROLLBACKS) {
+
+			const oldest = snapshots.shift();
+			removeDirectorySync(path.join(rollbackDir, oldest.name));
+			shareData.Common.logger(`Removed old rollback snapshot: ${oldest.name}`);
+		}
+
+		success = true;
+		snapshotNameResult = snapshotName;
+	}
+	catch (err) {
+
+		shareData.Common.logger('Failed to create rollback snapshot: ' + err.message);
+		error = err.message;
+	}
+
+	return { success, snapshotName: snapshotNameResult, error };
+}
+
+
+async function listRollbacks() {
+
+	if (!fs.existsSync(rollbackDir)) return [];
+
+	const snapshots = fs.readdirSync(rollbackDir)
+		.filter(f => fs.statSync(path.join(rollbackDir, f)).isDirectory())
+		.map(f => {
+
+			let manifest = { version: 'unknown', date: null, snapshotName: f };
+
+			try {
+
+				const raw = fs.readFileSync(path.join(rollbackDir, f, '.rollback-manifest.json'), 'utf8');
+				manifest = { ...manifest, ...JSON.parse(raw) };
+			}
+			catch(e) {}
+
+			return manifest;
+		})
+		.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+	return snapshots;
+}
+
+
+async function routeListRollbacks(req, res) {
+
+	const rollbacks = await listRollbacks();
+
+	res.json({ success: true, data: rollbacks });
+}
+
+
+async function routeRollbackSystem(req, res) {
+
+	const { snapshotName } = req.body;
+
+	if (!snapshotName) {
+
+		return res.status(400).json({ success: false, error: 'No snapshot name provided.' });
+	}
+
+	const snapshotDir = path.join(rollbackDir, snapshotName);
+
+	if (!fs.existsSync(snapshotDir)) {
+
+		return res.status(404).json({ success: false, error: 'Snapshot not found.' });
+	}
+
+	let success = false;
+	let error;
+
+	try {
+
+		shareData.Common.logger(`Rolling back to snapshot: ${snapshotName}`);
+
+		await copyFiles(snapshotDir, pathRoot);
+
+		// Run npm install to restore node_modules to the rolled-back state
+		await new Promise((resolve, reject) => {
+
+			exec('npm install', { cwd: pathRoot }, (err, stdout, stderr) => {
+
+				if (err) return reject(err);
+				resolve();
+			});
+		});
+
+		success = true;
+
+		shareData.Common.logger(`Rollback to ${snapshotName} complete. Shutting down.`);
+	}
+	catch (err) {
+
+		error = err.message;
+		shareData.Common.logger('Rollback failed: ' + error);
+	}
+
+	res.json({ success, error });
+
+	if (success) {
+
+		// Shutdown so process manager restarts with rolled-back code
+		const resParent = await shareData.Common.sendParentMsg({
+			'type': 'shutdown_hub',
+			'data': ''
+		});
+
+		if (!resParent.success) {
+
+			shutDownFunction();
+		}
+	}
+}
+
+
+async function rollbackConsole(snapshotName) {
+
+	const rollbackPath = pathRoot + '/rollbacks';
+	let selected = null;
+	let exitCode = 0;
+	let message = '';
+
+	if (!fs.existsSync(rollbackPath)) {
+
+		message = '\nNo rollback snapshots found in: ' + rollbackPath + '\nSnapshots are created automatically before each update.';
+		exitCode = 1;
+	}
+	else {
+
+		const snapshots = fs.readdirSync(rollbackPath)
+			.filter(f => fs.statSync(path.join(rollbackPath, f)).isDirectory())
+			.map(f => {
+
+				let manifest = { version: 'unknown', date: null, snapshotName: f };
+
+				try {
+
+					const raw = fs.readFileSync(path.join(rollbackPath, f, '.rollback-manifest.json'), 'utf8');
+					manifest = { ...manifest, ...JSON.parse(raw) };
+				}
+				catch(e) {}
+
+				return manifest;
+			})
+			.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+		if (snapshots.length === 0) {
+
+			message = '\nNo rollback snapshots available.';
+			exitCode = 1;
+		}
+		else if (snapshotName) {
+
+			selected = snapshots.find(s => s.snapshotName === snapshotName);
+
+			if (!selected) {
+
+				message = '\nSnapshot not found: ' + snapshotName + '\n\nAvailable snapshots:\n' +
+					snapshots.map(s => '  ' + s.snapshotName).join('\n');
+				exitCode = 1;
+			}
+		}
+		else if (snapshots.length === 1) {
+
+			selected = snapshots[0];
+		}
+		else {
+
+			console.log('\nAvailable rollback snapshots:\n');
+
+			snapshots.forEach((s, i) => {
+
+				const date = s.date ? new Date(s.date).toLocaleString() : 'Unknown date';
+				console.log('  [' + (i + 1) + '] v' + s.version + ' — ' + date + ' (' + s.snapshotName + ')');
+			});
+
+			console.log('');
+
+			const input = prompt('Select snapshot [1-' + snapshots.length + ']: ');
+			const idx   = parseInt(input, 10) - 1;
+
+			if (isNaN(idx) || idx < 0 || idx >= snapshots.length) {
+
+				message = 'Invalid selection. Exiting.';
+				exitCode = 1;
+			}
+			else {
+
+				selected = snapshots[idx];
+			}
+		}
+
+		if (selected && exitCode === 0) {
+
+			const date = selected.date ? new Date(selected.date).toLocaleString() : 'Unknown date';
+
+			console.log('\nSelected: v' + selected.version + ' — ' + date);
+			console.log('\n*** CAUTION *** This will restore code files from the snapshot.');
+			console.log('The database will NOT be affected.\n');
+
+			const confirm = prompt('Do you want to continue? (Y/n): ');
+
+			if (confirm !== 'Y') {
+
+				message = 'Rollback cancelled.';
+			}
+			else {
+
+				const snapshotDir = path.join(rollbackPath, selected.snapshotName);
+
+				try {
+
+					console.log('\nRestoring files from: ' + selected.snapshotName);
+
+					await copyFiles(snapshotDir, pathRoot);
+
+					console.log('Files restored.');
+					console.log('\nRunning npm install...');
+
+					await new Promise((resolve, reject) => {
+
+						exec('npm install', { cwd: pathRoot }, (err) => {
+
+							if (err) return reject(err);
+							resolve();
+						});
+					});
+
+					message = 'npm install complete.\n\nRollback complete. Start SymBot normally with: npm start';
+				}
+				catch (err) {
+
+					message = '\nRollback failed: ' + err.message;
+					exitCode = 1;
+				}
+			}
+		}
+	}
+
+	if (message) console.log(message);
+
+	if (exitCode !== 0) process.exit(exitCode);
+}
+
+
 async function routeUpdateSystem(req, res) {
 
 	const dataUpdate = await updateSystem();
@@ -1082,6 +1380,14 @@ async function updateSystem() {
 			await shareData.Common.saveConfig(file, configCombined, updated);
 		}
 
+		// Create rollback snapshot before overwriting files
+		const snapshotResult = await createRollbackSnapshot(appVersion);
+
+		if (!snapshotResult.success) {
+
+			shareData.Common.logger('Warning: Could not create rollback snapshot: ' + snapshotResult.error);
+		}
+
 		// Remove existing files except backups and config folders and replace with new 
 		await moveFiles(pathRoot, extractDir + '/' + extractDirName);
 
@@ -1173,6 +1479,61 @@ async function updateSystem() {
 }
 
 
+async function copyFiles(sourceDir, destDir) {
+
+	try {
+
+		const items = await fsp.readdir(sourceDir);
+
+		for (const item of items) {
+
+			// Preserve live data
+			if (item === 'backups' || item === 'config' || item === 'rollbacks') {
+
+				continue;
+			}
+
+			// Skip the manifest file
+			if (item === '.rollback-manifest.json') {
+
+				continue;
+			}
+
+			const src   = path.join(sourceDir, item);
+			const dest  = path.join(destDir, item);
+			const stats = await fsp.stat(src);
+
+			if (stats.isDirectory()) {
+
+				// Copy directory atomically via temp path
+				const tmp = dest + '.new';
+
+				if (fs.existsSync(tmp)) {
+
+					removeDirectorySync(tmp);
+				}
+
+				await fsp.cp(src, tmp, { recursive: true });
+				removeDirectorySync(dest);
+				await fsp.rename(tmp, dest);
+			}
+			else {
+
+				// Copy file safely
+				const tmp = dest + '.new';
+
+				await fsp.copyFile(src, tmp);
+				await fsp.rename(tmp, dest);
+			}
+		}
+	}
+	catch (e) {
+
+		throw new Error(`copyFiles failed: ${e.message}`);
+	}
+}
+
+
 async function moveFiles(originalDir, newDir) {
 
 	try {
@@ -1182,7 +1543,7 @@ async function moveFiles(originalDir, newDir) {
 		for (const item of items) {
 
 			// Preserve live data
-			if (item === 'backups' || item === 'config') {
+			if (item === 'backups' || item === 'config' || item === 'rollbacks') {
 
 				continue;
 			}
@@ -1501,6 +1862,13 @@ async function sftpUploadBackup(configObj, localFile, remoteDir, maxBackups, isT
 
 		//console.log("Upload OK");
 
+		// Rotate AFTER successful upload so we never delete old backups
+		// without first confirming the new one was uploaded successfully.
+		if (!isTest && maxBackups && maxBackups > 0) {
+
+			await sftpRotateBackups(sftp, remoteDir, shareData.appData.name, maxBackups);
+		}
+
 		if (isTest) {
 
 			try {
@@ -1508,10 +1876,6 @@ async function sftpUploadBackup(configObj, localFile, remoteDir, maxBackups, isT
 				await sftp.delete(remotePath);
 			}
 			catch(e) {}
-		}
-		else if (maxBackups && maxBackups > 0) {
-
-			await sftpRotateBackups(sftp, remoteDir, shareData.appData.name, maxBackups);
 		}
 
 		success = true;
@@ -1968,6 +2332,9 @@ module.exports = {
 	routeBackupDb,
 	routeRestoreDb,
 	routeUpdateSystem,
+	rollbackConsole,
+	routeListRollbacks,
+	routeRollbackSystem,
 	cronJobToggle,
 	cronBackupStart,
 	spawnCommand,

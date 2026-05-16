@@ -44,10 +44,7 @@
 	}
 
 
-	function isDialogOpen() {
-
-		return $('.jconfirm').length > 0 || $('.ui-dialog:visible').length > 0;
-	}
+	// isDialogOpen is provided by SymBot.UI (symbot-ui.js)
 
 
 	function setReloadTimeout() {
@@ -63,7 +60,7 @@
 
 			timeOutId = setTimeout(() => {
 
-				if (isDialogOpen()) {
+				if (SymBot.UI.isDialogOpen()) {
 
 					setReloadTimeout();
 				}
@@ -340,10 +337,7 @@
 			}
 		});
 
-		$('#botDealSelectorShow').click(function() {
-
-			$('.botDealSelectorWrapper').toggleClass('is-visible');
-		});
+		SymBot.UI.initColumnSelector();
 
 		initRefreshSelector();
 
@@ -356,14 +350,7 @@
 <center>
 <main>
 
-	<div class="botDealSelectorWrapper">
-		<div id="botDealSelector" class="botDealSelector">
-		  <!-- column selector -->
-		</div>
-		<div class="botDealSelectorHidden">
-			<div id="popover-botdeals"></div>
-		</div>
-	</div>
+	<%- include('../partialsColumnSelector') %>
 
 	<div id="contentBox">
 
