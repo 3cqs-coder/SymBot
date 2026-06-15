@@ -90,7 +90,7 @@ $(document).ready(function() {
 
 			for (let i = 0; i < dataArr.length; i++) {
 
-				let msg = dataArr[i]['message'];
+				let msg = (dataArr[i]['message'] || '').replace(/\n/g, '<br>');
 				let typeMsg = dataArr[i]['type'];
 				let dateMsg = dataArr[i]['date'];
 
@@ -211,7 +211,7 @@ function processNotificationData(data) {
 
 	let id = 'notifs-' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
 
-	let msg = '<div id="' + id + '" class="notificationsRow">' + data + '</div>';
+	let msg = '<div id="' + id + '" class="notificationsRow">' + (data || '').replace(/\n/g, '<br>') + '</div>';
 
 	if (dataTracker['notifications'] == undefined || dataTracker['notifications'] == null) {
 

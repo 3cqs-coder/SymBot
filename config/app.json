@@ -19,6 +19,7 @@
 				},
 	"cron_backup": {
 					"enabled": false,
+					"include_chats": true,
 					"schedule": "",
 					"password": "",
 					"max": "",
@@ -33,6 +34,17 @@
 								"enabled": false
 							}
 	},
+   "circuit_breaker": {
+        "enabled": true,
+        "deal_ratio_threshold": 0.5,
+        "deal_ratio_window_secs": 30,
+        "price_drop_percent": 5.0,
+        "price_drop_window_secs": 60,
+        "pause_duration_secs": 60,
+        "repeat_alert_window_secs": 3600,
+        "price_zero_alert_count": 4,
+		"price_drop_enabled": true
+    },
 	"bots": {
 				"start_conditions": {
 										"asap": {
@@ -70,14 +82,20 @@
 					"host": "",
 					"api_key": "",
 					"model": ""
-				}
-			},
+				},
 				"openai": {
 					"enabled": false,
 					"api_key": "",
 					"model": "",
 					"base_url": ""
-        	},
-		"provider": "",
+        		},
+				"provider": "",
+				"max_history": 25,
+				"context_compression": {
+					"enabled": true,
+            		"threshold_chars": 80000,
+            		"protect_last_n": 10
+        		}
+			},		
 	"verbose_log": true
 }

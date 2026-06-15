@@ -1026,19 +1026,48 @@ form textarea {
 }
 
 
+#chatConversationBar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--table-border-color, #444);
+	background: var(--content-box-background-color);
+	box-sizing: border-box;
+	width: 100%;
+}
+
+#chatConversationBar select {
+	flex: 1;
+	min-width: 0;
+	max-width: 100%;
+}
+
+#chatConversationBar .btn {
+	flex-shrink: 0;
+	white-space: nowrap;
+	font-size: 1.1rem;
+	padding: 4px 10px;
+}
+
+
 #chatInputContainer {
 	padding: 10px;
 	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
 	box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
 }
 
 
 #chatInput {
-	width: calc(100% - 90px);
+	flex: 1;
+	min-width: 0;
 	padding: 10px;
 	border: 1px solid #ccc;
 	border-radius: 5px;
-	margin-right: 10px;
 	box-sizing: border-box;
 	outline: none;
 	font-size: 16px;
@@ -1109,7 +1138,7 @@ table#ordersTable td {
 
 table#ordersTable tr:not(:first-child):hover {
 
-	background-color: var(--table-background-color);
+	background-color: var(--table-background-hover-color);
 	cursor: pointer;
 }
 
@@ -1459,6 +1488,47 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 	gap: 5px;
 	height: 20px;
 }
+
+
+@media screen and (max-width: 600px) {
+
+	.summary-bar {
+		gap: 6px 16px;
+		font-size: 1rem;
+		margin-top: 6px;
+	}
+
+	/* Portfolio bar: 2-column grid on mobile so it doesn't stack 5 rows tall */
+	#portfolioRiskBar {
+		display: grid !important;
+		grid-template-columns: 1fr 1fr;
+		justify-items: center;
+		gap: 4px 10px;
+		width: 100%;
+		padding: 4px 0;
+	}
+
+	/* Balance age spans full width centred below the grid */
+	#portfolioBalanceAge {
+		grid-column: 1 / -1;
+	}
+}
+
+
+/* Portfolio risk bar colour coding — matches profit-positive/negative colours */
+.portfolio-risk-low  { color: #1a9f00; }
+.portfolio-risk-mid  { color: #ffb700; }
+.portfolio-risk-high { color: #d82715; }
+
+[data-theme="dark"] .portfolio-risk-low  { color: #3ec43e; }
+[data-theme="dark"] .portfolio-risk-mid  { color: #ffb700; }
+[data-theme="dark"] .portfolio-risk-high { color: #f05040; }
+
+/* Available funds colouring reuses existing profit classes */
+#portfolioAvail.profit-positive { color: inherit; }
+#portfolioAvail.profit-negative { color: #d82715; }
+
+[data-theme="dark"] #portfolioAvail.profit-negative { color: #f05040; }
 
 
 .toolTip {
@@ -2164,4 +2234,77 @@ body.popout-body #chatInputContainer {
 }
 
 
+/* ── AI Chat file attachments ────────────────────────────────────────── */
 
+#chatAttachBtn {
+	cursor: pointer;
+	background: none;
+	border: none;
+	padding: 4px 6px;
+	color: var(--table-content-color);
+	opacity: 0.7;
+	flex-shrink: 0;
+	order: 2;
+}
+
+#chatAttachBtn:hover {
+	opacity: 1;
+}
+
+#chatAttachFile {
+	display: none;
+}
+
+#chatAttachments {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	padding: 4px 8px 0 8px;
+}
+
+.chat-attachment-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	background: var(--table-background-hover-color);
+	border: 1px solid var(--table-border-color, #444);
+	border-radius: 12px;
+	padding: 2px 8px;
+	font-size: 1.1rem;
+	color: var(--table-content-color);
+	max-width: 200px;
+}
+
+.chat-attachment-pill span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chat-attachment-pill .pill-remove {
+	cursor: pointer;
+	opacity: 0.6;
+	line-height: 1;
+	flex-shrink: 0;
+}
+
+.chat-attachment-pill .pill-remove:hover {
+	opacity: 1;
+}
+
+.chat-attachment-uploading {
+	opacity: 0.6;
+	animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+	0%, 100% { opacity: 0.6; }
+	50% { opacity: 1; }
+}
+
+.user-message .attach-badge {
+	display: block;
+	font-size: 1.0rem;
+	opacity: 0.7;
+	margin-top: 4px;
+}

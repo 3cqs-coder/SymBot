@@ -142,7 +142,7 @@ function initApp() {
 
 	const upload = multer({
 		dest: 'uploads/',
-		limits: { fileSize: 100000000 }
+		limits: { fileSize: 262144000 }
 	});
 
 	app.use(bodyParser.json({

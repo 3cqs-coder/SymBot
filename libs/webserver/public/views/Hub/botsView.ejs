@@ -245,7 +245,9 @@
 
 			const dealMax  = (bot.dealMax  == 0) ? '&#8734;' : bot.dealMax;
 			const pairMax  = (bot.pairMax  == 0) ? '&#8734;' : bot.pairMax;
-			const maxFunds = '$' + Math.round(bot.botMaxFunds || bot.maxFunds || 0);
+			const botQuote = Array.isArray(bot.pair) ? (bot.pair[0] || '').split('/')[1] : (bot.pair || '').split('/')[1];
+			const botSym = getCurrencySymbol(botQuote) || '$';
+			const maxFunds = botSym + Math.round(bot.botMaxFunds || bot.maxFunds || 0);
 
 			let startCondition = 'ASAP';
 
@@ -294,7 +296,9 @@
 
 	// ── Document ready ────────────────────────────────────────────────────────
 
-	$(document).ready(function() {
+	const getCurrencySymbol = <%- getCurrencySymbol %>;
+
+$(document).ready(function() {
 
 		$(window).resize(function() {
 

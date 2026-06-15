@@ -1,7 +1,10 @@
 'use strict';
 
-const fs = require('fs');
+const fs   = require('fs');
+const fsp  = require('fs').promises;
 const path = require('path');
+const os   = require('os');
+const multer = require('multer');
 
 const pathRoot = path.resolve(__dirname, ...Array(2).fill('..'));
 
@@ -106,6 +109,23 @@ async function updateConfig(req, res) {
 	const cronBackupSchedule = body.cron_backup_schedule;
 	const cronBackupPassword = body.cron_backup_password;
 	const cronBackupMax = Number(body.cron_backup_max ?? 1) || 1;
+	const cronBackupIncludeChats = convertBoolean(body.cron_backup_include_chats, true);
+
+	const ctxCompEnabled    = convertBoolean(body.ctx_compression_enabled, true);
+	const ctxCompThreshold  = parseInt(body.ctx_compression_threshold) || 80000;
+	const ctxCompProtectN   = parseInt(body.ctx_compression_protect_n)  || 10;
+
+	const cbEnabled        = convertBoolean(body.cb_enabled, true);
+
+
+	const cbDealRatio      = Math.min(Math.max(parseFloat(body.cb_deal_ratio_threshold)   || 0.5,  0.1), 1.0);
+	const cbDealWindow     = Math.min(Math.max(parseInt(body.cb_deal_ratio_window_secs)   || 30,   5),   300);
+	const cbPriceDrop      = Math.min(Math.max(parseFloat(body.cb_price_drop_percent)     || 5.0,  0.5), 50.0);
+	const cbPriceWindow    = Math.min(Math.max(parseInt(body.cb_price_drop_window_secs)   || 60,   10),  600);
+	const cbPriceDropEnabled = convertBoolean(body.cb_price_drop_enabled, true);
+	const cbPauseDuration  = Math.min(Math.max(parseInt(body.cb_pause_duration_secs)      || 60,   10),  600);
+	const cbRepeatWindow   = Math.min(Math.max(parseInt(body.cb_repeat_alert_window_secs) || 3600, 60),  86400);
+	const cbPriceZeroAlert = Math.min(Math.max(parseInt(body.cb_price_zero_alert_count)   || 4,    2),   20);
 
 	const sftp = body.sftp_enabled;
  	const sftpHost = body.sftp_host;
@@ -326,6 +346,31 @@ async function updateConfig(req, res) {
 		appConfig['cron_backup']['schedule'] = cronBackupSchedule;
 		appConfig['cron_backup']['password'] = cronBackupPasswordFinal;
 		appConfig['cron_backup']['max'] = cronBackupMax;
+		appConfig['cron_backup']['include_chats'] = cronBackupIncludeChats;
+
+		if (!appConfig['circuit_breaker']) appConfig['circuit_breaker'] = {};
+		appConfig['circuit_breaker']['enabled']               = cbEnabled;
+		appConfig['circuit_breaker']['deal_ratio_threshold']  = cbDealRatio;
+		appConfig['circuit_breaker']['deal_ratio_window_secs']= cbDealWindow;
+		appConfig['circuit_breaker']['price_drop_percent']    = cbPriceDrop;
+		appConfig['circuit_breaker']['price_drop_window_secs']= cbPriceWindow;
+		appConfig['circuit_breaker']['price_drop_enabled']    = cbPriceDropEnabled;
+		appConfig['circuit_breaker']['pause_duration_secs']   = cbPauseDuration;
+		appConfig['circuit_breaker']['repeat_alert_window_secs'] = cbRepeatWindow;
+		appConfig['circuit_breaker']['price_zero_alert_count']   = cbPriceZeroAlert;
+
+		// Context compression settings
+		if (!appConfig['ai'])                      appConfig['ai'] = {};
+		if (!appConfig['ai']['context_compression']) appConfig['ai']['context_compression'] = {};
+		appConfig['ai']['context_compression']['enabled']         = ctxCompEnabled;
+		appConfig['ai']['context_compression']['threshold_chars'] = ctxCompThreshold;
+		appConfig['ai']['context_compression']['protect_last_n']  = ctxCompProtectN;
+		if (!shareData.appData.ai)                 shareData.appData.ai = {};
+		shareData.appData.ai.context_compression = appConfig['ai']['context_compression'];
+
+		// Update live appData so circuit breaker takes effect immediately without restart
+		shareData.appData.circuit_breaker = appConfig['circuit_breaker'];
+
 
 		appConfig['cron_backup']['sftp']['enabled'] = sftpEnabled;
 		appConfig['cron_backup']['sftp']['host'] = sftpHost;
@@ -2057,10 +2102,32 @@ async function updateBotConfig(req, res) {
 			}
 
 			const sandBoxWallet = parseFloat(body.sandBoxWallet);
-			if (!isNaN(sandBoxWallet) && sandBoxWallet >= 0) cfg.sandBoxWallet = sandBoxWallet;
+			if (!isNaN(sandBoxWallet) && sandBoxWallet >= 0) {
+
+				cfg.sandBoxWallet = sandBoxWallet;
+
+				// Keep Hub per-instance override in sync if it exists
+				if (shareData.appData.sandbox_wallet_override !== undefined) {
+
+					shareData.appData.sandbox_wallet_override = sandBoxWallet;
+				}
+			}
 
 			const exchangeFee = parseFloat(body.exchangeFee);
 			if (!isNaN(exchangeFee) && exchangeFee >= 0) cfg.exchangeFee = exchangeFee;
+
+			// Save sandBoxWallet and exchangeFee immediately — these fields
+			// do not require exchange connectivity and must not be blocked
+			// by a timeout during the exchange validation step below.
+			await saveConfig(botConfigFile, cfg);
+
+			const buySlippage  = parseFloat(body.exchange_buy_slippage);
+			const sellSlippage = parseFloat(body.exchange_sell_slippage);
+			let balanceCurrencies = body.exchange_balance_currencies;
+			if (!Array.isArray(balanceCurrencies)) {
+				balanceCurrencies = balanceCurrencies ? [balanceCurrencies] : [];
+			}
+			balanceCurrencies = balanceCurrencies.map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
 
 			// sandBox toggle is handled separately via /api/bot-config/sandbox
 			// to enforce the confirmation step — do not allow it via this route.
@@ -2107,6 +2174,21 @@ async function updateBotConfig(req, res) {
 
 						dataMessage = 'Exchange configuration updated successfully';
 						success = true;
+
+						// Save order settings (slippage, balance currencies) to app.json
+						const appConfigFile = shareData.appData.app_config;
+						const appCfgResult = await getConfig(appConfigFile);
+						if (appCfgResult.success) {
+							const appCfg = appCfgResult.data;
+							const excDef = appCfg?.bots?.exchange?.default;
+							if (excDef) {
+								if (!isNaN(buySlippage)  && buySlippage  >= 0) excDef.orders.buy.slippage_percent  = buySlippage;
+								if (!isNaN(sellSlippage) && sellSlippage >= 0) excDef.orders.sell.slippage_percent = sellSlippage;
+								if (balanceCurrencies.length > 0) excDef.account_balance_currencies = balanceCurrencies;
+								await saveConfig(appConfigFile, appCfg);
+								shareData.appData.bots.exchange = appCfg.bots.exchange;
+							}
+						}
 					}
 				}
 			}
@@ -2173,10 +2255,171 @@ async function updateBotConfigSandbox(req, res) {
 }
 
 
+function getCurrencySymbol(code) {
+
+	if (!code) return '';
+
+	// Check known crypto symbols first — Intl won't handle these correctly
+	const crypto = {
+		'BTC':  '₿',
+		'ETH':  'Ξ',
+		'USDT': '$',
+		'USDC': '$',
+		'BUSD': '$',
+		'DAI':  '$'
+	};
+
+	if (crypto[code.toUpperCase()]) return crypto[code.toUpperCase()];
+
+	try {
+
+		// Intl handles all ISO 4217 fiat codes automatically
+		const sym = (0).toLocaleString('en', {
+			style: 'currency',
+			currency: code,
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 0
+		}).replace(/\d/g, '').trim();
+
+		// Intl returns the code itself for unknown currencies — treat that as no symbol
+		if (sym.toUpperCase() === code.toUpperCase()) return '';
+
+		return sym;
+	}
+	catch (e) {
+
+		return '';
+	}
+}
+
+
+async function uploadAiChatFile(req, res) {
+
+	const chatUpload = multer({
+		storage: multer.diskStorage({
+			destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+			filename:    (_req, file, cb) => cb(null, 'symbot-chat-' + Date.now() + path.extname(file.originalname).toLowerCase())
+		}),
+		limits: { fileSize: 25 * 1024 * 1024 }
+	});
+
+	chatUpload.single('file')(req, res, async (err) => {
+
+		if (err) {
+			const msg = err.code === 'LIMIT_FILE_SIZE' ? 'File too large (max 25 MB)' : err.message;
+			logger('AI chat upload multer error: ' + msg);
+			if (!res.headersSent) return res.status(400).json({ success: false, error: msg });
+			return;
+		}
+
+		if (!req.file) return res.status(400).json({ success: false, error: 'No file received' });
+
+		const file    = req.file;
+		const ext     = path.extname(file.originalname).toLowerCase();
+		const allowed = ['.pdf', '.docx', '.txt', '.md', '.csv'];
+
+		if (!allowed.includes(ext)) {
+			fs.unlink(file.path, () => {});
+			return res.status(400).json({ success: false, error: `Unsupported file type: ${ext}. Allowed: ${allowed.join(', ')}` });
+		}
+
+		try {
+
+			let text = '';
+
+			if (ext === '.pdf') {
+				// Run pdf-parse in a worker thread — keeps the event loop free
+				// during CPU-heavy parsing (large PDFs can take several seconds)
+				const { Worker } = require('worker_threads');
+				const buffer = await fsp.readFile(file.path);
+
+				const workerCode = `
+					const { parentPort, workerData } = require('worker_threads');
+					const { PDFParse } = require('pdf-parse');
+					(async () => {
+						try {
+							const buf = Buffer.from(workerData.buffer);
+							const parser = new PDFParse({ data: buf });
+							const data = await parser.getText();
+							await parser.destroy();
+							parentPort.postMessage({ success: true, text: data.text || '' });
+						} catch(e) {
+							parentPort.postMessage({ success: false, error: e.message });
+						}
+					})();
+				`;
+
+				text = await new Promise((resolve, reject) => {
+					const ab = buffer.buffer.slice(
+						buffer.byteOffset,
+						buffer.byteOffset + buffer.byteLength
+					);
+					const worker = new Worker(workerCode, {
+						eval: true,
+						workerData: { buffer: ab },
+						transferList: [ab]
+					});
+					worker.once('message', msg => {
+						if (msg.success) resolve(msg.text);
+						else reject(new Error(msg.error));
+					});
+					worker.once('error', reject);
+				});
+			}
+			else if (ext === '.docx') {
+				const mammoth = require('mammoth');
+				const result  = await mammoth.extractRawText({ path: file.path });
+				text = result.value || '';
+			}
+			else {
+				text = await fsp.readFile(file.path, 'utf-8');
+			}
+
+			// Delete temp file immediately — only extracted text is retained
+			fs.unlink(file.path, () => {});
+
+			text = text.trim();
+
+			if (!text) return res.status(400).json({ success: false, error: 'Could not extract text from file' });
+
+			// Store text server-side — never sent to client
+			if (!shareData.attachmentCache) shareData.attachmentCache = new Map();
+
+			const attachmentId = uuidv4();
+
+			shareData.attachmentCache.set(attachmentId, { name: file.originalname, text });
+
+			// Auto-expire after 1 hour
+			setTimeout(() => shareData.attachmentCache.delete(attachmentId), 60 * 60 * 1000);
+
+			res.status(200).json({
+				success:      true,
+				attachmentId: attachmentId,
+				name:         file.originalname,
+				type:         ext.slice(1),
+				size:         file.size,
+				charCount:    text.length,
+			});
+
+		}
+		catch (e) {
+
+			fs.unlink(file.path, () => {});
+			logger('AI chat upload error: ' + e.message);
+			if (!res.headersSent) {
+				res.status(500).json({ success: false, error: 'Extraction failed: ' + e.message });
+			}
+		}
+	});
+}
+
+
 module.exports = {
 
+	getCurrencySymbol,
 	delay,
 	uuidv4,
+	uploadAiChatFile,
 	makeDir,
 	convertBoolean,
 	convertToCamelCase,

@@ -113,7 +113,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() } );
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString(), 'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString() } );
 }
 
 
@@ -149,13 +149,13 @@ async function viewBots(req, res) {
 		botsSort = botsSort.reverse();
 	}
 
-	res.render( 'strategies/DCABot/DCABotsView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'bots': botsSort } );
+	res.render( 'strategies/DCABot/DCABotsView', { 'appData': shareData.appData, 'getDateParts': shareData.Common.getDateParts, 'timeDiff': shareData.Common.timeDiff, 'getCurrencySymbol': shareData.Common.getCurrencySymbol, 'bots': botsSort } );
 }
 
 
 async function viewHistoryDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData } );
+	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString() } );
 }
 
 
@@ -650,7 +650,187 @@ async function apiGetActiveDeals(req, res, sendResponse = true) {
 
 	const deals = await shareData.DCABot.getActiveDeals(active);
 
-	const obj = { 'date': new Date(), 'data': deals };
+	const cbActive = shareData.appData.circuit_breaker_active || null;
+	const cbClearsAt = shareData.appData.circuit_breaker_clears_at || null;
+
+	// Portfolio summary — balance from cache (no blocking exchange call) and
+	// total max funds computed across all active deals from their configs.
+	let portfolioSummary = null;
+
+	try {
+
+		// Get account_balance_currencies from config (e.g. ['USD','USDT','USDC'])
+		const exchangeConfig = shareData.appData.bots?.exchange?.default || {};
+		const balanceCurrencies = Array.isArray(exchangeConfig.account_balance_currencies)
+			? exchangeConfig.account_balance_currencies
+			: [];
+
+		// Detect sandbox mode from active deals.
+		// Always read sandBoxWallet from the live bot config so changes in the
+		// UI take effect immediately without needing to restart deals.
+		// When running under Hub, prefer the per-instance sandbox_wallet_override
+		// stored in shareData.appData (set from hub.json overrides) so each
+		// instance maintains its own wallet value independently of the shared bot.json.
+		let isSandbox     = false;
+		let sandboxWallet = 0;
+
+		if (Array.isArray(deals) && deals.length > 0) {
+
+			const sandboxDeal = deals.find(d => d?.config?.sandBox);
+
+			if (sandboxDeal) {
+
+				isSandbox = true;
+
+				// Hub per-instance override takes priority
+				if (shareData.appData.sandbox_wallet_override !== undefined && shareData.appData.sandbox_wallet_override !== null) {
+
+					sandboxWallet = parseFloat(shareData.appData.sandbox_wallet_override) || 0;
+				}
+				else {
+
+					// Read from live bot config — updated immediately when user saves in UI
+					const botConfigFile = shareData.appData.bot_config;
+					const botConfig     = await shareData.Common.getConfig(botConfigFile);
+					sandboxWallet       = parseFloat(botConfig?.data?.sandBoxWallet) || 0;
+				}
+			}
+		}
+
+		// Build per-exchange balances filtered to configured currencies only
+		const filteredBalances = {};
+		let portfolioTotal = 0;
+
+		if (isSandbox) {
+
+			// Sandbox mode — use configured wallet amount as portfolio total
+			// Show it under the first configured currency
+			const quoteCcy = balanceCurrencies[0] || 'USD';
+			filteredBalances['Sandbox'] = { [quoteCcy]: { free: sandboxWallet, total: sandboxWallet } };
+			portfolioTotal = sandboxWallet;
+		}
+		else {
+
+			// Live mode — read from balance cache populated by background refresh in DCABot.js.
+			// Fall back to getBalanceTracker() on first load before the interval has fired.
+			let balanceTracker = shareData.DCABot.getBalanceCache();
+
+			if (!balanceTracker?.updated) {
+
+				balanceTracker = await shareData.DCABot.getBalanceTracker();
+			}
+
+			const balances = balanceTracker?.balances || {};
+
+			for (const exchangeName in balances) {
+
+				const exchangeData = balances[exchangeName];
+
+				filteredBalances[exchangeName] = {};
+
+				for (const currency of balanceCurrencies) {
+
+					const entry = exchangeData[currency];
+
+					if (entry != null) {
+
+						const free  = parseFloat(entry?.free  ?? entry ?? 0) || 0;
+						const total = parseFloat(entry?.total ?? entry ?? 0) || 0;
+
+						filteredBalances[exchangeName][currency] = { free, total };
+						portfolioTotal += free;
+					}
+				}
+			}
+
+			portfolioSummary = portfolioSummary || {};
+			portfolioSummary['balance_updated'] = balanceTracker?.updated || null;
+		}
+
+		// Total max funds across all active deals
+		let totalMaxFunds = 0;
+
+		if (Array.isArray(deals)) {
+
+			for (const deal of deals) {
+
+				const mf = parseFloat(deal?.info?.max_funds ?? 0);
+
+				if (!isNaN(mf)) totalMaxFunds += mf;
+			}
+		}
+
+		totalMaxFunds = Math.round(totalMaxFunds * 100) / 100;
+
+		// Risk % = total max funds / portfolio total * 100
+		const riskPercent = portfolioTotal > 0
+			? Math.round((totalMaxFunds / portfolioTotal) * 100)
+			: null;
+
+		// In deals = sum of filled order amounts (USD cost) across all active deals.
+		// Each order.amount = price × qty = quote currency cost (e.g. USD).
+		// order.sum is the cumulative cost up to that order — use the last filled
+		// order's sum per deal for the total capital deployed in that deal.
+		let inDeals = 0;
+
+		if (Array.isArray(deals)) {
+
+			for (const deal of deals) {
+
+				const orders = deal?.orders;
+
+				if (!Array.isArray(orders)) continue;
+
+				const filledOrders = orders.filter(o => o.filled == 1 || o.filled === true);
+
+				if (filledOrders.length > 0) {
+
+					// sum on the last filled order is the cumulative USD cost
+					const lastFilled = filledOrders[filledOrders.length - 1];
+					const dealCost   = parseFloat(lastFilled?.sum ?? 0);
+
+					if (!isNaN(dealCost) && dealCost > 0) {
+
+						inDeals += dealCost;
+					}
+					else {
+
+						// Fallback: sum individual order amounts
+						inDeals += filledOrders.reduce((acc, o) => acc + (parseFloat(o.amount) || 0), 0);
+					}
+				}
+			}
+		}
+
+		const availFunds = Math.round((portfolioTotal - inDeals) * 100) / 100;
+
+		portfolioSummary = {
+			'balances':           filteredBalances,
+			'balance_currencies': balanceCurrencies,
+			'portfolio_total':    Math.round(portfolioTotal * 100) / 100,
+			'total_max_funds':    totalMaxFunds,
+			'in_deals':           Math.round(inDeals * 100) / 100,
+			'avail_funds':        availFunds,
+			'risk_percent':       riskPercent,
+			'is_sandbox':         isSandbox,
+			'balance_updated':    isSandbox ? null : (portfolioSummary?.balance_updated || null),
+		};
+	}
+	catch (e) {
+
+		shareData.Common.logger('Portfolio summary error: ' + e.message);
+	}
+
+	const obj = {
+		'date': new Date(),
+		'data': deals,
+		'circuit_breaker': cbActive ? {
+			'active': true,
+			'reason': cbActive,
+			'clears_at': cbClearsAt
+		} : null,
+		'portfolio': portfolioSummary,
+	};
 
 	if (sendResponse) {
 
@@ -799,10 +979,11 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 				// Only calculate if orders or tp were set
 				if (data && data['orders']['success']) {
 
-					let orderHeaders = data['orders']['data']['orders']['headers'];
-					let orderSteps = data['orders']['data']['orders']['steps'];
 					let orderContent = data['orders']['data']['content'];
 					let ordersMetadata = data['orders']['data']['metadata'];
+
+					// Use structured data directly — no text parsing needed
+					let orderSteps = data['orders']['data']['orders']['structured'] || data['orders']['data']['orders']['steps'];
 
 					let maxDeviationPercent = orderContent['max_deviation_percent'];
 
@@ -1169,7 +1350,7 @@ async function apiGetBalances(req, res, sendResponse = true) {
 
 	let success = true;
 
-	const balances = await shareData.DCABot.getBalanceTracker();
+	const balances = await shareData.DCABot.getBalanceCache();
 
 	const resObj = { 'date': new Date(), 'success': success, 'data': balances };
 
@@ -1260,6 +1441,11 @@ async function apiCreateUpdateBot(req, res) {
 
 		// Add property bot_max_funds to orders object by calculating deal max funds multiplied by numbers of pairs
 		orders['data']['content']['bot_max_funds'] = bot_maxFunds();
+
+		// Add currency symbol derived from quote of first selected pair
+		const previewPair = Array.isArray(pairs) ? (pairs[0] || '') : (pairs || '');
+		const previewQuote = previewPair.split('/')[1] || '';
+		orders['data']['content']['currency_symbol'] = shareData.Common.getCurrencySymbol(previewQuote);
 	}
 
 	if (botData.startConditions != undefined && botData.startConditions != null) {
@@ -1532,7 +1718,7 @@ async function apiEnableDisableBot(req, res, sendResponse = true, directBotId = 
 		msg = 'Invalid Bot ID';
 	}
 
-	const resObj = { 'date': new Date(), 'success': success, 'data': msg };
+	const resObj = { 'date': new Date(), 'success': success, 'data': msg, 'botName': (bots[0] ? bots[0].botName : '') };
 
 	shareData.Common.logger('API Enable / Disable Bot: ' + JSON.stringify(resObj));
 
@@ -2006,9 +2192,23 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
         if (data.sandBox) return Object.fromEntries(currencies.map(c => [c, data.sandBoxWallet]));
 
-        const exchange = await shareData.DCABot.connectExchange(data);
-        const { success, balance } = await shareData.DCABot.getBalance(exchange);
-        return success ? balance : {};
+        // Use the background balance cache instead of calling the exchange directly
+        // Cache is refreshed every 60s by the interval in DCABot.js initApp()
+        const balanceTracker = await shareData.DCABot.getBalanceCache();
+        const allBalances = balanceTracker?.balances || {};
+
+        // Merge all exchanges and filter to configured currencies
+        const merged = {};
+        for (const exName in allBalances) {
+            for (const currency of currencies) {
+                const entry = allBalances[exName]?.[currency];
+                if (entry != null) {
+                    const free = parseFloat(entry?.free ?? entry ?? 0) || 0;
+                    merged[currency] = (merged[currency] || 0) + free;
+                }
+            }
+        }
+        return merged;
     })();
 
     // Bot map helpers
@@ -2030,7 +2230,8 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         }
 
         // Profit by day
-        const dayKey = deal.date_end.toDateString();
+        const localDealEnd = new Date(deal.date_end.getTime() + totalOffsetMinutes * 60000);
+        const dayKey = localDealEnd.toDateString();
         profit_by_day_map[dayKey] = (profit_by_day_map[dayKey] || 0) + (deal.profit || 0);
 
         // Deal duration
@@ -2151,6 +2352,17 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
     pair_profit_map = sortDesc(pair_profit_map);
 
+    // Derive KPI display symbol from most common quote currency in completed deals
+    const quoteCounts = {};
+    complete_deals.forEach(deal => {
+        const quote = deal.profit_currency === 'base'
+            ? (deal.pair || '').split('/')[0]
+            : (deal.pair || '').split('/')[1];
+        if (quote) quoteCounts[quote] = (quoteCounts[quote] || 0) + 1;
+    });
+    const kpiCurrency = Object.keys(quoteCounts).sort((a, b) => quoteCounts[b] - quoteCounts[a])[0] || currencies[0] || 'USD';
+    const kpiSymbol = shareData.Common.getCurrencySymbol(kpiCurrency);
+
     return {
         kpi: {
             active_deals: Object.keys(deal_tracker).length,
@@ -2176,6 +2388,7 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         },
         botIdNameMap,
         currencies,
+        kpiSymbol,
         isLoading,
         period
     };

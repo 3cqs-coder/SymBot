@@ -11,7 +11,8 @@
 
 
 const DB = require(__dirname + '/libs/mongodb');
-const ServerDB = require(__dirname + '/libs/mongodb/ServerSchema');
+const ServerDB  = require(__dirname + '/libs/mongodb/ServerSchema');
+const AIChatDB  = require(__dirname + '/libs/mongodb/AIChatSchema');
 const DCABot = require(__dirname + '/libs/strategies/DCABot/DCABot.js');
 const DCABotManager = require(__dirname + '/libs/strategies/DCABot/DCABotManager.js');
 const TradingSignals = require(__dirname + '/libs/signals/TradingSignals.js');
@@ -71,6 +72,7 @@ async function init() {
 	let isReset = false;
 	let resetServerId = false;
 	let resetSessions = false;
+	let resetAiChats  = false;
 	let isRollback = false;
 	let rollbackSnapshot = null;
 	let consoleLog = false;
@@ -107,6 +109,11 @@ async function init() {
 		if (process.argv[3] && process.argv[3].toLowerCase() == 'sessions') {
 
 			resetSessions = true;
+		}
+
+		if (process.argv[3] && process.argv[3].toLowerCase() == 'aichats') {
+
+			resetAiChats = true;
 		}
 	}
 
@@ -304,6 +311,8 @@ async function init() {
 										'telegram_enabled_config': telegramEnabled,
 										'signals_3cqs_enabled': appConfig?.data?.signals?.['3CQS']?.enabled,
 										'cron_backup': appConfig['data']['cron_backup'],
+										'ai': appConfig['data']['ai'] || {},
+										'circuit_breaker': appConfig['data']['circuit_breaker'] || {},
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
 										'reset': isReset,
@@ -322,7 +331,8 @@ async function init() {
 						'System': System,
 						'Telegram': Telegram,
 						'WebServer': WebServer,
-						'AIClient': AIClient,
+						'AIClient':  AIClient,
+						'AIChatDB':  AIChatDB,
 					};
 
 	Common.freezeProperty(shareData['appData'], [ 'path_root', 'app_filename' ]);
@@ -358,6 +368,19 @@ async function init() {
 		if (workerDataOverrides['signals_3cqs_enabled'] !== undefined && workerDataOverrides['signals_3cqs_enabled'] !== null && workerDataOverrides['signals_3cqs_enabled'] !== '') {
 
 			shareData.appData['signals_3cqs_enabled'] = Common.convertBoolean(workerDataOverrides['signals_3cqs_enabled'], false);
+		}
+
+		// Per-instance sandbox wallet override — stored in Hub instance overrides
+		// so each instance maintains its own wallet balance independently of the
+		// shared bot.json file that all instances use.
+		if (workerDataOverrides['sandbox_wallet'] !== undefined && workerDataOverrides['sandbox_wallet'] !== null && workerDataOverrides['sandbox_wallet'] !== '') {
+
+			const sandboxWalletOverride = parseFloat(workerDataOverrides['sandbox_wallet']);
+
+			if (!isNaN(sandboxWalletOverride) && sandboxWalletOverride >= 0) {
+
+				shareData.appData['sandbox_wallet_override'] = sandboxWalletOverride;
+			}
 		}
 	}
 
@@ -466,6 +489,14 @@ async function init() {
 			const resetData = await System.resetSessions();
 
 			console.log('Sessions reset: ' + resetData['success']);
+
+			process.exit(1);
+		}
+		else if (resetAiChats) {
+
+			const resetData = await System.resetAiChatsConsole();
+
+			console.log('AI chats reset: ' + resetData['success']);
 
 			process.exit(1);
 		}

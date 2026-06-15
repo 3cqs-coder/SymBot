@@ -233,6 +233,13 @@ async function processSignal(data) {
 		return;
 	}
 
+	if (shareData.appData.circuit_breaker_active && signal == 'BOT_START') {
+
+		// Log that CB is active when a BOT_START arrives — enforcement is handled
+		// authoritatively in canStartDeal so all clients are treated consistently.
+		shareData.Common.logger(colors.yellow.bold('Circuit Breaker Active: BOT_START signal received for ' + symbol + ' — will be blocked by canStartDeal'));
+	}
+
 	const maxMins = 5;
 
 	const symbol = data['symbol'];

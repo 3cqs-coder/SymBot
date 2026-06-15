@@ -352,6 +352,7 @@ async function routeAddInstance(req, res) {
 	let webServerPortOverride;
 	let telegramEnabledOverride;
 	let signals3CQSEnabledOverride;
+	let sandboxWalletOverride;
 
 	let success = true;
 	let appConfigCopy = false;
@@ -383,6 +384,7 @@ async function routeAddInstance(req, res) {
 		enabled = shareData.Common.convertBoolean(body['enabled'], false);
 		telegramEnabledOverride = shareData.Common.convertBoolean(body['overrides']['telegram_enabled'], body['overrides']['telegram_enabled']);
 		signals3CQSEnabledOverride = shareData.Common.convertBoolean(body['overrides']['signals_3cqs_enabled'], body['overrides']['signals_3cqs_enabled']);
+		sandboxWalletOverride = body['overrides']['sandbox_wallet'] !== undefined && body['overrides']['sandbox_wallet'] !== '' ? parseFloat(body['overrides']['sandbox_wallet']) : undefined;
 
 		const validateOrig = await validateConfig(configs, true);
 
@@ -465,7 +467,8 @@ async function routeAddInstance(req, res) {
 				'mongo_db_url': mongoDbUrlOverride,
 				'web_server_port': webServerPortOverride,
 				'telegram_enabled': telegramEnabledOverride,
-				'signals_3cqs_enabled': signals3CQSEnabledOverride
+				'signals_3cqs_enabled': signals3CQSEnabledOverride,
+				'sandbox_wallet': sandboxWalletOverride
 			}
 		};
 
@@ -701,6 +704,12 @@ async function routeUpdateInstances(req, res) {
 					if (config.overrides && 'signals_3cqs_enabled' in config.overrides) {
 
 						config.overrides.signals_3cqs_enabled = shareData.Common.convertBoolean(config.overrides.signals_3cqs_enabled);
+					}
+
+					if (config.overrides && 'sandbox_wallet' in config.overrides && config.overrides.sandbox_wallet !== '' && config.overrides.sandbox_wallet !== undefined) {
+
+						const sw = parseFloat(config.overrides.sandbox_wallet);
+						config.overrides.sandbox_wallet = !isNaN(sw) && sw >= 0 ? sw : undefined;
 					}
 				});
 

@@ -518,6 +518,7 @@
 			dealTracker[dealId] = {
 				instanceId,
 				instanceName,
+				pair:   deal['pair'],
 				date:   deal['date'],
 				info:   deal['info'],
 				config: config,
@@ -550,6 +551,7 @@
 			const safetyMax  = config['dcaMaxOrder'];
 			const priceLast  = deal['info']['price_last'];
 			const priceTarget = deal['info']['price_target'];
+			const dealSym = getDealSym(deal['pair'], deal['config']['profitCurrency']);
 
 			const pillContent = panicBtn + pauseBtn + cancelBtn + (stopBtn || '');
 
@@ -559,10 +561,10 @@
 				'<td>' + botName + '</td>' +
 				'<td>' + deal['pair'] + '</td>' +
 				'<td>' + duration + '</td>' +
-				'<td>$' + convertNotation(priceLast) + '</td>' +
-				'<td>$' + convertNotation(priceTarget) + '</td>' +
-				'<td>$' + dealVolume.toFixed(2) + '</td>' +
-				'<td class="' + profitPercClass + '">$' + profit + '</td>' +
+				'<td>' + dealSym + convertNotation(priceLast) + '</td>' +
+				'<td>' + dealSym + convertNotation(priceTarget) + '</td>' +
+				'<td>' + dealSym + dealVolume.toFixed(2) + '</td>' +
+				'<td class="' + profitPercClass + '">' + dealSym + profit + '</td>' +
 				'<td class="' + profitPercClass + '">' + profitPerc + '%</td>' +
 				'<td>' + safetyUsed + ' / ' + safetyMax + '</td>' +
 				'<td>' + dealCount + '</td>' +
@@ -588,9 +590,9 @@
 
 		$('#totalProfit').removeClass('profit-positive profit-negative')
 			.addClass(totalProfit <= 0 ? 'profit-negative' : 'profit-positive')
-			.html('$' + totalProfit.toFixed(2));
+			.html((deals.length > 0 ? getDealSym(deals[0]['pair'], deals[0]['config']['profitCurrency']) : '$') + totalProfit.toFixed(2));
 
-		$('#inDeals').html('$' + inDeals.toFixed(2));
+		$('#inDeals').html((deals.length > 0 ? getDealSym(deals[0]['pair'], deals[0]['config']['profitCurrency']) : '$') + inDeals.toFixed(2));
 		$('#totalDeals').html(activeDeals);
 
 		$('#hubDeals').trigger('update');
@@ -601,7 +603,16 @@
 
 	// ── Document ready ────────────────────────────────────────────────────────
 
-	$(document).ready(function() {
+	const getCurrencySymbol = <%- getCurrencySymbol %>;
+
+function getDealSym(pair, profitCurrency) {
+	const parts = (pair || '').split('/');
+	const code = profitCurrency === 'base' ? parts[0] : parts[1];
+	return getCurrencySymbol(code) || '$';
+}
+
+
+$(document).ready(function() {
 
 		let tooltipDisplayTime = {};
 
@@ -719,7 +730,7 @@
 				// Any other data column — order history
 				if (!dealTracker[dealId]) return;
 
-				showOrderHistory(modalId, dealId, dealTracker[dealId]['info']['active'], dealTracker[dealId]['orders']);
+				showOrderHistory(modalId, dealId, dealTracker[dealId]['info']['active'], dealTracker[dealId]['orders'], dealTracker[dealId]['pair']);
 			}
 		});
 

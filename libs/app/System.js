@@ -61,7 +61,7 @@ const connectDb = async (url) => {
 };
 
 
-const resetDatabase = async (resetDb, resetServerId) => {
+const resetDatabase = async (resetDb, resetServerId, resetAiChats = false) => {
 
 	let success = true;
 
@@ -70,6 +70,7 @@ const resetDatabase = async (resetDb, resetServerId) => {
 	let collectionDeals;
 	let collectionSessions;
 	let collectionServer;
+	let collectionAiChats;
 
 	try {
 
@@ -81,6 +82,11 @@ const resetDatabase = async (resetDb, resetServerId) => {
 			collectionBots = await db.dropCollection('bots');
 			collectionDeals = await db.dropCollection('deals');
 			collectionSessions = await db.dropCollection('sessions');
+		}
+
+		if (resetAiChats) {
+
+			try { collectionAiChats = await db.dropCollection('ai_conversations'); } catch(e) {}
 		}
 
 		if (resetServerId) {
@@ -104,7 +110,8 @@ const resetDatabase = async (resetDb, resetServerId) => {
 						'collectionBots': collectionBots,
 						'collectionDeals': collectionDeals,
 						'collectionServer': collectionServer,
-						'collectionSessions': collectionSessions
+						'collectionSessions': collectionSessions,
+						'collectionAiChats': collectionAiChats
 					};
 
 	return resObj;
@@ -151,7 +158,7 @@ const resetSessions = async () => {
 };
 
 
-const backupAllCollections = async (dbConnection, dir) => {
+const backupAllCollections = async (dbConnection, dir, includeChats = true) => {
 
     let success = true;
 	let isErr;
@@ -172,6 +179,11 @@ const backupAllCollections = async (dbConnection, dir) => {
         for (const collection of collections) {
 
             const collectionName = collection.name;
+
+			if (collectionName === 'ai_conversations' && !includeChats) {
+				shareData.Common.logger('Skipping ai_conversations backup (include_chats is false).');
+				continue;
+			}
             const cursor = db.collection(collectionName).find();
             const filePath = path.join(dbDir, `${collectionName}.bson`);
             const fileStream = fs.createWriteStream(filePath);
@@ -272,7 +284,12 @@ const restoreAllCollections = async (dbConnection, dir) => {
 };
 
 
-const backupDb = async () => {
+const backupDb = async (includeChats) => {
+
+	// Default to app.json config for cron backups; manual backups pass explicit value
+	if (includeChats === undefined) {
+		includeChats = !(shareData.appData.cron_backup && shareData.appData.cron_backup.include_chats === false);
+	}
 
 	let res;
 
@@ -284,7 +301,7 @@ const backupDb = async () => {
 
 	try {
 
-		res = await backupAllCollections(dbConnection, dir);
+		res = await backupAllCollections(dbConnection, dir, includeChats);
 	}
 	finally {
 
@@ -326,8 +343,9 @@ async function routeBackupDb(req, res) {
 	const body = req.body;
 
 	let password = body.password;
+	let includeChats = shareData.Common.convertBoolean(body.include_chats, true);
 
-	const resBackup = await processBackupDb(password);
+	const resBackup = await processBackupDb(password, includeChats);
 
 	const msg = resBackup.msg;
 	const outFileEnc = resBackup.full_path;
@@ -367,6 +385,7 @@ async function routeRestoreDb(req, res) {
 	let password = body.password;
 	let convertData = shareData.Common.convertBoolean(body.convertData, false);
 	let resetServerId = shareData.Common.convertBoolean(body.resetServerId, false);
+	let resetAiChats  = shareData.Common.convertBoolean(body.resetAiChats, false);
 
 	try {
 
@@ -385,7 +404,7 @@ async function routeRestoreDb(req, res) {
 		}
 
 		// Process restore
-		await processRestoreDb(tempPath, targetPath, password, convertData, resetServerId);
+		await processRestoreDb(tempPath, targetPath, password, convertData, resetServerId, resetAiChats);
 
 		// Send a success response
 		res.status(200).send('File uploaded and database restored successfully.');
@@ -399,7 +418,7 @@ async function routeRestoreDb(req, res) {
 }
 
 
-async function processBackupDb(password) {
+async function processBackupDb(password, includeChats = true) {
 
 	let msg;
 	let outFileEnc;
@@ -422,7 +441,7 @@ async function processBackupDb(password) {
 	// Wait short delay for data to stop processing
 	await shareData.Common.delay(5000);
 
-	const resBackup = await backupDb();
+	const resBackup = await backupDb(includeChats);
 
 	let success = resBackup['success'];
 	const dir = resBackup['dir'];
@@ -466,7 +485,7 @@ async function processBackupDb(password) {
 }
 
 
-async function processRestoreDb(tempPath, targetPath, password, convertData, resetServerId) {
+async function processRestoreDb(tempPath, targetPath, password, convertData, resetServerId, resetAiChats = false) {
 
 	await pause(true, 'Database Restore Processing');
 	await shareData.Common.delay(5000);
@@ -524,6 +543,11 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 			if (convertData) {
 
 				await shareData.DCABot.convertDataToSandBox();
+			}
+
+			if (resetAiChats) {
+
+				await resetDatabase(false, false, true);
 			}
 
 			if (resetServerId) {
@@ -1989,6 +2013,53 @@ async function findMissingParameters(obj1, obj2, path = '') {
 }
 
 
+async function resetAiChatsConsole() {
+
+	let success = false;
+	let isErr;
+
+	console.log('\n*** CAUTION *** You are about to reset all AI chat conversations for ' + shareData.appData.name + '!\n');
+	console.log('Database: ' + shareData.appData['mongo_db_url'] + '\n');
+
+	const confirm = prompt('Do you want to continue? (Y/n): ');
+
+	if (confirm === 'Y') {
+
+		const resetCode = Math.floor(Math.random() * 1000000000);
+		console.log('\nReset code: ' + resetCode);
+
+		const code = prompt('Enter the reset code above to reset AI chat history: ');
+
+		if (code == resetCode) {
+
+			try {
+
+				const resetData = await resetDatabase(false, false, true);
+
+				success = resetData['success'];
+				isErr   = resetData['error'];
+
+				console.log('\nAI conversations reset: ' + resetData['collectionAiChats']);
+			}
+			catch(e) {
+
+				isErr = e.message;
+			}
+		}
+		else {
+
+			console.log('\nReset code did not match. Aborted.');
+		}
+	}
+	else {
+
+		console.log('\nReset aborted.');
+	}
+
+	return { 'success': success, 'error': isErr };
+}
+
+
 async function resetConsole(serverIdError, resetServerId) {
 
 	// Reset database from command line
@@ -2319,6 +2390,7 @@ module.exports = {
 	start,
 	pause,
 	resetConsole,
+	resetAiChatsConsole,
 	resetDatabase,
 	resetSessions,
 	updateSystem,

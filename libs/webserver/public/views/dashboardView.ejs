@@ -7,6 +7,10 @@
     const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map, equity_curve_map = {}, win_rate_map = {}, pair_profit_map = {}, pair_profit_pos_map = {}, pair_profit_neg_map = {}, so_utilisation_map = {} } = <%- JSON.stringify(charts) %>;
     const balances = <%- JSON.stringify(available_balance) %>;
     const currencies = <%- '[' + currencies.map(currency => `'${currency}'`).join(',') + ']'; %>;
+
+    // kpiSymbol derived server-side from most common quote currency in completed deals
+    const getCurrencySymbol = <%- getCurrencySymbol %>;
+    let currencySymbol = '<%- kpiSymbol %>';
     const botIdNameMap = <%- JSON.stringify(botIdNameMap) %>;
 
     const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
@@ -39,7 +43,7 @@
         function populateBalance(currency) {
             let balance = Number(balances[currency]);
             if (isNaN(balance)) balance = 0;
-            $('#balance').html('$' + balance.toLocaleString());
+            $('#balance').html(currencySymbol + balance.toLocaleString());
         }
 
         const period_map = { 'week': 7, '2-weeks': 14, 'month': 30 };
@@ -51,6 +55,7 @@
         populateBalance(currencies[0]);
 
         $('#currencies').change(function() {
+            currencySymbol = getCurrencySymbol($(this).val());
             populateBalance($(this).val());
         });
 
@@ -109,7 +114,7 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return label + ': $' + context.raw.toLocaleString();
+                                    return label + ': ' + currencySymbol + context.raw.toLocaleString();
                                 }
                             }
                         }
@@ -125,7 +130,7 @@
                         },
                         y: {
                             ticks: { color: chartTickColor, callback: function(value) {
-                                return '$' + value.toLocaleString();
+                                return currencySymbol + value.toLocaleString();
                             }},
                             grid: { color: chartGridColor }
                         }
@@ -136,7 +141,7 @@
 
         // --- Chart creation helper ---
         function createChart(ctx, label, data, showMaxOnTop=false, maxData={}) {
-            const moneyCharts = ['Bot Profit','Active P/L','Adjusted P/L','Profit Per Day','Funds in Use'];
+            const moneyCharts = ['Bot Profit','Active P/L','Adjusted P/L','Profit Per Day','Funds in Use','Pair Profit','Pair Losses'];
             const isMoney = moneyCharts.includes(label);
 
             const keys = Object.keys(data);
@@ -161,7 +166,7 @@
                             callbacks: {
                                 label: function(context) {
                                     const value = context.raw.toLocaleString();
-                                    return isMoney ? `${label}: $${value}` : `${label}: ${value}`;
+                                    return isMoney ? `${label}: ${currencySymbol}${value}` : `${label}: ${value}`;
                                 }
                             }
                         }
@@ -178,7 +183,7 @@
                         },
                         y: {
                             ticks: { color: chartTickColor, callback: function(value) {
-                                return isMoney ? '$' + value.toLocaleString() : value;
+                                return isMoney ? currencySymbol + value.toLocaleString() : value;
                             }},
                             grid: { color: chartGridColor }
                         }
@@ -200,7 +205,7 @@
                                 ctx.font = 'bold 12px Arial';
                                 ctx.textAlign = 'center';
                                 ctx.textBaseline = 'bottom';
-                                ctx.fillText('$' + maxValue.toLocaleString(), bar.x, bar.y - 5);
+                                ctx.fillText(currencySymbol + maxValue.toLocaleString(), bar.x, bar.y - 5);
                                 ctx.restore();
                             });
                         });
@@ -277,7 +282,7 @@
                     </div>
                     <div class="performance-kpi">
                         <span style="font-size: 11px">Total In Deals</span>
-                        <span style="font-size: 20px;">$<%- total_in_deals.toLocaleString() %></span>
+                        <span style="font-size: 20px;"><%- kpiSymbol %><%- total_in_deals.toLocaleString() %></span>
                     </div>
                     <div class="performance-kpi">
                         <span style="font-size: 11px">Available Funds</span>
@@ -285,11 +290,11 @@
                     </div>
                     <div class="performance-kpi">
                         <span style="font-size: 11px">Profit</span>
-                        <span style="font-size: 20px;">$<%- total_profit.toLocaleString() %></span>
+                        <span style="font-size: 20px;"><%- kpiSymbol %><%- total_profit.toLocaleString() %></span>
                     </div>
                     <div class="performance-kpi">
                         <span style="font-size: 11px">Active P/L</span>
-                        <span style="font-size: 20px;">$<%- total_pl.toLocaleString() %></span>
+                        <span style="font-size: 20px;"><%- kpiSymbol %><%- total_pl.toLocaleString() %></span>
                     </div>
                 </div>
 

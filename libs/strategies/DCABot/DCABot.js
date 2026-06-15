@@ -563,7 +563,8 @@ async function start(dataObj, startId) {
 
 					let contentAdd = await ordersAddContent(wallet, lastDcaOrderSum, maxDeviation, balanceObj);
 
-					let ordersTable = await ordersToData(t.toString());
+					// Use structured data directly — no text parsing needed
+					const ordersTable = await ordersToStructuredData(orderData['structured']);
 
 					return ({
 								'success': true,
@@ -964,6 +965,36 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					
 					Common.logger(colors.red.bold(msg));
 				}
+
+				// Track consecutive zero-price events per deal
+				if (!shareData.appData.cb_price_zero_tracker) shareData.appData.cb_price_zero_tracker = {};
+				const pzt = shareData.appData.cb_price_zero_tracker;
+				pzt[dealId] = (pzt[dealId] || 0) + 1;
+
+				const cbCfg = shareData.appData.circuit_breaker;
+				const zeroAlertThreshold = (cbCfg && cbCfg.price_zero_alert_count) || 4;
+
+				if (pzt[dealId] >= zeroAlertThreshold) {
+
+					if (cbCfg && cbCfg.enabled) {
+
+						Common.sendNotification({
+							'message': `⚠️ Invalid Price: 0\n\nPair: ${pair}\nDeal ID: ${dealId}\n\nPrice feed has returned 0 ${pzt[dealId]} consecutive times. The exchange may have an issue with this pair.`,
+							'type': 'warning',
+							'telegram_id': shareData.appData.telegram_id
+						});
+					}
+
+					// Reset counter after alert (or threshold reached) so it doesn't accumulate
+					pzt[dealId] = 0;
+				}
+			}
+			else {
+
+				// Valid price — reset zero counter for this deal
+				if (shareData.appData.cb_price_zero_tracker) {
+					shareData.appData.cb_price_zero_tracker[dealId] = 0;
+				}
 			}
 
 			let targetPrice = 0;
@@ -975,6 +1006,17 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 			isDealPauseSell = Common.convertBoolean(deal.pausedSell, false);
 
 			if (deal.isStart == 0) {
+
+				// Defence in depth — circuit breaker should already have been caught
+				// by canStartDeal before reaching here, but guard at the exchange call
+				// level too in case start() is ever called from a path that bypasses
+				// the serial queue (e.g. resume on startup).
+				if (shareData.appData.circuit_breaker_active) {
+
+					Common.logger(colors.yellow.bold('Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active + ' - Blocking base order for deal ' + dealId));
+
+					return ( { 'success': false, 'finished': false, 'reason': 'Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active } );
+				}
 
 				let buyError;
 				let buyOrderId = '';
@@ -1133,6 +1175,14 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						if ((price <= priceBuyOrder && order.filled == 0) && !cancelOnly && !isDealPause && !isDealPauseBuy && !isDealCancel && !isDealPanicSell) {
 							//Buy DCA
 
+							// Circuit breaker blocks safety order buys
+							if (shareData.appData.circuit_breaker_active) {
+
+								Common.logger(colors.yellow.bold('Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active + ' - Blocking safety order for deal ' + dealId));
+
+								return ( { 'success': false, 'finished': false } );
+							}
+
 							isBuy = true;
 
 							const handleSuccessfulBuy = async ({ dealId, orderIndex, buyOrderId, buyOrderPrice, orders, price, currentOrder, exchange, pair, profit }) => {
@@ -1174,6 +1224,9 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 							if (!config.sandBox) {
 
 								const priceFiltered = await filterPrice(exchange, pair, price);
+
+								// Record safety order trigger for circuit breaker evaluation
+								recordSafetyOrderTrigger(dealId, pair, price);
 
 								const buy = await buyOrder(exchange, dealId, pair, order.qty, priceFiltered);
 
@@ -1434,9 +1487,83 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										}
 										else if (sellOrderStatusInvalid) {
 
-											// Sell failed after trying to be verified. Maybe exchange canceled order. Try selling again after additional short delay
+											// Check if exchange cancelled after a partial fill (e.g. Coinbase price protection)
+											const cancelPartialFilled = Number(sell['data_order']['quantity'] ?? 0);
+											const cancelShortfall = cancelPartialFilled > 0
+												? ((Number(qtySumSellOrder) - cancelPartialFilled) / Number(qtySumSellOrder)) * 100
+												: 0;
 
-											await Common.delay(5000);
+											if (cancelPartialFilled > 0 && cancelShortfall > partialSellFillThresholdPercent) {
+
+												// Exchange cancelled after partial fill — record fill and
+												// wait for settlement before retrying the remainder
+												sellOrderIds.push(sell['data']['id']);
+
+												Common.logger(colors.bgYellow.bold(
+													'Exchange-cancelled partial fill for deal ID ' + dealId +
+													' / Filled: ' + cancelPartialFilled.toFixed(8) +
+													' / Shortfall: ' + cancelShortfall.toFixed(2) + '% — waiting for settlement'
+												));
+
+												Common.sendNotification({
+													'message': `Partial sell fill for deal ID ${dealId}. Exchange cancelled after ${(100 - cancelShortfall).toFixed(0)}% filled. Waiting for settlement then retrying remainder.`,
+													'type': 'deal_error',
+													'telegram_id': shareData.appData.telegram_id
+												});
+
+												// Settlement delay — give exchange time to release remaining balance
+												const settlementDelayMs = 30000;
+												await Common.delay(settlementDelayMs);
+
+												let cancelRetryCount = 0;
+												let cancelTotalFilled = cancelPartialFilled;
+												let cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
+
+												while (cancelRetryCount < maxPartialSellRetries && cancelQtyRemaining > 0) {
+
+													if (isDealCancel || isDealPanicSell) break;
+
+													await Common.delay(partialSellRetryDelayMs);
+													cancelRetryCount++;
+
+													const cancelSymData = await getSymbol(exchange, pair);
+													const cancelPrice = (cancelSymData.data?.bid ?? price);
+													const cancelPriceFiltered = await filterPrice(exchange, pair, cancelPrice);
+													const cancelQtyFiltered = await filterAmount(exchange, pair, cancelQtyRemaining);
+
+													if (!cancelQtyFiltered || Number(cancelQtyFiltered) <= 0) break;
+
+													Common.logger(colors.bgYellow.bold(
+														'Settlement retry ' + cancelRetryCount + '/' + maxPartialSellRetries +
+														' for deal ID ' + dealId + ' / Selling: ' + cancelQtyFiltered
+													));
+
+													const cancelSellRetry = await sellOrder(exchange, dealId, pair, cancelQtyFiltered, cancelPriceFiltered);
+
+													if (cancelSellRetry.success && cancelSellRetry.success_verify) {
+
+														sellOrderIds.push(cancelSellRetry['data']['id']);
+														const cancelRetryFilled = Number(cancelSellRetry['data_order']['quantity'] ?? 0);
+														cancelTotalFilled += cancelRetryFilled;
+														cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
+														if ((cancelQtyRemaining / Number(qtySumSellOrder)) * 100 <= partialSellFillThresholdPercent) break;
+													}
+													else if (cancelSellRetry.nsf) {
+
+														// Still settling — extend wait
+														await Common.delay(settlementDelayMs);
+													}
+												}
+
+												// Mark sell successful so deal closes with the partial fill
+												sellSuccess = true;
+												sellOrderStatusInvalid = false;
+
+											} else {
+
+												// Clean cancel with no partial fill — retry after short delay
+												await Common.delay(5000);
+											}
 										}
 										else if (sellOrderInvalid) {
 
@@ -1969,6 +2096,18 @@ const canStartDeal = async ({ pair, config, pairCount = 0, dealsActive = [] }) =
 
 	let allowed = true;
 	let reason  = '';
+
+	// Circuit breaker is the first gate — checked before any DB queries.
+	// Enforced here rather than in individual signal clients so that ALL
+	// deal-start paths (3CQS signals, manual API, webhooks, future clients)
+	// are blocked consistently and receive a clear reason in the response.
+	if (shareData.appData.circuit_breaker_active) {
+
+		return {
+			allowed: false,
+			reason:  'Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active
+		};
+	}
 
 	const isPairBlackListed        = await Common.pairBlackListed(pair);
 	const globalPairLimitExceeded  = await checkGlobalPairLimit(pairBotsDealsMax, pair);
@@ -2747,6 +2886,19 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 					if (orderVerify.invalid_status) {
 
 						statusInvalid = true;
+
+						// Capture partial fill qty even when exchange cancels the order
+						// (e.g. Coinbase price protection cancels after partial fill)
+						if (orderVerify.data) {
+
+							const partialFilled = orderVerify.data.filled ?? null;
+							if (partialFilled !== null && Number(partialFilled) > 0) {
+
+								orderQty    = Number(partialFilled);
+								orderAmount = orderVerify.data.cost ?? null;
+								orderPrice  = orderVerify.data.price ?? null;
+							}
+						}
 					}
 
 					success = false;
@@ -3772,11 +3924,14 @@ async function getPairData(pair) {
 
 		const orderData = JSON.parse(JSON.stringify(orders.data.orders));
 
-		const orderDataSteps = orderData.steps;
+		// Use structured data if available, fall back to legacy positional array
+		const orderDataSteps = orderData.structured || orderData.steps;
 
 		for (let i = 0; i < orderDataSteps.length; i++) {
 
-			qtyArr.push(orderDataSteps[i][5])
+			const step = orderDataSteps[i];
+			const isObj = step !== null && typeof step === 'object' && !Array.isArray(step);
+			qtyArr.push(isObj ? step.qty : step[5]);
 		}
 
 		const precisionAmount = Common.getPrecision(qtyArr);
@@ -4189,32 +4344,33 @@ async function updateOrders(data) {
 	for (let i = 0; i < orderSteps.length; i++) {
 
 		let orderNew;
+		const step = orderSteps[i];
 
-		let priceTargetNew = orderSteps[i][4].replace(/[^0-9.]/g, '');
+		// Support both structured objects (new path) and legacy positional arrays (old path)
+		const isObj = step !== null && typeof step === 'object' && !Array.isArray(step);
+
+		const priceTargetNew = String(isObj ? step.target : step[4]).replace(/[^0-9.]/g, '');
 
 		// Use existing order data if available
 		if (ordersOrig[i] != undefined && ordersOrig[i] != null) {
 
-			let priceTargetOrig = ordersOrig[i]['target'];
-
 			orderNew = ordersOrig[i];
-
 			orderNew['target'] = priceTargetNew;
 		}
 		else {
 
 			let orderObj = {
-								orderNo: orderSteps[i][0],
-								orderId: '',
-								price: orderSteps[i][2].replace(/[^0-9.]/g, ''),
-								average: orderSteps[i][3].replace(/[^0-9.]/g, ''),
-								target: priceTargetNew,
-								qty: orderSteps[i][5].replace(/[^0-9.]/g, ''),
-								amount: orderSteps[i][6].replace(/[^0-9.]/g, ''),
-								qtySum: orderSteps[i][7].replace(/[^0-9.]/g, ''),
-								sum: orderSteps[i][8].replace(/[^0-9.]/g, ''),
-								type: orderSteps[i][9],
-								filled: 0,
+								orderNo:  isObj ? step.no                                          : step[0],
+								orderId:  '',
+								price:    String(isObj ? step.price   : step[2]).replace(/[^0-9.]/g, ''),
+								average:  String(isObj ? step.average : step[3]).replace(/[^0-9.]/g, ''),
+								target:   priceTargetNew,
+								qty:      String(isObj ? step.qty     : step[5]).replace(/[^0-9.]/g, ''),
+								amount:   String(isObj ? step.amount  : step[6]).replace(/[^0-9.]/g, ''),
+								qtySum:   String(isObj ? step.qtySum  : step[7]).replace(/[^0-9.]/g, ''),
+								sum:      String(isObj ? step.sum     : step[8]).replace(/[^0-9.]/g, ''),
+								type:     isObj ? step.type : step[9],
+								filled:   0,
 								orderMetadata: orderMetadata[i]
 							};
 
@@ -4586,6 +4742,9 @@ async function getActiveDeals(active) {
 	dealsSort = Common.sortByKey(dealsArr, 'date');
 	dealsSort = dealsSort.reverse();
 
+	// Keep circuit breaker informed of active deal count
+	shareData.appData.cb_active_deal_count = dealsSort.length;
+
 	return dealsSort;
 }
 
@@ -4736,6 +4895,14 @@ async function processResumeDealTracker(data) {
 }
 
 
+// Returns the cached balance directly — no exchange call, no timestamp update.
+// Use this everywhere except the background refresh interval.
+function getBalanceCache() {
+
+	return balanceTracker ? JSON.parse(JSON.stringify(balanceTracker)) : {};
+}
+
+
 async function getBalanceTracker() {
 
 	let getNew = false;
@@ -4776,20 +4943,23 @@ async function getBalanceTracker() {
 				balances[uniqueName] = balance.balance;
 			}
 		}
+
+		// Only stamp updated when we actually fetched from the exchange
+		const resObj = {
+			'updated': new Date(),
+			'balances': balances
+		};
+
+		balanceTracker = JSON.parse(JSON.stringify(resObj));
 	}
 	else {
-		
+
 		try {
 
 			balances = JSON.parse(JSON.stringify(balanceTracker.balances));
 		}
 		catch (e) {}
 	}
-
-	const resObj = {
-		'updated': new Date(),
-		'balances': balances
-	};
 
 	for (let exchange in balances) {
 
@@ -4808,9 +4978,7 @@ async function getBalanceTracker() {
 		}
 	}
 
-	balanceTracker = JSON.parse(JSON.stringify(resObj));
-
-	return resObj;
+	return balanceTracker;
 }
 
 
@@ -4825,7 +4993,7 @@ async function getDealInfo(data) {
 	const pause = data['pause'];
 	const pauseBuy = data['pause_buy'];
 	const pauseSell = data['pause_sell'];
-	const pauseReason = data['pause_reason'] || '';
+	const pauseReason = data['pauseReason'] || data['pause_reason'] || '';
 
 	const config = JSON.parse(JSON.stringify(data['config']));
 	const orders = JSON.parse(JSON.stringify(data['orders']));
@@ -5020,6 +5188,32 @@ async function ordersToHtml(data) {
 }
 
 
+async function ordersToStructuredData(structured) {
+
+	if (!Array.isArray(structured) || structured.length === 0) {
+		return { 'headers': [], 'steps': [], 'structured': [] };
+	}
+
+	const headers = ['No', 'Deviation', 'Price', 'Average', 'Target', 'Qty', 'Amount', 'Sum(Qty)', 'Sum', 'Type', 'Filled'];
+
+	const steps = structured.map(order => [
+		order.no,
+		order.deviation + '%',
+		order.price,
+		order.average,
+		order.target,
+		order.qty,
+		order.amount,
+		order.qtySum,
+		order.sum,
+		order.type,
+		order.filled == 0 ? 'Waiting' : 'Filled'
+	]);
+
+	return { 'headers': headers, 'steps': steps, 'structured': structured };
+}
+
+
 async function ordersToData(data) {
 
 	let rows = data.split(/[\r\n]+/);
@@ -5081,6 +5275,7 @@ async function ordersCreateTable(data) {
 
 	let ordersDeviation = [];
 	let ordersMetadata = [];
+	let ordersStructured = [];
 
 	let t = new Table();
 
@@ -5095,19 +5290,39 @@ async function ordersCreateTable(data) {
 		ordersDeviation.push(deviationPerc);
 	}
 
+	const pair = typeof config.pair === 'string' ? config.pair : (config.pair || [])[0] || '';
+	const quoteCurrency = pair.split('/')[1] || '';
+	const sym = Common.getCurrencySymbol(quoteCurrency);
+	const amountHeader = 'Amount' + (sym ? '(' + sym + ')' : '');
+	const sumHeader = 'Sum' + (sym ? '(' + sym + ')' : '');
+
 	orders.forEach(function (order) {
 
 		ordersMetadata.push(order.orderMetadata);
 
+		ordersStructured.push({
+			no:        order.orderNo,
+			deviation: ordersDeviation[order.orderNo - 1],
+			price:     order.price,
+			average:   order.average,
+			target:    order.target,
+			qty:       order.qty,
+			amount:    order.amount,
+			qtySum:    order.qtySum,
+			sum:       order.sum,
+			type:      order.type,
+			filled:    order.filled
+		});
+
 		t.cell('No', order.orderNo);
 		t.cell('Deviation', ordersDeviation[order.orderNo - 1] + '%');
-		t.cell('Price', '$' + order.price);
-		t.cell('Average', '$' + order.average);
-		t.cell('Target', '$' + order.target);
+		t.cell('Price', sym + order.price);
+		t.cell('Average', sym + order.average);
+		t.cell('Target', sym + order.target);
 		t.cell('Qty', order.qty);
-		t.cell('Amount($)', '$' + order.amount);
+		t.cell(amountHeader, sym + order.amount);
 		t.cell('Sum(Qty)', order.qtySum);
-		t.cell('Sum($)', '$' + order.sum);
+		t.cell(sumHeader, sym + order.sum);
 		t.cell('Type', order.type);
 		t.cell('Filled', order.filled == 0 ? 'Waiting' : 'Filled');
 
@@ -5116,7 +5331,7 @@ async function ordersCreateTable(data) {
 
 	let maxDeviation = await getDeviationDca(config.dcaOrderStepPercent, config.dcaOrderStepPercentMultiplier, orders.length - 1);
 
-	return ( { 'table': t, 'max_deviation': maxDeviation, 'metadata': ordersMetadata } );
+	return ( { 'table': t, 'structured': ordersStructured, 'max_deviation': maxDeviation, 'metadata': ordersMetadata } );
 }
 
 
@@ -5177,7 +5392,8 @@ async function sendNotificationFinish(botName, dealId, pair, sellData) {
 
 	if (!profitCurrency || profitCurrency == 'quote' || Number(profitBase) <= 0) {
 
-		profit = '$' + profitQuote + ' ' + pairQuote;
+		const quoteSym = Common.getCurrencySymbol(pairQuote);
+		profit = quoteSym + profitQuote + ' ' + pairQuote;
 	}
 	else {
 
@@ -5763,6 +5979,132 @@ async function resumeDeal(dealObj) {
 	start({ 'create': true, 'config': config });
 
 	await Common.delay(1000);
+}
+
+
+function recordSafetyOrderTrigger(dealId, pair, price) {
+
+	const cb = shareData.appData.circuit_breaker;
+	if (!cb || !cb.enabled) return;
+
+	const now = Date.now();
+	const windowMs = (cb.deal_ratio_window_secs || 30) * 1000;
+
+	// Initialise rolling window arrays
+	if (!shareData.appData.cb_trigger_window) shareData.appData.cb_trigger_window = [];
+	if (!shareData.appData.cb_price_tracker)  shareData.appData.cb_price_tracker  = {};
+
+	// Add this trigger to rolling window
+	shareData.appData.cb_trigger_window.push({ dealId, pair, price, time: now });
+
+	// Prune entries outside the deal-ratio window
+	shareData.appData.cb_trigger_window = shareData.appData.cb_trigger_window
+		.filter(t => (now - t.time) <= windowMs);
+
+	// Track price history per pair for drop detection
+	const tracker = shareData.appData.cb_price_tracker;
+	const dropWindowMs = (cb.price_drop_window_secs || 60) * 1000;
+	if (!tracker[pair]) tracker[pair] = [];
+	tracker[pair].push({ price: parseFloat(price), time: now });
+	tracker[pair] = tracker[pair].filter(p => (now - p.time) <= dropWindowMs);
+
+	// Skip if circuit breaker already active
+	if (shareData.appData.circuit_breaker_active) return;
+
+	// ── Deal ratio trigger ───────────────────────────────────────────────
+	const uniqueDeals = new Set(shareData.appData.cb_trigger_window.map(t => t.dealId)).size;
+	const totalActive = shareData.appData.cb_active_deal_count || 1;
+	const ratio = uniqueDeals / totalActive;
+	const ratioThreshold = cb.deal_ratio_threshold || 0.5;
+
+	if (ratio >= ratioThreshold && uniqueDeals >= 2) {
+
+		activateCircuitBreaker(
+			`Deal ratio: ${uniqueDeals}/${totalActive} deals triggered safety orders within ${cb.deal_ratio_window_secs}s`
+		);
+		return;
+	}
+
+	// ── Price drop trigger ───────────────────────────────────────────────
+	const pairPrices = tracker[pair];
+	if (pairPrices && pairPrices.length >= 2 && cb.price_drop_enabled !== false) {
+
+		const oldest  = pairPrices[0].price;
+		const newest  = pairPrices[pairPrices.length - 1].price;
+		const dropPct = oldest > 0 ? ((oldest - newest) / oldest) * 100 : 0;
+		const dropThreshold = cb.price_drop_percent || 5.0;
+
+		if (dropPct >= dropThreshold) {
+
+			activateCircuitBreaker(
+				`Price drop: ${pair} fell ${dropPct.toFixed(2)}% within ${cb.price_drop_window_secs}s`
+			);
+		}
+	}
+}
+
+
+function activateCircuitBreaker(reason) {
+
+	const cb = shareData.appData.circuit_breaker;
+	const pauseSecs = (cb && cb.pause_duration_secs) || 60;
+
+	shareData.appData.circuit_breaker_active       = reason;
+	shareData.appData.circuit_breaker_activated_at = Date.now();
+	shareData.appData.circuit_breaker_clears_at    = Date.now() + (pauseSecs * 1000);
+
+	Common.logger(colors.yellow.bold(`CIRCUIT BREAKER ACTIVATED (${pauseSecs}s): ${reason}`));
+
+	// Build top affected pairs list from the trigger window
+	const triggerWindow = shareData.appData.cb_trigger_window || [];
+	const pairCounts = {};
+	triggerWindow.forEach(t => { pairCounts[t.pair] = (pairCounts[t.pair] || 0) + 1; });
+	const topPairs = Object.entries(pairCounts)
+		.sort((a, b) => b[1] - a[1])
+		.slice(0, 5)
+		.map(([pair, count]) => `${pair} (${count})`)
+		.join(', ');
+	const pairsLine = topPairs ? `\nTop pairs: ${topPairs}` : '';
+
+	// Check if CB has activated recently — elevated alert if so
+	const now = Date.now();
+	const cbRepeatWindowMs = ((cb && cb.repeat_alert_window_secs) || 3600) * 1000;
+	const lastActivation = shareData.appData.circuit_breaker_last_activation || 0;
+	const isRepeat = (now - lastActivation) <= cbRepeatWindowMs && lastActivation > 0;
+	shareData.appData.circuit_breaker_last_activation = now;
+
+	const prefix = isRepeat ? '🚨 Circuit Breaker Activated Again' : '⚡ Circuit Breaker Activated';
+	const repeatLine = isRepeat
+		? `\n⚠️ This is a repeat activation within ${Math.round((now - lastActivation) / 60000)}m — market conditions may be deteriorating.`
+		: '';
+
+	Common.sendNotification({
+		'message': `${prefix}\n\n${reason}${pairsLine}${repeatLine}\n\nNew buys paused for ${pauseSecs}s. Sells and panic sells are unaffected.`,
+		'type': 'warning',
+		'telegram_id': shareData.appData.telegram_id
+	});
+
+	// Capture activation timestamp to guard against re-trigger clearing a newer activation
+	const activatedAt = shareData.appData.circuit_breaker_activated_at;
+
+	setTimeout(() => {
+
+		if (shareData.appData.circuit_breaker_activated_at === activatedAt) {
+
+			delete shareData.appData.circuit_breaker_active;
+			delete shareData.appData.circuit_breaker_activated_at;
+			delete shareData.appData.circuit_breaker_clears_at;
+			shareData.appData.cb_trigger_window = [];
+			Common.logger(colors.yellow.bold('CIRCUIT BREAKER CLEARED — resuming normal deal processing'));
+
+			Common.sendNotification({
+				'message': '✅ Circuit Breaker Cleared\n\nNormal deal processing has resumed.',
+				'type': 'warning',
+				'telegram_id': shareData.appData.telegram_id
+			});
+		}
+
+	}, pauseSecs * 1000);
 }
 
 
@@ -6522,13 +6864,12 @@ async function initApp() {
 	}, (60000 * 1));
 
 
-	/*
 	setInterval(() => {
 
 		getBalanceTracker();
 
 	}, (60000 * 1));
-	*/
+
 
 	setInterval(() => {
 
@@ -6538,7 +6879,9 @@ async function initApp() {
 
 	await resumeBots();
 
-	//getBalanceTracker();
+	// Prime the balance cache immediately so the portfolio bar
+	// shows correct data on first load rather than waiting 60s
+	getBalanceTracker();
 
 	Common.startSignals();
 
@@ -6553,6 +6896,7 @@ module.exports = {
 	updateBot,
 	sendBotStatus,
 	ordersValid,
+	ordersToStructuredData,
 	updateOrders,
 	cancelDeal,
 	pauseDeal,
@@ -6580,6 +6924,7 @@ module.exports = {
 	getSymbol,
 	getSymbolsAll,
 	getBalanceTracker,
+	getBalanceCache,
 	checkGlobalPairLimit,
 	canStartDeal,
 	applyConfigData,

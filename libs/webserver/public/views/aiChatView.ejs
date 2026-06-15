@@ -9,15 +9,21 @@
 
     <div class="aiChatContainer">
         <div id="aiChatSpinner" class="spinner-dynamic-container" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"><div class="spinner-dynamic"></div></div>
+        <div id="chatConversationBar">
+            <select id="conversationSelect" class="form-field" title="Saved conversations" style="flex:1; min-width:0;"><option value="">New conversation</option></select>
+            <button id="chatSaveBtn" class="btn btn-default" title="Save">Save</button>
+            <button id="chatDeleteBtn" class="btn btn-default" title="Delete" style="display:none;">Delete</button>
+        </div>
         <div id="aiChatBox"></div>
+        <div id="chatAttachments"></div>
         <div id="chatInputContainer">
             <input id="chatInput" type="text" placeholder="Type your message here...">
+            <button id="chatAttachBtn" title="Attach file (PDF, DOCX, TXT, CSV, MD — max 25 MB)">📎</button>
+            <input id="chatAttachFile" type="file" accept=".pdf,.docx,.txt,.md,.csv">
             <button id="chatSendButton">Send</button>
         </div>
     </div>
     
-	<script src="./js/vendor/marked/marked.min.js"></script>
-
 	<script>
 		$(document).ready(function() {
 	
@@ -26,6 +32,21 @@
 			let canSendMessage = true;
 
 			const room = 'chat' + Math.random().toString(36).slice(2) + Math.floor(Date.now() / 1000);
+			const basePath = './';
+			// Pending file attachments — declared first to avoid temporal dead zone
+			let pendingAttachments = [];
+
+			// Reset shared module so it re-initialises for this new chat instance
+			window.AIChatConv_initialized = false;
+			$('#chatAttachments').empty();
+			window.AIChatConv_room         = room;
+			window.AIChatConv_basePath     = basePath;
+			window.AIChatConv_activeId     = null;
+			window.AIChatConv_sessionStart = 0;
+			window.AIChatConv_firstMessage = null;
+			window.AIChatConv_savedName    = null;
+			window.AIChatConv_type         = 'chat';
+			window.AIChatConv_dealId       = '';
 
 		// Expose room on container so pop-out button can read it
 		$('.aiChatContainer').data('room', room);
@@ -88,7 +109,8 @@
 				$.ajax({
 					type: 'POST',
 					url: './api/ai/chat/prompt',
-					data: content,
+					contentType: 'application/json',
+					data: JSON.stringify(content),
 					dataType: 'json',
 					success: function(data) {},
 					error: function(data) {
@@ -112,6 +134,9 @@
 
 					canSendMessage = true; // Allow sending messages
 					toggleInputState(false); // Enable input box and button
+
+					// Auto-save if conversation already saved
+					if (typeof window.AIChatConv_autoSave === 'function') window.AIChatConv_autoSave();
 				}
 				else {
 
@@ -131,6 +156,30 @@
 				scrollToBottom();
 			}
 
+			function renderHistory(messages) {
+				const $chatBox = $('#aiChatBox');
+				const firstUserIdx = messages.findIndex(function(m) { return m.role === 'user'; });
+				messages.forEach(function(msg, idx) {
+					if (msg.role === 'user') {
+						if (idx === firstUserIdx && msg.content.length > 200) return;
+						const $userMsg = $('<div>', { class: 'message user-message', text: msg.content });
+						if (msg.attachments && msg.attachments.length > 0) {
+							msg.attachments.forEach(function(att) {
+								$userMsg.append($('<span class="attach-badge">').text('📄 ' + att.name));
+							});
+						}
+						$chatBox.append($userMsg);
+					} else if (msg.role === 'assistant') {
+						const $msg = $('<div>', { class: 'message bot-message' });
+						$msg.html(marked.parse(msg.content, { breaks: true }));
+						$chatBox.append($msg);
+					}
+				});
+				$chatBox.scrollTop($chatBox.prop('scrollHeight'));
+			}
+			window.AIChatConv_renderHistory = renderHistory;
+
+
 			function toggleInputState(disable) {
 
 				$('#chatInput').prop('disabled', disable);
@@ -148,6 +197,66 @@
 			}
 	
 			$('#chatSendButton').on('click', sendMessage);
+
+			// Paperclip button
+			$('#chatAttachBtn').on('click', function() {
+				$('#chatAttachFile').val('').trigger('click');
+			});
+
+			$('#chatAttachFile').on('change', async function() {
+
+				const file = this.files[0];
+				if (!file) return;
+
+				// Show uploading pill immediately
+				const $uploading = $('<div class="chat-attachment-pill chat-attachment-uploading">')
+					.append($('<span>').text('⏳ ' + file.name));
+				$('#chatAttachments').append($uploading);
+				$('#chatAttachBtn').prop('disabled', true);
+
+				const formData = new FormData();
+				formData.append('file', file);
+
+				try {
+
+					const resp = await fetch('./api/ai/chat/upload', { method: 'POST', body: formData });
+					const text = await resp.text();
+
+					$uploading.remove();
+					$('#chatAttachBtn').prop('disabled', false);
+
+					let data;
+					try { data = JSON.parse(text); } catch(pe) {
+						alertBox('Upload failed: server returned unexpected response. Check logs.');
+						return;
+					}
+
+					if (!data.success) { alertBox(data.error || 'Upload failed'); return; }
+
+					pendingAttachments.push(data);
+					renderAttachmentPills();
+
+				} catch (e) {
+					$uploading.remove();
+					$('#chatAttachBtn').prop('disabled', false);
+					alertBox('Upload error: ' + e.message);
+				}
+			});
+
+			function renderAttachmentPills() {
+
+				const $area = $('#chatAttachments');
+				$area.empty();
+				pendingAttachments.forEach(function(att, idx) {
+					const $pill = $('<div class="chat-attachment-pill">')
+						.append($('<span>').text('📄 ' + att.name))
+						.append($('<span class="pill-remove">').text('×').on('click', function() {
+							pendingAttachments.splice(idx, 1);
+							renderAttachmentPills();
+						}));
+					$area.append($pill);
+				});
+			}
 	
 			$('#chatInput').on('keypress', function(e) {
 
@@ -173,6 +282,19 @@
 				});
 
 				$chatBox.append($userMessage);
+
+				// Capture attachments BEFORE clearing pendingAttachments
+				const attachmentsToSend = pendingAttachments.slice();
+
+				// Show attachment badges in bubble
+				if (attachmentsToSend.length > 0) {
+					attachmentsToSend.forEach(function(att) {
+						$userMessage.append($('<span class="attach-badge">').text('📄 ' + att.name));
+					});
+					pendingAttachments = [];
+					renderAttachmentPills();
+				}
+
 				$('#chatInput').val('');
 	
 				const userContent = { ...contentOrigObj };
@@ -182,7 +304,10 @@
 				    userContent.message = {};
 				}
 
-				userContent.message.content = userMessage;
+				userContent.message.content     = userMessage;
+				userContent.message.attachments = attachmentsToSend;
+
+				if (!window.AIChatConv_firstMessage) window.AIChatConv_firstMessage = userMessage;
 
 				postChatPrompt(userContent);
 	
@@ -195,6 +320,13 @@
 
 			if (hasRealContent) {
 
+				// Use dialog title as name; mark as analysis type
+				const msgTitle = (contentOrigObj.message && contentOrigObj.message.title) || '';
+				if (msgTitle && !window.AIChatConv_firstMessage) window.AIChatConv_firstMessage = msgTitle;
+				window.AIChatConv_type   = 'analysis';
+				window.AIChatConv_dealId = (contentOrigObj.message && contentOrigObj.message.dealId) || '';
+				$('.aiChatContainer').data('dealId', window.AIChatConv_dealId);
+
 				postChatPrompt(contentOrigObj);
 			}
 			else {
@@ -204,5 +336,6 @@
 			}
 		});
 	</script>
+	<script src="/js/ai-chat-conversations.js?v=<%- appData.version %>"></script>
 </body>
 </html>

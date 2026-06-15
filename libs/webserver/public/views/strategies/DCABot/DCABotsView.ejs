@@ -46,7 +46,7 @@
 						}
 						else {
 
-							alertBox('Bot is now ' + status);
+							alertBox((data.botName ? data.botName : 'Bot') + ' is now ' + status);
 						}
 					},
 					error: function(data) {
@@ -459,7 +459,13 @@
 						<td><%- bot['config']['dcaTakeProfitPercent'] %>%</td>
 						<td><%- dealMax %></td>
 						<td><%- pairMax %></td>
-						<td>$<%- botMaxFunds %></td>
+						<td><%-
+							(function() {
+								const p = typeof bot['config']['pair'] === 'string' ? bot['config']['pair'] : (bot['config']['pair'] || [])[0] || '';
+								const quote = p.split('/')[1] || 'USD';
+								return getCurrencySymbol(quote);
+							})()
+						%><%- botMaxFunds %></td>
 						<td><%- startCondition %></td>
 						<td><%- sandBox %></td>
 						<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>

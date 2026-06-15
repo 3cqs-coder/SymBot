@@ -1,5 +1,8 @@
 'use strict';
 
+const fs   = require('fs');
+const path = require('path');
+
 const routesWebSocket = require(__dirname + '/routesWebSocket.js');
 
 let shareData;
@@ -177,11 +180,11 @@ function initRoutes(router, upload) {
 
 		const { duration, timeZoneOffset } = req.query;
 
-		const { kpi, charts, botIdNameMap, currencies, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7'), timeZoneOffset });
+		const { kpi, charts, botIdNameMap, currencies, kpiSymbol, isLoading, period } = await shareData.DCABotManager.getDashboardData({ duration: Number(duration ?? '7'), timeZoneOffset });
 
 		res.set('Cache-Control', 'no-store');
 
-		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, botIdNameMap, currencies, isLoading, period });
+		res.render( 'dashboardView', { 'appData': shareData.appData, kpi, charts, botIdNameMap, currencies, kpiSymbol, getCurrencySymbol: shareData.Common.getCurrencySymbol.toString(), isLoading, period });
 	})
 
 
@@ -436,6 +439,36 @@ function initRoutes(router, upload) {
 
 			res.redirect('/login');
 		}
+	});
+
+
+	router.post('/api/circuit-breaker/clear', (req, res) => {
+
+		if (!isLoggedIn(req, res)) return;
+
+		delete shareData.appData.circuit_breaker_active;
+		delete shareData.appData.circuit_breaker_activated_at;
+		delete shareData.appData.circuit_breaker_clears_at;
+		shareData.appData.cb_trigger_window = [];
+
+		shareData.Common.logger('Circuit breaker manually cleared by user');
+
+		shareData.Common.sendNotification({
+			'message': '✅ Circuit Breaker Manually Cleared\n\nNormal deal processing has resumed.',
+			'type': 'warning',
+			'telegram_id': shareData.appData.telegram_id
+		});
+
+		res.status(200).json({ success: true });
+	});
+
+
+	// ── AI chat file upload ─────────────────────────────────────────────────
+	router.post('/api/ai/chat/upload', (req, res) => {
+
+		if (!isLoggedIn(req, res)) return;
+
+		shareData.Common.uploadAiChatFile(req, res);
 	});
 
 
@@ -728,6 +761,60 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.get('/api/ai/chat/conversations', async (req, res) => {
+
+		if (!isLoggedIn(req, res)) return;
+
+		try {
+			const conversations = await shareData.AIClient.listConversations();
+			res.status(200).json({ success: true, data: conversations });
+		} catch(e) { res.status(200).json({ success: false, error: e.message }); }
+	});
+
+
+	router.post('/api/ai/chat/conversations/save', async (req, res) => {
+
+		if (!isLoggedIn(req, res)) return;
+
+		const { conversation_id, name, room } = req.body;
+		const startIndex = req.body.start_index !== undefined ? Number(req.body.start_index) : undefined;
+		const convType   = req.body.type    || 'chat';
+		const dealId     = req.body.deal_id || '';
+		if (!conversation_id || !room) return res.status(400).json({ success: false, error: 'conversation_id and room required' });
+
+		try {
+			await shareData.AIClient.saveConversation(conversation_id, name || 'New Conversation', room, startIndex, convType, dealId);
+			res.status(200).json({ success: true });
+		} catch(e) { res.status(200).json({ success: false, error: e.message }); }
+	});
+
+
+	router.post('/api/ai/chat/conversations/load', async (req, res) => {
+
+		if (!isLoggedIn(req, res)) return;
+
+		const { conversation_id, room } = req.body;
+		if (!conversation_id || !room) return res.status(400).json({ success: false, error: 'conversation_id and room required' });
+
+		try {
+			const result = await shareData.AIClient.loadConversation(conversation_id, room);
+			if (!result) return res.status(200).json({ success: false, error: 'Conversation not found' });
+			res.status(200).json({ success: true, data: result });
+		} catch(e) { res.status(200).json({ success: false, error: e.message }); }
+	});
+
+
+	router.delete('/api/ai/chat/conversations/:conversation_id', async (req, res) => {
+
+		if (!isLoggedIn(req, res)) return;
+
+		try {
+			await shareData.AIClient.deleteConversation(req.params.conversation_id);
+			res.status(200).json({ success: true });
+		} catch(e) { res.status(200).json({ success: false, error: e.message }); }
+	});
+
+
 	router.get('/api/ai/chat/popout', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -796,6 +883,19 @@ async function processConfig(req, res) {
 				model:    aiRaw.openai?.model    || '',
 				base_url: aiRaw.openai?.base_url || '',
 			},
+			context_compression: aiRaw.context_compression || {},
+		};
+
+		const cbDefaults = {
+			enabled: true,
+			deal_ratio_threshold: 0.5,
+			deal_ratio_window_secs: 30,
+			price_drop_percent: 5.0,
+			price_drop_window_secs: 60,
+			price_drop_enabled: true,
+			pause_duration_secs: 60,
+			repeat_alert_window_secs: 3600,
+			price_zero_alert_count: 4
 		};
 
 		let services = Object.assign({
@@ -803,7 +903,8 @@ async function processConfig(req, res) {
 			'ai': aiNormalised,
 			'cron_backup': JSON.parse(JSON.stringify(appConfig.data.cron_backup)),
 			'telegram': JSON.parse(JSON.stringify(appConfig.data.telegram)),
-			'signals': JSON.parse(JSON.stringify(appConfig.data.signals))
+			'signals': JSON.parse(JSON.stringify(appConfig.data.signals)),
+			'circuit_breaker': Object.assign({}, cbDefaults, appConfig.data.circuit_breaker || {})
 		});
 
 		const cronBackupPasswordEnc = services['cron_backup']['password'];

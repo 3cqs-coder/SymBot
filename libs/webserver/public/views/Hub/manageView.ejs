@@ -371,6 +371,7 @@
 					let instanceName = $row.find('td[data-field="name"]').text().trim();
 					let telegramEnabledOverride = $row.find('select#telegram_select_override').val();
 					let signals3CQSSelectOverride = $row.find('select#signals_3cqs_select_override').val();
+					let sandboxWalletOverride = $row.find('input#sandbox_wallet_override').val().trim();
 					let serverId = $row.find('td[data-field="server_id"]').text().trim();
 					let webServerPort = $row.find('td[data-field="web_server_port"]').text().trim() ? Number($row.find('td[data-field="web_server_port"]').text().trim()) : null;
 					let mongoDbUrl = $row.find('td[data-field="mongo_db_url"]').text().trim();
@@ -401,6 +402,7 @@
 								webServerPortOverride: webServerPortOverride,
 								telegramEnabledOverride: telegramEnabledOverride,
 								signals3CQSOverride: signals3CQSSelectOverride,
+								sandboxWalletOverride: sandboxWalletOverride !== '' ? sandboxWalletOverride : undefined,
 							}
 						});
 
@@ -683,7 +685,8 @@
 												'mongo_db_url': overrides.mongoDbUrlOverride || '',
 												'web_server_port': overrides.webServerPortOverride || null,
 												'telegram_enabled': overrides.telegramEnabledOverride,
-												'signals_3cqs_enabled': overrides.signals3CQSOverride
+												'signals_3cqs_enabled': overrides.signals3CQSOverride,
+												'sandbox_wallet': overrides.sandboxWalletOverride !== undefined && overrides.sandboxWalletOverride !== '' ? overrides.sandboxWalletOverride : undefined
 											}
 							};
 			}
@@ -1177,6 +1180,7 @@
 								<th class="columnSelector-false">Port Override</th>
 								<th>Telegram</th>
 								<th>3CQS</th>
+								<th>Sandbox $</th>
 								<th data-sorter="false" class="columnSelector-disable"></th>
 							</tr>
 						</thead>
@@ -1233,6 +1237,11 @@
 												<option value="true" <%= config.overrides?.signals_3cqs_enabled === true ? 'selected' : '' %>>Enabled</option>
 												<option value="false" <%= config.overrides?.signals_3cqs_enabled === false ? 'selected' : '' %>>Disabled</option>
 											</select>
+										</td>
+										<td>
+											<input id="sandbox_wallet_override" type="number" step="1" min="0" class="form-field" style="width:90px;"
+												value="<%= config.overrides?.sandbox_wallet !== undefined && config.overrides?.sandbox_wallet !== null ? config.overrides.sandbox_wallet : '' %>"
+												placeholder="–">
 										</td>
 										<td nowrap>
 											<span id="loginButton" style="display: inline-block; margin-right: 5px;">

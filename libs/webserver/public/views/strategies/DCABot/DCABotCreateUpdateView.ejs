@@ -364,6 +364,11 @@
 
 							let table = $('<table id="ordersTable" cellspacing=0 cellpadding=0>');
 
+							const orderSym = content.currency_symbol || '$';
+
+							// Columns that display a currency value (0-indexed in step array)
+							const moneyCols = new Set([2, 3, 4, 6, 8]);
+
 							let tableData = orders.steps;
 
 							tableData.unshift(orders.headers);
@@ -385,6 +390,11 @@
 
 									let col = cols[x];
 
+									// Prefix currency symbol on money columns (skip header row)
+									if (i > 0 && moneyCols.has(x)) {
+										col = orderSym + col;
+									}
+
 									row.append($('<' + tag + '>' + col + '</' + tag + '>'));
 								}
 
@@ -399,9 +409,10 @@
 							}
 
 							contentAdd += '<div style="position: relative; display: inline-block; text-align: left;">';
-							contentAdd += '<b>Current Balance</b>: $' + content.balance + '<br>\n';
-							contentAdd += '<b>Max. Funds Per Pair</b>: $' + Math.round(content.max_funds) + '<br>\n';
-							contentAdd += '<b>Max. Funds Total</b>: $' + content.bot_max_funds + '<br>\n';
+							const sym = content.currency_symbol || '$';
+							contentAdd += '<b>Current Balance</b>: ' + sym + content.balance + '<br>\n';
+							contentAdd += '<b>Max. Funds Per Pair</b>: ' + sym + Math.round(content.max_funds) + '<br>\n';
+							contentAdd += '<b>Max. Funds Total</b>: ' + sym + content.bot_max_funds + '<br>\n';
 							contentAdd += '<b>Max. Deviation</b>: ' + content.max_deviation_percent + '%<br>\n';
 							contentAdd += '</div></div><br>\n';
 

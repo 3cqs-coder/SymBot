@@ -143,6 +143,10 @@ $.confirm({
 		<input class="form-field" type="password" style="width: 200px;" id="encryptPasswordConfirm" name="encryptPasswordConfirm" required>
 
 		<br><br>
+		<input type="checkbox" id="includeChatsBackup" class="form-field" style="width: 20px;" /> <b>Include AI chats</b>
+
+		<br><br>
+
 		<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">BACKUP</span> database</b>
 	</form>
 	</div>`,
@@ -171,7 +175,8 @@ $.confirm({
 				}
 				else {
 
-					processBackupDb(password);
+					const includeChats = $('#includeChatsBackup').prop('checked');
+					processBackupDb(password, includeChats);
 				 }
 			  },
 		  },
@@ -184,6 +189,8 @@ $.confirm({
 	  onContentReady: function() {
 
 		$('#confirmBox').prop('checked', false);
+		$('#includeChatsBackup').simpleSwitch();
+		$('#includeChatsBackup').prop('checked', false);
 
 		let jc = this;
 		  this.$content.find("form").on("submit", function(e) {
@@ -222,6 +229,8 @@ $.confirm({
 
 		<br><br>
 		<input id="resetServerId" name="resetServerId" type=checkbox class="form-field"> &nbsp; <b>Reset server ID</b>
+		<br><br>
+		<input id="resetAiChats" name="resetAiChats" type=checkbox class="form-field"> &nbsp; <b>Reset AI chat history</b>
 		<br>
 		<input id="convertData" name="convertData" type=checkbox class="form-field"> &nbsp; <b>Convert all bots and deals to sandbox mode</b>
 	</form>
@@ -240,6 +249,7 @@ $.confirm({
 				const confirmBox = $('#confirmBox').prop('checked');
 				const convertData = $('#convertData').prop('checked');
 				const resetServerId = $('#resetServerId').prop('checked');
+				const resetAiChats  = $('#resetAiChats').prop('checked');
 				const password = $('#decryptPassword').val();
 
 				if (!confirmBox) {
@@ -252,7 +262,7 @@ $.confirm({
 				}
 				else {
 
-					processRestoreDb(password, convertData, resetServerId);
+					processRestoreDb(password, convertData, resetServerId, resetAiChats);
 				 }
 			  },
 		  },
@@ -269,6 +279,8 @@ $.confirm({
 
 		$('#resetServerId').simpleSwitch();
 		$('#resetServerId').prop('checked', false);
+		$('#resetAiChats').simpleSwitch();
+		$('#resetAiChats').prop('checked', false);
 	},
 	onContentReady: function() {
 
@@ -485,10 +497,11 @@ $.ajax({
 }
 
 
-function processBackupDb(password) {
+function processBackupDb(password, includeChats) {
 
 	const requestBody = new URLSearchParams();
 	requestBody.append('password', password);
+	requestBody.append('include_chats', includeChats ? 'true' : 'false');
 
 	$('#spinner-overlay').fadeIn(100);
 
@@ -547,7 +560,7 @@ function processBackupDb(password) {
 }
 
 
-function processRestoreDb(password, convertData, resetServerId) {
+function processRestoreDb(password, convertData, resetServerId, resetAiChats) {
 
 	const fileInput = $('#file-input')[0]; // Assuming you have an input with id="file-input"
 	const file = fileInput.files[0];
@@ -563,6 +576,7 @@ function processRestoreDb(password, convertData, resetServerId) {
 	formData.append('backupFile', file);
 	formData.append('convertData', convertData);
 	formData.append('resetServerId', resetServerId);
+	formData.append('resetAiChats', resetAiChats || false);
 	formData.append('password', password);
 
 	$('#spinner-overlay').fadeIn(100);

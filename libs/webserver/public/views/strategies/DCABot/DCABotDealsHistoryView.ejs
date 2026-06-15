@@ -56,7 +56,7 @@
 
 						$('#spinner-overlay').fadeOut(100);
 
-						showOrderHistory(modalId, dealId, data['info']['active'], data['orders']);
+						showOrderHistory(modalId, dealId, data['info']['active'], data['orders'], data['config'] && data['config']['pair']);
 					},
 					error: function(data) {
 
@@ -138,6 +138,7 @@
 			let dateEnd = new Date(deal['date_end']).getTime();
 
 			let duration = timeDiff(new Date(deal['date_start']), new Date(deal['date_end']));
+			const dealSym = getDealSym(deal['pair'], deal['profit_currency']);
 
 			if (profitPerc <= 0) {
 
@@ -150,7 +151,7 @@
 			contentArr.push('<td>' + deal['deal_id'] + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');
-			contentArr.push('<td class="' + profitPercClass + '">$' + profit + '</td>');
+			contentArr.push('<td class="' + profitPercClass + '">' + dealSym + profit + '</td>');
 			contentArr.push('<td class="' + profitPercClass + '">' + profitBase + '</td>');
 			contentArr.push('<td class="' + profitPercClass + '">' + profitPerc + '%</td>');
 			contentArr.push('<td>' + deal['safety_orders'] + '</td>');
@@ -190,7 +191,8 @@
 		$('#botsDeals tbody').append(contentArr.join(''));
 
 		$('#totalProfit').removeClass('profit-positive profit-negative').addClass(profitTotalClass);
-		$('#totalProfit').html('$' + totalProfit.toFixed(2));
+		const summarySym = deals.length > 0 ? getDealSym(deals[0]['pair'], deals[0]['profit_currency']) : '$';
+		$('#totalProfit').html(summarySym + totalProfit.toFixed(2));
 		$('#totalDeals').html(deals.length);
 
 		$('#botsDeals').tablesorter().trigger('update');
@@ -230,6 +232,15 @@
 				 }
 		});
 	}
+
+
+const getCurrencySymbol = <%- getCurrencySymbol %>;
+
+function getDealSym(pair, profitCurrency) {
+	const parts = (pair || '').split('/');
+	const code = profitCurrency === 'base' ? parts[0] : parts[1];
+	return getCurrencySymbol(code) || '$';
+}
 
 
 	$(document).ready(function () {

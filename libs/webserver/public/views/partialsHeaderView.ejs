@@ -31,11 +31,12 @@
 	<script src="/js/vendor/simple-switch/jquery.simpleswitch.min.js"></script>
 
 	<script src="/js/vendor/tablesorter/jquery.tablesorter.combined.min.js"></script>
+	<script src="/js/vendor/marked/marked.min.js?v=<%- appData.version %>"></script>
 	<script src="/js/vendor/tablesorter/parsers/parser-duration.min.js"></script>
 	<script src="/js/vendor/tablesorter/parsers/parser-named-numbers.min.js"></script>
 	<script src="/js/vendor/tablesorter/widgets/widget-columnSelector.min.js"></script>
 	<script src="/js/vendor/tablesorter/widgets/widget-filter-formatter-jui.min.js"></script>
-	<script src="/js/symbot-ui.js"></script>
+	<script src="/js/symbot-ui.js?v=<%- appData.version %>"></script>
 
 	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
@@ -235,7 +236,8 @@
 
 			data = {
 						'message': {
-										'content': content
+										'content': content,
+										'title': header || ''
 									}
 			};
 		}
@@ -247,7 +249,33 @@
 					data: JSON.stringify(data),
 					success: function(response) {
 						
-						$('#' + divId).html(response);
+						// Use $.parseHTML to avoid synchronous script execution warning
+					// that occurs when injecting HTML containing <script> tags via .html()
+					const $target = $('#' + divId);
+					$target.empty();
+					const nodes = $.parseHTML(response, document, true);
+					const scripts = [];
+					$(nodes).each(function() {
+						if (this.nodeName === 'SCRIPT') {
+							scripts.push(this);
+						} else {
+							$target.append(this);
+						}
+					});
+					// Execute scripts after DOM is ready, outside the injection call stack
+					setTimeout(function() {
+						scripts.forEach(function(script) {
+							if (script.src) {
+								// External script — only load if not already loaded
+								if (!$('script[src="' + script.src + '"]').length) {
+									$.getScript(script.src);
+								}
+							} else {
+								// Inline script
+								$.globalEval(script.textContent);
+							}
+						});
+					}, 0);
 
 						// Inject pop-out button into dialog titlebar (desktop only)
 						const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -269,7 +297,9 @@
 									const wsPath = encodeURIComponent('<%- appData.web_socket_path %>');
 									const bp = encodeURIComponent(basePath);
 									const titleText = $titlebar.find('.ui-dialog-title').text().trim();
-									const url = basePath + 'api/ai/chat/popout?room=' + encodeURIComponent(room) + '&bp=' + bp + '&wsp=' + wsPath + '&title=' + encodeURIComponent(titleText);
+									const convId  = $aiContainer.data('convId')  || '';
+								const dealId  = $aiContainer.data('dealId')  || '';
+								const url = basePath + 'api/ai/chat/popout?room=' + encodeURIComponent(room) + '&bp=' + bp + '&wsp=' + wsPath + '&title=' + encodeURIComponent(titleText) + (convId ? '&conv_id=' + encodeURIComponent(convId) : '') + (dealId ? '&deal_id=' + encodeURIComponent(dealId) : '');
 
 									window.open(url, 'aiChatPopout_' + room, 'width=480,height=700,resizable=yes,scrollbars=no');
 
@@ -828,8 +858,9 @@
 	}
 
 
-	function showOrderHistory(modalId, dealId, active, dealOrders) {
+	function showOrderHistory(modalId, dealId, active, dealOrders, pair) {
 
+		const orderSym = (typeof getCurrencySymbol === 'function') ? getCurrencySymbol((pair || '').split('/')[1] || 'USD') : '$';
 		let orders = JSON.parse(JSON.stringify(dealOrders)).reverse();
 		let ordersFilled = orders.filter(item => item.filled);
 
@@ -839,7 +870,7 @@
 		let table = $('<table id="ordersTable" style="width: 100%;" cellspacing=0 cellpadding=0>');
 
 		let row = $('<tr />');
-		row.append($('<th></th> <th>Date</th> <th>Price</th> <th>Qty</th> <th>Amount</th> <th>Sum(Qty)</th> <th>Sum($)</th>'));
+		row.append($('<th></th> <th>Date</th> <th>Price</th> <th>Qty</th> <th>Amount</th> <th>Sum(Qty)</th> <th>Sum</th>'));
 		table.append(row);
 
 		for (let i = orders.length - 1; i >= 0; i--) {
@@ -870,11 +901,11 @@
 
 			row.append($('<td style="' + style + '">' + count + '.</td>'));
 			row.append($('<td>' + dateFilled + '</td>'));
-			row.append($('<td>$' + convertNotation(data['price']) + '</td>'));
+			row.append($('<td>' + orderSym + convertNotation(data['price']) + '</td>'));
 			row.append($('<td>' + data['qty'] + '</td>'));
-			row.append($('<td>$' + data['amount'] + '</td>'));
+			row.append($('<td>' + orderSym + data['amount'] + '</td>'));
 			row.append($('<td>' + data['qtySum'] + '</td>'));
-			row.append($('<td>$' + data['sum'] + '</td>'));
+			row.append($('<td>' + orderSym + data['sum'] + '</td>'));
 
 			if (dateFilled != '') {
 

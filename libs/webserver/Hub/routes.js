@@ -239,7 +239,7 @@ function initRoutes(router) {
 
 		if (req.session.loggedIn) {
 
-			res.render('Hub/dealsView', { 'isHub': true, 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() });
+			res.render('Hub/dealsView', { 'isHub': true, 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString(), 'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString() });
 		}
 		else {
 
@@ -255,7 +255,7 @@ function initRoutes(router) {
 
 		if (req.session.loggedIn) {
 
-			res.render('Hub/botsView', { 'isHub': true, 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString() });
+			res.render('Hub/botsView', { 'isHub': true, 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString(), 'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString() });
 		}
 		else {
 

@@ -144,6 +144,38 @@
 	}
 
 
+	function populateSettings(data) {
+
+		if (!data) return;
+
+		// Order settings
+		$('#exchange_buy_slippage').val(data.buySlippage);
+		$('#exchange_sell_slippage').val(data.sellSlippage);
+
+		const balCurrencies = Array.isArray(data.balanceCurrencies) ? data.balanceCurrencies : [];
+		$('#exchange_balance_currencies').select2({ tags: true, data: balCurrencies });
+		$('#exchange_balance_currencies').val(balCurrencies);
+		$('#exchange_balance_currencies').trigger('change');
+
+		// Context compression
+		$('#ctx_compression_threshold').val(data.ctxCompThreshold);
+		$('#ctx_compression_protect_n').val(data.ctxCompProtectN);
+		if (data.ctxCompEnabled && !$('#toggleCtxCompression').is(':checked')) $('#toggleCtxCompression').click();
+
+		// Circuit breaker
+		$('#cb_deal_ratio_threshold').val(data.cbDealRatio);
+		$('#cb_deal_ratio_window_secs').val(data.cbDealWindow);
+		$('#cb_price_drop_percent').val(data.cbPriceDrop);
+		$('#cb_price_drop_window_secs').val(data.cbPriceWindow);
+		if (data.cbPriceDropEnabled && !$('#togglePriceDrop').is(':checked')) $('#togglePriceDrop').click();
+		if (!data.cbPriceDropEnabled && $('#togglePriceDrop').is(':checked')) $('#togglePriceDrop').click();
+		$('#cb_pause_duration_secs').val(data.cbPauseDuration);
+		$('#cb_repeat_alert_window_secs').val(data.cbRepeatWindow);
+		$('#cb_price_zero_alert_count').val(data.cbPriceZeroAlert);
+		if (data.cbEnabled && !$('#toggleCircuitBreaker').is(':checked')) $('#toggleCircuitBreaker').click();
+	}
+
+
 	function populateBackupSchedule(data) {
 
 		if (!data || !data.cronSchedule) return;
@@ -180,8 +212,12 @@
 			});
 		}
 
-		// Set other fields
 		if (data.maxBackups !== undefined) $('#backup_max').val(data.maxBackups);
+
+		if (data.backupIncludeChats) {
+			if (!$('#toggleBackupIncludeChats').is(':checked')) $('#toggleBackupIncludeChats').click();
+		}
+
 		if (data.password !== undefined) $('#backup_password').val(data.password);
 		if (data.sftpPassword !== undefined) $('#sftp_password').val(data.sftpPassword);
 		if (data.sftpPassphrase !== undefined) $('#sftp_passphrase').val(data.sftpPassphrase);
@@ -191,18 +227,16 @@
 			if (data.sftpEnabled) {
 
 				$('#toggleSftp').click();
-			} 
+			}
 
 		}
 
 		if (data.enabled !== undefined) {
 
-			//$('#toggleBackup').prop('checked', data.enabled === '1' || data.enabled === 1 || data.enabled === true);
-
 			if (data.enabled) {
 
 				$('#toggleBackup').click();
-			} 
+			}
 
 		}
 	}
@@ -269,7 +303,33 @@
 		formData.push({ name: 'cron_backup_utc_time', value: cronData.utcTime });
 		formData.push({ name: 'cron_backup_max', value: cronData.maxBackups });
 		formData.push({ name: 'cron_backup_password', value: cronData.password });
-		formData.push({ name: 'cron_backup_enabled', value: cronData.enabled })
+		formData.push({ name: 'cron_backup_enabled', value: cronData.enabled });
+		formData.push({ name: 'cron_backup_include_chats', value: $('#toggleBackupIncludeChats').prop('checked') });
+
+		// Remove any CB fields serialized by serializeArray to avoid duplicates
+		// exchange_buy_slippage, exchange_sell_slippage, exchange_balance_currencies
+		// are saved via botConfigSave (./api/bot-config), not the main config route
+
+		const ctxFields = ['ctx_compression_enabled','ctx_compression_threshold','ctx_compression_protect_n'];
+		formData = formData.filter(item => !ctxFields.includes(item.name));
+		formData.push({ name: 'ctx_compression_enabled',   value: String($('#toggleCtxCompression').prop('checked')) });
+		formData.push({ name: 'ctx_compression_threshold', value: $('#ctx_compression_threshold').val() });
+		formData.push({ name: 'ctx_compression_protect_n', value: $('#ctx_compression_protect_n').val() });
+
+		const cbFields = ['cb_enabled','cb_deal_ratio_threshold','cb_deal_ratio_window_secs',
+		                  'cb_price_drop_percent','cb_price_drop_window_secs','cb_price_drop_enabled',
+		                  'cb_pause_duration_secs','cb_repeat_alert_window_secs','cb_price_zero_alert_count'];
+		formData = formData.filter(item => !cbFields.includes(item.name));
+
+		formData.push({ name: 'cb_enabled',                  value: String($('#toggleCircuitBreaker').prop('checked')) });
+		formData.push({ name: 'cb_deal_ratio_threshold',     value: $('#cb_deal_ratio_threshold').val() });
+		formData.push({ name: 'cb_deal_ratio_window_secs',   value: $('#cb_deal_ratio_window_secs').val() });
+		formData.push({ name: 'cb_price_drop_percent',       value: $('#cb_price_drop_percent').val() });
+		formData.push({ name: 'cb_price_drop_window_secs',   value: $('#cb_price_drop_window_secs').val() });
+		formData.push({ name: 'cb_price_drop_enabled',        value: String($('#togglePriceDrop').prop('checked')) });
+		formData.push({ name: 'cb_pause_duration_secs',      value: $('#cb_pause_duration_secs').val() });
+		formData.push({ name: 'cb_repeat_alert_window_secs', value: $('#cb_repeat_alert_window_secs').val() });
+		formData.push({ name: 'cb_price_zero_alert_count',   value: $('#cb_price_zero_alert_count').val() });
 
 		$.ajax({
 					type: 'POST',
@@ -380,6 +440,7 @@
 							const cfg = data.data;
 
 							$('#bot_exchange').val(cfg.exchange || '');
+							$('#bot_exchange').data('original', cfg.exchange || '');
 							$('#bot_exchangeFee').val(cfg.exchangeFee || '');
 							$('#bot_sandBoxWallet').val(cfg.sandBoxWallet || '');
 
@@ -507,19 +568,25 @@
 
 		$('#botConfigSave').on('click', function() {
 
+			const originalExchange = $('#bot_exchange').data('original') || '';
+			const selectedExchange = $('#bot_exchange').val().trim();
+			const exchangeChanged = selectedExchange && selectedExchange !== originalExchange;
+
+			const updateBotsHtml = exchangeChanged
+				? '<div style="font-size: 1.2rem; margin-top: 14px; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">'
+					+ '<b>&#9888; Exchange settings are saved to ' + ('<%= appData.bot_config %>'.split('/').pop().split('\\\\').pop()) + ' only.</b> Existing bots retain their original exchange. '
+					+ 'Bots with no active deals can be updated below. <b>Bots with active deals will be skipped.</b>'
+					+ '</div>'
+					+ '<br><div style="font-size: 1.2rem; margin-top: 6px;"><input type="checkbox" id="updateBotsExchange" class="form-field" style="width:20px;" /> <b>Update existing bots (no active deals) to use the new exchange</b></div>'
+				: '';
+
 			$.confirm({
 				title: false,
 				boxWidth: '40%',
 				useBootstrap: false,
 				content: '<div style="font-size: 1.2rem;">Enter your current password to save exchange settings:</div>' +
 					'<br><input type="password" id="botConfigPassword" class="form-field" style="width: 250px;" placeholder="Password">' +
-					'<br><br>' +
-					'<div style="font-size: 1.2rem; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
-					'<b>&#9888; Exchange settings are saved to ' + ('<%= appData.bot_config %>'.split('/').pop().split('\\\\').pop()) + ' only.</b> Existing bots retain their original exchange. ' +
-					'If you changed the exchange, bots with no active deals can be updated below. ' +
-					'<b>Bots with active deals will be skipped</b> — update them manually once deals complete.' +
-					'</div>' +
-					'<br><div style="font-size: 1.2rem; margin-top: 6px;"><input type="checkbox" id="updateBotsExchange" class="form-field" style="width:20px;" /> <b>Update existing bots (no active deals) to use the new exchange</b></div>',
+					updateBotsHtml,
 				buttons: {
 					confirm: {
 						btnClass: 'btn-default',
@@ -545,8 +612,11 @@
 								apiPassphrase_clear: $('#bot_apiPassphrase_clear').val(),
 								apiPassword:         $('#bot_apiPassword').val().trim(),
 								apiPassword_clear:   $('#bot_apiPassword_clear').val(),
-								exchangeFee:     $('#bot_exchangeFee').val().trim(),
-								sandBoxWallet:   $('#bot_sandBoxWallet').val().trim(),
+								exchangeFee:         $('#bot_exchangeFee').val().trim(),
+								sandBoxWallet:       $('#bot_sandBoxWallet').val().trim(),
+								exchange_buy_slippage:        $('#exchange_buy_slippage').val(),
+								exchange_sell_slippage:       $('#exchange_sell_slippage').val(),
+								exchange_balance_currencies:  $('#exchange_balance_currencies').val() || [],
 							};
 
 							$('#spinner-overlay').fadeIn(100);
@@ -660,6 +730,22 @@
 			"sftpPassword": "<%= services['cron_backup']['sftp']['password'] %>",
 			"sftpPassphrase": "<%= services['cron_backup']['sftp']['passphrase'] %>",
 			"sftpEnabled": convertBoolean("<%= services['cron_backup']['sftp']['enabled'] %>"),
+			"backupIncludeChats": convertBoolean("<%= (services['cron_backup']['include_chats'] !== false) ? 'true' : 'false' %>"),
+			"buySlippage":         "<%= appData.bots && appData.bots.exchange && appData.bots.exchange.default && appData.bots.exchange.default.orders ? appData.bots.exchange.default.orders.buy.slippage_percent : 0 %>",
+			"sellSlippage":        "<%= appData.bots && appData.bots.exchange && appData.bots.exchange.default && appData.bots.exchange.default.orders ? appData.bots.exchange.default.orders.sell.slippage_percent : 0 %>",
+			"balanceCurrencies":   <%- JSON.stringify(appData.bots && appData.bots.exchange && appData.bots.exchange.default ? (appData.bots.exchange.default.account_balance_currencies || []) : []) %>,
+			"ctxCompEnabled":    convertBoolean("<%= services['ai'] && services['ai']['context_compression'] && services['ai']['context_compression']['enabled'] !== false ? 'true' : 'false' %>"),
+			"ctxCompThreshold": "<%= services['ai'] && services['ai']['context_compression'] ? services['ai']['context_compression']['threshold_chars'] : 80000 %>",
+			"ctxCompProtectN":  "<%= services['ai'] && services['ai']['context_compression'] ? services['ai']['context_compression']['protect_last_n'] : 10 %>",
+			"cbEnabled":          convertBoolean("<%= services['circuit_breaker'] && services['circuit_breaker']['enabled'] ? 'true' : 'false' %>"),
+			"cbDealRatio":        "<%= services['circuit_breaker'] ? services['circuit_breaker']['deal_ratio_threshold'] : 0.5 %>",
+			"cbDealWindow":       "<%= services['circuit_breaker'] ? services['circuit_breaker']['deal_ratio_window_secs'] : 30 %>",
+			"cbPriceDrop":        "<%= services['circuit_breaker'] ? services['circuit_breaker']['price_drop_percent'] : 5.0 %>",
+			"cbPriceWindow":      "<%= services['circuit_breaker'] ? services['circuit_breaker']['price_drop_window_secs'] : 60 %>",
+			"cbPriceDropEnabled": convertBoolean("<%= services['circuit_breaker'] && services['circuit_breaker']['price_drop_enabled'] !== false ? 'true' : 'false' %>"),
+			"cbPauseDuration":    "<%= services['circuit_breaker'] ? services['circuit_breaker']['pause_duration_secs'] : 60 %>",
+			"cbRepeatWindow":     "<%= services['circuit_breaker'] ? services['circuit_breaker']['repeat_alert_window_secs'] : 3600 %>",
+			"cbPriceZeroAlert":   "<%= services['circuit_breaker'] ? services['circuit_breaker']['price_zero_alert_count'] : 4 %>",
 		};
 
 		if (cronObj.password != undefined && cronObj.password != null && cronObj.password != '') {
@@ -677,6 +763,7 @@
 			cronObj.sftpPassphrase = window.atob(cronObj.sftpPassphrase);
 		}
 
+		populateSettings(cronObj);
 		populateBackupSchedule(cronObj);
 
 		$(document).on('keypress', '#botsCreate input', function(e) {
@@ -692,7 +779,7 @@
 				return;
 			}
 
-			if (id.startsWith('backup_') && id.toLowerCase() != 'backup_password') {
+			if (id.startsWith('backup_') && id.toLowerCase() != 'backup_password' && id.toLowerCase() != 'backup_include_chats' && id.toLowerCase() != 'cb_enabled' && id.toLowerCase() != 'ctx_compression_enabled') {
 
 				let regEx = /[^0-9]/g;
 
@@ -1071,6 +1158,44 @@
 					</td>
 				</tr>
 
+				<tr><td colspan="2" style="padding-top: 8px; padding-bottom: 2px; font-size: 0.9rem; opacity: 0.6;">Context Compression</td></tr>
+
+				<tr>
+					<td>
+						<label for="ctx_compression_threshold">Threshold (chars):
+							<span class="toolTip">?<span class="toolTipText">
+								Compress conversation history when total characters exceed this value. ~4 chars per token — 80000 ≈ 20K tokens
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="number" id="ctx_compression_threshold" name="ctx_compression_threshold" class="form-field" min="10000" max="500000" step="10000" style="width:100px;">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="ctx_compression_protect_n">Protect Last N:
+							<span class="toolTip">?<span class="toolTipText">
+								Number of most recent messages to always preserve verbatim when compressing
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="number" id="ctx_compression_protect_n" name="ctx_compression_protect_n" class="form-field" min="2" max="50" style="width:80px;">
+					</td>
+				</tr>
+
+				<tr>
+					<td>Enabled:</td>
+
+					<td>
+						<input type="checkbox" id="toggleCtxCompression" name="ctx_compression_enabled" class="form-field">
+					</td>
+				</tr>
+
 				</table>
 
 			</div>
@@ -1173,6 +1298,19 @@
 					<td style="width: 325px;">
 						<input type="password" autocomplete="off" id="backup_password" class="form-field" style="width: 200px;" placeholder="">
 						<span id="showPassword" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="backup_include_chats">Include AI Chats:
+							<span class="toolTip">?<span class="toolTipText">
+								When enabled, AI chat conversations are included in scheduled automatic backups
+							</span></span>
+						</label>
+					</td>
+					<td style="width: 325px;">
+						<input type="checkbox" id="toggleBackupIncludeChats" name="backup_include_chats" class="form-field">
 					</td>
 				</tr>
 
@@ -1316,6 +1454,136 @@
 
 			<div style="padding-top: 10px; padding-bottom: 5px;">
 
+				<b>Circuit Breaker</b>
+				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
+
+					<tr>
+						<td>
+							<label for="cb_deal_ratio_threshold">Deal Ratio:
+								<span class="toolTip">?<span class="toolTipText">
+									Fraction of active deals that must trigger safety orders within the window to activate (e.g. 0.5 = 50%)
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="number" id="cb_deal_ratio_threshold" name="cb_deal_ratio_threshold" class="form-field" step="0.1" min="0.1" max="1.0" style="width:80px;">
+						</td>
+					</tr>
+
+					<tr>
+						<td>
+							<label for="cb_deal_ratio_window_secs">Deal Ratio Window:
+								<span class="toolTip">?<span class="toolTipText">
+									Rolling time window in seconds for counting simultaneous safety order triggers
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="number" id="cb_deal_ratio_window_secs" name="cb_deal_ratio_window_secs" class="form-field" min="5" max="300" style="width:80px;">
+						</td>
+					</tr>
+
+					<tr>
+						<td>
+							<label for="cb_price_drop_percent">Price Drop %:
+								<span class="toolTip">?<span class="toolTipText">
+									Percentage price drop within the window that triggers the circuit breaker for that pair
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="number" id="cb_price_drop_percent" name="cb_price_drop_percent" class="form-field" step="0.5" min="1" max="50" style="width:80px;">
+						</td>
+					</tr>
+
+					<tr>
+						<td>
+							<label for="cb_price_drop_window_secs">Price Drop Window:
+								<span class="toolTip">?<span class="toolTipText">
+									Rolling time window in seconds for measuring price drops
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="number" id="cb_price_drop_window_secs" name="cb_price_drop_window_secs" class="form-field" min="10" max="600" style="width:80px;">
+						</td>
+					</tr>
+
+					<tr>
+						<td>
+							<label for="togglePriceDrop">Price Drop Trigger:
+								<span class="toolTip">?<span class="toolTipText">
+									When disabled, only the deal ratio trigger is active.
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="checkbox" id="togglePriceDrop" name="cb_price_drop_enabled" class="form-field">
+						</td>
+					</tr>
+
+					<tr>
+						<td>
+							<label for="cb_pause_duration_secs">Pause Duration:
+								<span class="toolTip">?<span class="toolTipText">
+									How long in seconds to pause all deal processing when the circuit breaker activates
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="number" id="cb_pause_duration_secs" name="cb_pause_duration_secs" class="form-field" min="10" max="600" style="width:80px;">
+						</td>
+					</tr>
+
+					<tr>
+						<td>
+							<label for="cb_repeat_alert_window_secs">Elevated Alert Window:
+								<span class="toolTip">?<span class="toolTipText">
+									If the circuit breaker activates more than once within this window (seconds), an elevated 🚨 Telegram alert is sent indicating deteriorating market conditions. Default: 3600 (1 hour)
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="number" id="cb_repeat_alert_window_secs" name="cb_repeat_alert_window_secs" class="form-field" min="60" max="86400" style="width:80px;">
+						</td>
+					</tr>
+
+					<tr>
+						<td>
+							<label for="cb_price_zero_alert_count">Price Zero Alert Count:
+								<span class="toolTip">?<span class="toolTipText">
+									Number of consecutive Invalid Price: 0 events for the same deal before a Telegram alert is sent. Default: 4
+								</span></span>
+							</label>
+						</td>
+
+						<td style="width: 325px;">
+							<input type="number" id="cb_price_zero_alert_count" name="cb_price_zero_alert_count" class="form-field" min="2" max="20" style="width:80px;">
+						</td>
+					</tr>
+
+					<tr>
+						<td>Enabled:</td>
+
+						<td>
+							<input type="checkbox" id="toggleCircuitBreaker" name="cb_enabled" class="form-field">
+						</td>
+					</tr>
+
+				</table>
+			</div>
+
+			<div class="divHr"></div>
+
+			<div style="padding-top: 10px; padding-bottom: 5px;">
+
 				<b>Exchange Settings</b>
 				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
 
@@ -1412,6 +1680,50 @@
 
 					<td>
 						<input type="number" step="1" min="0" name="bot_sandBoxWallet" id="bot_sandBoxWallet" class="form-field" style="width: 100px;">
+					</td>
+				</tr>
+
+				<tr><td colspan="2" style="padding-top: 8px; padding-bottom: 2px; font-size: 0.9rem; opacity: 0.6;">Order Settings</td></tr>
+
+				<tr>
+					<td>
+						<label for="exchange_buy_slippage">Buy Slippage %:
+							<span class="toolTip">?<span class="toolTipText">
+								Percentage slippage applied to buy order prices to improve fill rate
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="number" step="0.01" min="0" max="10" id="exchange_buy_slippage" name="exchange_buy_slippage" class="form-field" style="width: 100px;">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="exchange_sell_slippage">Sell Slippage %:
+							<span class="toolTip">?<span class="toolTipText">
+								Percentage slippage applied to sell order prices to improve fill rate
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="number" step="0.01" min="0" max="10" id="exchange_sell_slippage" name="exchange_sell_slippage" class="form-field" style="width: 100px;">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="exchange_balance_currencies">Balance Currencies:
+							<span class="toolTip">?<span class="toolTipText">
+								Currencies shown in the dashboard balance dropdown. Type a currency code and press Enter to add it (e.g. USD, USDT, USDC)
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<select id="exchange_balance_currencies" name="exchange_balance_currencies" class="form-select-pair" style="width: 200px;" multiple="multiple"></select>
 					</td>
 				</tr>
 

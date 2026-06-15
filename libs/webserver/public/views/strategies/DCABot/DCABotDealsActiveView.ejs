@@ -51,6 +51,106 @@
 	const convertBoolean = new Function('return ' + `<%- convertBoolean %>`)();
 
 
+	var cbCountdownTimer = null;
+
+	function updateCircuitBreakerBanner(cb) {
+
+		const $banner = $('#circuitBreakerBanner');
+
+		if (!cb || !cb.active) {
+
+			$banner.hide();
+			if (cbCountdownTimer) { clearInterval(cbCountdownTimer); cbCountdownTimer = null; }
+			return;
+		}
+
+		$('#cbReason').text(cb.reason);
+		$banner.show();
+
+		// Countdown timer
+		if (cbCountdownTimer) clearInterval(cbCountdownTimer);
+
+		function updateCountdown() {
+
+			const secsLeft = cb.clears_at ? Math.max(0, Math.round((cb.clears_at - Date.now()) / 1000)) : 0;
+			$('#cbCountdown').text(secsLeft + 's');
+
+			if (secsLeft <= 0) {
+				clearInterval(cbCountdownTimer);
+				cbCountdownTimer = null;
+			}
+		}
+
+		updateCountdown();
+		cbCountdownTimer = setInterval(updateCountdown, 1000);
+	}
+
+
+	function updatePortfolioBar(portfolio) {
+
+		if (!portfolio) {
+
+			$('#portfolioRiskBar').hide();
+			return;
+		}
+
+		// Currency symbol — use first configured currency as the quote
+		const currencies  = portfolio.balance_currencies || [];
+		const quoteCcy    = currencies[0] || 'USD';
+		const sym         = (typeof getCurrencySymbol === 'function') ? getCurrencySymbol(quoteCcy) : '$';
+
+		// Portfolio total
+		$('#portfolioTotal').text(sym + (portfolio.portfolio_total || 0).toFixed(2) + ' ' + quoteCcy);
+
+		// Max Funds
+		$('#portfolioMaxFunds').text(sym + (portfolio.total_max_funds || 0).toFixed(2));
+
+		// Risk % with colour coding
+		const risk = portfolio.risk_percent;
+		let riskClass = 'portfolio-risk-low';
+
+		if (risk !== null && risk !== undefined) {
+
+			if (risk >= 90)      riskClass = 'portfolio-risk-high';
+			else if (risk >= 70) riskClass = 'portfolio-risk-mid';
+		}
+
+		$('#portfolioRisk')
+			.attr('class', riskClass)
+			.text(risk !== null && risk !== undefined ? risk + '%' : 'N/A');
+
+		// Balance age indicator — hidden in sandbox mode, shows freshness in live mode
+		if (portfolio.is_sandbox) {
+
+			$('#portfolioBalanceAge').text('Sandbox');
+		}
+		else if (portfolio.balance_updated) {
+
+			const ageSecs = Math.round((Date.now() - new Date(portfolio.balance_updated).getTime()) / 1000);
+			const ageMins = Math.floor(ageSecs / 60);
+			const ageText = ageMins > 0 ? ageMins + 'm ago' : ageSecs + 's ago';
+			$('#portfolioBalanceAge').text('Balance: ' + ageText);
+		}
+		else {
+
+			$('#portfolioBalanceAge').text('');
+		}
+
+		$('#portfolioRiskBar').show();
+	}
+
+
+	$(document).on('click', '#cbClearBtn', function() {
+
+		$.ajax({
+			type: 'POST',
+			url: './api/circuit-breaker/clear',
+			dataType: 'json',
+			success: function() { getActiveDeals(); }
+		});
+	});
+
+
 	function setReloadTimeout() {
 
 		if (timeOutId) {
@@ -352,6 +452,10 @@
 
 						csvDataArr = populateDeals(date, deals);
 
+						updateCircuitBreakerBanner(data.circuit_breaker);
+
+					updatePortfolioBar(data.portfolio);
+
 						setReloadTimeout();
 					},
 					error: function(data) {
@@ -380,11 +484,11 @@
 
 						if (!data.success) {
 
-							alertBox('Unable to close deal: ' + data['data']);
+							alertBox('Unable to close deal: ' + data['data'], function() { getActiveDeals(); });
 						}
 						else {
 
-							alertBox('Deal ID ' + dealId + ' closed');
+							alertBox('Deal ID ' + dealId + ' closed', function() { getActiveDeals(); });
 						}
 					},
 					error: function(data) {
@@ -392,7 +496,7 @@
 						// Some error in ajax call
 						$('#spinner-overlay').fadeOut(100);
 
-						alertBox('Error: ' + JSON.stringify(data));
+						alertBox('Error: ' + JSON.stringify(data), function() { getActiveDeals(); });
 					}
 		});
 	}
@@ -413,11 +517,11 @@
 
 						if (!data.success) {
 
-							alertBox('Unable to update deal: ' + data['data'], function() { });
+							alertBox('Unable to update deal: ' + data['data'], function() { getActiveDeals(); });
 						}
 						else {
 
-							alertBox('Deal ID ' + dealId + ' updated', function() { });
+							alertBox('Deal ID ' + dealId + ' updated', function() { getActiveDeals(); });
 						}
 					},
 					error: function(data) {
@@ -425,7 +529,7 @@
 						// Some error in ajax call
 						$('#spinner-overlay').fadeOut(100);
 
-						alertBox('Error: ' + JSON.stringify(data), function() { });
+						alertBox('Error: ' + JSON.stringify(data), function() { getActiveDeals(); });
 					}
 		});
 	}
@@ -581,17 +685,17 @@
 				$('#spinner-overlay').fadeOut(100);
 
 				if (!data.success) {
-					alertBox('Unable to update pause status for deal: ' + data['data'], function() {});
+					alertBox('Unable to update pause status for deal: ' + data['data'], function() { getActiveDeals(); });
 				}
 				else {
-					alertBox('Successfully updated pause status for deal: ' + dealId, function() {});
+					alertBox('Successfully updated pause status for deal: ' + dealId, function() { getActiveDeals(); });
 				}
 			},
 			error: function(data) {
 				// Some error in ajax call
 				$('#spinner-overlay').fadeOut(100);
 
-				alertBox('Error: ' + JSON.stringify(data), function() {});
+				alertBox('Error: ' + JSON.stringify(data), function() { getActiveDeals(); });
 			},
 		});
 	}
@@ -669,17 +773,17 @@
 				$('#spinner-overlay').fadeOut(100);
 
 					if (!data.success) {
-						alertBox('Unable to cancel deal: ' + data['data'], function() {});
+						alertBox('Unable to cancel deal: ' + data['data'], function() { getActiveDeals(); });
 					}
 				else {
-					alertBox('Successfully canceled deal: ' + dealId, function() {});
+					alertBox('Successfully canceled deal: ' + dealId, function() { getActiveDeals(); });
 				}
 			},
 			error: function(data) {
 				// Some error in ajax call
 				$('#spinner-overlay').fadeOut(100);
 
-				alertBox('Error: ' + JSON.stringify(data), function() {});
+				alertBox('Error: ' + JSON.stringify(data), function() { getActiveDeals(); });
 			},
 		});
 	}
@@ -771,17 +875,17 @@
 				$('#spinner-overlay').fadeOut(100);
 
   				if (!data.success) {
-  					alertBox('Unable to update deal: ' + data['data'], function() {});
+  					alertBox('Unable to update deal: ' + data['data'], function() { getActiveDeals(); });
   				}
 				else {
-  					alertBox('Successfully added funds to: ' + dealId, function() {});
+  					alertBox('Successfully added funds to: ' + dealId, function() { getActiveDeals(); });
   				}
   			},
   			error: function(data) {
   				// Some error in ajax call
   				$('#spinner-overlay').fadeOut(100);
 
-	  			alertBox('Error: ' + JSON.stringify(data), function() {});
+	  			alertBox('Error: ' + JSON.stringify(data), function() { getActiveDeals(); });
   			},
   		});
 	}
@@ -865,6 +969,7 @@
 			const maxDeviation = deal['info']['max_deviation'];
 
 			const duration = timeDiff(new Date(), new Date(deal['date']));
+			const dealSym = getDealSym(deal['info']['pair'], deal['config']['profitCurrency']);
 
 			let csvDealInfo = JSON.parse(JSON.stringify(deal.info));
 
@@ -1008,16 +1113,16 @@
 			contentArr.push('<td id="dealid-cell">' + dealId + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
 			contentArr.push('<td>' + duration + '</td>');
-			contentArr.push('<td>$' + convertNotation(deal['info']['price_last']) + '</td>');
-			contentArr.push('<td>$' + convertNotation(deal['info']['price_target']) + '</td>');
-			contentArr.push('<td>$' + dealVolume.toFixed(2) + '</td>')
-			contentArr.push('<td class="' + profitPercClass + '">$' + profit + '</td>');
+			contentArr.push('<td>' + dealSym + convertNotation(deal['info']['price_last']) + '</td>');
+			contentArr.push('<td>' + dealSym + convertNotation(deal['info']['price_target']) + '</td>');
+			contentArr.push('<td>' + dealSym + dealVolume.toFixed(2) + '</td>')
+			contentArr.push('<td class="' + profitPercClass + '">' + dealSym + profit + '</td>');
 			contentArr.push('<td class="' + profitPercClass + '">' + profitBase + '</td>');
 			contentArr.push('<td class="' + profitPercClass + '">' + profitPerc + '%</td>');
-			contentArr.push('<td>$' + profitQuoteProjected + '</td>');
+			contentArr.push('<td>' + dealSym + profitQuoteProjected + '</td>');
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
-			contentArr.push('<td>$' + maxFunds + '</td>')
+			contentArr.push('<td>' + dealSym + maxFunds + '</td>')
 			contentArr.push('<td>' + dealCount + '</td>');
 			const pillContent = aiButtonDeal + editButtonDeal + panicButtonDeal + addFundsButtonDeal + pauseButtonDeal + cancelButtonDeal + (stopButtonDeal || '');
 			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-pausereason="' + pauseReason + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
@@ -1051,11 +1156,12 @@
 		$('#botsDeals tbody').append(contentArr.join(''));
 
 		$('#totalProfit').removeClass('profit-positive profit-negative').addClass(profitTotalClass);
-		$('#totalProfit').html('$' + totalProfit.toFixed(2));
+		const summarySym = deals.length > 0 ? getDealSym(deals[0]['info']['pair'], deals[0]['config']['profitCurrency']) : '$';
+		$('#totalProfit').html(summarySym + totalProfit.toFixed(2));
 
-		$('#inDeals').html('$' + inDeals.toFixed(2));
+		$('#inDeals').html(summarySym + inDeals.toFixed(2));
 		$('#totalDeals').html(activeDeals);
-		$('#projectedProfit').html('$' + (Math.round(totalProjectedProfit * 100) / 100).toFixed(2));
+		$('#projectedProfit').html(summarySym + (Math.round(totalProjectedProfit * 100) / 100).toFixed(2));
 
 		$('#botsDeals').tablesorter().trigger('update');
 
@@ -1065,7 +1171,16 @@
 	}
 
 
-	$(document).ready(function() {
+	const getCurrencySymbol = <%- getCurrencySymbol %>;
+
+function getDealSym(pair, profitCurrency) {
+	const parts = (pair || '').split('/');
+	const code = profitCurrency === 'base' ? parts[0] : parts[1];
+	return getCurrencySymbol(code) || '$';
+}
+
+
+$(document).ready(function() {
  
 		let tooltipDisplayTime = {};
 
@@ -1115,7 +1230,7 @@
 				const tooltip = $(`
 					<span class="toolTipStatic dynamic-tooltip" style="position: absolute;">
 						<span class="toolTipText">
-							Buying ${base} at the current market price using $${amountNet} ${quote} may bring the average price bought to $${priceAvgNet} and the new target take profit price to $${priceTargetNet}. ${contentPriceTarget}
+							Buying ${base} at the current market price using ${getCurrencySymbol(quote)}${amountNet} ${quote} may bring the average price bought to ${getCurrencySymbol(quote)}${priceAvgNet} and the new target take profit price to ${getCurrencySymbol(quote)}${priceTargetNet}. ${contentPriceTarget}
 						</span>
 					</span>
 				`);
@@ -1370,7 +1485,7 @@
 					return;
 				}
 
-				showOrderHistory(modalId, dealId, dealTracker[dealId]['info']['active'], dealTracker[dealId]['orders']);
+				showOrderHistory(modalId, dealId, dealTracker[dealId]['info']['active'], dealTracker[dealId]['orders'], dealTracker[dealId]['info']['pair']);
 			}
 		});
 
@@ -1446,6 +1561,13 @@
 		</div>
 	</div>
 
+	<div id="circuitBreakerBanner" style="display:none; margin-bottom:10px;">
+		<div style="background:#7a4f00; color:#ffe08a; border:1px solid #c47f00; border-radius:6px; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+			<span>⚡ <b>Circuit Breaker Active</b> — <span id="cbReason"></span> &nbsp;|&nbsp; Resumes in <span id="cbCountdown"></span></span>
+			<button class="btn btn-default" id="cbClearBtn" style="font-size:1.1rem; padding:3px 12px;">Clear</button>
+		</div>
+	</div>
+
 	<div id="contentBox">
 
 		<div style="position: relative;">
@@ -1470,6 +1592,13 @@
 								<option value="all"></option>
 							</select>
 					</div>
+				</div>
+
+				<div class="summary-bar" id="portfolioRiskBar" style="display:none;">
+					<p>Portfolio: <span id="portfolioTotal"></span></p>
+					<p>Max Funds: <span id="portfolioMaxFunds"></span></p>
+					<p>Risk: <span id="portfolioRisk"></span></p>
+					<p id="portfolioBalanceAge" style="font-size:0.8em; opacity:0.6;"></p>
 				</div>
 			</div>
 
@@ -1509,7 +1638,7 @@
 					Currency used for the profit for this deal. Changing this will not affect other deals.
 					</span></span>
 
-				</td> <td><select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 100px; background-color: #ffffff; cursor: pointer;"><option value="base">Base<option value="quote">Quote</option></select></td></tr>
+				</td> <td><select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 100px; cursor: pointer;"><option value="base">Base<option value="quote">Quote</option></select></td></tr>
 
 				<tr><td>Last Deal:
 				

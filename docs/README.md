@@ -22,8 +22,13 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Telegram Setup](#telegram-setup)
 - [Advanced Setup](#advanced-setup)
 - [Reverse Proxy Setup](#reverse-proxy-setup)
+- [Circuit Breaker](#circuit-breaker)
+- [Portfolio Summary Bar](#portfolio-summary-bar)
 - [Artificial Intelligence (AI)](#artificial-intelligence-ai)
   - [AI Chat](#ai-chat)
+  - [AI Chat Conversations](#ai-chat-conversations)
+  - [AI Chat File Attachments](#file-attachments)
+  - [AI Chat Context Compression](#context-compression)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
 - [WebSocket API](#websocket-api)
@@ -228,8 +233,8 @@ These files are located in the `config` directory
 		-	`start_conditions` contains keys and descriptions such as `asap` and `api` for various start conditions that can be used to start bots and deals. The keys should never be changed after the initial start of SymBot or they will not match previous bots and deals.
 		-	`exchange` contains additional parameters that will apply to particular exchanges. Currently only the *default* exchange parameter is supported.
 			-	`orders` contains buy and sell parameters
-				-	`slippage_percent` is an additional percentage that is factored into the current price before another buy or sell order is placed on the exchange.  Sometimes orders will be executed at a different price than originally requested primarily with market orders. This helps to ensure orders are executed at or below the buy price and at or above the sell price requested. This can also potentially increase overall profit, but setting these values too high may cause further delays in closing your deals.
-			-	`account_balance_currencies` is an array of currencies that are used to show preferred exchange account balances in order of precedence.
+				-	`slippage_percent` is an additional percentage that is factored into the current price before another buy or sell order is placed on the exchange.  Sometimes orders will be executed at a different price than originally requested primarily with market orders. This helps to ensure orders are executed at or below the buy price and at or above the sell price requested. This can also potentially increase overall profit, but setting these values too high may cause further delays in closing your deals. Both buy and sell slippage percentages are configurable in **Configuration → Exchange Settings → Order Settings** without restarting SymBot.
+			-	`account_balance_currencies` is an array of currencies that are used to show preferred exchange account balances in order of precedence (e.g. `["USD", "USDT", "USDC"]`). Configurable in **Configuration → Exchange Settings → Order Settings** using a tag-style input where each currency is added individually.
 		- `pair_buttons` is an array of currencies that is used to automatically fill in pairs after clicking on one of these buttons when creating or updating bots.
 		-	`pair_blacklist` is an array of pairs that you don't want to trade. You can use full pairs such as BTC/USD or wildcards such as BTC/*. This can be useful to prevent bots from starting deals using stablecoin pairs such as USDT/USD as those will generally have little volatility in typical market conditions.
 
@@ -237,6 +242,7 @@ These files are located in the `config` directory
 		- `schedule` this is a crontab format schedule of the days and time to process tasks.
 		- `password` is the password that will be used to encrypt database backups. It is required and is not a plain text password, but rather an encrypted form of it, so it should not be manually entered.
 		- `max` is the maximum number of backups to keep.
+		- `include_chats` controls whether AI chat conversation history is included in scheduled automatic backups. Defaults to `true`. Can also be toggled per-backup when performing a manual backup from the System menu. AI chat history can also be reset independently via the CLI using `npm start reset aichats` or from the System menu during a database restore.
 		- `enabled` is whether the cron scheduler will run and automatically process database backups.
 		- `sftp`
 			- `host` is the SFTP host to upload backups
@@ -267,7 +273,19 @@ mongodb://localhost:27017/SymBot
 
 	- `signals` contains a section to use signals with SymBot. There is a 3CQS signals section by default. You must have a 3CQS API key for these to work. You can get one by signing up for free at https://www.3CQS.com. Webhooks must also be enabled for these signals to work.
 
+	- `circuit_breaker` contains settings for the automatic circuit breaker that temporarily pauses deal processing during sudden market drops. See [Circuit Breaker](#circuit-breaker) for full details.
+		- `enabled` set to true to enable the circuit breaker or false to disable it.
+		- `deal_ratio_threshold` the fraction of active deals that must trigger safety orders within the window to activate (e.g. `0.5` = 50% of active deals). Minimum 2 deals must trigger regardless of ratio.
+		- `deal_ratio_window_secs` rolling time window in seconds for counting simultaneous safety order triggers. Default is `30`.
+		- `price_drop_percent` percentage price drop within the window for a single pair that triggers the circuit breaker. Default is `5.0`.
+		- `price_drop_window_secs` rolling time window in seconds for measuring price drops per pair. Default is `60`.
+		- `price_drop_enabled` whether the price drop trigger is active. Set to `false` to use only the deal ratio trigger. Default is `true`.
+		- `pause_duration_secs` how long in seconds to block new buys when the circuit breaker activates. Sells, cancels, and panic sells are always allowed through. Default is `60`.
+		- `repeat_alert_window_secs` if the circuit breaker activates more than once within this window, an elevated Telegram alert is sent warning that market conditions may be deteriorating. Default is `3600` (1 hour).
+		- `price_zero_alert_count` number of consecutive Invalid Price: 0 events for the same deal before a Telegram alert is sent. Default is `4`.
+
 	- `ai` contains settings for the AI provider used with SymBot. See the [Artificial Intelligence (AI)](#artificial-intelligence-ai) section for full details and configuration options.
+		- `max_history` is the maximum number of messages retained per conversation session. Defaults to 25. Messages older than 2 hours are automatically purged from memory.
 
 - **bot.json**
 
@@ -278,7 +296,8 @@ mongodb://localhost:27017/SymBot
 		- Set the exchange fee percentage
 		- Set the sandbox wallet balance used for paper trading
 		- Toggle between **Sandbox (paper trading)** and **Live trading** modes — switching modes requires password confirmation to prevent accidental changes
-	- **Important:** Exchange settings are saved to `bot.json` only and apply to newly created bots. Existing bots retain the exchange they were created with, which is visible in the **Exchange** column of the Manage Bots view. When saving exchange settings, a confirmation dialog will offer the option to update all existing bots that have no active deals to use the new exchange. Bots with active deals are skipped and must be updated manually once their deals complete.
+	- **Important:** Exchange settings are saved to `bot.json` only and apply to newly created bots. Existing bots retain the exchange they were created with, which is visible in the **Exchange** column of the Manage Bots view. When saving exchange settings, a confirmation dialog will offer the option to update all existing bots that have no active deals to use the new exchange (only shown if the exchange name has changed). Bots with active deals are skipped and must be updated manually once their deals complete.
+	- The **Order Settings** subsection of Exchange Settings (Buy Slippage %, Sell Slippage %, Balance Currencies) are saved to `app.json` and take effect immediately on the next order without restart.
 	- Valid exchanges include binance, binanceus, coinbase, and many others. SymBot uses the [CCXT](https://github.com/ccxt/ccxt) library so if the exchange is supported, you should be able to connect to it. When saving exchange settings the credentials are validated against the exchange before being written to disk.
 	- Most bot settings do not need to be set here since they can be set when creating a bot in the web interface
 	- Set your exchange fee appropriately:
@@ -428,6 +447,8 @@ sudo nano /etc/httpd/conf.d/your-domain-name.com.conf
 	ServerAlias www.your-domain-name.com
 	ServerAdmin webmaster@your-domain-name.com
 
+	LimitRequestBody 272629760
+
 	RewriteEngine on
 	RewriteCond ${HTTP:Upgrade} websocket [NC]
 	RewriteCond ${HTTP:Connection} upgrade [NC]
@@ -449,6 +470,8 @@ sudo systemctl restart httpd
 ```
 
 You should now be able to access SymBot by opening your web browser to http://your-domain-name.com
+
+**Note:** The `LimitRequestBody` directive may be required depending on your Apache distribution. Some distributions set a restrictive default that will block database backup restores and AI Chat file attachments. The value `272629760` equals 260 MB — enough to cover SymBot's 250 MB backup restore limit and 25 MB AI Chat attachment limit.
 
 
 ### NGINX
@@ -476,6 +499,7 @@ server {
 	server_name your-domain-name.com;
 
 	location / {
+				client_max_body_size 260m;
 				proxy_pass http://127.0.0.1:3000;
 				proxy_http_version 1.1;
 				proxy_set_header Upgrade $http_upgrade;
@@ -486,12 +510,120 @@ server {
 }
 ```
 
+**Note:** The `client_max_body_size` directive is required for SymBot to function correctly. NGINX defaults to 1 MB which will reject database backup restores and AI Chat file attachments. SymBot supports backup files up to 250 MB and AI Chat attachments up to 25 MB — set `client_max_body_size` to at least `260m` to cover both.
+
 5. Restart NGINX:
 ```
 sudo systemctl nginx restart
 ```
 
 You should now be able to access SymBot by opening your web browser to http://your-domain-name.com
+
+
+## Circuit Breaker
+
+The circuit breaker is an automatic risk management feature that blocks new position-opening during sudden market-wide volatility, while allowing existing positions to close normally. It is memory-only — no database writes occur and it resets on restart.
+
+### How It Works
+
+The circuit breaker monitors two independent triggers. Either is sufficient to activate it:
+
+**Deal ratio trigger** — if a configurable fraction of your active deals trigger safety orders within a rolling time window, the circuit breaker fires. For example with a threshold of 0.5 and 30-second window: if 3 out of 5 active deals all trigger safety orders within 30 seconds, that's a 60% ratio which exceeds the threshold. A minimum of 2 deals must trigger regardless of ratio to avoid false positives on small portfolios.
+
+**Price drop trigger** — if the price of any individual pair drops by a configurable percentage within a rolling time window (tracked from the first safety order price seen for that pair), the circuit breaker fires.
+
+### What Gets Blocked and What Passes Through
+
+When active, the circuit breaker blocks position-opening but allows position-closing:
+
+**Blocked:**
+- Base orders (starting new deals) — no new positions open into a falling market
+- Safety order buys — no averaging down during a drop
+- Any deal-start request from any client (3CQS signals, manual API calls, webhooks, or any future integration) — enforcement is in the core deal-start gate so no client needs to implement its own circuit breaker logic. The API response includes a clear reason: `"Circuit Breaker Active: <reason>"` so callers can distinguish a CB block from other failures and retry after the pause window expires.
+
+> **Important for integration builders:** When the circuit breaker is active, a `start_deal` request is rejected before the deal is created. The base order is **not** queued for later — the request must be retried after the circuit breaker clears. If your integration (e.g. TradingView alert) is price-sensitive, check `circuit_breaker_active` in the API response before assuming a deal will open at the intended price. The circuit breaker clears automatically after `pause_duration_secs` (default 60s) or can be cleared manually via the UI.
+
+**Always allowed through:**
+- Take profit sells — if a volatility spike pushes a pair above its target, the deal closes normally
+- Panic sells — manual emergency closes always execute regardless of circuit breaker state
+- Deal cancels — manual cancels always execute
+- `BOT_STOP` signals from 3CQS — protective close/cancel signals are never blocked
+- The UI and API — full access to view deals, make manual changes, and clear the circuit breaker at any time
+
+### Auto-Resume
+
+The circuit breaker auto-clears after `pause_duration_secs`. Because each deal runs on its own independent timer, they naturally resume in a staggered fashion rather than all simultaneously — no burst of orders at resume time.
+
+### UI Banner
+
+When the circuit breaker activates, an amber warning banner appears at the top of the Active Deals page showing the reason (e.g. *"Deal ratio: 3/5 deals triggered safety orders within 30s"*) and a live countdown to auto-resume. A **Clear** button allows manual dismissal.
+
+### Telegram Notifications
+
+The circuit breaker sends Telegram alerts at key events:
+
+**On activation** — sent immediately when the circuit breaker fires, including:
+- The trigger reason (deal ratio or price drop with specific values)
+- Top affected pairs and how many times each triggered within the window (e.g. *PEPE/USD (8), RSR/USD (3)*)
+- How long buys will be paused
+
+**On repeat activation** — if the circuit breaker fires more than once within the `repeat_alert_window_secs` window (default 1 hour), the alert is elevated with a 🚨 prefix and includes how many minutes elapsed since the last activation. This is a signal that market conditions may be deteriorating beyond a single event.
+
+**On auto-clear** — sent when the pause duration expires and normal processing resumes.
+
+**On manual clear** — sent when a user clears the circuit breaker via the UI or API.
+
+**On consecutive Invalid Price: 0** — if the exchange returns a price of 0 for the same deal `price_zero_alert_count` consecutive times (default 4), a Telegram alert is sent naming the pair and deal ID. The counter resets after the alert and also resets whenever a valid price is received for that deal.
+
+### Configuration
+
+All circuit breaker settings are configurable in **Configuration → Circuit Breaker** without restarting SymBot. Changes take effect immediately. Settings are also stored in `config/app.json` under the `circuit_breaker` key.
+
+| Setting | Description | Default |
+|---------|-------------|----------|
+| `deal_ratio_threshold` | Fraction of active deals that must trigger safety orders within the window | `0.5` |
+| `deal_ratio_window_secs` | Rolling window in seconds for counting simultaneous safety order triggers | `30` |
+| `price_drop_percent` | Price drop % within the window for a single pair that triggers the CB | `5.0` |
+| `price_drop_window_secs` | Rolling window in seconds for measuring price drops per pair | `60` |
+| `pause_duration_secs` | How long in seconds to block new buys when activated | `60` |
+| `price_drop_enabled` | Enable or disable the price drop trigger. When `false`, only the deal ratio trigger is active | `true` |
+| `repeat_alert_window_secs` | Window in seconds for detecting repeat CB activations and sending an elevated alert | `3600` |
+| `price_zero_alert_count` | Consecutive zero-price events before a Telegram alert is sent for that deal | `4` |
+
+## Portfolio Summary Bar
+
+The Active Deals view includes a live portfolio summary bar displayed below the deal statistics. It gives you an at-a-glance view of your overall account position without needing to navigate to the dashboard.
+
+### What It Shows
+
+| Field | Description |
+|-------|-------------|
+| **Portfolio** | Total free balance across all configured account balance currencies (e.g. USD, USDT, USDC) |
+| **Max Funds** | Total worst-case capital commitment if all safety orders on all active deals were to fire simultaneously |
+| **Risk %** | Max Funds as a percentage of total portfolio. Color coded: green below 70%, amber 70–90%, red 90%+ |
+| **Balance** | How long ago the exchange balance was last fetched |
+
+### Balance Caching
+
+Exchange balance is fetched once per minute in the background and cached — the summary bar reads from the cache rather than calling the exchange on every refresh. This means the balance shown may be up to 60 seconds old, which is reflected by the **Balance: Xm ago** indicator. The cache is primed immediately at startup so the bar is populated on first load.
+
+### Sandbox Mode
+
+When running in sandbox (paper trading) mode, the portfolio total is taken from the **Sandbox Wallet** value configured in **Configuration → Exchange** rather than a live exchange balance. The balance age indicator shows **Sandbox** instead of a timestamp.
+
+### Risk % Color Coding
+
+| Color | Range | Meaning |
+|--------|-------|---------|
+| 🟢 Green | Below 70% | Comfortable headroom — plenty of capital available |
+| 🟡 Amber | 70–90% | Most capital committed — monitor closely |
+| 🔴 Red | 90%+ | Near or over-extended — limited room for new safety orders |
+
+A Risk % above 100% means your configured Max Funds across all bots exceeds your available balance. This does not mean anything is broken — it reflects the theoretical worst case if every safety order on every active deal fired at once, which is unlikely. It is a useful prompt to review your position sizing.
+
+### Configuration
+
+The currencies shown in the Portfolio total are the same ones configured in **Configuration → Exchange Settings → Order Settings** under **Balance Currencies**. These are stored in `config/app.json` under `bots.exchange.default.account_balance_currencies`.
 
 
 ## Artificial Intelligence (AI)
@@ -578,6 +710,7 @@ The `ai` section of `config/app.json` stores all provider settings:
 ```json
 "ai": {
     "provider": "ollama",
+    "max_history": 25,
     "ollama": {
         "enabled": true,
         "host": "http://127.0.0.1:11434",
@@ -616,6 +749,85 @@ On desktop, an additional pop-out button appears in the top-left corner of the c
 - The pop-out respects the current light/dark theme and includes its own theme toggle
 - On mobile the pop-out button is hidden — the modal is used instead
 - Multiple pop-out windows can be open simultaneously, each maintaining its own independent conversation
+
+### AI Chat Conversations
+
+AI chat conversations can be saved, loaded, and managed across sessions. A conversation bar appears at the top of every chat window — both inline and in the pop-out.
+
+#### Saving a Conversation
+
+Click **Save** to name and save the current conversation. The save prompt pre-fills with the first message you typed (or the deal analysis title for AI analysis sessions) as a suggested name. Once a conversation is saved, it auto-saves silently after each AI response — no need to click Save again.
+
+Each conversation in the dropdown is prefixed with a type icon — ⚡ for deal analysis sessions and 💬 for free-form chats. Hovering over a conversation shows a tooltip with how long ago it was last active.
+
+#### Loading a Conversation
+
+Select any saved conversation from the dropdown to load it. The full message history is restored and the AI model is seeded with the prior context, so the conversation continues seamlessly. If you open the pop-out while a saved conversation is active, it opens with that conversation pre-loaded.
+
+#### Starting a New Conversation
+
+Select **New conversation** from the dropdown. A confirmation prompt will appear before clearing the current chat to prevent accidental loss.
+
+#### Deleting a Conversation
+
+When a saved conversation is selected, a **Delete** button appears. Click it to permanently remove the conversation. The Save button is hidden while a saved conversation is active since auto-save handles persistence.
+
+#### File Attachments
+
+You can attach documents to any AI chat message by clicking the 📎 paperclip button to the right of the chat input. Supported file types are PDF, DOCX, TXT, MD, and CSV, with a maximum size of 25 MB per file.
+
+When you select a file, a pulsing pill appears above the input showing the filename while extraction is in progress. Once processed, the pill becomes a permanent badge with an × to remove it before sending. Multiple files can be attached to a single message.
+
+**How it works** — the file is written to a temporary location on the server, the text is extracted, and the file is immediately deleted. The extracted text is injected into the model's context alongside your message. The raw file is never stored — only the extracted text is retained with the conversation.
+
+**Follow-up questions** — because the extracted text is stored with the message in the conversation history, the model retains full document context across all follow-up messages in the same session. If the conversation is saved, the attachment text is persisted to the database so it remains available when the conversation is reloaded in a future session.
+
+**Badge display** — a 📄 filename badge appears on the user message bubble in the chat to indicate which files were attached. These badges are restored when loading a saved conversation.
+
+**Large documents** — the full extracted text is sent to the model on every message. For very large documents this may approach the model's context window limit. OpenAI models (128K context) handle larger files than local Ollama models, which typically have 4K–32K context depending on configuration.
+
+**Reverse proxy users** — if running SymBot behind NGINX or Apache, you must configure the upload size limit in your reverse proxy. The limit must cover both AI Chat attachments (25 MB) and database backup restores (250 MB). See the [Reverse Proxy Setup](#reverse-proxy-setup) section for the required configuration.
+
+#### Context Compression
+
+As a conversation grows, the accumulated message history can exceed the model's context window limit — particularly with local Ollama models which typically have 4K–32K token contexts. Context compression automatically manages this by summarising older turns into a concise structured summary, keeping the conversation within limits without losing the thread.
+
+When the total character count of the conversation history exceeds the configured threshold, the middle turns (everything between the first exchange and the most recent N messages) are summarized into a single structured message using the same model. The summary uses these headings:
+
+- **Topic** — what the conversation is about
+- **Key Points** — main facts and findings discussed
+- **Important Values / Numbers** — specific figures mentioned
+- **Decisions Made** — conclusions reached
+- **Still Open** — unresolved questions
+
+The first exchange and the most recent messages are always preserved verbatim. On subsequent compressions the previous summary is updated rather than restarted, so information accumulates across multiple compression rounds.
+
+If compression fails for any reason (model error, timeout) the conversation continues normally with the full history — compression is always silent and non-breaking.
+
+Context compression is configured under **Configuration → Artificial Intelligence (AI) → Context Compression**:
+
+| Field | Description | Default |
+|---|---|---|
+| Threshold (chars) | Compress when total history exceeds this character count. ~4 chars per token — 80000 ≈ 20K tokens | 80000 |
+| Protect Last N | Number of most recent messages always preserved verbatim | 10 |
+| Enabled | Enable or disable context compression | Enabled |
+
+Context compression also applies to the `app.json` config file under `ai.context_compression`:
+
+```json
+"ai": {
+    "context_compression": {
+        "enabled": true,
+        "threshold_chars": 80000,
+        "protect_last_n": 10
+    }
+}
+```
+
+#### Backup and Reset
+
+AI chat conversations are stored in the database and are included in backups by default. This can be toggled in **Configuration → Database Backups** under *Include AI Chats*, or per-backup when triggering a manual backup from the System menu. When resetting the database from the System menu, a separate *Reset AI chat history* toggle is available to clear conversation history independently from the main bot and deal data.
+
 
 
 ## API Information
@@ -716,14 +928,6 @@ Permanently deletes a bot and all of its deal history. The bot must have no acti
 
 ```
 DELETE /api/bots/{botId}
-```
-
-#### Delete bot
-```
-curl -i -X DELETE \
--H 'Accept: application/json' \
--H 'api-key: {API-KEY}' \
-http://127.0.0.1:3000/api/bots/{botId}
 ```
 
 ### Update deal
@@ -908,6 +1112,14 @@ GET /api/tradingview
 POST /api/system/backup
 ```
 
+### Clear circuit breaker
+
+Manually clears an active circuit breaker, immediately resuming normal deal processing. No parameters required.
+
+```
+POST /api/circuit-breaker/clear
+```
+
 ## API Sample Usage
 
 Below are examples demonstrating how to use SymBot APIs. When using [SymBot Hub](#symbot-hub), you should replace the base URL with the appropriate Hub instance path, such as `/instance/3000`.
@@ -998,6 +1210,22 @@ curl -i -X POST \
 -H 'Accept: application/json' \
 -H 'api-key: {API-KEY}' \
 http://127.0.0.1:3000/api/bots/{botId}/enable
+```
+
+#### Disable bot
+```
+curl -i -X POST \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/bots/{botId}/disable
+```
+
+#### Delete bot
+```
+curl -i -X DELETE \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/bots/{botId}
 ```
 
 #### Update deal
@@ -1139,6 +1367,14 @@ curl -X POST http://127.0.0.1:3000/api/system/backup \
 -o SymBot_Backup_DB.zip.enc
 ```
 
+#### Clear circuit breaker
+```
+curl -i -X POST \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/circuit-breaker/clear
+```
+
 ## WebSocket API
 
 
@@ -1236,7 +1472,7 @@ const socket = io(host, {
 socket.on("connect", () => {
 
   // Register before sending any api_action events.
-  // Wait for the acknowledgement before proceeding.
+  // Wait for the acknowledgment before proceeding.
   socket.emit("register_client", { appId }, (ack) => {
 
     if (!ack?.success) {
@@ -1295,6 +1531,8 @@ From this example you can see there are only three differences from SymBot APIs:
 
 Remember if you ever change your API key or alter your server id, your token will also change automatically. You can get your token from the SymBot web interface configuration section.
 
+> **Circuit Breaker and webhooks:** If the circuit breaker is active when a `start_deal` webhook fires, SymBot returns `{ "success": false, "data": "Circuit Breaker Active: <reason>" }`. The deal is not created and the base order is not queued — your integration must handle this response and retry after the circuit breaker clears (default 60 seconds). This is intentional: SymBot cannot guarantee entry at the intended price if the base order were queued and placed after an unknown delay.
+
 ## Backup and Restore Features
 
 SymBot offers built-in backup and restore capabilities that focus on safeguarding your database. These features can be accessed directly through the web interface, ensuring that your trading data is securely stored and easily recoverable.
@@ -1343,6 +1581,11 @@ To reset the SymBot database or server ID, you must use the command line. The sy
 
 1. Stop any running instances of SymBot
 2. Type: `npm start reset sessions` (or `node symbot.js reset sessions`)
+
+#### Reset AI chat history only
+
+1. Stop any running instances of SymBot
+2. Type: `npm start reset aichats` (or `node symbot.js reset aichats`)
 
 
 ## Frequently Asked Questions (FAQ)
