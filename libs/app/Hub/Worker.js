@@ -107,16 +107,21 @@ async function processWorkerTaskMessage(SymBot, message) {
 
 	// Get worker instance active deals
 	if (message.type === HUB_TO_WORKER.DEALS_ACTIVE) {
-	
-		const deals = await SymBot.DCABot.getActiveDeals();
-	
+
+		// Use apiGetActiveDeals (not DCABot.getActiveDeals) so the portfolio
+		// summary is included — needed by the Hub dashboard cards.
+		// Pass a mock req with empty query so req.query access doesn't throw.
+		const mockReq = { query: {} };
+		const result = await SymBot.DCABotManager.apiGetActiveDeals(mockReq, null, false);
+
 		parentPort.postMessage({
-	
+
 			type: WORKER_TO_HUB.DEALS_ACTIVE_RECEIVED,
 			id: message.id,
 			data: {
-					'name': message.name,
-					'deals': deals
+					'name':      message.name,
+					'deals':     result.data     || [],
+					'portfolio': result.portfolio || null
 				  }
 		});
 	}
@@ -174,7 +179,7 @@ async function processWorkerTaskMessage(SymBot, message) {
 		});
 	}
 
-	// Deal action received — cancel, stop, pause, close, update, add_funds, bot_enable, bot_disable
+	// Deal action received — cancel, stop, panic_sell, pause, update_deal
 	if (message.type === HUB_TO_WORKER.DEAL_ACTION) {
 
 		const { requestId, action, dealId, botId, data } = message;
@@ -203,14 +208,7 @@ async function processWorkerTaskMessage(SymBot, message) {
 
 				result = await SymBot.DCABotManager.apiUpdateDeal(null, null, false, dealId, data);
 			}
-			else if (action === 'bot_disable') {
 
-				result = await SymBot.DCABotManager.apiEnableDisableBot(null, null, false, botId, false);
-			}
-			else if (action === 'bot_enable') {
-
-				result = await SymBot.DCABotManager.apiEnableDisableBot(null, null, false, botId, true);
-			}
 		}
 		catch (err) {
 
@@ -220,6 +218,153 @@ async function processWorkerTaskMessage(SymBot, message) {
 		parentPort.postMessage({
 
 			type: WORKER_TO_HUB.DEAL_ACTION_RECEIVED,
+			requestId,
+			data: result
+		});
+	}
+
+	// Bot action received — create, update, delete, start_deal
+	if (message.type === HUB_TO_WORKER.BOT_ACTION) {
+
+		const { requestId, action, botId, data } = message;
+
+		let result = { 'success': false, 'data': 'Unknown bot action' };
+
+		try {
+
+			if (action === 'bot_enable' || action === 'bot_disable') {
+
+				result = await SymBot.DCABotManager.apiEnableDisableBot(null, null, false, botId, action === 'bot_enable');
+			}
+			else if (action === 'create' || action === 'update') {
+
+				// Build a mock req/res to reuse the existing apiCreateUpdateBot handler
+				const mockReq = {
+					path:   action === 'update' ? '/api/bots/update' : '/api/bots/create',
+					body:   data,
+					params: {},
+					query:  {}
+				};
+
+				let responseData;
+
+				const mockRes = {
+					send: (d) => { responseData = d; },
+					json: (d) => { responseData = d; }
+				};
+
+				await SymBot.DCABotManager.apiCreateUpdateBot(mockReq, mockRes);
+
+				result = responseData || { 'success': false, 'data': 'No response from apiCreateUpdateBot' };
+			}
+			else if (action === 'delete') {
+
+				const mockReq = {
+					params: { botId },
+					body:   {},
+					query:  {}
+				};
+
+				let responseData;
+
+				const mockRes = {
+					json: (d) => { responseData = d; },
+					send: (d) => { responseData = d; }
+				};
+
+				await SymBot.DCABotManager.apiDeleteBot(mockReq, mockRes);
+
+				result = responseData || { 'success': false, 'data': 'No response from apiDeleteBot' };
+			}
+			else if (action === 'start_deal') {
+
+				const mockReq = {
+					params: { botId },
+					body:   data || {},
+					query:  {}
+				};
+
+				let responseData;
+
+				const mockRes = {
+					send: (d) => { responseData = d; },
+					json: (d) => { responseData = d; }
+				};
+
+				await SymBot.DCABotManager.apiStartDeal(mockReq, mockRes);
+
+				result = responseData || { 'success': false, 'data': 'No response from apiStartDeal' };
+			}
+			else if (action === 'get_defaults') {
+
+				// getDefaultBotConfig reads shareData via DCABotManager's own
+				// module-level reference — SymBot.shareData is not exported from symbot.js.
+				const defaults = await SymBot.DCABotManager.getDefaultBotConfig();
+
+				result = { 'success': true, 'data': defaults };
+			}
+			else if (action === 'get_sc_strings') {
+
+				// getBotsConfig reads shareData via DCABotManager's own module-level
+				// reference — SymBot.shareData is not exported from symbot.js.
+				const botsConfig = SymBot.DCABotManager.getBotsConfig();
+				const scStrings  = SymBot.DCABotManager.buildStartConditionStrings(botsConfig, data.botData || {});
+				const symString  = SymBot.DCABotManager.buildSymbolString(data.symbols || [], data.botData || {});
+				const actChecked = SymBot.DCABotManager.buildActiveChecked(data.botData || {});
+
+				result = { 'success': true, 'data': Object.assign({}, scStrings, { symbolString: symString, activeChecked: actChecked }) };
+			}
+			else if (action === 'get_start_conditions') {
+
+				// getBotsConfig reads shareData from DCABotManager's own module-level
+				// reference — SymBot.shareData is not exported from symbot.js.
+				const botsConfig = SymBot.DCABotManager.getBotsConfig();
+
+				result = { 'success': true, 'data': botsConfig };
+			}
+			else if (action === 'get_symbols') {
+
+				// getSymbolList reads bot_config from shareData internally —
+				// no need to pass config from the Worker side.
+				const symbols = await SymBot.DCABotManager.getSymbolList();
+
+				result = { 'success': true, 'data': symbols };
+			}
+			else if (action === 'get_bot') {
+
+				const botsRaw = await SymBot.DCABot.getBots({ 'botId': botId });
+
+				if (botsRaw && botsRaw.length > 0) {
+
+					let bot = JSON.parse(JSON.stringify(botsRaw[0]));
+
+					bot = await SymBot.DCABot.removeDbKeys(bot);
+
+					// Flatten config into top-level same as BOTS_ACTIVE so the
+					// edit form receives the same field structure the table uses
+					const config = JSON.parse(JSON.stringify(bot.config || {}));
+
+					delete bot.date;
+					delete bot.config;
+
+					const botFlat = Object.assign({}, bot, config);
+
+					result = { 'success': true, 'data': botFlat };
+				}
+				else {
+
+					result = { 'success': false, 'data': 'Bot not found' };
+				}
+			}
+		}
+		catch (err) {
+
+			result = { 'success': false, 'data': err?.message || String(err) };
+		}
+
+		parentPort.postMessage({
+
+			type: WORKER_TO_HUB.BOT_ACTION_RECEIVED,
 			requestId,
 			data: result
 		});

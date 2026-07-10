@@ -136,13 +136,15 @@ With SymBot Hub's simple web interface, you can easily add, update, restart, or 
 
 ### Hub Unified Views
 
-In addition to instance management, SymBot Hub provides two unified views that aggregate data across all running instances:
+In addition to instance management, SymBot Hub provides unified views that aggregate data across all running instances:
+
+- **Dashboard** — the Hub home page shows a live summary refreshed every 30 seconds. Per-instance cards display active deal count, bot count, active P/L, portfolio balance, max funds, and risk percentage (colour-coded green / amber / red). A combined totals bar across all instances sits at the top. Sandbox instances are clearly badged.
 
 - **Active Deals** — view all active deals across every instance in a single table. Filter by instance or bot, adjust the refresh interval, and take actions directly from the Hub including closing, pausing, resuming, cancelling deals, and stopping bots. Clicking on a pair opens a TradingView chart for that symbol. Deals paused automatically by SymBot due to order verification failures are highlighted distinctly from manually paused deals.
 
-- **Bots** — view all bots across every instance in a single table, including the exchange each bot is assigned to. Toggle bots on or off directly from the Hub without navigating to each instance individually.
+- **Bots** — view all bots across every instance in a single table, including the exchange each bot is assigned to. Toggle bots on or off directly from the Hub without navigating to each instance individually. Click any bot row to open the full bot edit page, or use the ✕ button to delete a bot. The **+ Create Bot** button opens a full bot create page for the selected instance. Both create and edit pages include the complete bot configuration form — pairs with exchange-sourced symbol list, all safety order parameters, start conditions, and a preview step that shows the projected order table before saving.
 
-Both views refresh automatically and pause when a confirmation dialog is open to prevent stale data from overwriting pending actions.
+All views refresh automatically and pause when a confirmation dialog is open to prevent stale data from overwriting pending actions.
 
 ### Starting SymBot Hub
 
@@ -1694,7 +1696,7 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 - SymBot is continuously monitoring and processing data from exchanges, potential signal providers you're using such as from 3CQS, accessing the database, or performing house-keeping tasks like purging old logs. During times of increased market volatility, more data could be coming in faster and may stay in memory for longer periods of time or as necessary. It is normal to see spikes in CPU or memory usage, but if either remain excessively high for extended periods of time you may want to look into it further. Many times upgrading your CPU, increasing system memory, or upgrading hard drive capacity tend to resolve most issues and provide much better performance and an improved trading experience. See also [Advanced Setup](#advanced-setup) for additional tips.
 
 #### What is the difference between SymBot and SymBot Hub?
-- SymBot is the software used for trading, while SymBot Hub serves as a central platform to manage multiple SymBot instances, offering a simplified and more efficient way to access them. While SymBot Hub is optional, it is highly recommended if you're running multiple SymBot instances.
+- SymBot is the software used for trading, while SymBot Hub serves as a central platform to manage multiple SymBot instances, offering a simplified and more efficient way to access them. SymBot Hub includes a live dashboard, unified active deals and bots views across all instances, and a full bot management interface for creating, editing, and deleting bots on any instance without switching between them. While SymBot Hub is optional, it is highly recommended if you're running multiple SymBot instances.
 
 #### How can I disable logging to file to save disk space?
 - While we do not recommend disabling logging to file, you have the option to do so by running adding the argument `clglite` when starting the application.

@@ -739,6 +739,27 @@ $(document).ready(function() {
 		$('#hub-instance-filter').change(() => { getActiveDeals(); });
 
 
+		// Pre-select instance filter from URL param ?instance=:instanceName
+		const _urlParams = new URLSearchParams(window.location.search);
+		const _preInstance = _urlParams.get('instance');
+
+		if (_preInstance) {
+
+			// Wait for options to populate then set value and refresh
+			const _filterInterval = setInterval(function() {
+
+				if ($('#hub-instance-filter option[value="' + _preInstance + '"]').length) {
+
+					$('#hub-instance-filter').val(_preInstance).trigger('change');
+					clearInterval(_filterInterval);
+				}
+			}, 100);
+
+			// Stop polling after 5s in case instance isn't found
+			setTimeout(() => clearInterval(_filterInterval), 5000);
+		}
+
+
 		$('#hubDeals').tablesorter({
 			widgets: ['saveSort', 'stickyHeaders', 'uitheme', 'columnSelector'],
 			widgetOptions: {

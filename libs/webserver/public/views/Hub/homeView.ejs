@@ -1,54 +1,217 @@
 <%- include('../partialsHeaderView'); %>
 
+<script>
+
+	let dashboardTimeout;
+
+	const getCurrencySymbol = <%- getCurrencySymbol %>;
+
+
+	function setDashboardTimeout() {
+
+		clearTimeout(dashboardTimeout);
+		dashboardTimeout = setTimeout(loadDashboard, 30000);
+	}
+
+
+	function loadDashboard() {
+
+		$.ajax({
+			type: 'GET',
+			url: './api/hub/dashboard',
+			dataType: 'json',
+			success: function(data) {
+
+				if (!data.success) { setDashboardTimeout(); return; }
+
+				renderDashboard(data.instances || [], data.totals || {});
+				setDashboardTimeout();
+			},
+			error: function(err) {
+
+				if (err.status === 401) { window.location.href = './login'; return; }
+				setDashboardTimeout();
+			}
+		});
+	}
+
+
+	function renderDashboard(instances, totals) {
+
+		const sym = '$';
+
+		// ── Combined totals bar ────────────────────────────────────────────
+		const tpClass = totals.profit >= 0 ? 'profit-positive' : 'profit-negative';
+
+		$('#hub-total-deals').text(totals.deals || 0);
+		$('#hub-total-bots').text(totals.bots || 0);
+		$('#hub-total-profit')
+			.removeClass('profit-positive profit-negative')
+			.addClass(tpClass)
+			.text(sym + (totals.profit || 0).toFixed(2));
+
+		// ── Per-instance cards ─────────────────────────────────────────────
+		const container = $('#hub-instance-cards');
+		container.empty();
+
+		for (const inst of instances) {
+
+			const pClass = inst.profit >= 0 ? 'profit-positive' : 'profit-negative';
+			const portfolio = inst.portfolio;
+			let portfolioRows = '';
+
+			if (portfolio) {
+
+				const riskPct = portfolio.risk_percent;
+				const riskClass = riskPct >= 90 ? 'portfolio-risk-high'
+				                : riskPct >= 70 ? 'portfolio-risk-mid'
+				                : 'portfolio-risk-low';
+
+				const quoteArr = Object.keys(portfolio.balances || {});
+				const quote    = quoteArr[0] || 'USD';
+				const quoteSym = getCurrencySymbol(quote) || sym;
+
+				const portfolioVal = portfolio.is_sandbox
+					? '<span style="opacity:0.5;">Sandbox</span>'
+					: quoteSym + (portfolio.portfolio_total || 0).toFixed(2);
+
+				const balanceAge = portfolio.is_sandbox ? '' :
+					portfolio.balance_updated
+						? '<div class="hub-dash-card-row" style="margin-top:4px;">' +
+							'<span class="hub-dash-label">Balance</span>' +
+							'<span style="font-size:0.85rem; opacity:0.5;">' + timeAgo(portfolio.balance_updated) + '</span>' +
+						  '</div>'
+						: '';
+
+				portfolioRows =
+					'<div class="hub-dash-divider"></div>' +
+					'<div class="hub-dash-card-row">' +
+						'<span class="hub-dash-label">Portfolio</span>' +
+						'<span>' + portfolioVal + '</span>' +
+					'</div>' +
+					'<div class="hub-dash-card-row">' +
+						'<span class="hub-dash-label">Max Funds</span>' +
+						'<span>' + quoteSym + (portfolio.total_max_funds || 0).toFixed(2) + '</span>' +
+					'</div>' +
+					'<div class="hub-dash-card-row">' +
+						'<span class="hub-dash-label">Risk</span>' +
+						'<span class="' + riskClass + '">' + (riskPct !== null ? riskPct + '%' : 'N/A') + '</span>' +
+					'</div>' +
+					balanceAge;
+			}
+
+			const isSandbox  = portfolio && portfolio.is_sandbox;
+			const sandboxBadge = isSandbox ? ' <span class="hub-dash-sandbox-badge">SANDBOX</span>' : '';
+
+			container.append(
+				'<div class="hub-dash-card">' +
+					'<div class="hub-dash-card-title">' + inst.name + sandboxBadge + '</div>' +
+					'<div class="hub-dash-card-row">' +
+						'<span class="hub-dash-label">Active Deals</span>' +
+						'<span style="font-weight:600;">' + inst.deals + '</span>' +
+					'</div>' +
+					'<div class="hub-dash-card-row">' +
+						'<span class="hub-dash-label">Bots</span>' +
+						'<span>' + inst.bots + '</span>' +
+					'</div>' +
+					'<div class="hub-dash-card-row">' +
+						'<span class="hub-dash-label">Active P/L</span>' +
+						'<span class="' + pClass + '" style="font-weight:600;">' + sym + (inst.profit || 0).toFixed(2) + '</span>' +
+					'</div>' +
+					portfolioRows +
+					'<div class="hub-dash-card-actions">' +
+						'<a href="./deals?instance=' + encodeURIComponent(inst.name) + '" class="hub-dash-card-link">Deals</a>' +
+						'<a href="./bots?instance='  + encodeURIComponent(inst.instanceId) + '" class="hub-dash-card-link">Bots</a>' +
+					'</div>' +
+				'</div>'
+			);
+		}
+	}
+
+
+	function timeAgo(dateStr) {
+
+		const diffSec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+		if (diffSec < 60)  return diffSec + 's ago';
+		if (diffSec < 3600) return Math.floor(diffSec / 60) + 'm ago';
+		return Math.floor(diffSec / 3600) + 'h ago';
+	}
+
+
+	$(document).ready(function() {
+
+		loadDashboard();
+	});
+
+</script>
+
+
 <main>
 
-	<div id="contentBox" style="text-align: center; max-width: 480px; margin-top: 40px;">
+	<div id="contentBox" style="text-align: center; max-width: 900px; padding: 20px 16px;">
 
-	<div style="display: inline-block; text-align: left; font-size: 1.3rem; width: 80%;">
-
-		<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 4px 0 6px 0;">Hub</div>
-
-		<div class="mainMenuItem">
-			<a href="./manage"><span class="menu-icon">&#9776;</span> Manage Instances</a>
+		<!-- Combined totals box -->
+		<div style="text-align: center; margin-bottom: 24px;">
+			<div class="hub-dash-totals-box">
+				<div class="summary-bar" style="justify-content: center; gap: 28px; margin-top: 0;">
+					<p>Deals: <span id="hub-total-deals">—</span></p>
+					<p>Bots: <span id="hub-total-bots">—</span></p>
+					<p>Active P/L: <span id="hub-total-profit">—</span></p>
+				</div>
+			</div>
 		</div>
 
-		<div class="mainMenuItem">
-			<a href="./deals"><span class="menu-icon">&#9654;</span> Active Deals</a>
+		<!-- Per-instance cards -->
+		<div style="display: inline-block; text-align: left; width: 80%; margin-bottom: 20px;">
+			<div id="hub-instance-cards" class="hub-dash-grid"></div>
 		</div>
 
-		<div class="mainMenuItem">
-			<a href="./bots"><span class="menu-icon">&#9632;</span> Bots</a>
+		<!-- Nav -->
+		<div style="display: inline-block; text-align: left; width: 80%;">
+
+			<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 0 0 6px 0;">Hub</div>
+
+			<div class="mainMenuItem">
+				<a href="./deals"><span class="menu-icon">&#9654;</span> Active Deals</a>
+			</div>
+
+			<div class="mainMenuItem">
+				<a href="./bots"><span class="menu-icon">&#9632;</span> Bots</a>
+			</div>
+
+			<div class="mainMenuItem">
+				<a href="./manage"><span class="menu-icon">&#9776;</span> Manage Instances</a>
+			</div>
+
+			<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 16px 0 6px 0;">Tools &amp; Settings</div>
+
+			<div class="mainMenuItem">
+				<a href="https://www.symrank.com" target=_blank><span class="menu-icon">&#8599;</span> SymRank Crypto Screener</a>
+			</div>
+
+			<div class="mainMenuItem">
+				<a href="./news"><span class="menu-icon">&#9632;</span> News</a>
+			</div>
+
+			<div class="mainMenuItem">
+				<a href="./config"><span class="menu-icon">&#9881;</span> Configuration</a>
+			</div>
+
+			<div class="mainMenuItem">
+				<a href="./backups"><span class="menu-icon">&#9741;</span> Backups</a>
+			</div>
+
+			<div class="mainMenuItem">
+				<a href="./logs"><span class="menu-icon">&#9783;</span> Logs</a>
+			</div>
+
+			<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 16px 0 6px 0;">Account</div>
+
+			<div class="mainMenuItem" style="border-bottom: 0;">
+				<a href="./logout"><span class="menu-icon">&#8594;</span> Log Out</a>
+			</div>
+
 		</div>
-
-		<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 16px 0 6px 0;">Tools &amp; Settings</div>
-
-		<div class="mainMenuItem">
-			<a href="https://www.symrank.com" target=_blank><span class="menu-icon">&#8599;</span> SymRank Crypto Screener</a>
-		</div>
-
-		<div class="mainMenuItem">
-			<a href="./news"><span class="menu-icon">&#9632;</span> News</a>
-		</div>
-
-		<div class="mainMenuItem">
-			<a href="./config"><span class="menu-icon">&#9881;</span> Configuration</a>
-		</div>
-
-		<div class="mainMenuItem">
-			<a href="./backups"><span class="menu-icon">&#9741;</span> Backups</a>
-		</div>
-
-		<div class="mainMenuItem">
-			<a href="./logs"><span class="menu-icon">&#9783;</span> Logs</a>
-		</div>
-
-		<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 16px 0 6px 0;">Account</div>
-
-		<div class="mainMenuItem" style="border-bottom: 0;">
-			<a href="./logout"><span class="menu-icon">&#8594;</span> Log Out</a>
-		</div>
-
-	</div>
 
 	</div>
 

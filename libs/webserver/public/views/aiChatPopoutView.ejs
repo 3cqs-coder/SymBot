@@ -295,6 +295,20 @@
 
 						displayMessage(data.message);
 					}
+					else if (data.type === 'aborted') {
+
+						// Show timeout notice as a distinct system message
+						const $notice = $('<div>').css({
+							'font-size': '0.85rem',
+							'opacity': '0.6',
+							'font-style': 'italic',
+							'margin': '6px 0 2px 0',
+							'padding': '4px 8px',
+							'border-left': '3px solid #f0a500',
+						}).text('⚠ ' + (data.message || 'Response stopped due to timeout.'));
+
+						$('#chatMessages').append($notice);
+					}
 				});
 
 				socket.on('connect_error', function() {});
@@ -455,11 +469,12 @@
 				});
 			}
 
-			// Leave room on close
+			// Leave room on close — also abort any in-progress generation
 			window.addEventListener('beforeunload', function() {
 
 				if (socket) {
 
+					socket.emit('stopGeneration', room);
 					socket.emit('leaveRoom', room);
 				}
 			});

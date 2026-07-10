@@ -101,6 +101,41 @@
 
 	// ── Bot actions ───────────────────────────────────────────────────────────
 
+	function botAction(instanceId, action, botId, data, successMsg) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+			type: 'POST',
+			url: './api/hub/bots/action',
+			contentType: 'application/json',
+			data: JSON.stringify({ instanceId, action, botId, data: data || {} }),
+			dataType: 'json',
+			success: function(res) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+				if (!res.success) {
+
+					alertBox('Error: ' + (res.data || res.message || 'Unknown error'), function() { setReloadTimeout(); });
+				}
+				else {
+
+					alertBox(successMsg || 'Done', function() { getActiveBots(); });
+				}
+			},
+			error: function(err) {
+
+				$('#spinner-overlay').fadeOut(100);
+
+				if (err.status === 401) { window.location.href = './login'; return; }
+
+				alertBox('Error: ' + JSON.stringify(err), function() { setReloadTimeout(); });
+			}
+		});
+	}
+
+
 	function toggleBotConfirm(instanceId, botId, botName, enable) {
 
 		const action  = enable ? 'bot_enable' : 'bot_disable';
@@ -128,9 +163,9 @@
 
 						$.ajax({
 							type: 'POST',
-							url: './api/hub/bots/' + botId + '/action',
+							url: './api/hub/bots/action',
 							contentType: 'application/json',
-							data: JSON.stringify({ instanceId, action }),
+							data: JSON.stringify({ instanceId, action, botId }),
 							dataType: 'json',
 							success: function(res) {
 
@@ -176,6 +211,63 @@
 		});
 	}
 
+
+	function deleteBotConfirm(instanceId, botId, botName) {
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">' +
+				'<b style="color: #d80f08;">Delete ' + botName + '?</b><br><br>' +
+				'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
+				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or cancelled first.' +
+				'</div><br>' +
+				'Type the bot name to confirm:<br>' +
+				'<form action="" style="display: inline;"><input type="text" id="deleteBotConfirmName" class="form-field" style="width: 100%; margin-top: 6px; box-sizing: border-box;" required /></form>' +
+				'</div>',
+			buttons: {
+				confirm: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #d80f08;">Delete Bot</div>',
+					action: function() {
+
+						const typed = this.$content.find('#deleteBotConfirmName').val().trim();
+
+						if (typed !== botName) {
+
+							alertBox('Bot name does not match.');
+							return false;
+						}
+
+						botAction(instanceId, 'delete', botId, {}, 'Bot "' + botName + '" and all deal history deleted.');
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: #000000;">Cancel</div>',
+					action: function() { setReloadTimeout(); }
+				}
+			},
+			onContentReady: function() {
+
+				let jc = this;
+
+				this.$content.find('form').on('submit', function(e) {
+
+					e.preventDefault();
+					jc.$$confirm.trigger('click');
+				});
+			}
+		});
+	}
+
+
+
+	function editBot(instanceId, botId) {
+
+		window.location.href = './bots/' + encodeURIComponent(instanceId) + '/' + encodeURIComponent(botId);
+	}
 
 	// ── Data fetching and rendering ───────────────────────────────────────────
 
@@ -224,10 +316,10 @@
 			if (!activeInstances.includes(instanceName)) {
 
 				activeInstances.push(instanceName);
-				$('#hub-instance-filter').append('<option value="' + instanceName + '">' + instanceName + '</option>');
+				$('#hub-instance-filter').append('<option value="' + instanceId + '">' + instanceName + '</option>');
 			}
 
-			if (selectedInst !== 'all' && instanceName !== selectedInst) continue;
+			if (selectedInst !== 'all' && instanceId !== selectedInst) continue;
 
 			totalBots++;
 
@@ -275,6 +367,11 @@
 				'<td>' + startCondition + '</td>' +
 				'<td>' + (sandBox ? 'Yes' : 'No') + '</td>' +
 				'<td><input id="toggle' + botId + '" type=checkbox ' + checkedAttr + ' disabled></td>' +
+				'<td style="text-align:center;">' +
+				'<div class="pill-group">' +
+					'<span class="pill-btn pill-danger" title="Delete Bot" data-action="delete">&#10005;</span>' +
+				'</div>' +
+			'</td>' +
 				'</tr>'
 			);
 		}
@@ -306,8 +403,8 @@ $(document).ready(function() {
 		});
 
 
-		// Row click — last column toggles bot, other columns reserved for future detail view
-		$(document).on('click', '#hubBots tbody tr td', function() {
+		// Row click handler — clicking any data column navigates to edit page
+		$(document).on('click', '#hubBots tbody tr td', function(e) {
 
 			const col        = $(this).index();
 			const row        = $(this).closest('tr');
@@ -315,19 +412,71 @@ $(document).ready(function() {
 			const botId      = row.data('botid');
 			const botName    = row.data('botname');
 			const instanceId = row.data('instanceid');
+			const instanceName = row.data('instancename');
 			const active     = row.attr('data-active') === 'true';
 
+			// Action buttons column (last) — delete only now
 			if (col === colCount - 1) {
 
-				// Toggle column — confirm enable/disable
-				toggleBotConfirm(instanceId, botId, botName, !active);
+				const action = $(e.target).closest('[data-action]').data('action');
+
+				if (action === 'delete') {
+
+					deleteBotConfirm(instanceId, botId, botName);
+				}
+
+				return;
 			}
-			// Note: non-toggle columns are read-only for now.
-			// Bot detail navigation requires a Hub-level bot detail page (future).
+
+			// Enable/disable toggle column (second to last)
+			if (col === colCount - 2) {
+
+				toggleBotConfirm(instanceId, botId, botName, !active);
+				return;
+			}
+
+			// Any other column — navigate to bot edit page
+			editBot(instanceId, botId);
+		});
+
+
+		// Create Bot button
+		$(document).on('click', '#hubCreateBot', function() {
+
+			const instanceId = $('#hub-instance-filter').val();
+
+			if (!instanceId || instanceId === 'all') {
+
+				alertBox('Please select a specific instance from the Instance filter before creating a bot.');
+				return;
+			}
+
+			window.location.href = './bots/' + encodeURIComponent(instanceId) + '/create';
 		});
 
 
 		$('#hub-instance-filter').change(() => { getActiveBots(); });
+
+
+		// Pre-select instance filter from URL param ?instance=:instanceId
+		const _urlParams = new URLSearchParams(window.location.search);
+		const _preInstance = _urlParams.get('instance');
+
+		if (_preInstance) {
+
+			// Wait for options to populate then set value and refresh
+			const _filterInterval = setInterval(function() {
+
+				if ($('#hub-instance-filter option[value="' + _preInstance + '"]').length) {
+
+					$('#hub-instance-filter').val(_preInstance).trigger('change');
+					clearInterval(_filterInterval);
+				}
+			}, 100);
+
+			// Stop polling after 5s in case instance isn't found
+			setTimeout(() => clearInterval(_filterInterval), 5000);
+		}
 
 
 		$('#hubBots').tablesorter({
@@ -378,6 +527,7 @@ $(document).ready(function() {
 							<option value="all"></option>
 						</select>
 					</div>
+					<button id="hubCreateBot" class="btn-default" style="font-size: 0.95rem; padding: 3px 10px; cursor: pointer;">+ Create Bot</button>
 				</div>
 			</div>
 
@@ -387,7 +537,7 @@ $(document).ready(function() {
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Instance</th> <th>Bot Name</th> <th>Exchange</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th data-sorter="false" class="columnSelector-disable">Active</th>
+						<th>Instance</th> <th>Bot Name</th> <th>Exchange</th> <th>Pairs</th> <th>BO</th> <th>SO</th> <th>Max SO</th> <th>TP</th> <th>Max Deals</th> <th>Max Pairs</th> <th>Max Funds</th> <th>Start</th> <th>Sandbox</th> <th data-sorter="false" class="columnSelector-disable">Active</th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

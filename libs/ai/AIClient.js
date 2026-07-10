@@ -69,6 +69,10 @@ const COMPRESSION_DEFAULTS = {
 // Map to store conversation history for each room
 const conversationHistory = new Map();
 
+// Map of room → AbortController for currently active generations.
+// Allows external callers (e.g. socket stopGeneration event) to abort mid-stream.
+const activeGenerations = new Map();
+
 let aiStarted = false;
 
 setInterval(() => {
@@ -200,7 +204,9 @@ async function compressContext(room, roomData, model) {
 		if (!adapter) return false;
 
 		// Non-streaming call — summary doesn't need to stream
-		const result  = await adapter.createNonStream(aiClient, model, summaryPrompt, new AbortController().signal);
+		// No abort signal for compression — it's a background operation and
+		// we want it to complete fully regardless of user-facing timeouts.
+		const result  = await adapter.createNonStream(aiClient, model, summaryPrompt);
 		const summary = adapter.extractNonStreamContent(result);
 
 		if (!summary || !summary.trim()) return false;
@@ -353,10 +359,16 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 	}
 	catch (err) {
 
-		if (abortSignal.aborted && stream) {
+		// AbortError from timeout or user cancel — notify the user distinctly
+		if (err.name === 'AbortError' || abortSignal.aborted) {
 
-			sendMessage(room, 'Stream aborted due to timeout');
-			return;
+			if (stream) {
+
+				sendAborted(room, 'Response stopped due to timeout. Please try again.');
+				sendMessage(room, 'END_OF_CHAT');
+			}
+
+			return stream ? undefined : fullResponse;
 		}
 
 		throw err;
@@ -376,8 +388,40 @@ const providerAdapters = {
 		createStream: (client, model, messages) =>
 			client.chat({ model, stream: true, messages }),
 
-		createNonStream: (client, model, messages) =>
-			client.chat({ model, stream: false, messages }),
+		createNonStream: async (client, model, messages, abortSignal) => {
+
+			// Ollama's non-stream path has no built-in abort support.
+			// When a signal is provided, use the streaming path internally
+			// and accumulate — the stream iterator supports .abort().
+			if (!abortSignal) return client.chat({ model, stream: false, messages });
+
+			const iterator = await client.chat({ model, stream: true, messages });
+
+			const onAbort = () => { try { iterator.abort(); } catch (_) {} };
+
+			if (abortSignal.aborted) { onAbort(); return { message: { content: '' } }; }
+
+			abortSignal.addEventListener('abort', onAbort, { once: true });
+
+			let content = '';
+
+			try {
+
+				for await (const part of iterator) {
+					content += part?.message?.content || '';
+				}
+			}
+			catch (err) {
+
+				if (err.name !== 'AbortError' && !abortSignal.aborted) throw err;
+			}
+			finally {
+
+				abortSignal.removeEventListener('abort', onAbort);
+			}
+
+			return { message: { content } };
+		},
 
 		extractChunkContent: (chunk) => chunk?.message?.content,
 
@@ -412,34 +456,73 @@ const streamChatProvider = async ({ model, stream, messages, abortSignal, onActi
 
 	if (!stream) {
 
-		const result = await adapter.createNonStream(aiClient, model, messages, abortSignal);
+		try {
 
-		if (abortSignal.aborted) {
+			const result = await adapter.createNonStream(aiClient, model, messages, abortSignal);
 
-			throw new Error('Request aborted due to timeout');
+			if (abortSignal.aborted) {
+
+				return fullResponse;
+			}
+
+			onActivity?.();
+			fullResponse = adapter.extractNonStreamContent(result);
 		}
+		catch (err) {
 
-		onActivity?.();
-		fullResponse = adapter.extractNonStreamContent(result);
+			if (err.name === 'AbortError' || abortSignal.aborted) {
+
+				return fullResponse;
+			}
+
+			throw err;
+		}
 	}
 	else {
 
 		const result = await adapter.createStream(aiClient, model, messages, abortSignal);
 
-		for await (const part of result) {
+		// Wire the abort signal directly to the iterator so the provider
+		// stops generating immediately rather than waiting for the next chunk.
+		const onAbort = () => { try { result.abort?.(); } catch (_) {} };
 
-			if (abortSignal.aborted) {
+		if (abortSignal.aborted) {
 
-				throw new Error('Stream aborted due to timeout');
+			onAbort();
+			sendMessage(room, 'END_OF_CHAT');
+			return fullResponse;
+		}
+
+		abortSignal.addEventListener('abort', onAbort, { once: true });
+
+		try {
+
+			for await (const part of result) {
+
+				const content = adapter.extractChunkContent(part);
+				if (!content) continue;
+
+				onActivity?.();
+
+				fullResponse += content;
+				sendMessage(room, content);
+			}
+		}
+		catch (err) {
+
+			// AbortError is expected — notify user and close stream gracefully
+			if (err.name === 'AbortError' || abortSignal.aborted) {
+
+				sendAborted(room, 'Response stopped due to timeout. Please try again.');
+				sendMessage(room, 'END_OF_CHAT');
+				return fullResponse;
 			}
 
-			const content = adapter.extractChunkContent(part);
-			if (!content) continue;
+			throw err;
+		}
+		finally {
 
-			onActivity?.();
-
-			fullResponse += content;
-			sendMessage(room, content);
+			abortSignal.removeEventListener('abort', onAbort);
 		}
 
 		sendMessage(room, 'END_OF_CHAT');
@@ -457,6 +540,9 @@ const streamChatResponseWithTimeout = async ({ room, model, message, reset, stre
 	let hardTimeoutMs = TIMEOUT_MS * 1.5;
 
 	const abortController = new AbortController();
+
+	// Register so external callers can abort this generation (e.g. client closes view)
+	activeGenerations.set(room, abortController);
 
 	const resetIdleTimeout = () => {
 
@@ -492,6 +578,7 @@ const streamChatResponseWithTimeout = async ({ room, model, message, reset, stre
 
 		clearTimeout(idleTimeout);
 		clearTimeout(hardTimeout);
+		activeGenerations.delete(room);
 	}
 };
 
@@ -579,6 +666,16 @@ async function sendError(room, msg) {
 }
 
 
+async function sendAborted(room, reason) {
+
+	shareData.Common.sendSocketMsg({
+		room,
+		type: 'aborted',
+		message: reason || 'Response stopped due to timeout.',
+	});
+}
+
+
 function start(provider, config) {
 
 	const host = config.host;
@@ -646,7 +743,9 @@ function stop() {
 
 		try {
 
-			// Ollama has an abort method; OpenAI does not
+			// Ollama's client.abort() cancels ALL in-flight requests on this client.
+			// OpenAI does not expose a global abort — individual requests are
+			// aborted via AbortSignal passed at request time.
 			if (typeof aiClient.abort === 'function') {
 
 				aiClient.abort();
@@ -789,6 +888,18 @@ function getChatHistory(room) {
 }
 
 
+function abortGeneration(room) {
+
+	const controller = activeGenerations.get(room);
+
+	if (controller) {
+
+		controller.abort();
+		activeGenerations.delete(room);
+	}
+}
+
+
 module.exports = {
 	start,
 	stop,
@@ -799,6 +910,8 @@ module.exports = {
 	loadConversation,
 	deleteConversation,
 	resetAllConversations,
+
+	abortGeneration,
 
 	init: function(obj) {
 		shareData = obj;

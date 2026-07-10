@@ -88,11 +88,27 @@
 							displayMessage(messageContent);
 						}
 					}
+					else if (data.type === 'aborted') {
+
+						// Show timeout notice as a distinct system message — not part of AI response
+						const $notice = $('<div>').css({
+							'font-size': '0.85rem',
+							'opacity': '0.6',
+							'font-style': 'italic',
+							'margin': '6px 0 2px 0',
+							'padding': '4px 8px',
+							'border-left': '3px solid #f0a500',
+						}).text('⚠ ' + (data.message || 'Response stopped due to timeout.'));
+
+						$('#chatMessages').append($notice);
+					}
 				});
 	
 				// Leave room on window unload
 				const leaveRoom = () => {
 					if (socket) {
+						// Tell the server to abort any in-progress generation for this room
+						socket.emit('stopGeneration', room);
 						socket.emit('leaveRoom', room);
 					}
 				};

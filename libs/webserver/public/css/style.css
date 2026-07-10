@@ -478,6 +478,109 @@ a:visited {
 	vertical-align: middle;
 	justify-content: center;
 	align-items: center;
+}
+
+
+/* ─── Hub Dashboard ─────────────────────────────────────────────────────── */
+
+.hub-dash-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 16px;
+	width: 100%;
+}
+
+.hub-dash-card {
+	background: var(--content-box-background-color);
+	border: 1px solid #c0c0c0;
+	border-radius: 8px;
+	padding: 16px 18px;
+	font-size: 1.2rem;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+	display: flex;
+	flex-direction: column;
+}
+
+[data-theme="dark"] .hub-dash-card {
+	border: 1px solid #505050;
+	box-shadow: none;
+}
+
+.hub-dash-card-title {
+	font-weight: 600;
+	font-size: 1.3rem;
+	margin-bottom: 12px;
+	border-bottom: 1px solid var(--table-border-color);
+	padding-bottom: 8px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hub-dash-card-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 4px 0;
+	font-size: 1.2rem;
+}
+
+.hub-dash-label {
+	opacity: 0.6;
+	font-size: 1.1rem;
+}
+
+.hub-dash-sandbox-badge {
+	font-size: 0.7rem;
+	font-weight: 700;
+	background: #e6a800;
+	color: #000;
+	border-radius: 3px;
+	padding: 1px 5px;
+	vertical-align: middle;
+	margin-left: 5px;
+}
+
+.hub-dash-divider {
+	border-top: 1px solid var(--table-border-color);
+	margin: 8px 0;
+}
+
+.hub-dash-card-actions {
+	display: flex;
+	gap: 10px;
+	margin-top: auto;
+	padding-top: 8px;
+	border-top: 1px solid var(--table-border-color);
+}
+
+.hub-dash-card-link {
+	font-size: 1.1rem;
+	opacity: 0.7;
+	text-decoration: none;
+	color: var(--link-color);
+}
+
+.hub-dash-card-link:hover {
+	opacity: 1;
+	text-decoration: underline;
+}
+
+.hub-dash-totals-box {
+	display: inline-block;
+	background: var(--content-box-background-color);
+	border: 1px solid #c0c0c0;
+	border-radius: 8px;
+	padding: 14px 28px;
+	margin-bottom: 24px;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+	text-align: center;
+}
+
+[data-theme="dark"] .hub-dash-totals-box {
+	border: 1px solid #505050;
+	box-shadow: none;
+}
 	cursor: pointer;
 	transition: opacity 0.15s;
 }
@@ -559,6 +662,16 @@ form textarea {
 	max-height: 300px;
 	overflow-y: auto;
 	border: solid 1px #cccccc;
+}
+
+/* Prevent select2 dropdown from going behind the fixed 65px header or off screen */
+.select2-dropdown {
+	z-index: 10000;
+}
+
+.select2-results__options {
+	max-height: 250px !important;
+	overflow-y: auto !important;
 }
 
 

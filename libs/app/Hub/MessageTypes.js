@@ -29,6 +29,7 @@ const HUB_TO_WORKER = {
 	BOTS_ACTIVE:			'bots_active',
 	DEAL_ACTION:			'deal_action',
 	SYSTEM_PAUSE:			'system_pause',
+	BOT_ACTION:			'bot_action',
 };
 
 
@@ -41,6 +42,7 @@ const WORKER_TO_HUB = {
 	BOTS_ACTIVE_RECEIVED:		'bots_active_received',
 	DEAL_ACTION_RECEIVED:		'deal_action_received',
 	SYSTEM_PAUSE_RECEIVED:		'system_pause_received',
+	BOT_ACTION_RECEIVED:		'bot_action_received',
 	SYSTEM_PAUSE_ALL:		'system_pause_all',
 	SHUTDOWN_HUB:			'shutdown_hub',
 	LOG:				'log',

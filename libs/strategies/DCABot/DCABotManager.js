@@ -13,8 +13,6 @@ let symbolList = {};
 
 async function viewCreateUpdateBot(req, res, botId) {
 
-	let maxMins = 60;
-
 	let errMsg;
 	let botData;
 	let botUpdate = false;
@@ -37,77 +35,21 @@ async function viewCreateUpdateBot(req, res, botId) {
 		}
 	}
 
-	const botConfigFile = shareData.appData.bot_config;
-	const botConfig = await shareData.Common.getConfig(botConfigFile);
-
-	const exchangeName = botConfig.data.exchange;
-
-	if (symbolList[exchangeName] == undefined || symbolList[exchangeName] == null) {
-
-		symbolList[exchangeName] = {};
-		symbolList[exchangeName]['symbols'] = [];
-		symbolList[exchangeName]['updated'] = 0;
-	}
-	
-	const diffSec = (new Date().getTime() - new Date(symbolList[exchangeName]['updated']).getTime()) / 1000;
-
-	// Get new list of symbols only after n minutes have passed
-	if (diffSec > (60 * maxMins)) {
-
-		const exchange = await shareData.DCABot.connectExchange(botConfig.data);
-
-		if (exchange) {
-
-			let symbolData;
-			let count = 0;
-
-			let success = false;
-			let finished = false;
-
-			while (!finished) {
-
-				symbolData = await shareData.DCABot.getSymbolsAll(exchange);
-
-				if (symbolData.success) {
-
-					success = true;
-					finished = true;
-				}
-				else if (count >= 5) {
-
-					// Timeout
-					errMsg = symbolData.msg;
-
-					success = false;
-					finished = true;
-				}
-				else {
-
-					await shareData.Common.delay(1000);
-				}
-
-				count++;
-			}
-
-			if (success) {
-
-				symbolList[exchangeName]['updated'] = new Date();
-				symbolList[exchangeName]['symbols'] = [];
-				symbolList[exchangeName]['symbols'] = symbolData.symbols;
-			}
-		}
-		else {
-
-			errMsg = 'Unable to connect to exchange';
-		}
-	}
+	const symbols = await getSymbolList();
 
 	if (!botUpdate) {
+
+		const botConfigFile = shareData.appData.bot_config;
+		const botConfig     = await shareData.Common.getConfig(botConfigFile);
 
 		botData = botConfig.data;
 	}
 
-	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'symbols': symbolList[exchangeName]['symbols'], 'botData': botData, 'errorData': errMsg } );
+	const { startConditionString, startConditionSubString } = buildStartConditionStrings(shareData.appData.bots, botData);
+	const symbolString  = buildSymbolString(symbols, botData);
+	const activeChecked = buildActiveChecked(botData);
+
+	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'botData': botData, 'errorData': errMsg, 'startConditionString': startConditionString, 'startConditionSubString': startConditionSubString, 'symbolString': symbolString, 'activeChecked': activeChecked } );
 }
 
 
@@ -2462,6 +2404,179 @@ async function apiUpdateBotsExchange(req, res) {
 }
 
 
+function getBotsConfig() {
+
+	// Returns the signal-derived start_conditions data from this instance's
+	// shareData — used by the Hub Worker to send to the Hub UI.
+	const bots = shareData?.appData?.bots || {};
+
+	return {
+		'start_conditions':          bots['start_conditions']          || {},
+		'start_conditions_sub':      bots['start_conditions_sub']      || {},
+		'start_conditions_metadata': bots['start_conditions_metadata'] || {},
+		'pair_buttons':              bots['pair_buttons']              || []
+	};
+}
+
+
+async function getDefaultBotConfig() {
+
+	// Returns bot.json defaults — used by Hub create bot page.
+	// Accesses shareData via DCABotManager's own module-level reference
+	// since SymBot.shareData is not exported from symbot.js.
+	const botConfigFile = shareData?.appData?.bot_config;
+
+	if (!botConfigFile) return {};
+
+	const botConfig = await shareData.Common.getConfig(botConfigFile);
+
+	return botConfig?.data || {};
+}
+
+
+async function getSymbolList() {
+
+	const maxMins = 60;
+
+	const botConfigFile = shareData.appData.bot_config;
+	const botConfig     = await shareData.Common.getConfig(botConfigFile);
+	const botConfigData = botConfig?.data;
+	const exchangeName  = botConfigData?.exchange;
+
+	if (!exchangeName) return [];
+
+	if (symbolList[exchangeName] == undefined || symbolList[exchangeName] == null) {
+
+		symbolList[exchangeName] = {};
+		symbolList[exchangeName]['symbols'] = [];
+		symbolList[exchangeName]['updated'] = 0;
+	}
+
+	const diffSec = (new Date().getTime() - new Date(symbolList[exchangeName]['updated']).getTime()) / 1000;
+
+	if (diffSec > (60 * maxMins)) {
+
+		const exchange = await shareData.DCABot.connectExchange(botConfigData);
+
+		if (exchange) {
+
+			const symbolData = await shareData.DCABot.getSymbolsAll(exchange);
+
+			if (symbolData.success) {
+
+				symbolList[exchangeName]['updated'] = new Date();
+				symbolList[exchangeName]['symbols'] = symbolData.symbols;
+			}
+		}
+	}
+
+	return symbolList[exchangeName]['symbols'] || [];
+}
+
+
+function buildStartConditionStrings(bots, botData) {
+
+	const conds = (bots && bots['start_conditions'])          || {};
+	const subs  = (bots && bots['start_conditions_sub'])      || {};
+	const ops   = [
+		{ operator: '==', display: '=' },
+		{ operator: '!=', display: '!=' },
+		{ operator: '>=', display: '>=' },
+		{ operator: '<=', display: '<=' }
+	];
+
+	// Parse existing bot start conditions for pre-selection
+	const scSubObj = {};
+
+	if (botData && botData.startConditions && botData.startConditions.length > 1) {
+
+		for (let i = 1; i < botData.startConditions.length; i++) {
+
+			const parts = botData.startConditions[i].split('|');
+			const key   = parts[1]; const id = parts[2]; const op = parts[3]; const ct = parts[4];
+
+			if (!scSubObj[key]) scSubObj[key] = {};
+
+			scSubObj[key][id] = { operator: op, content: ct };
+		}
+	}
+
+	// Build main select options string
+	let startConditionString = '<option value="">';
+
+	for (const key in conds) {
+
+		const desc = conds[key]['description'] || key;
+		const sel  = (botData && botData.startConditions && botData.startConditions[0] === key) ? ' selected' : '';
+
+		startConditionString += '<option value="' + key + '"' + sel + '>' + desc;
+	}
+
+	// Build sub-condition rows string
+	let startConditionSubString = '';
+	let countSub = 1;
+
+	for (const keySub in subs) {
+
+		const parts = keySub.split('|');
+		const key   = parts[1]; const id = parts[2];
+		const desc  = subs[keySub]['description'] || id;
+
+		let content = ''; let operator = '';
+
+		if (scSubObj[key] && scSubObj[key][id]) {
+
+			content  = scSubObj[key][id]['content']  || '';
+			operator = scSubObj[key][id]['operator'] || '';
+		}
+
+		let str = '<tr id="startConditionSub-' + key + '-' + countSub + '" data-id="' + id + '" style="display: none;"><td style="padding-left: 15px;">' + desc + ':</td><td>';
+
+		str += '<select id="startConditionOp-' + key + '-' + countSub + '" name="startConditionOp" class="form-field"><option value="">';
+
+		for (const o of ops) {
+
+			str += '<option value="' + o.operator + '"' + (operator === o.operator ? ' selected' : '') + '>' + o.display;
+		}
+
+		str += '</select>';
+		str += ' <input id="startConditionVal-' + key + '-' + countSub + '" name="startCondition' + countSub + '" class="form-field" style="cursor: auto;" value="' + content + '">';
+		str += '</td></tr>';
+
+		startConditionSubString += str;
+		countSub++;
+	}
+
+	return { startConditionString, startConditionSubString };
+}
+
+
+function buildSymbolString(symbols, botData) {
+
+	const botPairs = Array.isArray(botData.pair)
+		? botData.pair.map(p => p.toUpperCase())
+		: (botData.pair ? [botData.pair.toUpperCase()] : []);
+
+	let symbolString = '';
+
+	for (const sym of (symbols || [])) {
+
+		const upper    = sym.toUpperCase();
+		const selected = botPairs.includes(upper) ? 'selected' : '';
+
+		symbolString += '<option value="' + upper + '" ' + selected + '>' + upper;
+	}
+
+	return symbolString;
+}
+
+
+function buildActiveChecked(botData) {
+
+	return botData && botData.active ? 'checked' : '';
+}
+
+
 module.exports = {
 
 	apiStartDeal,
@@ -2487,6 +2602,12 @@ module.exports = {
 	viewActiveDeals,
 	viewHistoryDeals,
 	getDashboardData,
+	getSymbolList,
+	getBotsConfig,
+	getDefaultBotConfig,
+	buildStartConditionStrings,
+	buildSymbolString,
+	buildActiveChecked,
 
 	init: function(obj) {
 

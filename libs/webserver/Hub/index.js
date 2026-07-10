@@ -179,8 +179,6 @@ function createBaseProxy(appId, targetUrl, ws) {
 			proxyReq: (proxyReq, req) => {
 
 				// Prevent MaxListenersExceededWarning on reused keep-alive sockets.
-				// httpxy (http-proxy-middleware v4) adds listeners per request with
-				// no cleanup — setting to 0 disables the warning without masking leaks.
 				if (req.socket) {
 
 					req.socket.setMaxListeners(0);

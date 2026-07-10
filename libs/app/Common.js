@@ -1899,7 +1899,7 @@ async function sendParentMsg(data) {
 
 async function renderView(view, req, res, isHub) {
 
-	res.render( view, { 'isHub': isHub, 'appData': shareData.appData } );
+	res.render( view, { 'isHub': isHub, 'appData': shareData.appData, 'getCurrencySymbol': getCurrencySymbol.toString() } );
 }
 
 

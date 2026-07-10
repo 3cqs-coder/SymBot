@@ -252,9 +252,20 @@ function initSocket(sessionMiddleware, server) {
 				}
 			});
 
+			// Track rooms with active AI generations so disconnect can clean them up
+			const clientGenerationRooms = new Set();
+
 			client.on('disconnect', () => {
 
 				inflightMap.delete(client.id);
+
+				// Abort any in-progress AI generation when the client disconnects
+				if (shareData.AIClient) {
+
+					clientGenerationRooms.forEach(room => shareData.AIClient.abortGeneration(room));
+				}
+
+				clientGenerationRooms.clear();
 			});
 
 			client.on('joinRooms', ({ rooms }) => {
@@ -273,6 +284,9 @@ function initSocket(sessionMiddleware, server) {
 
 					client.join(room);
 					//console.log(`Client ${client.id} joined room: ${room}`);
+
+					// Track as a potential AI generation room for disconnect cleanup
+					clientGenerationRooms.add(room);
 				});
 			});
 
@@ -280,6 +294,15 @@ function initSocket(sessionMiddleware, server) {
 
 				client.leave(room);
 				//console.log(`Client left room: ${room}`);
+			});
+
+			client.on('stopGeneration', (room) => {
+
+				if (room && shareData.AIClient) {
+
+					shareData.AIClient.abortGeneration(room);
+					clientGenerationRooms.delete(room);
+				}
 			});
 
 			client.on('notifications_history', function (data) {

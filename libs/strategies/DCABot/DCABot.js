@@ -861,7 +861,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 		return ( { 'success': false, 'finished': false } );
 	}
 
-	if (dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null) {
+	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null && dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null) {
 
 		if (dealTracker[dealId]['update']['deal_cancel']) {
 
@@ -1018,9 +1018,20 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					return ( { 'success': false, 'finished': false, 'reason': 'Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active } );
 				}
 
+				// If the base order is paused (mid-verify after a previous invalid_order),
+				// do not place another buy. Exit cleanly and let verifyInvalidOrder resolve
+				// in the background. The pause is the re-entry guard — same mechanism the
+				// safety order path relies on.
+				if (isDealPause || isDealPauseBuy) {
+
+					return ( { 'success': false, 'finished': true } );
+				}
+
 				let buyError;
 				let buyOrderId = '';
 				let buySuccess = true;
+				let buyOrderInvalid = false;
+				let buyResult = null;
 
 				const baseOrder = deal.orders[0];
 				targetPrice = baseOrder.target;
@@ -1044,6 +1055,8 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 							buySuccess = false;
 							buyError = buy.message;
+							buyOrderInvalid = buy.invalid_order || false;
+							buyResult = buy;
 						}
 						else {
 
@@ -1083,23 +1096,81 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					}
 
 					await updateDealTracker({ 
-												'exchange': exchange,
-												'deal_id': dealId,
-												'price': price,
-												'config': config,
-												'orders': orders,
-												'pause': isDealPause,
-												'pause_buy': isDealPauseBuy,
-												'pause_sell': isDealPauseSell,
-												'pause_reason': isDealPauseReason,
-												'error': buyError
-											});
+											'exchange': exchange,
+											'deal_id': dealId,
+											'price': price,
+											'config': config,
+											'orders': orders,
+											'pause': isDealPause,
+											'pause_buy': isDealPauseBuy,
+											'pause_sell': isDealPauseSell,
+											'pause_reason': isDealPauseReason,
+											'error': buyError
+										});
 
-					// Invalid order re-verification implementation may be needed for initial buy to start deal
-					// Could delay closing deals quickly during increased volatility
 					if (!buySuccess) {
 
-						// Initial buy failed
+						// Base order placed but the exchange could not confirm it (invalid_order).
+						// The order is likely filled — do NOT delete the deal. Pause it, store the
+						// order ID, and verify in the background. This mirrors the safety order path.
+						if (buyOrderInvalid && buyResult && buyResult['data'] && buyResult['data']['id']) {
+
+							const retryMins = 2;
+							const unverifiedOrderId = buyResult['data']['id'];
+
+							// Store the order ID on the base order so the startup resume path
+							// can find it if SymBot restarts mid-verification.
+							orders[0].orderId = unverifiedOrderId;
+							await Deals.updateOne({ dealId: dealId }, { orders: orders });
+
+							const msgErr = 'Invalid base order for deal ID ' + dealId + '. Pausing deal and verifying in ' + retryMins + ' minutes.';
+							await sendDealMessage('deal_error', msgErr);
+
+							isDealPauseReason = 'order_verify_buy';
+							await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
+							isDealPauseBuy = true;
+
+							isDealVerifying = true;
+
+							// On successful verification, mark the base order filled and advance
+							// the deal to isStart=1 — EXACTLY what the normal base-order success
+							// path does. We keep SymBot's pre-calculated qty/amount/average/target
+							// untouched so fee accounting, take-profit and profit% are identical to
+							// a normally-filled base order. We do not overwrite with raw exchange
+							// values and do not recalculate the ladder.
+							const handleBaseOrderVerified = async (verifyData) => {
+
+								orders[0].filled = 1;
+								orders[0].orderId = unverifiedOrderId;
+								orders[0].dateFilled = new Date();
+
+								await Deals.updateOne({ dealId: dealId }, { isStart: 1, orders: orders });
+							};
+
+							const verifyPromise = verifyInvalidOrder(0, retryMins, exchange, pair, config.botId, dealId, unverifiedOrderId, handleBaseOrderVerified, false);
+
+							verifyPromise.then(async (verifyResult) => {
+
+								if (verifyResult.retriesExhausted) {
+
+									// Retries exhausted and the order still could not be confirmed.
+									// The asset may be sitting on the exchange untracked — warn the
+									// user to verify manually, then disable the bot and remove the deal.
+									const exhaustMsg = 'Base order verification retries exhausted for deal ID ' + dealId + ' (order ' + unverifiedOrderId + '). The asset may be on the exchange — verify manually before re-enabling bot ' + config.botName + '. Disabling bot and removing deal.';
+									await sendDealMessage('deal_error', exhaustMsg);
+
+									await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
+									await deleteDeal(dealId);
+								}
+							});
+
+							// Exit cleanly. The deal is now paused, so the pause guard at the top
+							// of this block prevents any re-buy on the next tick.
+							return ( { 'success': false, 'finished': true } );
+						}
+
+						// Order never placed (genuine exchange rejection, e.g. BadRequest limit-only,
+						// or cancelOnly). No asset on the exchange — disable bot and remove deal.
 						let finished = false;
 
 						const statusObj = await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
@@ -1308,6 +1379,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 										isDealPauseReason = 'order_verify_buy';
 										const pauseData = await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
+										isDealPauseBuy = true;
 									}
 								}
 								else {
@@ -1603,6 +1675,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 											await sendDealMessage(msgType, msgErr);
 											isDealPauseReason = 'order_verify_sell';
 											await pauseDeal(config.botId, dealId, null, null, true, isDealPauseReason);
+											isDealPauseSell = true;
 										}
 									}
 									else {
@@ -2953,6 +3026,8 @@ const verifyInvalidOrder = ( count = 0, mins = 2, exchange, pair, botId, dealId,
 
 		await sendDealMessage('info', msg);
 
+		let verifiedData = null;
+
 		if (orderId) {
 
 			const verifyData = await verifyBuySellOrder(exchange, orderId, pair, dealId);
@@ -2960,6 +3035,7 @@ const verifyInvalidOrder = ( count = 0, mins = 2, exchange, pair, botId, dealId,
 			if (verifyData.success) {
 
 				resume = true;
+				verifiedData = verifyData;
 
 				msg = `Attempt #${count} to verify order ID ${orderId} for deal ID ${dealId} successful.`;
 
@@ -3030,7 +3106,7 @@ const verifyInvalidOrder = ( count = 0, mins = 2, exchange, pair, botId, dealId,
 
 			if (typeof onSuccessCallback === 'function') {
 
-				await onSuccessCallback();
+				await onSuccessCallback(verifiedData);
 			}
 
 			if (!pauseBeforeCallback) {
@@ -4927,6 +5003,11 @@ async function getBalanceTracker() {
 			const exchangeName = exchangeObj['name'];
 			const exchange = exchangeObj['exchange'];
 
+			// Skip exchanges without API credentials — they were connected
+			// for public data only (e.g. BTC price ticker, market data)
+			// or are sandbox instances without real credentials.
+			if (!exchange.apiKey) continue;
+
 			const balance = await getBalance(exchange);
 
 			if (balance.success) {
@@ -5968,7 +6049,27 @@ async function resumeDeal(dealObj) {
 
 		if (exchange) {
 
-			const verifyCallback = isSell ? null : null; // callbacks not available at startup — verifyInvalidOrder will clear pause on success
+			let verifyCallback = null;
+
+			// Base order interrupted mid-verify (isStart:0). On success, mark the base
+			// order filled and advance to isStart=1 — identical to the normal base-order
+			// success path. Pre-calculated qty/amount/average/target are preserved.
+			if (!isSell && dealObj.isStart === 0) {
+
+				const baseOrders = dealObj.orders || [];
+
+				verifyCallback = async (verifyData) => {
+
+					if (baseOrders[0]) {
+
+						baseOrders[0].filled = 1;
+						baseOrders[0].dateFilled = new Date();
+
+						await Deals.updateOne({ dealId: dealId }, { isStart: 1, orders: baseOrders });
+					}
+				};
+			}
+
 			verifyInvalidOrder(0, retryMins, exchange, pair, botId, dealId, pendingOrderId, verifyCallback, !isSell);
 		}
 	}
@@ -6153,7 +6254,8 @@ async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell, pauseReason 
 
 		if (val != null) {
 
-			const convertedVal = Common.convertBoolean(val, false);
+			// pauseReason is a string — write it as-is, do not convert to boolean
+			const convertedVal = dbKey === 'pauseReason' ? val : Common.convertBoolean(val, false);
 
 			const dataUpdate = await updateDeal(botId, dealId, {
 				[dbKey]: convertedVal

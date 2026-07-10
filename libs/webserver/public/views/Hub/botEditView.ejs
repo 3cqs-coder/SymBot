@@ -1,0 +1,228 @@
+<%- include('../partialsHeaderView'); %>
+
+<script src="/js/symbot-bot-form.js"></script>
+
+<script>
+
+	let confirmStart = false;
+
+	const isUpdate     = <%- botUpdate ? 'true' : 'false' %>;
+	const instanceId   = '<%- instanceId %>';
+	const botId        = '<%- botData.botId || "" %>';
+	const instanceName = '<%- instanceName %>';
+	const pairButtons  = <%- JSON.stringify(scData && scData.pair_buttons ? scData.pair_buttons : []) %>;
+	const startConditionsMeta = <%- JSON.stringify(scData && scData.start_conditions_metadata ? scData.start_conditions_metadata : {}) %>;
+	const botText      = isUpdate ? 'Update Bot' : 'Create Bot';
+
+
+	function getFormData(createStep) {
+
+		const scArr   = [];
+		const mainVal = $('#startCondition').val();
+		if (mainVal) scArr.push(mainVal);
+
+		$('[id^="startConditionSub-"]').each(function() {
+
+			const parts = this.id.split('-');
+			const key   = parts[1]; const num = parts[2];
+			const did   = $(this).data('id');
+			const op    = $('#startConditionOp-' + key + '-' + num).val();
+			const val   = $('#startConditionVal-' + key + '-' + num).val();
+
+			if (op) scArr.push('signalsub|' + key + '|' + did + '|' + op + '|' + val + '|');
+		});
+
+		return {
+			botId:                         botId || '',
+			botName:                       $('#botName').val(),
+			pair:                          $('#pair').val() || [],
+			firstOrderAmount:              $('#firstOrderAmount').val(),
+			dcaOrderAmount:                $('#dcaOrderAmount').val(),
+			dcaMaxOrder:                   $('#dcaMaxOrder').val(),
+			dcaOrderStepPercent:           $('#dcaOrderStepPercent').val(),
+			dcaOrderSizeMultiplier:        $('#dcaOrderSizeMultiplier').val(),
+			dcaOrderStepPercentMultiplier: $('#dcaOrderStepPercentMultiplier').val(),
+			dcaTakeProfitPercent:          $('#dcaTakeProfitPercent').val(),
+			dealMax:                       $('#dealMax').val(),
+			pairMax:                       $('#pairMax').val(),
+			pairDealsMax:                  $('#pairDealsMax').val(),
+			pairBotsDealsMax:              $('#pairBotsDealsMax').val(),
+			volumeMin:                     $('#volumeMin').val(),
+			dealCoolDown:                  $('#dealCoolDown').val(),
+			profitCurrency:                $('#profitCurrency').val(),
+			active:                        $('#botActive').is(':checked') ? 'true' : 'false',
+			startCondition:                scArr.length > 0 ? scArr : [''],
+			createStep:                    createStep
+		};
+	}
+
+
+	function submitForm(createStep) {
+
+		const payload = getFormData(createStep);
+
+		const pairs = payload.pair;
+
+		if (!pairs || pairs.length === 0 || (pairs[0] && !pairs[0].match(/\//))) {
+
+			alertBox('Invalid Pair');
+			return;
+		}
+
+		if (!payload.startCondition[0]) {
+
+			alertBox('Invalid Start Condition');
+			return;
+		}
+
+		$('#spinner-overlay').fadeIn(100);
+		$('#formSubmitPreview').hide();
+		BotForm.disableAll(true);
+
+		$.ajax({
+			type: 'POST',
+			url: '../../api/hub/bots/action',
+			contentType: 'application/json',
+			data: JSON.stringify({
+				instanceId,
+				action: isUpdate ? 'update' : 'create',
+				botId:  botId || null,
+				data:   payload
+			}),
+			dataType: 'json',
+			success: function(res) {
+
+				if (!res.success) {
+
+					$('#spinner-overlay').fadeOut(100);
+					$('#formSubmitPreview').show();
+					BotForm.disableAll(false);
+					alertBox(res.data || res.message || 'Unknown error');
+					return;
+				}
+
+				if (!res.step || res.step.toLowerCase() !== 'getorders') {
+
+					if (isUpdate) {
+
+						// Stay on the page after update — reload to reflect saved data
+						BotForm.resetForm();
+						alertBox('Bot Updated', function() {
+							window.location.reload();
+						});
+					}
+					else {
+
+						// After create — go back to bots list
+						BotForm.resetForm();
+						alertBox('Bot Created', function() {
+							window.location.href = '../../bots';
+						});
+					}
+					return;
+				}
+
+				// Preview — use shared renderer
+				BotForm.renderOrdersTable(res, botText);
+			},
+			error: function(err) {
+
+				$('#spinner-overlay').fadeOut(100);
+				$('#formSubmitPreview').show();
+				BotForm.disableAll(false);
+
+				if (err.status === 401) { window.location.href = '../../login'; return; }
+
+				alertBox('Error: ' + JSON.stringify(err));
+			}
+		});
+	}
+
+
+	$(document).ready(function() {
+
+		$('#headerText').text((isUpdate ? 'Update DCA Bot — ' : 'Create DCA Bot — ') + instanceName);
+		$('#formSubmitStart').text(botText);
+
+		if (isUpdate) $('#botIdRow').show();
+
+		BotForm.initPairButtons(pairButtons);
+		BotForm.initStartConditions(startConditionsMeta);
+
+		$('#pair').select2({ dropdownParent: $('body') });
+		$('[id*="botActive"]').simpleSwitch();
+
+		$('#formSubmitPreview').on('click', function(e) {
+
+			e.preventDefault();
+			confirmStart = false;
+			submitForm('getorders');
+		});
+
+		$('#formSubmitReset').on('click', function(e) {
+
+			e.preventDefault();
+			BotForm.resetForm();
+		});
+
+		$('#formSubmitStart').on('click', function(e) {
+
+			e.preventDefault();
+
+			if (!confirmStart) {
+
+				$.confirm({
+					title: false,
+					boxWidth: '50%',
+					useBootstrap: false,
+					content: '<div style="font-size: 1.2rem; text-align: left;">' + botText + '?</div>',
+					buttons: {
+						ok: {
+							btnClass: 'btn-default',
+							text: '<div style="color: #4aa602;">' + botText + '</div>',
+							action: function() { confirmStart = true; submitForm('start'); }
+						},
+						cancel: {
+							btnClass: 'btn-default',
+							text: '<div style="color: #000000;">Cancel</div>',
+							action: function() {}
+						}
+					}
+				});
+				return;
+			}
+
+			confirmStart = false;
+			submitForm('start');
+		});
+	});
+
+</script>
+
+
+<main>
+<center>
+
+	<div id="contentBox" style="width: 90%;">
+
+		<div class="contentHeaderBox" style="position: relative; text-align: center;">
+			<div style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 1.0rem; white-space: nowrap;">
+				<a href="/bots" style="text-decoration: none; opacity: 0.6;">&#8592; All Bots</a>
+				<span style="opacity: 0.3; padding: 0 4px;">|</span>
+				<a href="/bots?instance=<%- instanceId %>" style="text-decoration: none; opacity: 0.6;">&#8592; <%- instanceName %> Bots</a>
+			</div>
+			<b id="headerText" class="contentHeader"></b>
+		</div>
+
+		<div class="botsDealsBox">
+
+			<%- include('../strategies/DCABot/partialsBotForm') %>
+	</div>
+
+	<div id="ordersBox"></div>
+
+</center>
+</main>
+
+
+<%- include('../partialsFooterView'); %>

@@ -1577,6 +1577,177 @@ async function logger(type, msg) {
 
 
 
+async function performBotAction(instanceId, action, botId, data) {
+
+	const instanceResult = await getInstance(instanceId);
+
+	if (!instanceResult.success) {
+
+		return { 'success': false, 'data': 'Instance not found or not running' };
+	}
+
+	const { worker } = instanceResult;
+
+	const requestId = shareData.Common.uuidv4();
+
+	return new Promise((resolve) => {
+
+		let actionTimeout;
+
+		const onMessage = (msg) => {
+
+			if (msg.type === WORKER_TO_HUB.BOT_ACTION_RECEIVED && msg.requestId === requestId) {
+
+				clearTimeout(actionTimeout);
+				worker.off('message', onMessage);
+
+				resolve(msg.data);
+			}
+		};
+
+		worker.on('message', onMessage);
+
+		worker.postMessage({
+			type: HUB_TO_WORKER.BOT_ACTION,
+			requestId,
+			action,
+			botId,
+			data: data || {}
+		});
+
+		actionTimeout = setTimeout(() => {
+
+			worker.off('message', onMessage);
+			resolve({ 'success': false, 'data': 'Timeout waiting for bot action response' });
+		}, 30000);
+	});
+}
+
+
+async function getDashboardData() {
+
+	const [instancesDeals, instancesBots] = await Promise.all([
+		getActiveDeals(),
+		getActiveBots()
+	]);
+
+	const instanceMap = {};
+
+	for (const instance of instancesDeals) {
+
+		const name      = instance.name      || 'Unknown';
+		const portfolio = instance.portfolio  || null;
+
+		if (!instanceMap[name]) {
+
+			instanceMap[name] = { name, instanceId: instance.instanceId, deals: 0, bots: 0, profit: 0, portfolio };
+		}
+
+		const deals = instance.deals || [];
+
+		instanceMap[name].deals += deals.length;
+
+		for (const deal of deals) {
+
+			const p = parseFloat(deal?.info?.profit ?? 0);
+			if (!isNaN(p)) instanceMap[name].profit += p;
+		}
+	}
+
+	for (const instance of instancesBots) {
+
+		const name = instance.name || 'Unknown';
+
+		if (!instanceMap[name]) {
+
+			instanceMap[name] = { name, instanceId: instance.instanceId, deals: 0, bots: 0, profit: 0, portfolio: null };
+		}
+
+		instanceMap[name].bots += (instance.bots || []).length;
+	}
+
+	const instances = Object.values(instanceMap);
+
+	const totals = instances.reduce((acc, inst) => {
+
+		acc.deals  += inst.deals;
+		acc.bots   += inst.bots;
+		acc.profit += inst.profit;
+
+		return acc;
+
+	}, { deals: 0, bots: 0, profit: 0 });
+
+	return { instances, totals };
+}
+
+
+async function getCreateBotData(instanceId) {
+
+	const instResult = await getInstance(instanceId);
+
+	if (!instResult.success) return { success: false };
+
+	const [symResult, scResult, defResult] = await Promise.all([
+		performBotAction(instanceId, 'get_symbols',          null, {}),
+		performBotAction(instanceId, 'get_start_conditions', null, {}),
+		performBotAction(instanceId, 'get_defaults',         null, {})
+	]);
+
+	const scData   = (scResult.success && scResult.data)   ? scResult.data  : {};
+	const botData  = (defResult.success && defResult.data)  ? defResult.data : {};
+	const symbols  = (symResult.success && Array.isArray(symResult.data)) ? symResult.data : [];
+	const strResult = await performBotAction(instanceId, 'get_sc_strings', null, { botData, symbols });
+	const scStr    = (strResult.success && strResult.data) ? strResult.data : {};
+
+	return {
+		success:                  true,
+		instanceName:             instResult.name,
+		botData,
+		symbols,
+		scData,
+		startConditionString:     scStr.startConditionString    || '',
+		startConditionSubString:  scStr.startConditionSubString || '',
+		symbolString:             scStr.symbolString            || '',
+		activeChecked:            scStr.activeChecked           || ''
+	};
+}
+
+
+async function getBotEditData(instanceId, botId) {
+
+	const instResult = await getInstance(instanceId);
+
+	if (!instResult.success) return { success: false };
+
+	const [botResult, symResult, scResult] = await Promise.all([
+		performBotAction(instanceId, 'get_bot',              botId, {}),
+		performBotAction(instanceId, 'get_symbols',          botId, {}),
+		performBotAction(instanceId, 'get_start_conditions', botId, {})
+	]);
+
+	if (!botResult.success) return { success: false };
+
+	const botData2  = botResult.data || {};
+	const scData2   = (scResult.success && scResult.data) ? scResult.data : {};
+	const symbols2  = (symResult.success && Array.isArray(symResult.data)) ? symResult.data : [];
+	const strResult2 = await performBotAction(instanceId, 'get_sc_strings', null, { botData: botData2, symbols: symbols2 });
+	const scStr2    = (strResult2.success && strResult2.data) ? strResult2.data : {};
+
+	return {
+		success:                  true,
+		instanceName:             instResult.name,
+		botData:                  botData2,
+		symbols:                  symbols2,
+		scData:                   scData2,
+		startConditionString:     scStr2.startConditionString    || '',
+		startConditionSubString:  scStr2.startConditionSubString || '',
+		symbolString:             scStr2.symbolString            || '',
+		activeChecked:            scStr2.activeChecked           || ''
+	};
+}
+
+
 module.exports = {
 
 	logger,
@@ -1593,6 +1764,11 @@ module.exports = {
 	logMemoryUsage,
 	getActiveDeals,
 	getActiveBots,
+	getInstance,
+	getDashboardData,
+	getCreateBotData,
+	getBotEditData,
+	performBotAction,
 	performDealAction,
 
 	init: function(obj) {
