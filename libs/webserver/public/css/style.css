@@ -1630,7 +1630,7 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 
 /* Portfolio risk bar colour coding — matches profit-positive/negative colours */
 .portfolio-risk-low  { color: #1a9f00; }
-.portfolio-risk-mid  { color: #ffb700; }
+.portfolio-risk-mid  { color: #a85f00; }
 .portfolio-risk-high { color: #d82715; }
 
 [data-theme="dark"] .portfolio-risk-low  { color: #3ec43e; }

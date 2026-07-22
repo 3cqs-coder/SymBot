@@ -97,11 +97,20 @@ async function processWorkerTaskMessage(SymBot, message) {
 	if (message.type === HUB_TO_WORKER.MEMORY) {
 
 		const memoryUsage = process.memoryUsage();
-	
+
+		// rss is process-wide (shared by every worker thread in this process), so it
+		// cannot be attributed to a single instance. heapUsed + external + arrayBuffers
+		// is the portion attributable to THIS worker, including its off-heap buffers.
 		parentPort.postMessage({
-	
+
 			type: WORKER_TO_HUB.MEMORY,
-			data: memoryUsage
+			data: {
+				'rss': memoryUsage.rss,
+				'heapTotal': memoryUsage.heapTotal,
+				'heapUsed': memoryUsage.heapUsed,
+				'external': memoryUsage.external || 0,
+				'arrayBuffers': memoryUsage.arrayBuffers || 0
+			}
 		});
 	}
 

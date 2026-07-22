@@ -124,13 +124,40 @@
 					// Sort alphabetically
 					instances.sort((a, b) => a.instanceName.localeCompare(b.instanceName));
 
+					if (instances.length) {
+
+						// rss covers the entire process and is shared by every instance, so
+						// it is shown once here rather than repeated on each instance below.
+						// Any instance's reading is the same figure; use the highest seen in
+						// case readings were taken a moment apart.
+						let processRss = 0;
+						let attributedTotal = 0;
+
+						instances.forEach(instance => {
+
+							const rss = instance.memoryUsage.rss || 0;
+
+							if (rss > processRss) { processRss = rss; }
+
+							attributedTotal += (instance.memoryUsage.attributed || 0);
+						});
+
+						displayData += '<div style="text-align: left; padding: 5px; margin-bottom: 5px; border-bottom: 1px solid rgba(128,128,128,0.35);">';
+						displayData += '<b>Process</b><br>';
+						displayData += 'RSS: ' + numFormatter(processRss) + '<br>';
+						displayData += 'Attributed (all instances): ' + numFormatter(attributedTotal) + '<br>';
+						displayData += '</div>';
+					}
+
 					instances.forEach(instance => {
 
 						displayData += '<div style="text-align: left; padding: 5px;">';
 						displayData += '<b>' + instance.instanceName + '</b><br>';
-						displayData += 'RSS: ' + numFormatter(instance.memoryUsage.rss) + '<br>';
+						displayData += 'Attributed: ' + numFormatter(instance.memoryUsage.attributed) + '<br>';
 						displayData += 'Heap Used: ' + numFormatter(instance.memoryUsage.heapUsed) + '<br>';
 						displayData += 'Heap Total: ' + numFormatter(instance.memoryUsage.heapTotal) + '<br>';
+						displayData += 'External: ' + numFormatter(instance.memoryUsage.external) + '<br>';
+						displayData += 'Array Buffers: ' + numFormatter(instance.memoryUsage.arrayBuffers) + '<br>';
 						displayData += '</div>';
 					});
 

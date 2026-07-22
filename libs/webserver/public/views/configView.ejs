@@ -162,6 +162,11 @@
 		$('#ctx_compression_protect_n').val(data.ctxCompProtectN);
 		if (data.ctxCompEnabled && !$('#toggleCtxCompression').is(':checked')) $('#toggleCtxCompression').click();
 
+		$('#deal_context_router_model').val(data.dealCtxModel);
+		$('#deal_context_router_timeout_ms').val(data.dealCtxTimeout);
+		if (data.dealCtxEnabled && !$('#toggleDealContext').is(':checked')) $('#toggleDealContext').click();
+		if (data.dealCtxUseRouter && !$('#toggleDealContextRouter').is(':checked')) $('#toggleDealContextRouter').click();
+
 		// Circuit breaker
 		$('#cb_deal_ratio_threshold').val(data.cbDealRatio);
 		$('#cb_deal_ratio_window_secs').val(data.cbDealWindow);
@@ -315,6 +320,13 @@
 		formData.push({ name: 'ctx_compression_enabled',   value: String($('#toggleCtxCompression').prop('checked')) });
 		formData.push({ name: 'ctx_compression_threshold', value: $('#ctx_compression_threshold').val() });
 		formData.push({ name: 'ctx_compression_protect_n', value: $('#ctx_compression_protect_n').val() });
+
+		const dealCtxFields = ['deal_context_enabled','deal_context_use_router','deal_context_router_model','deal_context_router_timeout_ms'];
+		formData = formData.filter(item => !dealCtxFields.includes(item.name));
+		formData.push({ name: 'deal_context_enabled',           value: String($('#toggleDealContext').prop('checked')) });
+		formData.push({ name: 'deal_context_use_router',        value: String($('#toggleDealContextRouter').prop('checked')) });
+		formData.push({ name: 'deal_context_router_model',      value: $('#deal_context_router_model').val() });
+		formData.push({ name: 'deal_context_router_timeout_ms', value: $('#deal_context_router_timeout_ms').val() });
 
 		const cbFields = ['cb_enabled','cb_deal_ratio_threshold','cb_deal_ratio_window_secs',
 		                  'cb_price_drop_percent','cb_price_drop_window_secs','cb_price_drop_enabled',
@@ -737,6 +749,10 @@
 			"ctxCompEnabled":    convertBoolean("<%= services['ai'] && services['ai']['context_compression'] && services['ai']['context_compression']['enabled'] !== false ? 'true' : 'false' %>"),
 			"ctxCompThreshold": "<%= services['ai'] && services['ai']['context_compression'] ? services['ai']['context_compression']['threshold_chars'] : 80000 %>",
 			"ctxCompProtectN":  "<%= services['ai'] && services['ai']['context_compression'] ? services['ai']['context_compression']['protect_last_n'] : 10 %>",
+			"dealCtxEnabled":   convertBoolean("<%= services['ai'] && services['ai']['deal_context'] && services['ai']['deal_context']['enabled'] ? 'true' : 'false' %>"),
+			"dealCtxUseRouter": convertBoolean("<%= !services['ai'] || !services['ai']['deal_context'] || services['ai']['deal_context']['use_router'] !== false ? 'true' : 'false' %>"),
+			"dealCtxModel":     "<%= services['ai'] && services['ai']['deal_context'] ? (services['ai']['deal_context']['router_model'] || '') : '' %>",
+			"dealCtxTimeout":   "<%= services['ai'] && services['ai']['deal_context'] ? (services['ai']['deal_context']['router_timeout_ms'] || 12000) : 12000 %>",
 			"cbEnabled":          convertBoolean("<%= services['circuit_breaker'] && services['circuit_breaker']['enabled'] ? 'true' : 'false' %>"),
 			"cbDealRatio":        "<%= services['circuit_breaker'] ? services['circuit_breaker']['deal_ratio_threshold'] : 0.5 %>",
 			"cbDealWindow":       "<%= services['circuit_breaker'] ? services['circuit_breaker']['deal_ratio_window_secs'] : 30 %>",
@@ -1193,6 +1209,63 @@
 
 					<td>
 						<input type="checkbox" id="toggleCtxCompression" name="ctx_compression_enabled" class="form-field">
+					</td>
+				</tr>
+
+				</table>
+
+				<b style="display: block; padding-top: 12px;">AI Deal Context</b>
+				<small style="display: block; padding-bottom: 4px;">Lets the AI chat look up your deal records and read matching lines from SymBot's own log files when you ask about a deal. Read-only: it can describe deals, never change them. Deal analysis is unaffected.</small>
+
+				<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
+
+				<tr>
+					<td>
+						<label for="deal_context_router_model">Router Model:
+							<span class="toolTip">?<span class="toolTipText">
+								Optional. Model used only for the short routing step that decides which deal or logs a question needs. Leave blank to use the default chat model.
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="text" id="deal_context_router_model" name="deal_context_router_model" class="form-field" placeholder="(default chat model)" style="width:200px;">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="deal_context_router_timeout_ms">Router Timeout (ms):
+							<span class="toolTip">?<span class="toolTipText">
+								How long to wait for the routing step before falling back to keyword matching. 1000-60000 ms
+							</span></span>
+						</label>
+					</td>
+
+					<td style="width: 325px;">
+						<input type="number" id="deal_context_router_timeout_ms" name="deal_context_router_timeout_ms" class="form-field" min="1000" max="60000" step="1000" style="width:100px;">
+					</td>
+				</tr>
+
+				<tr>
+					<td>
+						<label for="toggleDealContextRouter">Use AI Router:
+							<span class="toolTip">?<span class="toolTipText">
+								Use a short AI pass to work out which deal or log events a question refers to. This is what resolves follow-ups such as "why did it pause?" to the deal discussed earlier. When off, keyword matching is used instead
+							</span></span>
+						</label>
+					</td>
+
+					<td>
+						<input type="checkbox" id="toggleDealContextRouter" name="deal_context_use_router" class="form-field">
+					</td>
+				</tr>
+
+				<tr>
+					<td>Enabled:</td>
+
+					<td>
+						<input type="checkbox" id="toggleDealContext" name="deal_context_enabled" class="form-field">
 					</td>
 				</tr>
 

@@ -157,6 +157,28 @@ function totalHistoryChars(messages) {
 
 // Compresses middle turns of roomData.messages into a structured summary.
 // Modifies roomData.messages in place. Returns true if compression occurred.
+// Single non-streaming completion against the configured provider.
+// Shared by context compression and by the AI context router so there is one
+// provider code path rather than one per caller. Returns '' on any failure.
+async function completePrompt(messages, model) {
+
+	const adapter = providerAdapters[aiProvider];
+
+	let content = '';
+
+	if (adapter && aiClient) {
+
+		const useModel = model || modelCurrent;
+
+		const result = await adapter.createNonStream(aiClient, useModel, messages);
+
+		content = adapter.extractNonStreamContent(result) || '';
+	}
+
+	return (content);
+}
+
+
 async function compressContext(room, roomData, model) {
 
 	const cfg = getCompressionConfig();
@@ -200,14 +222,10 @@ async function compressContext(room, roomData, model) {
 
 	try {
 
-		const adapter = providerAdapters[aiProvider];
-		if (!adapter) return false;
-
 		// Non-streaming call — summary doesn't need to stream
 		// No abort signal for compression — it's a background operation and
 		// we want it to complete fully regardless of user-facing timeouts.
-		const result  = await adapter.createNonStream(aiClient, model, summaryPrompt);
-		const summary = adapter.extractNonStreamContent(result);
+		const summary = await completePrompt(summaryPrompt, model);
 
 		if (!summary || !summary.trim()) return false;
 
@@ -308,11 +326,30 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 		await compressContext(room, roomData, model);
 	}
 
+	// Retrieve SymBot deal / log data relevant to this question, when enabled.
+	// Read-only and strictly additive: any failure yields an empty string and the
+	// payload below is built exactly as it was before this step existed.
+	let dealContext = '';
+
+	if (message.content && !reset && shareData.AIContext) {
+
+		try {
+
+			dealContext = await shareData.AIContext.build(room, message.content, roomData.messages);
+		}
+		catch (e) {
+
+			dealContext = '';
+		}
+	}
+
 	// Build final message payload for the model
 	// If a user message has attachments, inject the extracted text before the message content
+	const lastUserIndex = roomData.messages.map(m => m.role).lastIndexOf('user');
+
 	const messagesForModel = [
 		roomData.persona,
-		...roomData.messages.map(m => {
+		...roomData.messages.map((m, index) => {
 			let content = m.content;
 			if (m.role === 'user' && m.attachments && m.attachments.length > 0) {
 				const attachmentContext = m.attachments
@@ -322,6 +359,10 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 				if (attachmentContext) {
 					content = attachmentContext + '\n\n---\n\n' + content;
 				}
+			}
+			// Retrieved SymBot data goes outermost so it leads the message.
+			if (m.role === 'user' && index === lastUserIndex && dealContext) {
+				content = dealContext + '\n\n---\n\n' + content;
 			}
 			return { role: m.role, content };
 		})
@@ -904,6 +945,7 @@ module.exports = {
 	start,
 	stop,
 	streamChat,
+	completePrompt,
 	getChatHistory,
 	listConversations,
 	saveConversation,

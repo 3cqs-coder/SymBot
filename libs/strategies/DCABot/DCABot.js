@@ -49,6 +49,36 @@ const maxPartialSellRetries = 10;
 const partialSellRetryDelayMs = 3000;
 
 
+// ── Loop-flow signals ─────────────────────────────────────────────────────────
+// dcaFollow (and the extracted handlers) return one of these to tell runFollowLoop
+// what to do next. The consumer reads two fields: `finished` (true = stop the loop)
+// and `success` (false = wait 1s before the next tick). Naming them removes the
+// ambiguity that caused the base-order stall bug (returning finished:true exited the
+// loop when the deal should have stayed alive). Four reachable states:
+//
+//   LOOP_CONTINUE : healthy tick — loop again immediately
+//   LOOP_RETRY    : transient issue (paused, verifying, guard) — loop again after 1s
+//   LOOP_DONE     : deal completed cleanly (sold out) — stop the loop
+//   LOOP_STOPPED  : deal stopped without a clean completion (user stop) — stop after 1s
+//
+// Frozen so a shared reference can never be mutated by a consumer.
+const LOOP_CONTINUE = Object.freeze({ 'success': true,  'finished': false });
+const LOOP_RETRY    = Object.freeze({ 'success': false, 'finished': false });
+const LOOP_DONE     = Object.freeze({ 'success': true,  'finished': true  });
+const LOOP_STOPPED  = Object.freeze({ 'success': false, 'finished': true  });
+
+// CONTINUE while also handing runFollowLoop a refreshed config to adopt for later ticks.
+const loopContinueWithConfig = (config) => ({ 'success': true, 'finished': false, 'config': config });
+
+// Maps a runtime (success, finished) pair to the matching named signal. Used at the few
+// return points where both values are computed at runtime rather than known statically.
+const loopSignal = (success, finished) => (
+	finished ? (success ? LOOP_DONE : LOOP_STOPPED)
+	         : (success ? LOOP_CONTINUE : LOOP_RETRY)
+);
+
+
+
 let dealTracker = {};
 let timerTracker = {};
 let startDealTracker = {};
@@ -823,6 +853,940 @@ async function onDealComplete({ dealId, botIdMain, pair, dealCount, config }) {
 }
 
 
+// Handles a deal's base order (isStart:0) for one dcaFollow tick. Extracted from
+// dcaFollow verbatim (#60) — behaviour is identical to the original inline block.
+// Returns the loop signal { success, finished } that dcaFollow returns directly.
+// Pause flags are passed in (read fresh from the deal each tick by the caller);
+// the handler's own pause-flag mutations are local — they only feed this tick's
+// tracker updates and returns, and are never read after the handler returns.
+const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, price, isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, dcaError, cancelOnly }) => {
+
+	// Local tracker-update helper. The three base-order tracker refreshes below are
+	// identical except for the error value, and all read the current pause flags —
+	// which the invalid_order path mutates before its own refresh. Capturing the
+	// pause vars by closure means each call sees their live values (exactly as the
+	// former inline object literals did), so only the error is passed per call.
+	const trackBaseDeal = async (error) => {
+
+		await updateDealTracker({
+			'exchange': exchange,
+			'deal_id': dealId,
+			'price': price,
+			'config': config,
+			'orders': orders,
+			'pause': isDealPause,
+			'pause_buy': isDealPauseBuy,
+			'pause_sell': isDealPauseSell,
+			'pause_reason': isDealPauseReason,
+			'error': error
+		});
+	};
+
+	// Defence in depth — circuit breaker should already have been caught
+	// by canStartDeal before reaching here, but guard at the exchange call
+	// level too in case start() is ever called from a path that bypasses
+	// the serial queue (e.g. resume on startup).
+	if (shareData.appData.circuit_breaker_active) {
+
+		Common.logger(colors.yellow.bold('Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active + ' - Blocking base order for deal ' + dealId));
+
+		return ( LOOP_RETRY );
+	}
+
+	// If the base order is paused (mid-verify after a previous invalid_order),
+	// do not place another buy. Refresh the tracker (so info.updated stays
+	// current and the system-pause banner keeps showing), then return
+	// finished:false so the follow loop stays alive and keeps ticking. This
+	// mirrors the safety order path exactly: the pause is the re-entry guard
+	// WITHIN a live loop — not a loop exit. When verifyInvalidOrder unpauses
+	// the deal in the background, this same loop resumes and advances it to
+	// isStart:1. Refreshing here (as the isStart==1 paused path also does)
+	// prevents checkTrackers from firing false "deal stale" warnings during
+	// the verification window, which can span up to ~200 minutes.
+	if (isDealPause || isDealPauseBuy) {
+
+		await trackBaseDeal(dcaError);
+
+		return ( LOOP_RETRY );
+	}
+
+	let buyError;
+	let buyOrderId = '';
+	let buySuccess = true;
+	let buyOrderInvalid = false;
+	let buyResult = null;
+
+	// Single loop-signal this function returns (one exit at the end). Defaults to
+	// "filled — continue the loop", which is also the limit-order fall-through value.
+	// Each buy outcome below overwrites it; the two guard clauses above return early.
+	let result = LOOP_CONTINUE;
+
+	const baseOrder = deal.orders[0];
+
+	// Something went wrong, don't allow deal to start
+	if (cancelOnly) {
+
+		buySuccess = false;
+	}
+
+	if (baseOrder.type == 'MARKET') {
+		//Send market order to exchange
+
+		if (!config.sandBox && !cancelOnly) {
+
+			const priceFiltered = await filterPrice(exchange, pair, price);
+
+			const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
+
+			if (!buy.success || (buy.success && !buy.success_verify)) {
+
+				buySuccess = false;
+				buyError = buy.message;
+				buyOrderInvalid = buy.invalid_order || false;
+				buyResult = buy;
+			}
+			else {
+
+				buyOrderId = buy['data']['id'];
+			}
+		}
+
+		if (buySuccess) {
+
+			orders[0].filled = 1;
+			orders[0].orderId = buyOrderId;
+			orders[0].dateFilled = new Date();
+
+			if (shareData.appData.verboseLog) {
+
+				Common.logger(
+					colors.green.bold.italic(
+					'Pair: ' +
+					pair +
+					'\tQty: ' +
+					baseOrder.qty +
+					'\tPrice: ' +
+					baseOrder.price +
+					'\tAmount: ' +
+					baseOrder.amount +
+					'\tStatus: Filled'
+					)
+				);
+			}
+
+			await Deals.updateOne({
+				dealId: dealId
+			}, {
+				isStart: 1,
+				orders: orders
+			});
+		}
+
+		await trackBaseDeal(buyError);
+
+		if (!buySuccess) {
+
+			// Base order placed but the exchange could not confirm it (invalid_order).
+			// The order is likely filled — do NOT delete the deal. Pause it, store the
+			// order ID, and verify in the background. This mirrors the safety order path.
+			if (buyOrderInvalid && buyResult && buyResult['data'] && buyResult['data']['id']) {
+
+				const retryMins = 2;
+				const unverifiedOrderId = buyResult['data']['id'];
+
+				// Store the order ID on the base order so the startup resume path
+				// can find it if SymBot restarts mid-verification.
+				orders[0].orderId = unverifiedOrderId;
+				await Deals.updateOne({ dealId: dealId }, { orders: orders });
+
+				const msgErr = 'Invalid base order for deal ID ' + dealId + '. Pausing deal and verifying in ' + retryMins + ' minutes.';
+				await sendDealMessage('deal_error', msgErr);
+
+				isDealPauseReason = 'order_verify_buy';
+				await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
+				isDealPauseBuy = true;
+
+				// Refresh the tracker now that the deal is paused so its info carries
+				// pause_reason. getDealInfo returns a minimal paused info object for an
+				// isStart:0 deal, which lets the UI render the system-pause banner.
+				// (The earlier updateDealTracker call above ran before the pause was set,
+				// so at that point getDealInfo returned no info for this unfilled deal.)
+				await trackBaseDeal(buyError);
+
+				// On successful verification, mark the base order filled and advance
+				// the deal to isStart=1 — EXACTLY what the normal base-order success
+				// path does. We keep SymBot's pre-calculated qty/amount/average/target
+				// untouched so fee accounting, take-profit and profit% are identical to
+				// a normally-filled base order. We do not overwrite with raw exchange
+				// values and do not recalculate the ladder.
+				const handleBaseOrderVerified = async (verifyData) => {
+
+					orders[0].filled = 1;
+					orders[0].orderId = unverifiedOrderId;
+					orders[0].dateFilled = new Date();
+
+					await Deals.updateOne({ dealId: dealId }, { isStart: 1, orders: orders });
+				};
+
+				const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: unverifiedOrderId, onSuccessCallback: handleBaseOrderVerified, pauseBeforeCallback: false });
+
+				verifyPromise.then(async (verifyResult) => {
+
+					if (verifyResult.retriesExhausted) {
+
+						// Retries exhausted and the order still could not be confirmed.
+						// The asset may be sitting on the exchange untracked — warn the
+						// user to verify manually, then disable the bot and remove the deal.
+						const exhaustMsg = 'Base order verification retries exhausted for deal ID ' + dealId + ' (order ' + unverifiedOrderId + '). The asset may be on the exchange — verify manually before re-enabling bot ' + config.botName + '. Disabling bot and removing deal.';
+						await sendDealMessage('deal_error', exhaustMsg);
+
+						await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
+						await deleteDeal(dealId);
+
+						// Remove the tracker entry immediately so no phantom row lingers in
+						// the UI. The live follow loop also stops on its next tick when it finds
+						// the deal gone (dcaFollow returns finished:true on not-found), and
+						// onDealComplete would delete the tracker then too — deleteDealTracker
+						// is idempotent, so the redundant call is safe.
+						await deleteDealTracker(dealId);
+					}
+				});
+
+				// finished:false so the follow loop stays alive. The deal is now paused,
+				// so the pause guard at the top of this function no-ops every subsequent
+				// tick (no re-buy). When verifyInvalidOrder succeeds it advances the deal
+				// to isStart:1 and unpauses; this same live loop then picks up and
+				// continues into normal safety-order / sell monitoring. This mirrors the
+				// safety order path, which also stays alive — NOT a loop exit.
+				result = LOOP_RETRY;
+			}
+			else {
+
+				// Order never placed (genuine exchange rejection, e.g. BadRequest limit-only,
+				// or cancelOnly). No asset on the exchange — disable bot and remove deal.
+				const statusObj = await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
+
+				if (statusObj['success']) {
+
+					await deleteDeal(dealId);
+
+					// Deal removed — signal the loop to stop.
+					result = LOOP_STOPPED;
+				}
+				else {
+
+					// Could not disable/remove — stay alive and let a later tick retry.
+					result = LOOP_RETRY;
+				}
+			}
+		}
+	}
+	else {
+
+		// Limit order logic — not yet implemented. Leaves the default loop-continue
+		// signal in place, exactly as the original inline block did (it returned nothing
+		// and let dcaFollow's default { success:true, finished:false } stand).
+	}
+
+	return ( result );
+};
+
+
+const handleSell = async ({ config, exchange, dealId, deal, orders, order, currentOrder, filledOrders, pair, price, priceSellOrder, profit, profitBase, profitQuote, profitPerc, isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly }) => {
+
+	// success/finished are the loop signal this handler returns. In dcaFollow these were
+	// function-scope with defaults success=true, finished=false; kept identical here so the
+	// (unreachable) deal-not-started fall-through returns the same {true,false} the original
+	// did. Within the sell path success is re-affirmed true and finished is set true only when
+	// the deal sells out (status:1); otherwise the deal keeps following.
+	let success = true;
+	let finished = false;
+
+	if (deal.isStart == 1) {
+
+		let qtySumSellOrder;
+
+		let profitCurrency = config['profitCurrency'];
+
+		let sellOrderIds = [];
+		let sellError;
+		let sellOrderPrice;
+		let sellOrderInvalid = false;
+		let sellOrderStatusInvalid = false;
+		let sellNSF = false;
+		let sellSuccess = true;
+
+		const sellDataObj = await processSellData(pair, price, dealId, exchange, config, currentOrder, filledOrders);
+
+		const feeData = sellDataObj['fee_data'];
+
+		const qtySumSell = feeData['dcaOrderQtySumNet'];
+		const priceFiltered = feeData['priceFiltered'];
+		const exchangeFeePercent = feeData['exchangeFeePercent'];
+		const minMoveAmount = feeData['minMoveAmount'];
+
+		const qtySumSellBase = await filterAmount(exchange, pair, (Number(qtySumSell) - Number(profitBase)));
+
+		// Default profit currency to quote if not defined or profit is negative
+		if (!profitCurrency || profitCurrency == 'quote' || Number(profitBase) <= 0) {
+
+			qtySumSellOrder = qtySumSell;
+		}
+		else {
+
+			qtySumSellOrder = qtySumSellBase;
+		}
+
+		// Calculate profit based on new exchange fee percent
+		//const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, exchangeFeePercent);
+		//const profitPercFinal = profitData['profit_percentage'];
+		const profitPercFinal = Number(Number(profitPerc - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
+
+		const handleSuccessfulSell = async (verifyData) => {
+
+			// Sell price/profit default to the values computed when the sell was
+			// first attempted (market price at that moment). If this callback is
+			// running after a late invalid_order verification, the order actually
+			// filled minutes earlier at a different price — use the exchange's
+			// reported fill price so recorded profit matches the real execution
+			// rather than the market price at verification time.
+			//
+			// Quantity is unaffected (qtySum comes from accumulated buys), so only
+			// the sell price and the profit figures derived from it are recomputed.
+			// The fee adjustment (exchangeFeeSumDiffPercent) is derived from the
+			// buy-side sums and does not depend on the sell price, so it is reused.
+			let sellPriceFinal   = price;
+			let profitFinal      = profitPercFinal;
+			let profitBaseFinal  = profitBase;
+			let profitQuoteFinal = profitQuote;
+
+			if (verifyData && verifyData.order_price && Number(verifyData.order_price) > 0) {
+
+				sellPriceFinal = Number(verifyData.order_price);
+
+				const profitDataVerified = await calculateProfit(exchange, pair, sellPriceFinal, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee, config.sandBox);
+
+				profitBaseFinal  = profitDataVerified['profit_base'];
+				profitQuoteFinal = profitDataVerified['profit'];
+				profitFinal      = Number(Number(profitDataVerified['profit_percentage'] - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
+			}
+
+			await updateDealTracker({
+				'exchange': exchange,
+				'deal_id': dealId,
+				'price': sellPriceFinal,
+				'config': config,
+				'orders': orders,
+				'pause': isDealPause,
+				'pause_buy': isDealPauseBuy,
+				'pause_sell': isDealPauseSell,
+				'pause_reason': isDealPauseReason
+			});
+
+			if (shareData.appData.verboseLog) {
+
+				Common.logger(
+				colors.blue.bold.italic(
+				'Pair: ' + pair +
+				'\tQty: ' + currentOrder.qtySum +
+				'\tLast Price: $' + sellPriceFinal +
+				'\tDCA Price: $' + currentOrder.average +
+				'\tSell Price: $' + currentOrder.target +
+				'\tStatus: ' + colors.red('SELL') +
+				'\tProfit: ' + profitFinal
+				));
+			}
+
+			// orderId is stored as an array for partial fill retry compatibility.
+			// Single-order deals will have a one-element array.
+			// Legacy deals with a string orderId are handled transparently by consumers.
+			const sellData = {
+				'date': new Date(),
+				'orderId': sellOrderIds,
+				'qtySum': currentOrder.qtySum,
+				'qtySumSell': qtySumSell,
+				'qtySumSellOrder': qtySumSellOrder,
+				'price': sellPriceFinal,
+				'average': currentOrder.average,
+				'target': currentOrder.target,
+				'profit': profitFinal,
+				'profitBase': profitBaseFinal,
+				'profitQuote': profitQuoteFinal,
+				'feeData': feeData
+				 };
+
+			await Deals.updateOne({ dealId }, {
+				'sellData': sellData,
+				'panicSell': isDealPanicSell,
+				'canceled': isDealCancel,
+				'status': 1
+				  });
+
+			finished = true;
+
+			await deleteDealTracker(dealId);
+
+			if (shareData.appData.verboseLog) {
+
+				Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
+			}
+
+			sendNotificationFinish(config.botName, dealId, pair, sellData);
+		};
+
+		if (!config.sandBox && !isDealCancel && !cancelOnly) {
+
+			const sell = await sellOrder(exchange, dealId, pair, qtySumSellOrder, priceFiltered);
+
+			// Sell not successful / Sell successful but verification failed
+			if (!sell.success || (sell.success && !sell.success_verify)) {
+
+				// sellOrderInvalid - Order not found or unable to be looked up on exchange
+				// sellOrderStatusInvalid - Order may have been canceled by exchange or some other issue
+
+				sellSuccess = false;
+
+				sellOrderInvalid = sell.invalid_order;
+				sellOrderStatusInvalid = sell.invalid_status;
+				sellError = sell.message;
+				sellNSF = sell.nsf;
+
+				let msgErr = null;
+				let msgType = null;
+
+				if (sellNSF) {
+
+					// Let NSF reduce quantity sell error logic handle below
+				}
+				else if (sellOrderStatusInvalid) {
+
+					// Check if exchange cancelled after a partial fill (e.g. Coinbase price protection)
+					const cancelPartialFilled = Number(sell['data_order']['quantity'] ?? 0);
+					const cancelShortfall = cancelPartialFilled > 0
+						? ((Number(qtySumSellOrder) - cancelPartialFilled) / Number(qtySumSellOrder)) * 100
+						: 0;
+
+					if (cancelPartialFilled > 0 && cancelShortfall > partialSellFillThresholdPercent) {
+
+						// Exchange cancelled after partial fill — record fill and
+						// wait for settlement before retrying the remainder
+						sellOrderIds.push(sell['data']['id']);
+
+						Common.logger(colors.bgYellow.bold(
+							'Exchange-cancelled partial fill for deal ID ' + dealId +
+							' / Filled: ' + cancelPartialFilled.toFixed(8) +
+							' / Shortfall: ' + cancelShortfall.toFixed(2) + '% — waiting for settlement'
+						));
+
+						Common.sendNotification({
+							'message': `Partial sell fill for deal ID ${dealId}. Exchange cancelled after ${(100 - cancelShortfall).toFixed(0)}% filled. Waiting for settlement then retrying remainder.`,
+							'type': 'deal_error',
+							'telegram_id': shareData.appData.telegram_id
+						});
+
+						// Settlement delay — give exchange time to release remaining balance
+						const settlementDelayMs = 30000;
+						await Common.delay(settlementDelayMs);
+
+						let cancelRetryCount = 0;
+						let cancelTotalFilled = cancelPartialFilled;
+						let cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
+
+						while (cancelRetryCount < maxPartialSellRetries && cancelQtyRemaining > 0) {
+
+							if (isDealCancel || isDealPanicSell) break;
+
+							await Common.delay(partialSellRetryDelayMs);
+							cancelRetryCount++;
+
+							const cancelSymData = await getSymbol(exchange, pair);
+							const cancelPrice = (cancelSymData.data?.bid ?? price);
+							const cancelPriceFiltered = await filterPrice(exchange, pair, cancelPrice);
+							const cancelQtyFiltered = await filterAmount(exchange, pair, cancelQtyRemaining);
+
+							if (!cancelQtyFiltered || Number(cancelQtyFiltered) <= 0) break;
+
+							Common.logger(colors.bgYellow.bold(
+								'Settlement retry ' + cancelRetryCount + '/' + maxPartialSellRetries +
+								' for deal ID ' + dealId + ' / Selling: ' + cancelQtyFiltered
+							));
+
+							const cancelSellRetry = await sellOrder(exchange, dealId, pair, cancelQtyFiltered, cancelPriceFiltered);
+
+							// Credit whatever actually filled this attempt, regardless of the
+							// final order status. A retry can partially fill then be cancelled by
+							// the exchange (e.g. Coinbase price protection) — that returns
+							// success_verify:false but still reports a real fill in
+							// data_order.quantity. Crediting only clean (success && success_verify)
+							// fills would drop that quantity, leaving cancelQtyRemaining too high so
+							// every later retry over-asks and hits InsufficientFunds. NSF attempts
+							// report an empty data_order so this credits 0 for them. Adjusts only the
+							// in-memory tally — the deal's pre-calculated qtySumSellOrder is never
+							// mutated and remains the read-only ceiling.
+							const cancelRetryFilled = Number(cancelSellRetry?.['data_order']?.['quantity'] ?? 0);
+
+							if (cancelRetryFilled > 0) {
+
+								if (cancelSellRetry?.['data']?.['id']) {
+
+									sellOrderIds.push(cancelSellRetry['data']['id']);
+								}
+
+								cancelTotalFilled += cancelRetryFilled;
+								cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
+
+								if ((cancelQtyRemaining / Number(qtySumSellOrder)) * 100 <= partialSellFillThresholdPercent) break;
+							}
+							else if (cancelSellRetry.nsf) {
+
+								// Still settling — extend wait
+								await Common.delay(settlementDelayMs);
+							}
+						}
+
+						// Mark sell successful so deal closes with the partial fill
+						sellSuccess = true;
+						sellOrderStatusInvalid = false;
+
+					} else {
+
+						// Clean cancel with no partial fill — retry after short delay
+						await Common.delay(5000);
+					}
+				}
+				else if (sellOrderInvalid) {
+
+					const retryMins = 1;
+
+					msgType = 'deal_error';
+					msgErr = `Invalid order for deal ID ${dealId}. Pausing sell orders for ${retryMins} minutes.`;
+
+					isDealVerifying = true;
+
+					const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: sell['data']['id'], onSuccessCallback: handleSuccessfulSell, pauseBeforeCallback: true });
+
+					// Reset verifying flag if needed
+					verifyPromise.then(async (verifyResult) => {
+
+						if (verifyResult.retriesExhausted || verifyResult.notPaused) {
+							clearSellErrorVerifying(dealId);
+						}
+					});
+				}
+				else {
+
+					msgType = 'deal_error';
+					msgErr = `An error occurred during sell order for deal ID ${dealId}. Pausing any further sell orders for deal.`;
+				}
+
+				if (msgErr) {
+
+					await sendDealMessage(msgType, msgErr);
+					isDealPauseReason = 'order_verify_sell';
+					await pauseDeal(config.botId, dealId, null, null, true, isDealPauseReason);
+					isDealPauseSell = true;
+				}
+			}
+			else {
+
+				// Initial sell succeeded — record this order ID and check for partial fill
+				sellOrderIds.push(sell['data']['id']);
+
+				const initialQtyFilled = Number(sell['data_order']['quantity'] ?? 0);
+				let totalQtyFilled = initialQtyFilled;
+				let qtyRemaining = Number(qtySumSellOrder) - totalQtyFilled;
+
+				// Only attempt partial fill retry if the exchange reported a positive
+				// filled quantity. A zero or null quantity after a successful
+				// verifyBuySellOrder means the exchange didn't report the fill amount —
+				// not that nothing was filled. Retrying in that case would sell again
+				// on a position that has already been fully closed.
+				const shortfallPercent = initialQtyFilled > 0
+					? (qtyRemaining / Number(qtySumSellOrder)) * 100
+					: 0;
+
+				if (shortfallPercent > partialSellFillThresholdPercent) {
+
+					// Partial fill detected — attempt to sell the remainder
+					let retryCount = 0;
+
+					Common.logger(colors.bgYellow.bold(
+						'Partial sell fill detected for deal ID ' + dealId +
+						' / Requested: ' + qtySumSellOrder +
+						' / Filled: ' + totalQtyFilled.toFixed(8) +
+						' / Remaining: ' + qtyRemaining.toFixed(8) +
+						' / Shortfall: ' + shortfallPercent.toFixed(2) + '%'
+					));
+
+					Common.sendNotification({
+						'message': 'Partial sell fill detected for deal ID ' + dealId + '. Attempting to sell remaining quantity.',
+						'type': 'deal_error',
+						'telegram_id': shareData.appData.telegram_id
+					});
+
+					while (retryCount < maxPartialSellRetries && qtyRemaining > 0) {
+
+						// Stop retrying if a cancel or panic sell was requested
+						if (isDealCancel || isDealPanicSell) {
+
+							break;
+						}
+
+						await Common.delay(partialSellRetryDelayMs);
+
+						retryCount++;
+
+						// Get fresh price for this retry attempt
+						const symbolDataRetry = await getSymbol(exchange, pair);
+						const symbolRetry = symbolDataRetry.data;
+						const priceRetry = symbolRetry?.bid ?? price;
+						const priceRetryFiltered = await filterPrice(exchange, pair, priceRetry);
+
+						// Check the remaining qty meets exchange minimum after precision filter
+						const qtyRemainingFiltered = await filterAmount(exchange, pair, qtyRemaining);
+
+						if (!qtyRemainingFiltered || Number(qtyRemainingFiltered) <= 0) {
+
+							Common.logger(colors.bgYellow.bold(
+								'Partial sell retry halted for deal ID ' + dealId +
+								' — remaining quantity ' + qtyRemaining.toFixed(8) +
+								' is below exchange minimum. Accepting partial fill.'
+							));
+
+							break;
+						}
+
+						Common.logger(colors.bgYellow.bold(
+							'Partial sell retry ' + retryCount + '/' + maxPartialSellRetries +
+							' for deal ID ' + dealId +
+							' / Selling remaining: ' + qtyRemainingFiltered
+						));
+
+						const sellRetry = await sellOrder(exchange, dealId, pair, qtyRemainingFiltered, priceRetryFiltered);
+
+						// Credit whatever actually filled this attempt, regardless of the final
+						// order status. A retry can partially fill then be cancelled by the
+						// exchange (e.g. Coinbase price protection) — that returns
+						// success_verify:false but still reports a real fill in data_order.quantity.
+						// Crediting only clean fills would drop that quantity, leaving qtyRemaining
+						// too high so later retries over-ask and hit InsufficientFunds. A truly
+						// failed attempt reports an empty data_order and credits 0. Adjusts only the
+						// in-memory tally — pre-calculated qtySumSellOrder is never mutated.
+						const retryQtyFilled = Number(sellRetry?.['data_order']?.['quantity'] ?? 0);
+
+						if (retryQtyFilled > 0) {
+
+							if (sellRetry?.['data']?.['id']) {
+
+								sellOrderIds.push(sellRetry['data']['id']);
+							}
+
+							totalQtyFilled += retryQtyFilled;
+							qtyRemaining = Number(qtySumSellOrder) - totalQtyFilled;
+
+							Common.logger(colors.bgYellow.bold(
+								'Partial sell retry ' + retryCount + ' filled for deal ID ' + dealId +
+								' / Filled this attempt: ' + retryQtyFilled.toFixed(8) +
+								' / Total filled: ' + totalQtyFilled.toFixed(8) +
+								' / Remaining: ' + qtyRemaining.toFixed(8)
+							));
+
+							const remainingShortfallPercent = (Math.max(qtyRemaining, 0) / Number(qtySumSellOrder)) * 100;
+
+							if (remainingShortfallPercent <= partialSellFillThresholdPercent) {
+
+								// Within acceptable threshold — done
+								break;
+							}
+						}
+						else {
+
+							Common.logger(colors.bgYellow.bold(
+								'Partial sell retry ' + retryCount + ' filled nothing for deal ID ' + dealId +
+								': ' + (sellRetry.message || 'unknown error')
+							));
+						}
+					}
+
+					if (retryCount >= maxPartialSellRetries) {
+
+						const finalShortfall = ((Math.max(qtyRemaining, 0) / Number(qtySumSellOrder)) * 100).toFixed(2);
+
+						Common.logger(colors.bgRed.bold(
+							'Max partial sell retries reached for deal ID ' + dealId +
+							'. Accepting fill. Final shortfall: ' + finalShortfall + '%'
+						));
+
+						Common.sendNotification({
+							'message': 'Max partial sell retries reached for deal ID ' + dealId + '. Accepted fill with ' + finalShortfall + '% shortfall.',
+							'type': 'deal_error',
+							'telegram_id': shareData.appData.telegram_id
+						});
+					}
+				}
+			}
+		}
+
+		if (sellSuccess) {
+
+			await handleSuccessfulSell();
+		}
+		else {
+
+			// Sell failed
+			dealTracker[dealId]['update']['deal_sell_error']['nsf'] = sellNSF;
+			dealTracker[dealId]['update']['deal_sell_error']['verifying'] = isDealVerifying;
+			dealTracker[dealId]['update']['deal_sell_error']['count']++;
+			dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
+
+			await Common.delay(1000);
+		}
+
+		success = true;
+	}
+
+	// Single exit. Within the sell path success stays true; finished becomes true only when
+	// the deal sells out (status:1). So the signal is DONE when sold out, else CONTINUE. If the
+	// deal is not started (unreachable — caller is already in the isStart:1 branch) the defaults
+	// keep success:true/finished:false, i.e. CONTINUE, matching dcaFollow's original fall-through.
+	return ( finished ? LOOP_DONE : LOOP_CONTINUE );
+};
+
+
+const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order, currentOrder, pair, price, priceBuyOrder, profit, i, isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly }) => {
+
+	// Working state, local to this handler (was per-iteration / preamble state in dcaFollow).
+	let buyError;
+	let buySuccess = true;
+	let buyOrderId = '';
+	let buyOrderPrice;
+	let buyOrderInvalid = false;
+	let buyOrderStatusInvalid = false;
+	let buyNSF = false;
+	// isBuy is propagated back to dcaFollow (read after the loop for the 'max safety orders
+	// used' log). Returned alongside the loop signal.
+	let isBuy = false;
+
+	//Buy DCA
+
+	// Circuit breaker blocks safety order buys
+	if (shareData.appData.circuit_breaker_active) {
+
+		Common.logger(colors.yellow.bold('Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active + ' - Blocking safety order for deal ' + dealId));
+
+		return ( { 'result': LOOP_RETRY, 'isBuy': isBuy } );
+	}
+
+	isBuy = true;
+
+	const handleSuccessfulBuy = async ({ dealId, orderIndex, buyOrderId, buyOrderPrice, orders, price, currentOrder, exchange, pair, profit }) => {
+
+		let recalcPrice = price;
+
+		if (buyOrderPrice !== undefined && buyOrderPrice !== null && buyOrderPrice !== '' && buyOrderPrice !== 0) {
+
+			recalcPrice = buyOrderPrice;
+		}
+
+		const orderUpdated = await updateOrderDeal(dealId, orderIndex, buyOrderId, orders);
+
+		if (shareData.appData.verboseLog) {
+
+			Common.logger(
+				colors.blue.bold.italic(
+				'Pair: ' + pair +
+				'\tQty: ' + currentOrder.qtySum +
+				'\tLast Price: $' + price +
+				'\tDCA Price: $' + currentOrder.average +
+				'\tSell Price: $' + currentOrder.target +
+				'\tStatus: ' + colors.green('BUY') +
+				'\tProfit: ' + profit
+			));
+		}
+
+		await recalculateOrders({
+			'exchange': exchange,
+			'dealId': dealId,
+			'orderIndex': undefined,
+			'orderNo': orderUpdated.orderNo,
+			'orderId': undefined,
+			'price': recalcPrice,
+			'dryRun': false
+		});
+	};
+
+	if (!config.sandBox) {
+
+		const priceFiltered = await filterPrice(exchange, pair, price);
+
+		// Record safety order trigger for circuit breaker evaluation
+		recordSafetyOrderTrigger(dealId, pair, price);
+
+		const buy = await buyOrder(exchange, dealId, pair, order.qty, priceFiltered);
+
+		const handleSuccessfulBuyPostVerify = async () => {
+
+			await handleSuccessfulBuy({
+				'dealId': dealId,
+				'orderIndex': i,
+				'buyOrderId': buy['data']['id'],
+				'buyOrderPrice': buy['data_order']['price'],
+				'orders': Common.deepCopy(orders),
+				'price': price,
+				'currentOrder': currentOrder,
+				'exchange': exchange,
+				'pair': pair,
+				'profit': profit
+			});
+
+			// Wait before unpausing deal in callback to ensure existing data settles
+			await Common.delay(5000);
+		};
+
+		// Buy not successful / Buy successful but verification failed 
+		if (!buy.success || (buy.success && !buy.success_verify)) {
+
+			buySuccess = false;
+
+			buyOrderInvalid = buy.invalid_order;
+			buyOrderStatusInvalid = buy.invalid_status;
+			buyError = buy.message;
+			buyNSF = buy.nsf;
+
+			let msgErr;
+			let msgType;
+
+			// Insufficient funds to buy
+			if (buyNSF) {
+
+				msgType = 'deal_error';
+				msgErr = 'Insufficient funds to buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
+			}
+			else if (buyOrderInvalid) {
+
+				const retryMins = 2;
+
+				msgType = 'deal_error';
+				msgErr = 'Invalid order for deal ID ' + dealId + '. Pausing buy orders for ' + retryMins + ' minutes.';
+
+				isDealVerifying = true;
+
+				const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: buy['data']['id'], onSuccessCallback: handleSuccessfulBuyPostVerify, pauseBeforeCallback: false });
+
+				// Reset verifying flag if needed
+				verifyPromise.then(async (verifyResult) => {
+
+					if (verifyResult.retriesExhausted || verifyResult.notPaused) {
+						clearSellErrorVerifying(dealId);
+					}
+				});
+			}
+			else if (buyOrderStatusInvalid) {
+
+				// Exchange returned a terminal-but-not-clean status (e.g. Coinbase
+				// CANCELLED via "price protection point was breached"). Unlike an
+				// unverifiable order (buyOrderInvalid, which we retry), a status-invalid
+				// order is final — there is nothing to keep polling for. BUT the exchange
+				// may have PARTIALLY FILLED before cancelling: buyOrder surfaces that fill
+				// in data_order.quantity. We currently do NOT credit that partial into the
+				// deal ladder (that requires recomputing average/qty/target — tracked as a
+				// separate item, see backlog #66/#58). To avoid silently stranding coin,
+				// alert with the exact fill so it can be reconciled manually, then pause.
+				const buyPartialFilled = Number(buy['data_order']?.['quantity'] ?? 0);
+
+				msgType = 'deal_error';
+
+				if (buyPartialFilled > 0) {
+
+					const buyPartialPrice = buy['data_order']?.['price'];
+					const buyPartialAmount = buy['data_order']?.['amount'];
+
+					msgErr = 'Exchange-cancelled PARTIAL buy fill for deal ID ' + dealId +
+						'. Filled ' + buyPartialFilled + ' ' + pair.split('/')[0] +
+						(buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : '') +
+						(buyPartialAmount != undefined ? ' ($' + buyPartialAmount + ')' : '') +
+						' before the exchange cancelled the remainder. This fill is NOT yet ' +
+						'tracked in the deal — reconcile manually. Pausing further buy orders.';
+
+					Common.logger(colors.bgRed.bold(
+						'Exchange-cancelled partial BUY fill for deal ID ' + dealId +
+						' / Filled: ' + buyPartialFilled +
+						(buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : '') +
+						' — NOT credited to deal, manual reconciliation required'
+					));
+
+					Common.sendNotification({
+						'message': `Partial BUY fill for deal ID ${dealId}. Exchange filled ${buyPartialFilled} ${pair.split('/')[0]}${buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : ''} then cancelled the rest. This fill is NOT tracked in the deal — reconcile manually.`,
+						'type': 'deal_error',
+						'telegram_id': shareData.appData.telegram_id
+					});
+				}
+				else {
+
+					msgErr = 'Buy order for deal ID ' + dealId + ' was cancelled by the exchange with no fill. Pausing any further buy orders for deal.';
+				}
+			}
+			else {
+
+				msgType = 'deal_error';
+				msgErr = 'An error occurred during buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
+			}
+
+			// Pause deal buy orders
+			if (msgErr != undefined && msgErr != null && msgErr != '') {
+
+				await sendDealMessage(msgType, msgErr);
+
+				isDealPauseReason = 'order_verify_buy';
+				const pauseData = await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
+				isDealPauseBuy = true;
+			}
+		}
+		else {
+
+			buyOrderId = buy['data']['id'];
+			buyOrderPrice = buy['data_order']['price'];
+		}
+	}
+
+	if (buySuccess) {
+
+		await handleSuccessfulBuy({
+			'dealId': dealId,
+			'orderIndex': i,
+			'buyOrderId': buyOrderId,
+			'buyOrderPrice': buyOrderPrice,
+			'orders': orders,
+			'price': price,
+			'currentOrder': currentOrder,
+			'exchange': exchange,
+			'pair': pair,
+			'profit': profit
+		});
+	}
+
+	await updateDealTracker({
+				'exchange': exchange,
+				'deal_id': dealId,
+				'price': price,
+				'config': config,
+				'orders': orders,
+				'pause': isDealPause,
+				'pause_buy': isDealPauseBuy,
+				'pause_sell': isDealPauseSell,
+				'pause_reason': isDealPauseReason,
+				'error': buyError
+			});
+
+	// Single exit. On buy failure signal RETRY (loop keeps ticking, deal paused); on success
+	// result:null tells dcaFollow to fall through to its post-loop logic (incl. the isBuy log).
+	// isBuy is propagated either way (it was set true once a buy was attempted).
+	const result = buySuccess ? null : LOOP_RETRY;
+
+	return ( { 'result': result, 'isBuy': isBuy } );
+};
+
+
 const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 	let success = true;
@@ -844,21 +1808,21 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 		Common.logger(colors.red.bold(shareData.appData.database_error + ' - Not processing'));
 
-		return ( { 'success': false, 'finished': false } );
+		return ( LOOP_RETRY );
 	}
 
 	if (shareData.appData.system_pause != undefined && shareData.appData.system_pause != null && shareData.appData.system_pause != '') {
 
 		Common.logger(colors.red.bold('System Paused: ' + shareData.appData.system_pause + ' - Not processing deal ' + dealId));
 
-		return ( { 'success': false, 'finished': false } );
+		return ( LOOP_RETRY );
 	}
 
 	if (shareData.appData.sig_int) {
 
 		Common.logger(colors.red.bold(shareData.appData.name + ' is terminating. Not processing deal ' + dealId));
 
-		return ( { 'success': false, 'finished': false } );
+		return ( LOOP_RETRY );
 	}
 
 	if (dealTracker[dealId] != undefined && dealTracker[dealId] != null && dealTracker[dealId]['update'] != undefined && dealTracker[dealId]['update'] != null) {
@@ -878,7 +1842,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 			Common.logger(colors.red.bold('Deal ID ' + dealId + ' stop requested. Not processing'));
 	
-			return ( { 'success': false, 'finished': true } );
+			return ( LOOP_STOPPED );
 		}
 
 		// Refresh config without restarting deal
@@ -888,7 +1852,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 			delete dealTracker[dealId]['update']['config'];
 
-			return ( { 'success': true, 'finished': false, 'config': configRefresh } );
+			return ( loopContinueWithConfig(configRefresh) );
 		}
 
 		// Deal sell error
@@ -1004,240 +1968,24 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 			isDealPause = Common.convertBoolean(deal.paused, false);
 			isDealPauseBuy = Common.convertBoolean(deal.pausedBuy, false);
 			isDealPauseSell = Common.convertBoolean(deal.pausedSell, false);
+			// Re-read the pause REASON from the deal each tick too (it's a string, not a
+			// boolean). The extracted handlers (handleSafetyOrder / handleSell) set the
+			// reason on their own local copy when they pause a deal for order verification;
+			// that local mutation does not propagate back here. Without refreshing it from
+			// the deal, the idle-arm updateDealTracker below would send pause_reason:'' on
+			// every subsequent paused tick, so the UI never renders the "system paused"
+			// (order_verify_buy) banner even though the deal is correctly paused.
+			isDealPauseReason = deal.pauseReason || '';
 
 			if (deal.isStart == 0) {
 
-				// Defence in depth — circuit breaker should already have been caught
-				// by canStartDeal before reaching here, but guard at the exchange call
-				// level too in case start() is ever called from a path that bypasses
-				// the serial queue (e.g. resume on startup).
-				if (shareData.appData.circuit_breaker_active) {
+				const baseResult = await handleBaseOrder({
+					config, exchange, dealId, deal, orders, pair, price,
+					isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason,
+					dcaError, cancelOnly
+				});
 
-					Common.logger(colors.yellow.bold('Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active + ' - Blocking base order for deal ' + dealId));
-
-					return ( { 'success': false, 'finished': false, 'reason': 'Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active } );
-				}
-
-				// If the base order is paused (mid-verify after a previous invalid_order),
-				// do not place another buy. Refresh the tracker (so info.updated stays
-				// current and the system-pause banner keeps showing), then return
-				// finished:false so the follow loop stays alive and keeps ticking. This
-				// mirrors the safety order path exactly: the pause is the re-entry guard
-				// WITHIN a live loop — not a loop exit. When verifyInvalidOrder unpauses
-				// the deal in the background, this same loop resumes and advances it to
-				// isStart:1. Refreshing here (as the isStart==1 paused path also does)
-				// prevents checkTrackers from firing false "deal stale" warnings during
-				// the verification window, which can span up to ~200 minutes.
-				if (isDealPause || isDealPauseBuy) {
-
-					await updateDealTracker({
-						'exchange': exchange,
-						'deal_id': dealId,
-						'price': price,
-						'config': config,
-						'orders': orders,
-						'pause': isDealPause,
-						'pause_buy': isDealPauseBuy,
-						'pause_sell': isDealPauseSell,
-						'pause_reason': isDealPauseReason,
-						'error': dcaError
-					});
-
-					return ( { 'success': false, 'finished': false } );
-				}
-
-				let buyError;
-				let buyOrderId = '';
-				let buySuccess = true;
-				let buyOrderInvalid = false;
-				let buyResult = null;
-
-				const baseOrder = deal.orders[0];
-				targetPrice = baseOrder.target;
-
-				// Something went wrong, don't allow deal to start
-				if (cancelOnly) {
-
-					buySuccess = false;
-				}
-
-				if (baseOrder.type == 'MARKET') {
-					//Send market order to exchange
-
-					if (!config.sandBox && !cancelOnly) {
-
-						const priceFiltered = await filterPrice(exchange, pair, price);
-
-						const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
-
-						if (!buy.success || (buy.success && !buy.success_verify)) {
-
-							buySuccess = false;
-							buyError = buy.message;
-							buyOrderInvalid = buy.invalid_order || false;
-							buyResult = buy;
-						}
-						else {
-
-							buyOrderId = buy['data']['id'];
-						}
-					}
-
-					if (buySuccess) {
-
-						orders[0].filled = 1;
-						orders[0].orderId = buyOrderId;
-						orders[0].dateFilled = new Date();
-
-						if (shareData.appData.verboseLog) {
-
-							Common.logger(
-								colors.green.bold.italic(
-								'Pair: ' +
-								pair +
-								'\tQty: ' +
-								baseOrder.qty +
-								'\tPrice: ' +
-								baseOrder.price +
-								'\tAmount: ' +
-								baseOrder.amount +
-								'\tStatus: Filled'
-								)
-							);
-						}
-
-						await Deals.updateOne({
-							dealId: dealId
-						}, {
-							isStart: 1,
-							orders: orders
-						});
-					}
-
-					await updateDealTracker({ 
-											'exchange': exchange,
-											'deal_id': dealId,
-											'price': price,
-											'config': config,
-											'orders': orders,
-											'pause': isDealPause,
-											'pause_buy': isDealPauseBuy,
-											'pause_sell': isDealPauseSell,
-											'pause_reason': isDealPauseReason,
-											'error': buyError
-										});
-
-					if (!buySuccess) {
-
-						// Base order placed but the exchange could not confirm it (invalid_order).
-						// The order is likely filled — do NOT delete the deal. Pause it, store the
-						// order ID, and verify in the background. This mirrors the safety order path.
-						if (buyOrderInvalid && buyResult && buyResult['data'] && buyResult['data']['id']) {
-
-							const retryMins = 2;
-							const unverifiedOrderId = buyResult['data']['id'];
-
-							// Store the order ID on the base order so the startup resume path
-							// can find it if SymBot restarts mid-verification.
-							orders[0].orderId = unverifiedOrderId;
-							await Deals.updateOne({ dealId: dealId }, { orders: orders });
-
-							const msgErr = 'Invalid base order for deal ID ' + dealId + '. Pausing deal and verifying in ' + retryMins + ' minutes.';
-							await sendDealMessage('deal_error', msgErr);
-
-							isDealPauseReason = 'order_verify_buy';
-							await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
-							isDealPauseBuy = true;
-
-							isDealVerifying = true;
-
-							// Refresh the tracker now that the deal is paused so its info carries
-							// pause_reason. getDealInfo returns a minimal paused info object for an
-							// isStart:0 deal, which lets the UI render the system-pause banner.
-							// (The earlier updateDealTracker call above ran before the pause was set,
-							// so at that point getDealInfo returned no info for this unfilled deal.)
-							await updateDealTracker({
-								'exchange': exchange,
-								'deal_id': dealId,
-								'price': price,
-								'config': config,
-								'orders': orders,
-								'pause': isDealPause,
-								'pause_buy': isDealPauseBuy,
-								'pause_sell': isDealPauseSell,
-								'pause_reason': isDealPauseReason,
-								'error': buyError
-							});
-
-							// On successful verification, mark the base order filled and advance
-							// the deal to isStart=1 — EXACTLY what the normal base-order success
-							// path does. We keep SymBot's pre-calculated qty/amount/average/target
-							// untouched so fee accounting, take-profit and profit% are identical to
-							// a normally-filled base order. We do not overwrite with raw exchange
-							// values and do not recalculate the ladder.
-							const handleBaseOrderVerified = async (verifyData) => {
-
-								orders[0].filled = 1;
-								orders[0].orderId = unverifiedOrderId;
-								orders[0].dateFilled = new Date();
-
-								await Deals.updateOne({ dealId: dealId }, { isStart: 1, orders: orders });
-							};
-
-							const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: unverifiedOrderId, onSuccessCallback: handleBaseOrderVerified, pauseBeforeCallback: false });
-
-							verifyPromise.then(async (verifyResult) => {
-
-								if (verifyResult.retriesExhausted) {
-
-									// Retries exhausted and the order still could not be confirmed.
-									// The asset may be sitting on the exchange untracked — warn the
-									// user to verify manually, then disable the bot and remove the deal.
-									const exhaustMsg = 'Base order verification retries exhausted for deal ID ' + dealId + ' (order ' + unverifiedOrderId + '). The asset may be on the exchange — verify manually before re-enabling bot ' + config.botName + '. Disabling bot and removing deal.';
-									await sendDealMessage('deal_error', exhaustMsg);
-
-									await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
-									await deleteDeal(dealId);
-
-									// Remove the tracker entry immediately so no phantom row lingers in
-									// the UI. The live follow loop also stops on its next tick when it finds
-									// the deal gone (dcaFollow returns finished:true on not-found), and
-									// onDealComplete would delete the tracker then too — deleteDealTracker
-									// is idempotent, so the redundant call is safe.
-									await deleteDealTracker(dealId);
-								}
-							});
-
-							// Return finished:false so the follow loop stays alive. The deal is now
-							// paused, so the pause guard at the top of this block no-ops every
-							// subsequent tick (no re-buy). When verifyInvalidOrder succeeds it
-							// advances the deal to isStart:1 and unpauses; this same live loop then
-							// picks up and continues into normal safety-order / sell monitoring.
-							// This mirrors the safety order path, which also returns finished:false
-							// and relies on the loop staying alive — NOT on a loop exit.
-							return ( { 'success': false, 'finished': false } );
-						}
-
-						// Order never placed (genuine exchange rejection, e.g. BadRequest limit-only,
-						// or cancelOnly). No asset on the exchange — disable bot and remove deal.
-						let finished = false;
-
-						const statusObj = await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
-
-						if (statusObj['success']) {
-
-							await deleteDeal(dealId);
-
-							finished = true;
-						}
-
-						return ( { 'success': false, 'finished': finished } );
-					}
-				}
-				else {
-
-					// Limit order logic
-				}
+				return ( baseResult );
 			}
 			else {
 
@@ -1293,626 +2041,33 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						const priceSellOrder = parseFloat(Number(currentOrder.target) + (Number(currentOrder.target) * priceSlippageSellPercent));
 
 						if ((price <= priceBuyOrder && order.filled == 0) && !cancelOnly && !isDealPause && !isDealPauseBuy && !isDealCancel && !isDealPanicSell) {
-							//Buy DCA
 
-							// Circuit breaker blocks safety order buys
-							if (shareData.appData.circuit_breaker_active) {
+							const safetyResult = await handleSafetyOrder({
+								config, exchange, dealId, deal, orders, order, currentOrder, pair, price,
+								priceBuyOrder, profit, i, isDealPause, isDealPauseBuy, isDealPauseSell,
+								isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly
+							});
 
-								Common.logger(colors.yellow.bold('Circuit Breaker Active: ' + shareData.appData.circuit_breaker_active + ' - Blocking safety order for deal ' + dealId));
+							// Propagate isBuy (read after the loop for the 'max safety orders used' log).
+							isBuy = safetyResult['isBuy'];
 
-								return ( { 'success': false, 'finished': false } );
-							}
+							// A non-null result is a loop-exit/retry signal; null means the buy succeeded
+							// and the deal keeps following (fall through to the post-loop logic).
+							if (safetyResult['result'] != null) {
 
-							isBuy = true;
-
-							const handleSuccessfulBuy = async ({ dealId, orderIndex, buyOrderId, buyOrderPrice, orders, price, currentOrder, exchange, pair, profit }) => {
-
-								let recalcPrice = price;
-
-								if (buyOrderPrice !== undefined && buyOrderPrice !== null && buyOrderPrice !== '' && buyOrderPrice !== 0) {
-									
-									recalcPrice = buyOrderPrice;
-								}
-
-								const orderUpdated = await updateOrderDeal(dealId, orderIndex, buyOrderId, orders);
-
-								if (shareData.appData.verboseLog) {
-
-									Common.logger(
-										colors.blue.bold.italic(
-										'Pair: ' + pair +
-										'\tQty: ' + currentOrder.qtySum +
-										'\tLast Price: $' + price +
-										'\tDCA Price: $' + currentOrder.average +
-										'\tSell Price: $' + currentOrder.target +
-										'\tStatus: ' + colors.green('BUY') +
-										'\tProfit: ' + profit
-									));
-								}
-
-								await recalculateOrders({
-									'exchange': exchange,
-									'dealId': dealId,
-									'orderIndex': undefined,
-									'orderNo': orderUpdated.orderNo,
-									'orderId': undefined,
-									'price': recalcPrice,
-									'dryRun': false
-								});
-							};
-
-							if (!config.sandBox) {
-
-								const priceFiltered = await filterPrice(exchange, pair, price);
-
-								// Record safety order trigger for circuit breaker evaluation
-								recordSafetyOrderTrigger(dealId, pair, price);
-
-								const buy = await buyOrder(exchange, dealId, pair, order.qty, priceFiltered);
-
-								const handleSuccessfulBuyPostVerify = async () => {
-
-									await handleSuccessfulBuy({
-										'dealId': dealId,
-										'orderIndex': i,
-										'buyOrderId': buy['data']['id'],
-										'buyOrderPrice': buy['data_order']['price'],
-										'orders': Common.deepCopy(orders),
-										'price': price,
-										'currentOrder': currentOrder,
-										'exchange': exchange,
-										'pair': pair,
-										'profit': profit
-									});
-
-									// Wait before unpausing deal in callback to ensure existing data settles
-									await Common.delay(5000);
-								};
-
-								// Buy not successful / Buy successful but verification failed 
-								if (!buy.success || (buy.success && !buy.success_verify)) {
-
-									buySuccess = false;
-
-									buyOrderInvalid = buy.invalid_order;
-									buyOrderStatusInvalid = buy.invalid_status;
-									buyError = buy.message;
-									buyNSF = buy.nsf;
-
-									let msgErr;
-									let msgType;
-
-									// Insufficient funds to buy
-									if (buyNSF) {
-
-										msgType = 'deal_error';
-										msgErr = 'Insufficient funds to buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
-									}
-									else if (buyOrderInvalid) {
-
-										const retryMins = 2;
-
-										msgType = 'deal_error';
-										msgErr = 'Invalid order for deal ID ' + dealId + '. Pausing buy orders for ' + retryMins + ' minutes.';
-
-										isDealVerifying = true;
-
-										const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: buy['data']['id'], onSuccessCallback: handleSuccessfulBuyPostVerify, pauseBeforeCallback: false });
-
-										// Reset verifying flag if needed
-										verifyPromise.then(async (verifyResult) => {
-
-											if (verifyResult.retriesExhausted || verifyResult.notPaused) {
-												clearSellErrorVerifying(dealId);
-											}
-										});
-									}
-									else {
-
-										msgType = 'deal_error';
-										msgErr = 'An error occurred during buy order for deal ID ' + dealId + '. Pausing any further buy orders for deal.';
-									}
-
-									// Pause deal buy orders
-									if (msgErr != undefined && msgErr != null && msgErr != '') {
-
-										await sendDealMessage(msgType, msgErr);
-
-										isDealPauseReason = 'order_verify_buy';
-										const pauseData = await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
-										isDealPauseBuy = true;
-									}
-								}
-								else {
-
-									buyOrderId = buy['data']['id'];
-									buyOrderPrice = buy['data_order']['price'];
-								}
-							}
-
-							if (buySuccess) {
-
-								await handleSuccessfulBuy({
-									'dealId': dealId,
-									'orderIndex': i,
-									'buyOrderId': buyOrderId,
-									'buyOrderPrice': buyOrderPrice,
-									'orders': orders,
-									'price': price,
-									'currentOrder': currentOrder,
-									'exchange': exchange,
-									'pair': pair,
-									'profit': profit
-								});
-							}
-
-							await updateDealTracker({
-										'exchange': exchange,
-										'deal_id': dealId,
-										'price': price,
-										'config': config,
-										'orders': orders,
-										'pause': isDealPause,
-										'pause_buy': isDealPauseBuy,
-										'pause_sell': isDealPauseSell,
-										'pause_reason': isDealPauseReason,
-										'error': buyError
-									});
-
-							if (!buySuccess) {
-
-								// DCA buy failed
-								return ( { 'success': false, 'finished': false } );
+								return ( safetyResult['result'] );
 							}
 						}
 						else if ((price >= priceSellOrder && !isDealVerifying && !isDealPause && !isDealPauseSell) || isDealCancel || isDealPanicSell) {
 
-							//Sell order
-
-							if (deal.isStart == 1) {
-
-								let qtySumSellOrder;
-
-								let profitCurrency = config['profitCurrency'];
-
-								let sellOrderIds = [];
-								let sellError;
-								let sellOrderPrice;
-								let sellOrderInvalid = false;
-								let sellOrderStatusInvalid = false;
-								let sellNSF = false;
-								let sellSuccess = true;
-
-								const sellDataObj = await processSellData(pair, price, dealId, exchange, config, currentOrder, filledOrders);
-
-								const feeData = sellDataObj['fee_data'];
-
-								const qtySumSell = feeData['dcaOrderQtySumNet'];
-								const priceFiltered = feeData['priceFiltered'];
-								const exchangeFeePercent = feeData['exchangeFeePercent'];
-								const minMoveAmount = feeData['minMoveAmount'];
-
-								const qtySumSellBase = await filterAmount(exchange, pair, (Number(qtySumSell) - Number(profitBase)));
-
-								// Default profit currency to quote if not defined or profit is negative
-								if (!profitCurrency || profitCurrency == 'quote' || Number(profitBase) <= 0) {
-
-									qtySumSellOrder = qtySumSell;
-								}
-								else {
-
-									qtySumSellOrder = qtySumSellBase;
-								}
-
-								// Calculate profit based on new exchange fee percent
-								//const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, exchangeFeePercent);
-								//const profitPercFinal = profitData['profit_percentage'];
-								const profitPercFinal = Number(Number(profitPerc - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
-
-								const handleSuccessfulSell = async (verifyData) => {
-
-									// Sell price/profit default to the values computed when the sell was
-									// first attempted (market price at that moment). If this callback is
-									// running after a late invalid_order verification, the order actually
-									// filled minutes earlier at a different price — use the exchange's
-									// reported fill price so recorded profit matches the real execution
-									// rather than the market price at verification time.
-									//
-									// Quantity is unaffected (qtySum comes from accumulated buys), so only
-									// the sell price and the profit figures derived from it are recomputed.
-									// The fee adjustment (exchangeFeeSumDiffPercent) is derived from the
-									// buy-side sums and does not depend on the sell price, so it is reused.
-									let sellPriceFinal   = price;
-									let profitFinal      = profitPercFinal;
-									let profitBaseFinal  = profitBase;
-									let profitQuoteFinal = profitQuote;
-
-									if (verifyData && verifyData.order_price && Number(verifyData.order_price) > 0) {
-
-										sellPriceFinal = Number(verifyData.order_price);
-
-										const profitDataVerified = await calculateProfit(exchange, pair, sellPriceFinal, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, config.exchangeFee, config.sandBox);
-
-										profitBaseFinal  = profitDataVerified['profit_base'];
-										profitQuoteFinal = profitDataVerified['profit'];
-										profitFinal      = Number(Number(profitDataVerified['profit_percentage'] - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
-									}
-
-									await updateDealTracker({
-										'exchange': exchange,
-										'deal_id': dealId,
-										'price': sellPriceFinal,
-										'config': config,
-										'orders': orders,
-										'pause': isDealPause,
-										'pause_buy': isDealPauseBuy,
-										'pause_sell': isDealPauseSell,
-										'pause_reason': isDealPauseReason
-									});
-
-									if (shareData.appData.verboseLog) {
-
-										Common.logger(
-										colors.blue.bold.italic(
-										'Pair: ' + pair +
-										'\tQty: ' + currentOrder.qtySum +
-										'\tLast Price: $' + sellPriceFinal +
-										'\tDCA Price: $' + currentOrder.average +
-										'\tSell Price: $' + currentOrder.target +
-										'\tStatus: ' + colors.red('SELL') +
-										'\tProfit: ' + profitFinal
-										));
-									}
-
-									// orderId is stored as an array for partial fill retry compatibility.
-									// Single-order deals will have a one-element array.
-									// Legacy deals with a string orderId are handled transparently by consumers.
-									const sellData = {
-										'date': new Date(),
-										'orderId': sellOrderIds,
-										'qtySum': currentOrder.qtySum,
-										'qtySumSell': qtySumSell,
-										'qtySumSellOrder': qtySumSellOrder,
-										'price': sellPriceFinal,
-										'average': currentOrder.average,
-										'target': currentOrder.target,
-										'profit': profitFinal,
-										'profitBase': profitBaseFinal,
-										'profitQuote': profitQuoteFinal,
-										'feeData': feeData
-										 };
-
-									await Deals.updateOne({ dealId }, {
-										'sellData': sellData,
-										'panicSell': isDealPanicSell,
-										'canceled': isDealCancel,
-										'status': 1
-										  });
-
-									finished = true;
-
-									await deleteDealTracker(dealId);
-
-									if (shareData.appData.verboseLog) {
-
-										Common.logger(colors.bgRed('Deal ID ' + dealId + ' DCA Bot Finished.'));
-									}
-
-									sendNotificationFinish(config.botName, dealId, pair, sellData);
-								};
-
-								if (!config.sandBox && !isDealCancel && !cancelOnly) {
-
-									const sell = await sellOrder(exchange, dealId, pair, qtySumSellOrder, priceFiltered);
-
-									// Sell not successful / Sell successful but verification failed
-									if (!sell.success || (sell.success && !sell.success_verify)) {
-
-										// sellOrderInvalid - Order not found or unable to be looked up on exchange
-										// sellOrderStatusInvalid - Order may have been canceled by exchange or some other issue
-
-										sellSuccess = false;
-
-										sellOrderInvalid = sell.invalid_order;
-										sellOrderStatusInvalid = sell.invalid_status;
-										sellError = sell.message;
-										sellNSF = sell.nsf;
-
-										let msgErr = null;
-										let msgType = null;
-
-										if (sellNSF) {
-											
-											// Let NSF reduce quantity sell error logic handle below
-										}
-										else if (sellOrderStatusInvalid) {
-
-											// Check if exchange cancelled after a partial fill (e.g. Coinbase price protection)
-											const cancelPartialFilled = Number(sell['data_order']['quantity'] ?? 0);
-											const cancelShortfall = cancelPartialFilled > 0
-												? ((Number(qtySumSellOrder) - cancelPartialFilled) / Number(qtySumSellOrder)) * 100
-												: 0;
-
-											if (cancelPartialFilled > 0 && cancelShortfall > partialSellFillThresholdPercent) {
-
-												// Exchange cancelled after partial fill — record fill and
-												// wait for settlement before retrying the remainder
-												sellOrderIds.push(sell['data']['id']);
-
-												Common.logger(colors.bgYellow.bold(
-													'Exchange-cancelled partial fill for deal ID ' + dealId +
-													' / Filled: ' + cancelPartialFilled.toFixed(8) +
-													' / Shortfall: ' + cancelShortfall.toFixed(2) + '% — waiting for settlement'
-												));
-
-												Common.sendNotification({
-													'message': `Partial sell fill for deal ID ${dealId}. Exchange cancelled after ${(100 - cancelShortfall).toFixed(0)}% filled. Waiting for settlement then retrying remainder.`,
-													'type': 'deal_error',
-													'telegram_id': shareData.appData.telegram_id
-												});
-
-												// Settlement delay — give exchange time to release remaining balance
-												const settlementDelayMs = 30000;
-												await Common.delay(settlementDelayMs);
-
-												let cancelRetryCount = 0;
-												let cancelTotalFilled = cancelPartialFilled;
-												let cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
-
-												while (cancelRetryCount < maxPartialSellRetries && cancelQtyRemaining > 0) {
-
-													if (isDealCancel || isDealPanicSell) break;
-
-													await Common.delay(partialSellRetryDelayMs);
-													cancelRetryCount++;
-
-													const cancelSymData = await getSymbol(exchange, pair);
-													const cancelPrice = (cancelSymData.data?.bid ?? price);
-													const cancelPriceFiltered = await filterPrice(exchange, pair, cancelPrice);
-													const cancelQtyFiltered = await filterAmount(exchange, pair, cancelQtyRemaining);
-
-													if (!cancelQtyFiltered || Number(cancelQtyFiltered) <= 0) break;
-
-													Common.logger(colors.bgYellow.bold(
-														'Settlement retry ' + cancelRetryCount + '/' + maxPartialSellRetries +
-														' for deal ID ' + dealId + ' / Selling: ' + cancelQtyFiltered
-													));
-
-													const cancelSellRetry = await sellOrder(exchange, dealId, pair, cancelQtyFiltered, cancelPriceFiltered);
-
-													// Credit whatever actually filled this attempt, regardless of the
-													// final order status. A retry can partially fill then be cancelled by
-													// the exchange (e.g. Coinbase price protection) — that returns
-													// success_verify:false but still reports a real fill in
-													// data_order.quantity. Crediting only clean (success && success_verify)
-													// fills would drop that quantity, leaving cancelQtyRemaining too high so
-													// every later retry over-asks and hits InsufficientFunds. NSF attempts
-													// report an empty data_order so this credits 0 for them. Adjusts only the
-													// in-memory tally — the deal's pre-calculated qtySumSellOrder is never
-													// mutated and remains the read-only ceiling.
-													const cancelRetryFilled = Number(cancelSellRetry?.['data_order']?.['quantity'] ?? 0);
-
-													if (cancelRetryFilled > 0) {
-
-														if (cancelSellRetry?.['data']?.['id']) {
-
-															sellOrderIds.push(cancelSellRetry['data']['id']);
-														}
-
-														cancelTotalFilled += cancelRetryFilled;
-														cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
-
-														if ((cancelQtyRemaining / Number(qtySumSellOrder)) * 100 <= partialSellFillThresholdPercent) break;
-													}
-													else if (cancelSellRetry.nsf) {
-
-														// Still settling — extend wait
-														await Common.delay(settlementDelayMs);
-													}
-												}
-
-												// Mark sell successful so deal closes with the partial fill
-												sellSuccess = true;
-												sellOrderStatusInvalid = false;
-
-											} else {
-
-												// Clean cancel with no partial fill — retry after short delay
-												await Common.delay(5000);
-											}
-										}
-										else if (sellOrderInvalid) {
-
-											const retryMins = 1;
-
-											msgType = 'deal_error';
-											msgErr = `Invalid order for deal ID ${dealId}. Pausing sell orders for ${retryMins} minutes.`;
-
-											isDealVerifying = true;
-
-											const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: sell['data']['id'], onSuccessCallback: handleSuccessfulSell, pauseBeforeCallback: true });
-
-											// Reset verifying flag if needed
-											verifyPromise.then(async (verifyResult) => {
-
-												if (verifyResult.retriesExhausted || verifyResult.notPaused) {
-													clearSellErrorVerifying(dealId);
-												}
-											});
-										}
-										else {
-
-											msgType = 'deal_error';
-											msgErr = `An error occurred during sell order for deal ID ${dealId}. Pausing any further sell orders for deal.`;
-										}
-
-										if (msgErr) {
-
-											await sendDealMessage(msgType, msgErr);
-											isDealPauseReason = 'order_verify_sell';
-											await pauseDeal(config.botId, dealId, null, null, true, isDealPauseReason);
-											isDealPauseSell = true;
-										}
-									}
-									else {
-
-										// Initial sell succeeded — record this order ID and check for partial fill
-										sellOrderIds.push(sell['data']['id']);
-
-										const initialQtyFilled = Number(sell['data_order']['quantity'] ?? 0);
-										let totalQtyFilled = initialQtyFilled;
-										let qtyRemaining = Number(qtySumSellOrder) - totalQtyFilled;
-
-										// Only attempt partial fill retry if the exchange reported a positive
-										// filled quantity. A zero or null quantity after a successful
-										// verifyBuySellOrder means the exchange didn't report the fill amount —
-										// not that nothing was filled. Retrying in that case would sell again
-										// on a position that has already been fully closed.
-										const shortfallPercent = initialQtyFilled > 0
-											? (qtyRemaining / Number(qtySumSellOrder)) * 100
-											: 0;
-
-										if (shortfallPercent > partialSellFillThresholdPercent) {
-
-											// Partial fill detected — attempt to sell the remainder
-											let retryCount = 0;
-
-											Common.logger(colors.bgYellow.bold(
-												'Partial sell fill detected for deal ID ' + dealId +
-												' / Requested: ' + qtySumSellOrder +
-												' / Filled: ' + totalQtyFilled.toFixed(8) +
-												' / Remaining: ' + qtyRemaining.toFixed(8) +
-												' / Shortfall: ' + shortfallPercent.toFixed(2) + '%'
-											));
-
-											Common.sendNotification({
-												'message': 'Partial sell fill detected for deal ID ' + dealId + '. Attempting to sell remaining quantity.',
-												'type': 'deal_error',
-												'telegram_id': shareData.appData.telegram_id
-											});
-
-											while (retryCount < maxPartialSellRetries && qtyRemaining > 0) {
-
-												// Stop retrying if a cancel or panic sell was requested
-												if (isDealCancel || isDealPanicSell) {
-
-													break;
-												}
-
-												await Common.delay(partialSellRetryDelayMs);
-
-												retryCount++;
-
-												// Get fresh price for this retry attempt
-												const symbolDataRetry = await getSymbol(exchange, pair);
-												const symbolRetry = symbolDataRetry.data;
-												const priceRetry = symbolRetry?.bid ?? price;
-												const priceRetryFiltered = await filterPrice(exchange, pair, priceRetry);
-
-												// Check the remaining qty meets exchange minimum after precision filter
-												const qtyRemainingFiltered = await filterAmount(exchange, pair, qtyRemaining);
-
-												if (!qtyRemainingFiltered || Number(qtyRemainingFiltered) <= 0) {
-
-													Common.logger(colors.bgYellow.bold(
-														'Partial sell retry halted for deal ID ' + dealId +
-														' — remaining quantity ' + qtyRemaining.toFixed(8) +
-														' is below exchange minimum. Accepting partial fill.'
-													));
-
-													break;
-												}
-
-												Common.logger(colors.bgYellow.bold(
-													'Partial sell retry ' + retryCount + '/' + maxPartialSellRetries +
-													' for deal ID ' + dealId +
-													' / Selling remaining: ' + qtyRemainingFiltered
-												));
-
-												const sellRetry = await sellOrder(exchange, dealId, pair, qtyRemainingFiltered, priceRetryFiltered);
-
-												// Credit whatever actually filled this attempt, regardless of the final
-												// order status. A retry can partially fill then be cancelled by the
-												// exchange (e.g. Coinbase price protection) — that returns
-												// success_verify:false but still reports a real fill in data_order.quantity.
-												// Crediting only clean fills would drop that quantity, leaving qtyRemaining
-												// too high so later retries over-ask and hit InsufficientFunds. A truly
-												// failed attempt reports an empty data_order and credits 0. Adjusts only the
-												// in-memory tally — pre-calculated qtySumSellOrder is never mutated.
-												const retryQtyFilled = Number(sellRetry?.['data_order']?.['quantity'] ?? 0);
-
-												if (retryQtyFilled > 0) {
-
-													if (sellRetry?.['data']?.['id']) {
-
-														sellOrderIds.push(sellRetry['data']['id']);
-													}
-
-													totalQtyFilled += retryQtyFilled;
-													qtyRemaining = Number(qtySumSellOrder) - totalQtyFilled;
-
-													Common.logger(colors.bgYellow.bold(
-														'Partial sell retry ' + retryCount + ' filled for deal ID ' + dealId +
-														' / Filled this attempt: ' + retryQtyFilled.toFixed(8) +
-														' / Total filled: ' + totalQtyFilled.toFixed(8) +
-														' / Remaining: ' + qtyRemaining.toFixed(8)
-													));
-
-													const remainingShortfallPercent = (Math.max(qtyRemaining, 0) / Number(qtySumSellOrder)) * 100;
-
-													if (remainingShortfallPercent <= partialSellFillThresholdPercent) {
-
-														// Within acceptable threshold — done
-														break;
-													}
-												}
-												else {
-
-													Common.logger(colors.bgYellow.bold(
-														'Partial sell retry ' + retryCount + ' filled nothing for deal ID ' + dealId +
-														': ' + (sellRetry.message || 'unknown error')
-													));
-												}
-											}
-
-											if (retryCount >= maxPartialSellRetries) {
-
-												const finalShortfall = ((Math.max(qtyRemaining, 0) / Number(qtySumSellOrder)) * 100).toFixed(2);
-
-												Common.logger(colors.bgRed.bold(
-													'Max partial sell retries reached for deal ID ' + dealId +
-													'. Accepting fill. Final shortfall: ' + finalShortfall + '%'
-												));
-
-												Common.sendNotification({
-													'message': 'Max partial sell retries reached for deal ID ' + dealId + '. Accepted fill with ' + finalShortfall + '% shortfall.',
-													'type': 'deal_error',
-													'telegram_id': shareData.appData.telegram_id
-												});
-											}
-										}
-									}
-								}
-
-								if (sellSuccess) {
-
-									await handleSuccessfulSell();
-								}
-								else {
-
-									// Sell failed
-									dealTracker[dealId]['update']['deal_sell_error']['nsf'] = sellNSF;
-									dealTracker[dealId]['update']['deal_sell_error']['verifying'] = isDealVerifying;
-									dealTracker[dealId]['update']['deal_sell_error']['count']++;
-									dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
-
-									await Common.delay(1000);
-								}
-
-								success = true;
-
-								return ( { 'success': success, 'finished': finished } );
-							}
+							const sellResult = await handleSell({
+								config, exchange, dealId, deal, orders, order, currentOrder, filledOrders,
+								pair, price, priceSellOrder, profit, profitBase, profitQuote, profitPerc,
+								isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason,
+								isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly
+							});
+
+							return ( sellResult );
 						}
 						else {
 
@@ -1982,7 +2137,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 			// Delay before following again
 			await Common.delay(2000);
 
-			return ( { 'success': success, 'finished': finished } );
+			return ( loopSignal(success, finished) );
 		}
 		else {
 
@@ -2002,7 +2157,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 		Common.logger(JSON.stringify(e));
 	}
 
-	return ( { 'success': success, 'finished': finished } );
+	return ( loopSignal(success, finished) );
 };
 
 
@@ -4702,13 +4857,14 @@ async function createSellErrorTracker(dealId) {
 
 		if (dealTracker[dealId]['update']['deal_sell_error'] == undefined || dealTracker[dealId]['update']['deal_sell_error'] == null) {
 
-			dealTracker[dealId]['update']['deal_sell_error'] = {};
-			dealTracker[dealId]['update']['deal_sell_error']['history'] = {};
-			dealTracker[dealId]['update']['deal_sell_error']['nsf'] = false;
-			dealTracker[dealId]['update']['deal_sell_error']['verifying'] = false;
-			dealTracker[dealId]['update']['deal_sell_error']['count'] = 0;
-			dealTracker[dealId]['update']['deal_sell_error']['count_dupes'] = 0;
-			dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
+			dealTracker[dealId]['update']['deal_sell_error'] = {
+				'history': {},
+				'nsf': false,
+				'verifying': false,
+				'count': 0,
+				'count_dupes': 0,
+				'date': new Date()
+			};
 		}
 	}
 	catch(e) {}
@@ -6191,34 +6347,50 @@ async function resumeDeal(dealObj) {
 			}
 		}
 
-		Common.logger( colors.bgYellow.bold(`Deal ID ${dealId} was mid-${isSell ? 'sell' : 'buy'} verification at shutdown. Restarting verification loop.`) );
+		// If there is no pending order ID to verify, do NOT arm verification. This happens
+		// when the deal was paused with an order_verify_* reason but the order that caused
+		// the pause left no stored ID — most commonly an exchange-cancelled partial buy
+		// (price-protection): that path pauses with pauseReason 'order_verify_buy' but never
+		// persists a pending order ID. Arming verifyInvalidOrder with orderId=null logged a
+		// misleading "verify order ID null / Attempt #1" and immediately resumed anyway.
+		// Instead, clear the stale pause reason and resume cleanly — there is nothing to poll.
+		if (!pendingOrderId) {
 
-		const exchange = await connectExchange(dealObj.config || config);
+			Common.logger( colors.bgYellow.bold(`Deal ID ${dealId} was paused (${resumePauseReason}) at shutdown but has no pending order ID to verify (e.g. an exchange-cancelled order). Clearing pause and resuming.`) );
 
-		if (exchange) {
+			await pauseDeal(botId, dealId, false, false, false, '');
+		}
+		else {
 
-			let verifyCallback = null;
+			Common.logger( colors.bgYellow.bold(`Deal ID ${dealId} was mid-${isSell ? 'sell' : 'buy'} verification at shutdown. Restarting verification loop.`) );
 
-			// Base order interrupted mid-verify (isStart:0). On success, mark the base
-			// order filled and advance to isStart=1 — identical to the normal base-order
-			// success path. Pre-calculated qty/amount/average/target are preserved.
-			if (!isSell && dealObj.isStart === 0) {
+			const exchange = await connectExchange(dealObj.config || config);
 
-				const baseOrders = dealObj.orders || [];
+			if (exchange) {
 
-				verifyCallback = async (verifyData) => {
+				let verifyCallback = null;
 
-					if (baseOrders[0]) {
+				// Base order interrupted mid-verify (isStart:0). On success, mark the base
+				// order filled and advance to isStart=1 — identical to the normal base-order
+				// success path. Pre-calculated qty/amount/average/target are preserved.
+				if (!isSell && dealObj.isStart === 0) {
 
-						baseOrders[0].filled = 1;
-						baseOrders[0].dateFilled = new Date();
+					const baseOrders = dealObj.orders || [];
 
-						await Deals.updateOne({ dealId: dealId }, { isStart: 1, orders: baseOrders });
-					}
-				};
+					verifyCallback = async (verifyData) => {
+
+						if (baseOrders[0]) {
+
+							baseOrders[0].filled = 1;
+							baseOrders[0].dateFilled = new Date();
+
+							await Deals.updateOne({ dealId: dealId }, { isStart: 1, orders: baseOrders });
+						}
+					};
+				}
+
+				verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId, dealId, orderId: pendingOrderId, onSuccessCallback: verifyCallback, pauseBeforeCallback: !isSell });
 			}
-
-			verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId, dealId, orderId: pendingOrderId, onSuccessCallback: verifyCallback, pauseBeforeCallback: !isSell });
 		}
 	}
 

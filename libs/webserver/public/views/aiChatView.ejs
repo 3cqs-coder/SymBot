@@ -74,21 +74,27 @@
 				// Handle incoming data
 				socket.on('data', function(data) {
 
-					if (messageBuffer === '') {
-
-						$('#aiChatSpinner').hide();
-					}
-	
 					if (data.type === 'message') {
 
 						const messageContent = data.message;
-	
+
+						// Deal notifications, log lines and other traffic share this
+						// socket, so the spinner is only cleared once the response
+						// itself starts arriving. Clearing it on any event made the
+						// chat look finished when something unrelated came through.
+						if (messageBuffer === '') {
+
+							$('#aiChatSpinner').hide();
+						}
+
 						if (messageContent) {
 
 							displayMessage(messageContent);
 						}
 					}
 					else if (data.type === 'aborted') {
+
+						$('#aiChatSpinner').hide();
 
 						// Show timeout notice as a distinct system message — not part of AI response
 						const $notice = $('<div>').css({

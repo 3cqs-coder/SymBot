@@ -36,6 +36,12 @@ function processWorkerMessage(workerId, instanceName) {
 
 			if (workerInfo) {
 
+				// Memory attributable to this instance. rss is deliberately kept
+				// separate: it reports the whole process (all worker threads share
+				// it), so it is a single process-level figure rather than a
+				// per-instance one.
+				const memoryAttributed = (message.data.heapUsed || 0) + (message.data.external || 0) + (message.data.arrayBuffers || 0);
+
 				let msgObj = {
 					'instanceId': workerInfo.instance.id,
 					'instanceName': instanceName,
@@ -44,7 +50,10 @@ function processWorkerMessage(workerId, instanceName) {
 					'memoryUsage': {
 						'rss': message.data.rss,
 						'heapTotal': message.data.heapTotal,
-						'heapUsed': message.data.heapUsed
+						'heapUsed': message.data.heapUsed,
+						'external': message.data.external || 0,
+						'arrayBuffers': message.data.arrayBuffers || 0,
+						'attributed': memoryAttributed
 					}
 				};				
 

@@ -115,6 +115,11 @@ async function updateConfig(req, res) {
 	const ctxCompThreshold  = parseInt(body.ctx_compression_threshold) || 80000;
 	const ctxCompProtectN   = parseInt(body.ctx_compression_protect_n)  || 10;
 
+	const dealCtxEnabled    = convertBoolean(body.deal_context_enabled, false);
+	const dealCtxUseRouter  = convertBoolean(body.deal_context_use_router, true);
+	const dealCtxModel      = typeof body.deal_context_router_model === 'string' ? body.deal_context_router_model.trim() : '';
+	const dealCtxTimeout    = Math.min(Math.max(parseInt(body.deal_context_router_timeout_ms) || 12000, 1000), 60000);
+
 	const cbEnabled        = convertBoolean(body.cb_enabled, true);
 
 
@@ -367,6 +372,14 @@ async function updateConfig(req, res) {
 		appConfig['ai']['context_compression']['protect_last_n']  = ctxCompProtectN;
 		if (!shareData.appData.ai)                 shareData.appData.ai = {};
 		shareData.appData.ai.context_compression = appConfig['ai']['context_compression'];
+
+		// Deal context settings (AI access to deal records and logs)
+		if (!appConfig['ai']['deal_context']) appConfig['ai']['deal_context'] = {};
+		appConfig['ai']['deal_context']['enabled']            = dealCtxEnabled;
+		appConfig['ai']['deal_context']['use_router']         = dealCtxUseRouter;
+		appConfig['ai']['deal_context']['router_model']       = dealCtxModel;
+		appConfig['ai']['deal_context']['router_timeout_ms']  = dealCtxTimeout;
+		shareData.appData.ai.deal_context = appConfig['ai']['deal_context'];
 
 		// Update live appData so circuit breaker takes effect immediately without restart
 		shareData.appData.circuit_breaker = appConfig['circuit_breaker'];

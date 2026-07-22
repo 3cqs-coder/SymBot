@@ -1014,10 +1014,13 @@
 				pauseButtonId = 'resume';
 				pauseButtonDeal = resumeButtonDeal;
 
-				// System-paused deals get a distinct orange tint to distinguish from manual pauses
+				// System-paused deals get a distinct orange tint to distinguish from manual pauses.
+				// Use a translucent tint (not a solid dark color) so it layers over the themed row
+				// background and stays readable in BOTH light and dark mode — a solid dark brown
+				// (#7a4500) rendered dark-text-on-dark and was unreadable in light mode.
 				if (isSystemPaused) {
 
-					dealBackground = '#7a4500';
+					dealBackground = 'rgba(255,140,0,0.22)';
 				}
 			}
 
@@ -1050,7 +1053,9 @@
 
 					if (diffSec > maxSec) {
 
-						dealBackground = '#B78225';
+						// Translucent amber tint (see system-pause note above) — readable in
+						// light and dark mode, unlike the previous solid #B78225.
+						dealBackground = 'rgba(183,130,37,0.28)';
 						dealDataErrors++;
 					}
 					else {

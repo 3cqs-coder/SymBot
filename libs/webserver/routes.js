@@ -884,6 +884,7 @@ async function processConfig(req, res) {
 				base_url: aiRaw.openai?.base_url || '',
 			},
 			context_compression: aiRaw.context_compression || {},
+			deal_context: aiRaw.deal_context || {},
 		};
 
 		const cbDefaults = {

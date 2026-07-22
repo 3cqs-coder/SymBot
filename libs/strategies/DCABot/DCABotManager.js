@@ -2597,6 +2597,7 @@ module.exports = {
 	apiGetBalances,
 	apiAiAnalyzeDeal,
 	apiAiAnalyzeDealPrompt,
+	getProcessedDeals,
 	viewBots,
 	viewCreateUpdateBot,
 	viewActiveDeals,

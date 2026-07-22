@@ -23,6 +23,7 @@ const System = require(__dirname + '/libs/app/System.js');
 const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const AIClient = require(__dirname + '/libs/ai/AIClient.js');
+const AIContext = require(__dirname + '/libs/ai/AIContext.js');
 const packageJson = require(__dirname + '/package.json');
 const Dependencies = require('check-dependencies').sync({ verbose: false });
 
@@ -332,6 +333,7 @@ async function init() {
 						'Telegram': Telegram,
 						'WebServer': WebServer,
 						'AIClient':  AIClient,
+						'AIContext': AIContext,
 						'AIChatDB':  AIChatDB,
 					};
 
@@ -397,6 +399,7 @@ async function init() {
 	Telegram.init(shareData);
 	WebServer.init(shareData);
 	AIClient.init(shareData);
+	AIContext.init(shareData);
 
 	let success = true;
 

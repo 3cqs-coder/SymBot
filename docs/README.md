@@ -29,6 +29,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
   - [AI Chat Conversations](#ai-chat-conversations)
   - [AI Chat File Attachments](#file-attachments)
   - [AI Chat Context Compression](#context-compression)
+  - [AI Chat Deal Context](#deal-context)
 - [API Information](#api-information)
 - [API Sample Usage](#api-sample-usage)
 - [WebSocket API](#websocket-api)
@@ -145,6 +146,15 @@ In addition to instance management, SymBot Hub provides unified views that aggre
 - **Bots** — view all bots across every instance in a single table, including the exchange each bot is assigned to. Toggle bots on or off directly from the Hub without navigating to each instance individually. Click any bot row to open the full bot edit page, or use the ✕ button to delete a bot. The **+ Create Bot** button opens a full bot create page for the selected instance. Both create and edit pages include the complete bot configuration form — pairs with exchange-sourced symbol list, all safety order parameters, start conditions, and a preview step that shows the projected order table before saving.
 
 All views refresh automatically and pause when a confirmation dialog is open to prevent stale data from overwriting pending actions.
+
+#### Memory Usage Panel
+
+The Hub memory panel reports two different things, and the distinction matters:
+
+- **Process** — a single RSS figure for the whole Hub process, shown once at the top. Every instance runs as a worker thread inside that one process and shares its resident memory, so RSS cannot be attributed to any individual instance.
+- **Per instance** — *Attributed* is the memory genuinely belonging to that instance: its heap plus its off-heap buffers (`External` and `Array Buffers`). This is the figure to compare between instances when working out which one is heavy.
+
+Because the instances share a process, the per-instance Attributed figures will normally sum to less than process RSS — the difference is shared runtime, buffers and allocator overhead. After upgrading, an instance that has not yet restarted reports only its heap until it does.
 
 ### Starting SymBot Hub
 
@@ -822,6 +832,67 @@ Context compression also applies to the `app.json` config file under `ai.context
         "enabled": true,
         "threshold_chars": 80000,
         "protect_last_n": 10
+    }
+}
+```
+
+#### Deal Context
+
+By default the AI chat has no access to your trading data — it is a general assistant and cannot answer questions such as *"why did this deal pause?"* or *"how does this deal compare to that one?"*. Deal Context changes that: when enabled, the chat looks up the deal records you ask about and reads the matching lines from SymBot's own log files, then answers from that data.
+
+This is **read only**. The AI can describe deals and explain what happened to them. It cannot pause, cancel, panic sell, add funds, or modify anything. There is no write path.
+
+Typical questions it can answer once enabled:
+
+- *"Why did META_USD-3KI3K3O-1784152693 pause?"* — reads that deal's log events and explains the cause
+- *"Compare deal A with deal B"* — pulls both records and contrasts status, safety orders, duration and prices
+- *"How much did that deal make?"* — reports the realized profit or loss for a deal that has closed
+- *"What happened today?"* — surfaces notable log events such as circuit breaker trips, cancelled orders and completions
+- *"What is paused right now?"* — lists paused deals and why
+- *"How many Client Disconnected are in the logs?"* — searches the logs for a phrase you name and reports the count
+
+Each deal carries its own safety order ladder, fixed when the deal was created. A bot's configuration is only the default applied to new deals, so two deals from the same bot can have different ladder sizes and the bot's current setting says nothing about a deal already running. The assistant reads the ladder from the deal itself and reports it as exhausted using the same test SymBot uses internally.
+
+Counts report events, not raw text matches. SymBot logs the full text of AI chat requests, so a phrase you ask about can also appear inside an earlier conversation in the log. Those occurrences are excluded, which means a count here can be lower than a plain text search of the same file — the difference is the phrase being quoted back in chat rather than the event happening again.
+
+When a log search finds nothing, the answer distinguishes between the two reasons it can happen. If the search used wording SymBot is known to write, or an exact deal id, an empty result means those events did not occur in the dates searched. If the phrase was taken from your question instead, an empty result only means that exact wording was not found — the logs may record it differently — and the assistant will say so rather than concluding nothing happened.
+
+For deals that have closed, the sell price, quantity sold and realized profit or loss are included alongside the position details. Deals that are still open have no realized result — only their current average and target — and the AI is instructed not to present an open position as though it had made or lost money.
+
+##### How It Works
+
+When you send a message, SymBot decides what data — if any — is needed to answer it:
+
+1. **If your message names deal IDs outright**, they are used directly and no extra model call is made. This is the fast path.
+2. **If your message refers to something indirectly** — *"why did it pause?"*, *"how does that compare?"* — a short routing pass asks the model which deal you mean, resolving the reference from the conversation. If that pass fails, times out, or is disabled, keyword matching is used instead.
+3. **If the question needs no trading data** — general questions, greetings — nothing is retrieved and the conversation proceeds normally.
+
+Log access is restricted to SymBot's own `logs` directory and to files matching the name pattern SymBot itself writes (`YYYY-MM-DD-InstanceName.log`). Subdirectories, symbolic links and any path outside that directory are rejected. Log files are streamed rather than loaded into memory, so scanning a large log costs little regardless of its size — a deal ID typically reduces a day's log to a hundred or so relevant lines.
+
+If anything fails — the feature is disabled, the routing pass errors, no matching data is found — the chat behaves exactly as it does with the feature turned off. Retrieval is always silent and non-breaking.
+
+##### A Note on Response Time
+
+Retrieval itself is fast — typically well under a tenth of a second when your message names its deals. The time you wait for an answer is almost entirely the model generating it, which depends on your hardware and the length of the reply. If you use the routing pass and find it slow, setting a small fast model in **Router Model** keeps it quick, since classification is a much simpler task than answering.
+
+Deal Context is configured under **Configuration → Artificial Intelligence (AI) → AI Deal Context**:
+
+| Field | Description | Default |
+|---|---|---|
+| Router Model | Model used only for the routing step. Leave blank to use the default chat model | (blank) |
+| Router Timeout (ms) | How long to wait for the routing step before falling back to keyword matching | 12000 |
+| Use AI Router | Resolve indirect references such as *"why did it pause?"* using a short model pass. When off, keyword matching is used | Enabled |
+| Enabled | Enable or disable deal context retrieval | Disabled |
+
+Deal Context also applies to the `app.json` config file under `ai.deal_context`:
+
+```json
+"ai": {
+    "deal_context": {
+        "enabled": false,
+        "use_router": true,
+        "router_model": "",
+        "router_timeout_ms": 12000
     }
 }
 ```

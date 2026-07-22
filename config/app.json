@@ -95,7 +95,13 @@
 					"enabled": true,
             		"threshold_chars": 80000,
             		"protect_last_n": 10
-        		}
+        		},
+				"deal_context": {
+					"enabled": false,
+					"use_router": true,
+					"router_model": "",
+					"router_timeout_ms": 12000
+				}
 			},		
 	"verbose_log": true
 }
