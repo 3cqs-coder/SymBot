@@ -1,6 +1,6 @@
 {
   "name": "SymBot",
-  "version": "5.2",
+  "version": "5.3",
   "description": "SymBot",
   "main": "index.js",
   "scripts": {
@@ -9,12 +9,15 @@
   },
   "author": "3CQS",
   "license": "CC BY-NC-SA 4.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "ansi-to-html": "^0.7.2",
     "archiver": "^8.0.0",
     "body-parser": "^2.3.0",
     "bson": "^7.3.1",
-    "ccxt": "^4.5.68",
+    "ccxt": "^4.5.70",
     "check-dependencies": "^2.0.0",
     "colors": "^1.4.0",
     "compression": "^1.8.1",
@@ -25,12 +28,12 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "http-proxy-middleware": "^4.2.0",
-    "mongoose": "^9.8.0",
+    "mongoose": "^9.9.1",
     "multer": "^2.2.0",
     "node-cron": "^4.6.0",
     "node-fetch-commonjs": "^3.3.2",
     "ollama": "^0.6.3",
-    "openai": "^6.48.0",
+    "openai": "^7.3.0",
     "percentagejs": "^1.0.2",
     "prompt-sync": "^4.2.0",
     "session-file-store": "^1.5.0",
@@ -38,7 +41,7 @@
     "socket.io-client": "^4.8.3",
     "ssh2-sftp-client": "^12.1.1",
     "telegraf": "^4.16.3",
-    "trading-signals": "^7.4.3",
+    "trading-signals": "^8.2.0",
     "unzipper": "^0.12.5",
     "xml2js": "^0.6.2",
     "pdf-parse": "^2.4.5",

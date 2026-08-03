@@ -1741,6 +1741,146 @@ async function verifyPasswordHash(dataObj) {
 }
 
 
+// ---------------------------------------------------------------------------
+// Failed-login lockout / throttle (backlog #71)
+//
+// In-memory only, keyed by source IP. Counts consecutive failed logins in a
+// rolling window and temporarily blocks an IP once it crosses a threshold, so a
+// brute-force attempt is slowed to uselessness rather than merely notified.
+//
+// In-memory is deliberate: the state only needs to outlive an attack window,
+// not a restart, and this keeps it dependency-free with no schema change. A
+// process restart clears all counters (and any active block), which is an
+// acceptable trade for simplicity — an attacker cannot force a restart, and a
+// legitimate operator restarting simply gets a clean slate.
+//
+// Successful login clears the IP's record. Blocks fail closed: while an IP is
+// blocked, the password is not even checked.
+// ---------------------------------------------------------------------------
+
+const loginThrottleDefaults = {
+	// Consecutive failures from one IP before it is blocked.
+	'maxFailures': 5,
+	// Rolling window (ms) in which failures accumulate. Failures older than this
+	// are forgiven, so occasional typos by a legitimate user never build up.
+	'windowMs': 15 * 60 * 1000,
+	// How long an IP stays blocked once the threshold is crossed (ms).
+	'blockMs': 15 * 60 * 1000,
+	// Cap on tracked IPs, so the map cannot grow unbounded under a distributed
+	// attack. Oldest entries are evicted first.
+	'maxTrackedIps': 5000
+};
+
+// ip -> { failures: [timestamps], blockedUntil: ms|null }
+const loginAttempts = new Map();
+
+function getLoginThrottleConfig() {
+
+	// Allow overrides from appData.security.login_throttle if present, else defaults.
+	const cfg = shareData?.appData?.security?.login_throttle;
+
+	if (cfg == undefined || cfg == null) {
+
+		return loginThrottleDefaults;
+	}
+
+	return {
+		'maxFailures':   Number(cfg.max_failures)    > 0 ? Number(cfg.max_failures)    : loginThrottleDefaults['maxFailures'],
+		'windowMs':      Number(cfg.window_ms)        > 0 ? Number(cfg.window_ms)       : loginThrottleDefaults['windowMs'],
+		'blockMs':       Number(cfg.block_ms)         > 0 ? Number(cfg.block_ms)        : loginThrottleDefaults['blockMs'],
+		'maxTrackedIps': Number(cfg.max_tracked_ips)  > 0 ? Number(cfg.max_tracked_ips) : loginThrottleDefaults['maxTrackedIps']
+	};
+}
+
+// Returns { blocked: bool, retryAfterSec: number } without mutating counters.
+function checkLoginBlocked(ip) {
+
+	if (ip == undefined || ip == null || ip === '') {
+
+		// No usable IP — cannot throttle safely, so do not block (fail open on
+		// identification, never on the password check itself).
+		return { 'blocked': false, 'retryAfterSec': 0 };
+	}
+
+	const record = loginAttempts.get(ip);
+
+	if (record == undefined || record.blockedUntil == null) {
+
+		return { 'blocked': false, 'retryAfterSec': 0 };
+	}
+
+	const now = Date.now();
+
+	if (record.blockedUntil > now) {
+
+		return { 'blocked': true, 'retryAfterSec': Math.ceil((record.blockedUntil - now) / 1000) };
+	}
+
+	// Block has expired — clear it and let the attempt proceed with a clean slate.
+	loginAttempts.delete(ip);
+
+	return { 'blocked': false, 'retryAfterSec': 0 };
+}
+
+// Records a failed attempt; blocks the IP if it crosses the threshold.
+// Returns { blocked: bool, retryAfterSec: number, failures: number }.
+function recordLoginFailure(ip) {
+
+	if (ip == undefined || ip == null || ip === '') {
+
+		return { 'blocked': false, 'retryAfterSec': 0, 'failures': 0 };
+	}
+
+	const config = getLoginThrottleConfig();
+	const now = Date.now();
+
+	// Evict oldest entry if the map is at capacity and this IP is new.
+	if (!loginAttempts.has(ip) && loginAttempts.size >= config['maxTrackedIps']) {
+
+		const oldestKey = loginAttempts.keys().next().value;
+
+		if (oldestKey != undefined) {
+
+			loginAttempts.delete(oldestKey);
+		}
+	}
+
+	let record = loginAttempts.get(ip);
+
+	if (record == undefined) {
+
+		record = { 'failures': [], 'blockedUntil': null };
+	}
+
+	// Drop failures outside the rolling window, then add this one.
+	record.failures = record.failures.filter(ts => (now - ts) < config['windowMs']);
+	record.failures.push(now);
+
+	let blocked = false;
+	let retryAfterSec = 0;
+
+	if (record.failures.length >= config['maxFailures']) {
+
+		record.blockedUntil = now + config['blockMs'];
+		blocked = true;
+		retryAfterSec = Math.ceil(config['blockMs'] / 1000);
+	}
+
+	loginAttempts.set(ip, record);
+
+	return { 'blocked': blocked, 'retryAfterSec': retryAfterSec, 'failures': record.failures.length };
+}
+
+// Clears an IP's record on successful login.
+function recordLoginSuccess(ip) {
+
+	if (ip != undefined && ip != null && ip !== '') {
+
+		loginAttempts.delete(ip);
+	}
+}
+
+
 async function verifyLogin(req, res, isHub) {
 
 	let msg;
@@ -1751,19 +1891,51 @@ async function verifyLogin(req, res, isHub) {
 
 	const ip = getClientIp(req);
 
+	// Before checking the password, reject outright if this IP is currently
+	// blocked from too many recent failures. The password is not evaluated.
+	const blockStatus = checkLoginBlocked(ip);
+
+	if (blockStatus['blocked']) {
+
+		const blockMsg = 'Login BLOCKED (too many attempts) from: ' + ip + ' / Browser: ' + userAgent + ' / Retry after: ' + blockStatus['retryAfterSec'] + 's';
+
+		if (!isHub) {
+
+			logger(blockMsg);
+			sendNotification({ 'message': blockMsg, 'telegram_id': shareData.appData.telegram_id });
+		}
+
+		res.set('Retry-After', String(blockStatus['retryAfterSec']));
+		res.status(429).send('Too many login attempts. Try again in ' + blockStatus['retryAfterSec'] + ' seconds.');
+
+		return;
+	}
+
 	const dataPass = shareData.appData.password.split(':');
 
 	let success = await verifyPasswordHash( { 'salt': dataPass[0], 'hash': dataPass[1], 'data': password } );
+
+	let justBlocked = false;
+	let retryAfterSec = 0;
 
 	if (success) {
 
 		req.session.loggedIn = true;
 
+		// Clear this IP's failure record on any successful login.
+		recordLoginSuccess(ip);
+
 		msg = 'SUCCESS';
 	}
 	else {
 
-		msg = 'FAILED';
+		// Record the failure; may push this IP over the threshold into a block.
+		const failResult = recordLoginFailure(ip);
+
+		justBlocked = failResult['blocked'];
+		retryAfterSec = failResult['retryAfterSec'];
+
+		msg = 'FAILED' + (justBlocked ? ' (now blocked for ' + retryAfterSec + 's)' : '');
 	}
 
 	msg = 'Login ' + msg + ' from: ' + ip + ' / Browser: ' + userAgent;
@@ -1795,7 +1967,17 @@ async function verifyLogin(req, res, isHub) {
 	}
 	else {
 
-		res.redirect('/login');
+		// If this failure triggered a block, tell the client with a 429 so the
+		// lockout is visible rather than looking like an ordinary bad password.
+		if (justBlocked) {
+
+			res.set('Retry-After', String(retryAfterSec));
+			res.status(429).send('Too many login attempts. Try again in ' + retryAfterSec + ' seconds.');
+		}
+		else {
+
+			res.redirect('/login');
+		}
 	}
 }
 
@@ -2464,6 +2646,9 @@ module.exports = {
 	genPasswordHash,
 	verifyPasswordHash,
 	verifyLogin,
+	checkLoginBlocked,
+	recordLoginFailure,
+	recordLoginSuccess,
 	validateApiKey,
 	renderView,
 	timeDiff,

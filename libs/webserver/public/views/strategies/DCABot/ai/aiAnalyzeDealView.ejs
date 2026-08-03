@@ -69,10 +69,15 @@ const canAddFunds           = addedAmount > 0 && priceTargetNet > 0;
 let avgDailyMove = null;
 let parsedOhlcv  = [];
 let usedOhlcv    = false;
+let ohlcvCandleCount = 0;
 
 try {
     parsedOhlcv = JSON.parse(ohlcvData || '[]');
 } catch(e) {}
+
+if (Array.isArray(parsedOhlcv)) {
+    ohlcvCandleCount = parsedOhlcv.length;
+}
 
 if (Array.isArray(parsedOhlcv) && parsedOhlcv.length > 1) {
     try {
@@ -85,9 +90,17 @@ if (Array.isArray(parsedOhlcv) && parsedOhlcv.length > 1) {
             }
         }
         avgDailyMove = totalMove / (parsedOhlcv.length - 1);
-        if (avgDailyMove > 0) usedOhlcv = true;
     } catch(e) {}
 }
+
+// OHLCV is only considered "used" when real technical indicators were actually
+// computed from the candles (computeMarketIndicators returns null below the
+// minimum candle count). Deriving this from `indicators` — the same data the
+// MARKET CONDITIONS table renders — keeps the stated data source honest: it can
+// never claim OHLCV while the indicator cells are empty. (Previously this was
+// set from avgDailyMove, which only needs 2 candles and could disagree with the
+// indicators, letting the report claim OHLCV with no indicators behind it.)
+usedOhlcv = (indicators != null && typeof indicators === 'object');
 
 let lastOrderTime    = null;
 let lastOrderDisplay = 'N/A';
@@ -218,9 +231,9 @@ const pairName = pair || 'Unknown pair';
 
 ### MARKET CONDITIONS
 <% if (usedOhlcv) { %>
-Data source: OHLCV with technical indicators (<%= scenarioIndicators.timeframe || '1d' %> timeframe)
+**Data provenance:** This analysis WAS computed from live OHLCV candle data (<%= scenarioIndicators.timeframe || '1d' %> timeframe<% if (ohlcvCandleCount > 0) { %>, <%= ohlcvCandleCount %> candles<% } %>) fetched from the exchange. The market condition values below (Trend, RSI, Volatility, ATR) are technical indicators derived from that OHLCV data. If the user asks whether OHLCV was used, the correct answer is YES — the indicators in this report come directly from OHLCV candles.
 <% } else { %>
-Data source: Fallback estimates — OHLCV not available
+**Data provenance:** Live OHLCV candle data was NOT available for this analysis (the exchange returned too few candles or none). The values below are fallback estimates, not OHLCV-derived indicators. If the user asks whether OHLCV was used, the correct answer is NO for this particular report.
 <% } %>
 
 | | |

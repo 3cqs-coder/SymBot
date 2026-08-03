@@ -397,6 +397,21 @@ To secure login access to Linux, Mac, and Windows servers, it's crucial to imple
 
 For all three operating systems, regularly monitor and audit login attempts and system logs to detect and respond to any suspicious activities promptly. Implementing intrusion detection systems and keeping abreast of security best practices will contribute to a more robust defense against potential threats. Regularly reviewing and updating these security measures will help maintain a secure and resilient server environment.
 
+#### Login attempt protection
+
+SymBot automatically protects its web login against password-guessing (brute-force) attempts. Failed logins are tracked per source IP address: after several consecutive failures from the same address within a short window, that address is temporarily blocked from attempting to log in at all — the password is not even checked while a block is in effect. A successful login immediately clears the record for that address.
+
+When enabled with Telegram (see [Telegram Setup](#telegram-setup)), SymBot notifies you of every login — successful or failed — and sends a distinct alert when an address crosses the threshold and is blocked, so an in-progress brute-force attempt is visible rather than silent.
+
+This protection is on by default and requires no configuration. The tracking is held in memory only, so it adds no files and resets if SymBot restarts. Sensible defaults apply (a handful of failures triggers a block of several minutes), and they can be tuned by adding an optional `security.login_throttle` block to your **app.json** configuration:
+
+- `max_failures` — consecutive failed logins from one address before it is blocked. Default is `5`.
+- `window_ms` — rolling time window, in milliseconds, over which failures are counted; older failures are forgiven so occasional typos never accumulate. Default is `900000` (15 minutes).
+- `block_ms` — how long, in milliseconds, an address stays blocked once the threshold is crossed. Default is `900000` (15 minutes).
+- `max_tracked_ips` — maximum number of addresses tracked at once, to bound memory under a distributed attack; oldest entries are evicted first. Default is `5000`.
+
+Note that this protects the SymBot login specifically. It complements — and does not replace — the operating-system and network measures described above, and any protection provided by a reverse proxy or firewall in front of SymBot.
+
 ## Reverse Proxy Setup
 
 A reverse proxy is a special type of web server that receives requests, forwards them to another web server somewhere else, receives a reply, and forwards the reply to the original requester. Although there are many reasons to use a reverse proxy, they are generally used to help increase performance, security, and reliability. Two popular open-source software packages that can act as a reverse proxy are [Apache](https://apache.org) and [NGINX](https://nginx.org).
@@ -844,7 +859,7 @@ This is **read only**. The AI can describe deals and explain what happened to th
 
 Typical questions it can answer once enabled:
 
-- *"Why did META_USD-3KI3K3O-1784152693 pause?"* — reads that deal's log events and explains the cause
+- *"Why did BTC_USD-1A2B3C4-1700000000 pause?"* — reads that deal's log events and explains the cause
 - *"Compare deal A with deal B"* — pulls both records and contrasts status, safety orders, duration and prices
 - *"How much did that deal make?"* — reports the realized profit or loss for a deal that has closed
 - *"What happened today?"* — surfaces notable log events such as circuit breaker trips, cancelled orders and completions
@@ -1422,7 +1437,7 @@ curl -i -X POST \
 -H 'Content-Type: application/json' \
 -H 'Accept: application/json' \
 -H 'api-key: {API-KEY}' \
--d '{ "dealId": "BTC_USD-79P3J27-1762835040" }' \
+-d '{ "dealId": "BTC_USD-1A2B3C4-1700000000" }' \
 http://127.0.0.1:3000/api/ai/analyze_deal
 ```
 
@@ -1720,6 +1735,24 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 	- *Take profit in quote*: Bot sells BTC for USDT and keeps the USDT (you realize profit in dollars).
 
 - You can switch between base and quote currency at any time by updating your bot or deal settings.
+
+#### How is profit calculated when a sell fills in several parts?
+
+- Most sells fill completely in one go and profit is reported from that single fill price and the deal's accumulated quantity.
+
+- Occasionally an exchange fills only part of a market sell and cancels the rest (for example Coinbase price protection on a thin order book). SymBot retries the remainder, so the sell completes as a sequence of fills at different prices. In that case profit is reported from what actually executed: the total quantity filled across every attempt, valued at the volume-weighted average of those fill prices, against a cost basis matched to the quantity that sold. Reporting the pre-calculated ladder quantity at a single price would overstate the result, because a sell cascade on a thin book fills at progressively worse prices.
+
+- Fee handling is unchanged — profit remains net of the exchange fee configured on the bot, not per-fill fees reported by the exchange.
+
+- Actual fill data is used only when the exchange reports it reliably. SymBot reads the CCXT unified `average`, `cost` and `price` fields in that order of preference. Exchanges differ widely in what they return — some report nothing usable even after the order is queried — so SymBot falls back to the pre-calculated values whenever the data cannot be trusted: when no exchange-reported value is available, when the reported quantity exceeds what the deal held, or when the resulting average price is implausible against the market price the order was placed at. A deal on an exchange with poor fill reporting behaves exactly as it did before.
+
+- Some exchanges report an order's cost net of fees while others report it gross. Because profit already accounts for the exchange fee configured on the bot, SymBot cross-checks a reported cost against the reported fill price and ignores it when it looks fee-inclusive, preventing fees from being deducted twice.
+
+- Closed deals record which method was used, along with the quantity actually sold and each individual fill. Deals closed before this behaviour was added retain their original figures — they are not recalculated.
+
+#### Why does a closed deal show an unsold quantity?
+
+- When the remaining amount after partial-fill retries is below the retry threshold, SymBot accepts the fill and closes the deal rather than chasing dust, which would burn retries and fees for a negligible amount. The leftover quantity stays in your exchange account and is reported on the deal so you can reconcile it manually. It is excluded from the deal's cost basis, so profit reflects only the coin that actually sold.
 
 #### What is the difference between canceling and closing a deal?
 - Canceling a deal will remove the active deal from any further trading without selling any assets already bought from previous orders.

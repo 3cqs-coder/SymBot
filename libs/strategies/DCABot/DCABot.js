@@ -48,6 +48,71 @@ const maxPartialSellRetries = 10;
 // Delay in milliseconds between partial fill retry attempts
 const partialSellRetryDelayMs = 3000;
 
+// Tolerance (percent) by which an exchange-reported order cost may sit below
+// price * quantity before it is treated as fee-inclusive rather than display
+// rounding. Real taker fees are typically 0.1-1%, while rounding differences
+// observed on live fills are under 0.2%, so 0.25% separates the two without
+// discarding good data.
+const costFeeTolerancePercent = 0.25;
+
+
+// Quote-currency symbol for a pair, e.g. 'BTC/USD' -> '$'. Falls back to an
+// empty string when the pair is unusable so callers can concatenate safely.
+// Centralised here because several log lines and messages previously hardcoded
+// '$', which is wrong for any non-USD quote (EUR, GBP, BTC-quoted pairs, etc).
+function quoteSymbol(pair) {
+
+	const quote = (typeof pair === 'string' ? pair : '').split('/')[1] || '';
+
+	try {
+
+		return (Common.getCurrencySymbol(quote) || '');
+	}
+	catch (e) {
+
+		return ('');
+	}
+}
+
+
+// Format a price with its quote-currency symbol: formatPrice('BTC/USD', 1.5) -> '$1.5'
+function formatPrice(pair, value) {
+
+	return (quoteSymbol(pair) + value);
+}
+
+
+// Standard price/status log line shared by the sell, follow and safety-order
+// paths, which previously each built the same tab-separated string by hand with
+// a hardcoded '$'. Only the fields that differ are passed in; any field left
+// undefined is omitted so one helper covers all three call sites.
+function formatDealStatusLine({ pair, qty, lastPrice, dcaPrice, sellPrice, target, nextOrder, status, profit }) {
+
+	const parts = ['Pair: ' + pair];
+
+	if (qty        !== undefined) parts.push('Qty: ' + qty);
+	if (lastPrice  !== undefined) parts.push('Last Price: ' + formatPrice(pair, lastPrice));
+	if (dcaPrice   !== undefined) parts.push('DCA Price: ' + formatPrice(pair, dcaPrice));
+	if (sellPrice  !== undefined) parts.push('Sell Price: ' + formatPrice(pair, sellPrice));
+	if (target     !== undefined) parts.push('Target: ' + formatPrice(pair, target));
+	if (nextOrder  !== undefined) parts.push('Next Order: ' + formatPrice(pair, nextOrder));
+	if (status     !== undefined) parts.push('Status: ' + status);
+	if (profit     !== undefined) parts.push('Profit: ' + profit);
+
+	return (parts.join('\t'));
+}
+
+
+// Quantity actually executed on an order response, or 0 when the exchange
+// reported nothing usable. Centralises the `data_order.quantity` read that the
+// sell retry loops and the fill tracker both depend on.
+function orderFilledQty(orderResponse) {
+
+	const qty = Number(orderResponse?.['data_order']?.['quantity'] ?? 0);
+
+	return (isFinite(qty) && qty > 0 ? qty : 0);
+}
+
 
 // ── Loop-flow signals ─────────────────────────────────────────────────────────
 // dcaFollow (and the extracted handlers) return one of these to tell runFollowLoop
@@ -578,8 +643,8 @@ async function start(dataObj, startId) {
 
 				if (shareData.appData.verboseLog) {
 					
-					Common.logger(colors.bgWhite('Your Balance: $' + wallet));
-					Common.logger(colors.bgWhite('Max Funds: $' + lastDcaOrderSum));
+					Common.logger(colors.bgWhite('Your Balance: ' + formatPrice(pair, wallet)));
+					Common.logger(colors.bgWhite('Max Funds: ' + formatPrice(pair, lastDcaOrderSum)));
 				}
 
 				if (wallet < lastDcaOrderSum) {
@@ -1116,6 +1181,120 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 		let sellNSF = false;
 		let sellSuccess = true;
 
+		// Actual execution tally for this sell. A sell can complete as several partial
+		// fills at different prices (exchange cancels part way, remainder retried), so
+		// recording each fill lets the closed deal report what really executed instead
+		// of the pre-calculated ladder quantity valued at a single price.
+		//
+		// Observational only — it never feeds order sizing. The retry loops keep using
+		// qtySumSellOrder as the read-only ceiling exactly as before, so nothing here
+		// can change what gets sold. It is consumed only when building sellData, and
+		// only when it passes the checks in resolveFillSummary.
+		const fillTracker = {
+			'fills': [],
+			'qty': 0,
+			'proceeds': 0
+		};
+
+		// Record one executed fill.
+		//
+		// Exchange support for fill data varies widely across the exchanges CCXT
+		// covers, so the per-fill value is resolved through a precedence chain of
+		// CCXT unified fields, most trustworthy first:
+		//
+		//   1. average * qty  — 'average' is CCXT's volume-weighted fill price, i.e.
+		//                       unambiguously a PRICE, so it cannot silently include fees.
+		//                       Safest source where the exchange reports it.
+		//   2. cost           — CCXT's executed value. Preferred over 'price' because 'price'
+		//                       is rounded for display (observed live: the two differing
+		//                       by ~0.07% across a multi-fill sell) and on many exchanges
+		//                       'price' is the REQUESTED price, empty for market orders.
+		//                       CCXT maintainers note some exchanges fold fees into 'cost';
+		//                       since calculateProfit subtracts the configured exchangeFee
+		//                       itself, a fee-inclusive cost would be double-counted. It is
+		//                       therefore cross-checked against price * qty below.
+		//   3. price * qty    — CCXT's convention is cost = filled * price, so this
+		//                       reconstructs the same figure when cost is absent or rejected.
+		//   4. requested * qty— last resort. NOT evidence of execution, so it is tagged
+		//                       'requested' and resolveFillSummary rejects the summary.
+		//
+		// Exchanges that report nothing usable (some return null/zero for all of
+		// price, cost and average even after fetchOrder) fall through to 4 and the
+		// deal reports exactly as it does today. Quantity is still counted so the
+		// shortfall figure stays correct regardless.
+		const recordFill = (qtyFilled, orderData, requestedPrice) => {
+
+			const qty = Number(qtyFilled);
+
+			if (!isFinite(qty) || qty <= 0) {
+
+				return;
+			}
+
+			const num = (v) => {
+
+				const n = Number(v);
+
+				return (isFinite(n) && n > 0 ? n : 0);
+			};
+
+			const avg    = num(orderData?.['average']);
+			const cost   = num(orderData?.['amount']);
+			const px     = num(orderData?.['price']);
+			const reqPx  = num(requestedPrice ?? price);
+
+			let value = 0;
+			let valueSource = 'none';
+
+			if (avg > 0) {
+
+				value = qty * avg;
+				valueSource = 'average';
+			}
+			else if (cost > 0) {
+
+				// Guard against exchanges reporting cost net of fees. calculateProfit
+				// applies the configured exchangeFee itself, so a fee-inclusive cost
+				// would deduct fees twice and understate every partial-fill deal. On a
+				// sell, a cost materially BELOW price * qty is the signature of a
+				// fee-inclusive figure, so fall through to price instead. Display
+				// rounding is far smaller than any real fee, hence the tolerance.
+				// Where no price is available to compare, cost is used as-is.
+				const costImpliedPrice = cost / qty;
+
+				if (px > 0 && costImpliedPrice < (px * (1 - (costFeeTolerancePercent / 100)))) {
+
+					value = qty * px;
+					valueSource = 'price';
+				}
+				else {
+
+					value = cost;
+					valueSource = 'cost';
+				}
+			}
+			else if (px > 0) {
+
+				value = qty * px;
+				valueSource = 'price';
+			}
+			else if (reqPx > 0) {
+
+				value = qty * reqPx;
+				valueSource = 'requested';
+			}
+
+			fillTracker['fills'].push({
+				'qty': qty,
+				'price': value > 0 ? (value / qty) : 0,
+				'value': value,
+				'value_source': valueSource
+			});
+
+			fillTracker['qty'] += qty;
+			fillTracker['proceeds'] += value;
+		};
+
 		const sellDataObj = await processSellData(pair, price, dealId, exchange, config, currentOrder, filledOrders);
 
 		const feeData = sellDataObj['fee_data'];
@@ -1141,6 +1320,88 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 		//const profitData = await calculateProfit(price, config.sandBox, currentOrder.average, currentOrder.sum, config.dcaTakeProfitPercent, exchangeFeePercent);
 		//const profitPercFinal = profitData['profit_percentage'];
 		const profitPercFinal = Number(Number(profitPerc - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
+
+		// Decide whether the recorded fills are trustworthy enough to report profit
+		// from. Exchange fill data already drives order sizing (the retry loops depend
+		// on data_order.quantity), but reporting has a higher bar: a wrong number here
+		// yields a confidently wrong profit figure, which is worse than the
+		// pre-calculated estimate. Actuals are therefore corroborating, not
+		// authoritative — any check failing falls back to exactly today's behaviour.
+		//
+		// Checks:
+		//   1. At least one fill with positive quantity was recorded.
+		//   2. Every fill's value came from the exchange (amount or executed price).
+		//      A value derived from the requested price is not evidence of execution.
+		//   3. Total filled does not exceed the planned quantity beyond a rounding
+		//      tolerance — selling more than was held means the data is wrong.
+		//   4. VWAP is finite and positive.
+		//
+		// Returns null when actuals should not be used.
+		const resolveFillSummary = (plannedQty) => {
+
+			const planned = Number(plannedQty);
+
+			if (!fillTracker['fills'].length || fillTracker['qty'] <= 0) {
+
+				return (null);
+			}
+
+			// Only values the exchange actually reported count as evidence of execution.
+			const trustedSources = ['average', 'cost', 'price'];
+
+			const anyUntrusted = fillTracker['fills'].some(f => trustedSources.indexOf(f['value_source']) === -1);
+
+			if (anyUntrusted) {
+
+				return (null);
+			}
+
+			if (isFinite(planned) && planned > 0 && fillTracker['qty'] > (planned * 1.001)) {
+
+				return (null);
+			}
+
+			const vwap = fillTracker['proceeds'] / fillTracker['qty'];
+
+			if (!isFinite(vwap) || vwap <= 0) {
+
+				return (null);
+			}
+
+			// Sanity-check the VWAP against the market price this sell was placed at.
+			// Some exchanges return values in the wrong unit or scale (cost in base
+			// rather than quote, prices in satoshi-like integers). A VWAP wildly away
+			// from the price the order was submitted at means the reported figures
+			// cannot be interpreted safely, so fall back rather than report nonsense.
+			const referencePrice = Number(price);
+
+			if (isFinite(referencePrice) && referencePrice > 0) {
+
+				const ratio = vwap / referencePrice;
+
+				if (ratio < 0.5 || ratio > 2) {
+
+					Common.logger(colors.bgRed.bold(
+						'Fill data rejected for deal ID ' + dealId +
+						' — VWAP ' + vwap + ' implausible vs market price ' + referencePrice +
+						'. Reporting from pre-calculated values instead.'
+					));
+
+					return (null);
+				}
+			}
+
+			const qtyUnsold = (isFinite(planned) && planned > 0) ? Math.max(planned - fillTracker['qty'], 0) : 0;
+
+			return ({
+				'qty_filled': fillTracker['qty'],
+				'vwap': vwap,
+				'proceeds': fillTracker['proceeds'],
+				'fill_count': fillTracker['fills'].length,
+				'qty_unsold': qtyUnsold,
+				'partial': qtyUnsold > 0 || fillTracker['fills'].length > 1
+			});
+		};
 
 		const handleSuccessfulSell = async (verifyData) => {
 
@@ -1171,6 +1432,72 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				profitFinal      = Number(Number(profitDataVerified['profit_percentage'] - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
 			}
 
+			// Recompute from what actually executed when the sell completed as more than
+			// one fill (or left a shortfall) and the recorded fills pass their checks. A
+			// clean single-fill sell produces identical numbers either way — filled
+			// quantity equals planned and VWAP equals the single fill price — so this
+			// only moves deals whose reported figures were wrong.
+			//
+			// Only the INPUTS change: sell price becomes the volume-weighted average of
+			// the fills, and the cost basis covers only the quantity that actually sold.
+			// Fee handling is untouched — same configured exchangeFee, same
+			// calculateProfit path, same exchangeFeeSumDiffPercent adjustment.
+			const fillSummary = resolveFillSummary(qtySumSellOrder);
+
+			let profitSource = 'planned';
+			let qtySoldFinal = currentOrder.qtySum;
+
+			if (fillSummary && fillSummary['partial']) {
+
+				// Cost basis matched to the quantity that sold, so the deal is not charged
+				// for coin it still holds. Scale currentOrder.sum by the fraction of the
+				// ACCUMULATED BUY quantity (currentOrder.qtySum) that sold — qtySum is what
+				// currentOrder.sum paid for. Scaling by qtySumSellOrder would mix
+				// denominators: that figure is already net of the sell-side fee reduction,
+				// so it is smaller than qtySum and would understate the basis.
+				const basisQtyTotal = Number(currentOrder.qtySum);
+				const basisSumTotal = Number(currentOrder.sum);
+
+				let basisMatched;
+
+				if (isFinite(basisQtyTotal) && basisQtyTotal > 0 && isFinite(basisSumTotal) && basisSumTotal > 0) {
+
+					basisMatched = basisSumTotal * Math.min(fillSummary['qty_filled'] / basisQtyTotal, 1);
+				}
+				else {
+
+					basisMatched = fillSummary['qty_filled'] * Number(currentOrder.average);
+				}
+
+				const profitDataActual = await calculateProfit(exchange, pair, fillSummary['vwap'], currentOrder.average, basisMatched, config.dcaTakeProfitPercent, config.exchangeFee, config.sandBox);
+
+				sellPriceFinal   = Number(Number(fillSummary['vwap']).toFixed(10));
+				profitBaseFinal  = profitDataActual['profit_base'];
+				profitQuoteFinal = profitDataActual['profit'];
+				profitFinal      = Number(Number(profitDataActual['profit_percentage'] - feeData['exchangeFeeSumDiffPercent']).toFixed(2));
+
+				qtySoldFinal = fillSummary['qty_filled'];
+				profitSource = 'actual';
+
+				Common.logger(colors.bgYellow.bold(
+					'Profit from actual fills for deal ID ' + dealId +
+					' / Fills: ' + fillSummary['fill_count'] +
+					' / Sold: ' + fillSummary['qty_filled'].toFixed(8) +
+					' of ' + Number(qtySumSellOrder).toFixed(8) +
+					' / VWAP: ' + formatPrice(pair, fillSummary['vwap']) +
+					' / Proceeds: ' + formatPrice(pair, Number(fillSummary['proceeds']).toFixed(8)) +
+					(fillSummary['qty_unsold'] > 0 ? ' / Unsold: ' + fillSummary['qty_unsold'].toFixed(8) : '')
+				));
+
+				if (fillSummary['qty_unsold'] > 0) {
+
+					await sendDealMessage('deal_error',
+						'Deal ID ' + dealId + ' closed with ' + fillSummary['qty_unsold'].toFixed(8) + ' ' + (pair.split('/')[0] || '') +
+						' unsold (below retry threshold). This quantity is not tracked in the deal — reconcile manually.'
+					);
+				}
+			}
+
 			await updateDealTracker({
 				'exchange': exchange,
 				'deal_id': dealId,
@@ -1187,19 +1514,26 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 
 				Common.logger(
 				colors.blue.bold.italic(
-				'Pair: ' + pair +
-				'\tQty: ' + currentOrder.qtySum +
-				'\tLast Price: $' + sellPriceFinal +
-				'\tDCA Price: $' + currentOrder.average +
-				'\tSell Price: $' + currentOrder.target +
-				'\tStatus: ' + colors.red('SELL') +
-				'\tProfit: ' + profitFinal
+				formatDealStatusLine({
+					'pair': pair,
+					'qty': qtySoldFinal,
+					'lastPrice': sellPriceFinal,
+					'dcaPrice': currentOrder.average,
+					'sellPrice': currentOrder.target,
+					'status': colors.red('SELL'),
+					'profit': profitFinal
+				})
 				));
 			}
 
 			// orderId is stored as an array for partial fill retry compatibility.
 			// Single-order deals will have a one-element array.
 			// Legacy deals with a string orderId are handled transparently by consumers.
+			// Existing keys are unchanged in name, meaning and type — qtySum remains the
+			// deal's accumulated buy quantity and price remains the figure profit was
+			// derived from (the VWAP when fills were used). The fields after feeData are
+			// additive: consumers unaware of them are unaffected, and they are absent on
+			// deals closed before this change, so readers must treat them as optional.
 			const sellData = {
 				'date': new Date(),
 				'orderId': sellOrderIds,
@@ -1212,7 +1546,13 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				'profit': profitFinal,
 				'profitBase': profitBaseFinal,
 				'profitQuote': profitQuoteFinal,
-				'feeData': feeData
+				'feeData': feeData,
+				'profitSource': profitSource,
+				'qtySold': qtySoldFinal,
+				'qtyUnsold': fillSummary ? fillSummary['qty_unsold'] : 0,
+				'fillCount': fillSummary ? fillSummary['fill_count'] : (sellOrderIds.length || 1),
+				'proceeds': fillSummary ? fillSummary['proceeds'] : null,
+				'fills': fillTracker['fills']
 				 };
 
 			await Deals.updateOne({ dealId }, {
@@ -1261,7 +1601,7 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				else if (sellOrderStatusInvalid) {
 
 					// Check if exchange cancelled after a partial fill (e.g. Coinbase price protection)
-					const cancelPartialFilled = Number(sell['data_order']['quantity'] ?? 0);
+					const cancelPartialFilled = orderFilledQty(sell);
 					const cancelShortfall = cancelPartialFilled > 0
 						? ((Number(qtySumSellOrder) - cancelPartialFilled) / Number(qtySumSellOrder)) * 100
 						: 0;
@@ -1271,6 +1611,8 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 						// Exchange cancelled after partial fill — record fill and
 						// wait for settlement before retrying the remainder
 						sellOrderIds.push(sell['data']['id']);
+
+						recordFill(cancelPartialFilled, sell['data_order'], priceFiltered);
 
 						Common.logger(colors.bgYellow.bold(
 							'Exchange-cancelled partial fill for deal ID ' + dealId +
@@ -1323,7 +1665,7 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 							// report an empty data_order so this credits 0 for them. Adjusts only the
 							// in-memory tally — the deal's pre-calculated qtySumSellOrder is never
 							// mutated and remains the read-only ceiling.
-							const cancelRetryFilled = Number(cancelSellRetry?.['data_order']?.['quantity'] ?? 0);
+							const cancelRetryFilled = orderFilledQty(cancelSellRetry);
 
 							if (cancelRetryFilled > 0) {
 
@@ -1331,6 +1673,8 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 
 									sellOrderIds.push(cancelSellRetry['data']['id']);
 								}
+
+								recordFill(cancelRetryFilled, cancelSellRetry['data_order'], cancelPriceFiltered);
 
 								cancelTotalFilled += cancelRetryFilled;
 								cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
@@ -1392,7 +1736,10 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				// Initial sell succeeded — record this order ID and check for partial fill
 				sellOrderIds.push(sell['data']['id']);
 
-				const initialQtyFilled = Number(sell['data_order']['quantity'] ?? 0);
+				const initialQtyFilled = orderFilledQty(sell);
+
+				recordFill(initialQtyFilled, sell['data_order'], priceFiltered);
+
 				let totalQtyFilled = initialQtyFilled;
 				let qtyRemaining = Number(qtySumSellOrder) - totalQtyFilled;
 
@@ -1472,7 +1819,7 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 						// too high so later retries over-ask and hit InsufficientFunds. A truly
 						// failed attempt reports an empty data_order and credits 0. Adjusts only the
 						// in-memory tally — pre-calculated qtySumSellOrder is never mutated.
-						const retryQtyFilled = Number(sellRetry?.['data_order']?.['quantity'] ?? 0);
+						const retryQtyFilled = orderFilledQty(sellRetry);
 
 						if (retryQtyFilled > 0) {
 
@@ -1480,6 +1827,8 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 
 								sellOrderIds.push(sellRetry['data']['id']);
 							}
+
+							recordFill(retryQtyFilled, sellRetry['data_order'], priceRetryFiltered);
 
 							totalQtyFilled += retryQtyFilled;
 							qtyRemaining = Number(qtySumSellOrder) - totalQtyFilled;
@@ -1594,13 +1943,15 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 
 			Common.logger(
 				colors.blue.bold.italic(
-				'Pair: ' + pair +
-				'\tQty: ' + currentOrder.qtySum +
-				'\tLast Price: $' + price +
-				'\tDCA Price: $' + currentOrder.average +
-				'\tSell Price: $' + currentOrder.target +
-				'\tStatus: ' + colors.green('BUY') +
-				'\tProfit: ' + profit
+				formatDealStatusLine({
+					'pair': pair,
+					'qty': currentOrder.qtySum,
+					'lastPrice': price,
+					'dcaPrice': currentOrder.average,
+					'sellPrice': currentOrder.target,
+					'status': colors.green('BUY'),
+					'profit': profit
+				})
 			));
 		}
 
@@ -1692,7 +2043,7 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 				// deal ladder (that requires recomputing average/qty/target — tracked as a
 				// separate item, see backlog #66/#58). To avoid silently stranding coin,
 				// alert with the exact fill so it can be reconciled manually, then pause.
-				const buyPartialFilled = Number(buy['data_order']?.['quantity'] ?? 0);
+				const buyPartialFilled = orderFilledQty(buy);
 
 				msgType = 'deal_error';
 
@@ -2102,19 +2453,14 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 							if (shareData.appData.verboseLog) {
 							
 								Common.logger(
-								'Pair: ' +
-								pair +
-								'\tLast Price: $' +
-								price +
-								'\tDCA Price: $' +
-								currentOrder.average +
-								'\t\tTarget: $' +
-								currentOrder.target +
-								'\t\tNext Order: $' +
-								nextOrder +
-								'\tProfit: ' +
-								profit +
-								''
+								formatDealStatusLine({
+									'pair': pair,
+									'lastPrice': price,
+									'dcaPrice': currentOrder.average,
+									'target': currentOrder.target,
+									'nextOrder': nextOrder,
+									'profit': profit
+								})
 								);
 							}
 						}
@@ -2127,7 +2473,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 				if (maxSafetyOrdersUsed && isBuy) {
 
-					if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold(pair + ' Max safety orders used.') + '\tLast Price: $' + price + '\tTarget: $' + currentOrder.target + '\tProfit: ' + profit); }
+					if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold(pair + ' Max safety orders used.') + '\tLast Price: ' + formatPrice(pair, price) + '\tTarget: ' + formatPrice(pair, currentOrder.target) + '\tProfit: ' + profit); }
 					
 					//await Common.delay(2000);
 				}
@@ -3167,6 +3513,7 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 	let orderAmount = null;
 	let orderQty = null;
 	let orderPrice = null;
+	let orderAverage = null;
 
 	if (orderId) {
 
@@ -3182,6 +3529,12 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 				orderAmount = orderVerifyData.cost;
 				orderQty = orderVerifyData.filled ?? orderVerifyData.amount;
 				orderPrice = orderVerifyData.price;
+
+				// CCXT unified 'average' is the volume-weighted fill price. Where an
+				// exchange populates it, it is more accurate than 'price' (which is the
+				// requested price on many exchanges) and needs no derivation from cost.
+				// Not all exchanges provide it, so it is captured opportunistically.
+				orderAverage = orderVerifyData.average ?? null;
 
 				success = true;
 				finished = true;
@@ -3215,6 +3568,7 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 								orderQty    = Number(partialFilled);
 								orderAmount = orderVerify.data.cost ?? null;
 								orderPrice  = orderVerify.data.price ?? null;
+								orderAverage = orderVerify.data.average ?? null;
 							}
 						}
 					}
@@ -3235,6 +3589,7 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 		'order_amount': orderAmount,
 		'order_qty': orderQty,
 		'order_price': orderPrice,
+		'order_average': orderAverage,
 		'order_invalid': orderInvalid,
 		'status_invalid': statusInvalid
 	};
@@ -3492,6 +3847,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 						'data_order': {
 										'id': orderId,
 										'price': verifyData.order_price,
+										'average': verifyData.order_average,
 										'amount': verifyData.order_amount,
 										'quantity': verifyData.order_qty
 									  }
@@ -3619,6 +3975,7 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 						'data_order': {
 										'id': orderId,
 										'price': verifyData.order_price,
+										'average': verifyData.order_average,
 										'amount': verifyData.order_amount,
 										'quantity': verifyData.order_qty
 									  }

@@ -45,6 +45,14 @@
         "price_zero_alert_count": 4,
 		"price_drop_enabled": true
     },
+	"security": {
+    	"login_throttle": {
+        "max_failures": 5,
+        "window_ms": 900000,
+        "block_ms": 900000,
+        "max_tracked_ips": 5000
+    	}
+	},
 	"bots": {
 				"start_conditions": {
 										"asap": {
