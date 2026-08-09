@@ -172,7 +172,7 @@
 					}
 	
 					messageBuffer += content;
-					$currentMessageElement.html(marked.parse(messageBuffer, { breaks: true }));
+					$currentMessageElement.html(DOMPurify.sanitize(marked.parse(messageBuffer, { breaks: true })));
 				}
 	
 				scrollToBottom();
@@ -193,7 +193,7 @@
 						$chatBox.append($userMsg);
 					} else if (msg.role === 'assistant') {
 						const $msg = $('<div>', { class: 'message bot-message' });
-						$msg.html(marked.parse(msg.content, { breaks: true }));
+						$msg.html(DOMPurify.sanitize(marked.parse(msg.content, { breaks: true })));
 						$chatBox.append($msg);
 					}
 				});
