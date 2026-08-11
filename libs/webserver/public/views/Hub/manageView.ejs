@@ -113,71 +113,80 @@
 
 					let online = {};
 					let instances = [];
-					let displayData = '';
+					// Host CPU load — the same for every instance on this host, so it's
+					// collected once and shown in the header strip, not per row.
+					let hostLoad = null;
 
 					instanceMap.forEach((msg, instanceId) => {
-				
+					
 						online[instanceId] = true;
 						instances.push({ instanceId: instanceId, instanceName: msg.data.instanceName, memoryUsage: msg.data.memoryUsage });
 					});
 
-					// Sort alphabetically
 					instances.sort((a, b) => a.instanceName.localeCompare(b.instanceName));
 
-					if (instances.length) {
-
-						// rss covers the entire process and is shared by every instance, so
-						// it is shown once here rather than repeated on each instance below.
-						// Any instance's reading is the same figure; use the highest seen in
-						// case readings were taken a moment apart.
-						let processRss = 0;
-						let attributedTotal = 0;
-
-						instances.forEach(instance => {
-
-							const rss = instance.memoryUsage.rss || 0;
-
-							if (rss > processRss) { processRss = rss; }
-
-							attributedTotal += (instance.memoryUsage.attributed || 0);
-						});
-
-						displayData += '<div style="text-align: left; padding: 5px; margin-bottom: 5px; border-bottom: 1px solid rgba(128,128,128,0.35);">';
-						displayData += '<b>Process</b><br>';
-						displayData += 'RSS: ' + numFormatter(processRss) + '<br>';
-						displayData += 'Attributed (all instances): ' + numFormatter(attributedTotal) + '<br>';
-						displayData += '</div>';
-					}
-
-					instances.forEach(instance => {
-
-						displayData += '<div style="text-align: left; padding: 5px;">';
-						displayData += '<b>' + instance.instanceName + '</b><br>';
-						displayData += 'Attributed: ' + numFormatter(instance.memoryUsage.attributed) + '<br>';
-						displayData += 'Heap Used: ' + numFormatter(instance.memoryUsage.heapUsed) + '<br>';
-						displayData += 'Heap Total: ' + numFormatter(instance.memoryUsage.heapTotal) + '<br>';
-						displayData += 'External: ' + numFormatter(instance.memoryUsage.external) + '<br>';
-						displayData += 'Array Buffers: ' + numFormatter(instance.memoryUsage.arrayBuffers) + '<br>';
-						displayData += '</div>';
-					});
+					let memByInstance = {};
+					instances.forEach(inst => { memByInstance[inst.instanceId] = inst.memoryUsage; });
 
 					$('#botsDeals tbody tr').each(function() {
 
 						let instanceId = $(this).attr('data-instanceid');
 						$(this).find('.hub-instance-status-indicator').css('background-color', '');
 
+						let $mem = $(this).find('.hub-mem-cell');
+
 						if (online[instanceId]) {
 
 							$(this).find('.hub-instance-status-indicator').css('background-color', '#2ecc71');
+
+							let m = memByInstance[instanceId];
+							if (m) {
+
+								$mem.html(
+									'<span class="hub-mem-metric"><span class="hub-mem-k">Heap</span> ' + numFormatter(m.heapUsed) + '</span>' +
+									'<span class="hub-mem-metric"><span class="hub-mem-k">Attr</span> ' + numFormatter(m.attributed) + '</span>'
+								);
+
+								// Host CPU load is identical for every instance sharing this host,
+								// so it's shown ONCE in the header strip rather than repeated on each
+								// row. Capture it from whichever online instance reports it.
+								if (Array.isArray(m.loadAvg) && m.loadAvg.length >= 1 && m.cpuCount > 0) {
+
+									hostLoad = { loadAvg: m.loadAvg, cpuCount: m.cpuCount };
+								}
+							} else {
+								$mem.empty();
+							}
+						}
+						else {
+							$mem.empty();
 						}
 					});
 
-					if (displayData == '') {
-	
-						displayData = 'No Data';
-					}
+					renderHostLoad(hostLoad);
+				}
 
-					$('#hub-memoryContent').html(displayData);
+
+				// Renders the single host-load figure in the "Managed Instances" header
+				// strip. Load is host-level, so it appears once here rather than repeated
+				// on every instance row. Hidden when no online instance reports load
+				// (e.g. all offline, or instances predating the load feature).
+				function renderHostLoad(hostLoad) {
+
+					let $strip = $('#hubHostLoad');
+
+					if (!hostLoad) { $strip.hide().empty(); return; }
+
+					let loadPct = Math.min(999, Math.round((hostLoad.loadAvg[0] / hostLoad.cpuCount) * 100));
+					let loadClass = loadPct >= 90 ? 'health-load-high' : (loadPct >= 70 ? 'health-load-med' : 'health-load-low');
+					let triple = hostLoad.loadAvg.map(l => l.toFixed(2)).join(' / ');
+					let coresTxt = hostLoad.cpuCount + (hostLoad.cpuCount === 1 ? ' core' : ' cores');
+
+					$strip.html(
+						'<span class="hub-hostload-label">Host load</span> ' +
+						'<span class="hub-hostload-val ' + loadClass + '">' + loadPct + '%</span>' +
+						'<span class="hub-hostload-sub">' + triple + ' · ' + coresTxt + '</span>'
+					).show();
 				}
 
 				function cleanupInstances() {
@@ -218,18 +227,6 @@
 					socket.emit('leaveRoom', 'memory');
 				});
 			}
-
-			$('#hub-showMemoryButton, #hub-closeMemoryButton').click(function() {
-
-				let effect = 'slide';
-				let duration = 500; 
-				let options = { 'direction': 'left' };
-
-				const id = $(this).attr('id');
-
-				$('#hub-memory-container').toggle(effect, options, duration);
-			});
-
 
 			$('#app_config').val('app.json');
 			$('#bot_config').val('bot.json');
@@ -626,6 +623,7 @@
 			});
 
 			SymBot.UI.initColumnSelector();
+			SymBot.UI.initHeaderCorners('#botsDeals');
 
 			// Handle inline editing of fields
 			$(document).on('click', 'td.editable', function () {
@@ -831,7 +829,7 @@
 				}
 			});
 
-			// Automatically update and validate App Config and Bot Config fields in the "Existing Instances" section
+			// Automatically update and validate App Config and Bot Config fields in the "Managed Instances" section
 			$(document).on('blur', 'td[data-field="app_config"], td[data-field="bot_config"] td[data-field="server_config"] input', function () { // Changed to 'blur' event
 				let value = $(this).val().trim();
 
@@ -1103,9 +1101,9 @@
 
 			<%- include('../partialsColumnSelector') %>
 		
-			<div id="contentBox">
+			<div id="contentBox" class="wide">
 				<!-- Header -->
-				<div class="contentHeaderBox" style="position: relative;">
+				<div class="contentHeaderBox">
 					<b id="headerText" class="contentHeader">Hub Instance Manager</b>
 					<span class="viewSettings">
 						<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
@@ -1174,19 +1172,10 @@
 					</form>
 				</div>
 
-				<div id="hub-memory-container">
-					<button id="hub-closeMemoryButton">&times;</button>
-					<div id="hub-memoryContent">No Data</div>
-				</div>
-
-				<!-- Existing Instances Table -->
+				<!-- Managed Instances Table -->
 				<div class="hub-middle-container">
-					<h3 class="hub-middle-header">Existing Instances</h3>
-					<div class="hub-show-memorybutton-wrapper">
-						<button id="hub-showMemoryButton" type="button" class="hub-memory-btn">
-							<span class="icon icon-memory" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-right:4px;"></span>Memory
-						</button>
-					</div>
+					<h3 class="hub-middle-header">Managed Instances</h3>
+					<span id="hubHostLoad" class="hub-hostload-strip" style="display: none;"></span>
 				</div>
 				
 				<div class="hub-table-container" style="overflow-x: auto;">
@@ -1195,6 +1184,7 @@
 							<tr>
 								<th data-sorter="false" class="columnSelector-disable"></th>
 								<th>Instance</th>
+								<th data-sorter="false">Memory</th>
 								<th>Exchange</th>
 								<th>Mongo DB URL</th>
 								<th>Port</th>
@@ -1221,6 +1211,7 @@
 										<td class="editable" data-field="name">
 											<%= config.name %>
 										</td>
+										<td class="hub-mem-cell" data-instanceid="<%= config.id %>"></td>
 										<td>
 											<%= (config.exchange || '').toUpperCase() %>
 										</td>

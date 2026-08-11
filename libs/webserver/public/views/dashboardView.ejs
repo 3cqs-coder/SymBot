@@ -255,7 +255,13 @@
 </script>
 
 <main style="margin-top: 10px">
-    <div id="contentBox" style="display: flex; flex-wrap: wrap;">
+    <div id="contentBox" class="wide">
+
+        <div class="contentHeaderBox">
+            <b class="contentHeader">Dashboard</b>
+        </div>
+
+        <div class="dashboard-controls" style="display: flex; flex-wrap: wrap;">
         <div style="flex: 1;">
             <div style="display: flex; flex-direction: column; justify-content: center; gap: 5px;">
                 <select class="form-field" id="period-select" style="width: 100px;">
@@ -272,6 +278,7 @@
                 <b>Balance:</b>
                 <select class="form-field" id="currencies" style="width: 100px; margin-left: 5px;"></select>
             </div>
+        </div>
         </div>
         <div id="belowContentBox" style="flex-basis: 100%; display: flex; justify-content: center; margin-top: 20px;">
             <div id="innerContent" style="flex: 1;">

@@ -53,7 +53,11 @@ function processWorkerMessage(workerId, instanceName) {
 						'heapUsed': message.data.heapUsed,
 						'external': message.data.external || 0,
 						'arrayBuffers': message.data.arrayBuffers || 0,
-						'attributed': memoryAttributed
+						'attributed': memoryAttributed,
+						// Host CPU load (same for every instance on this host) — carried
+						// on the same channel so the Manage view can show it per row.
+						'loadAvg': message.data.loadAvg || null,
+						'cpuCount': message.data.cpuCount != null ? message.data.cpuCount : null
 					}
 				};				
 

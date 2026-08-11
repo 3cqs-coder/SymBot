@@ -60,6 +60,10 @@
 	--table-background-color: #e2e2e2;
 	--table-background-hover-color: #c5c5c5;
 	--table-border: 1px solid #cdcdcd;
+	--table-border-color: #cdcdcd;
+	--table-header-background-color: #e2e2e2;
+	--header-background-color: #ffffff;
+	--text-color: #3e3e3e;
 	--content-box-color: #000000;
 	--content-box-background-color: #ffffff;
 	--dialog-background-color: #ffffff;
@@ -75,6 +79,10 @@
 	--table-background-color: #222222;
 	--table-background-hover-color: #333333;
 	--table-border: 1px solid #3a3a3a;
+	--table-border-color: #3a3a3a;
+	--table-header-background-color: #2a2a2a;
+	--header-background-color: #1a1a1a;
+	--text-color: #b8b8b8;
 	--content-box-color: #b8b8b8;
 	--content-box-background-color: #222222;
 	--dialog-background-color: #222222;
@@ -389,6 +397,34 @@ a:visited {
 }
 
 
+/* Host-load strip in the Managed Instances header — shows the host CPU load once
+   (it's identical across all instances on the host) instead of repeating it per
+   row. Sits to the right of the section title. */
+.hub-hostload-strip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-left: 16px;
+    margin-bottom: 10px;
+    vertical-align: middle;
+    font-size: 0.95rem;
+}
+.hub-hostload-label {
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.82rem;
+}
+.hub-hostload-val {
+    font-weight: 600;
+}
+.hub-hostload-sub {
+    opacity: 0.55;
+    font-size: 0.85rem;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+
 .hub-show-memorybutton-wrapper {
     display: inline-block;
     margin-left: 10px;
@@ -581,9 +617,6 @@ a:visited {
 	border: 1px solid #505050;
 	box-shadow: none;
 }
-	cursor: pointer;
-	transition: opacity 0.15s;
-}
 
 .hub-remove-btn:hover {
 	opacity: 0.8;
@@ -712,6 +745,7 @@ form textarea {
 	border-radius: 6px;
 	overflow: hidden;
 	background: rgba(0, 0, 0, 0.06);
+	border: 1px solid var(--shell-section-border, rgba(0, 0, 0, 0.12));
 }
 
 
@@ -882,8 +916,17 @@ form textarea {
 
 .notificationsItem {
 
-	margin-top: 10px;
+	margin-top: 8px;
 	font-size: 0.85rem;
+	color: var(--table-content-color);
+	opacity: 0.75;
+}
+
+/* Timestamp on the dark toast chrome — brighter muted tone for readability. */
+#notificationsBox .notificationsItem {
+
+	color: #9aa0a8;
+	opacity: 1;
 }
 
 
@@ -1408,6 +1451,12 @@ table#botsDeals th, table#hubDeals th, table#hubBots th {
 }
 
 
+/* Rounded top corners on the header. The :first-child/:last-child rules are the
+   default; but the column selector hides columns via an injected
+   `nth-child(){display:none}` stylesheet rule, leaving the hidden cell still
+   :first-child / :last-child in the DOM — so the visible end cell would lose its
+   corner. The .th-round-left / .th-round-right classes (applied by JS to the
+   first/last VISIBLE header) fix that; they win via higher specificity. */
 table#botsDeals th:first-child, table#hubDeals th:first-child, table#hubBots th:first-child {
 
 	border-radius: 5px 0 0 0;
@@ -1416,6 +1465,17 @@ table#botsDeals th:first-child, table#hubDeals th:first-child, table#hubBots th:
 
 table#botsDeals th:last-child, table#hubDeals th:last-child, table#hubBots th:last-child {
 
+	border-radius: 0 5px 0 0;
+}
+
+table#botsDeals thead th.th-round-left,
+table#hubDeals thead th.th-round-left,
+table#hubBots thead th.th-round-left {
+	border-radius: 5px 0 0 0;
+}
+table#botsDeals thead th.th-round-right,
+table#hubDeals thead th.th-round-right,
+table#hubBots thead th.th-round-right {
 	border-radius: 0 5px 0 0;
 }
 
@@ -1483,22 +1543,49 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 .notificationsRow {
 
 	font-size: 1.0rem;
-	margin-top: 5px;
-	margin-bottom: 5px;
-	padding: 8px;
-	border: 1px solid #272727;
+	margin-top: 8px;
+	margin-bottom: 8px;
+	padding: 11px 13px;
 	cursor: pointer;
 	overflow-wrap: break-word;
-	border-radius: 5px;
-	color: #cccccc;
+	border-radius: 8px;
+	color: var(--table-content-color);
 
-	box-shadow: 0 3px 3px rgba(3, 0, 3, 0.6); 
+	/* Rows must stand out from the modal surface they sit on. Use the elevated
+	   header surface (lighter than the dialog bg in dark mode, distinct in light),
+	   a solid border, a teal accent stripe to delineate each item, and a shadow
+	   for separation. */
+	background: var(--table-header-background-color, var(--table-background-color));
+	border: 1px solid var(--table-border-color, rgba(128,128,128,0.4));
+	border-left: 3px solid var(--nav-item-active-bar, #14b8b8);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 
-	/* Permalink - use to edit and share this gradient: https://colorzilla.com/gradient-editor/#000000+0,2e3034+100 */
-	background: rgb(0,0,0); /* Old browsers */
-	background: -moz-linear-gradient(top,  rgba(0,0,0,1) 0%, rgba(46,48,52,1) 100%); /* FF3.6-15 */
-	background: -webkit-linear-gradient(top,  rgba(0,0,0,1) 0%,rgba(46,48,52,1) 100%); /* Chrome10-25,Safari5.1-6 */
-	background: linear-gradient(to bottom,  rgba(0,0,0,1) 0%,rgba(46,48,52,1) 100%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
+	transition: border-color 120ms ease, background-color 120ms ease, transform 80ms ease;
+}
+
+.notificationsRow:hover {
+
+	background: var(--table-background-hover-color, var(--table-header-background-color));
+	transform: translateX(1px);
+}
+
+/* Bottom-right TOASTS: a distinct "system chrome" surface (the same dark shell
+   the topbar/sidebar use in BOTH themes) with a teal accent stripe, so a toast
+   always stands out as a floating alert instead of blending into page content.
+   These tokens are intentionally dark in light AND dark mode. */
+#notificationsBox .notificationsRow {
+
+	color: var(--nav-text-bright, #ffffff);
+	background: #1e2024;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-left: 4px solid var(--nav-item-active-bar, #14b8b8);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+#notificationsBox .notificationsRow:hover {
+
+	background: #26292e;
+	transform: none;
 }
 
 
@@ -1853,6 +1940,12 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 #csvDownload {
 
 	cursor: pointer;
+}
+body.has-shell #csvDownload .icon {
+	background-color: #3e3e3e !important;
+}
+body[data-theme="dark"].has-shell #csvDownload .icon {
+	background-color: #d0d0d0 !important;
 }
 
 
@@ -2264,7 +2357,7 @@ table#hubDeals td.profit-negative,
 
 	font-size: 1.0rem;
 	font-weight: 600;
-	color: #e0e0e0;
+	color: var(--table-content-color);
 }
 
 
@@ -2285,15 +2378,15 @@ table#hubDeals td.profit-negative,
 	justify-content: center;
 	border-radius: 6px;
 	cursor: pointer;
-	color: #cccccc;
+	color: var(--table-content-color);
 	transition: background 120ms ease, color 120ms ease;
 }
 
 
 #popoutMode:hover {
 
-	background: rgba(255, 255, 255, 0.12);
-	color: #ffffff;
+	background: var(--table-background-hover-color, rgba(128, 128, 128, 0.18));
+	color: var(--table-content-color);
 }
 
 
@@ -2421,3 +2514,1921 @@ body.popout-body #chatInputContainer {
 	opacity: 0.7;
 	margin-top: 4px;
 }
+
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COCKPIT SHELL (backlog #75/#77)
+   Ported from the approved standalone mockup. Fixed top bar + fixed sidebar +
+   inset content panel. Activated per page via body.has-shell. Non-shell pages
+   (e.g. login) are untouched.
+
+   Architecture notes:
+   - NOT a grid on <body> — top bar & sidebar are position:fixed, content is
+     inset with margin-left/padding so modals, overlays, and legacy
+     <center><main> wrappers stay in normal flow and layer correctly.
+   - z-index: chrome (topbar/sidebar) 8000–9000; jQuery UI dialogs lifted above.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+	--shell-topbar-h: 60px;
+	--shell-sidebar-w: 236px;
+	--shell-sidebar-rail-w: 60px;
+	--shell-footer-h: 25px;
+
+	/* Workspace + panel surfaces (light) */
+	--shell-workspace-bg: #23262d;
+	--shell-panel-border: rgba(0, 0, 0, 0.08);
+	--shell-preview-border: rgba(0, 0, 0, 0.22);
+	--shell-preview-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+	--shell-panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+	--shell-section-tint: rgba(0, 0, 0, 0.035);
+	--shell-section-border: rgba(0, 0, 0, 0.07);
+	--shell-row-hover: rgba(0, 0, 0, 0.025);
+
+	/* Chrome */
+	--shell-topbar-bg: linear-gradient(180deg, #141416 0%, #0d0d0f 100%);
+	--nav-bg: linear-gradient(180deg, #1b1b1e 0%, #141416 100%);
+	--nav-border: #2a2a2e;
+	--nav-text: #c9c9cf;
+	--nav-text-muted: #7c7c86;
+	--nav-text-bright: #ffffff;
+	--nav-toggle-ic: #cfcfd6;
+	--btc-text: #d8d8d8;
+	--nav-item-hover-bg: rgba(255, 255, 255, 0.06);
+	--nav-item-active-bg: linear-gradient(90deg, rgba(20, 184, 184, 0.20) 0%, rgba(20, 184, 184, 0.03) 100%);
+	--nav-item-active-bar: #14b8b8;
+	--nav-item-active-text: #ffffff;
+	--nav-ic: #8a8a94;
+
+	/* Semantic colors — replace hard-coded hex scattered through view markup.
+	   Referenced via var() so both themes and future retinting are one place. */
+	--color-danger: #d80f08;
+	--color-danger-soft: rgba(216, 15, 8, 0.10);
+	--color-success: #16a34a;
+	--color-success-soft: rgba(22, 163, 74, 0.12);
+	--color-warning: #e0891b;
+	--color-warning-soft: rgba(224, 137, 27, 0.15);
+	--color-neutral: var(--content-box-color);
+}
+
+[data-theme="dark"] {
+	--shell-workspace-bg: #0b0b0d;
+	--shell-panel-border: rgba(255, 255, 255, 0.08);
+	--shell-preview-border: rgba(0, 0, 0, 0.22);
+	--shell-preview-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+	--shell-panel-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+	--shell-section-tint: rgba(255, 255, 255, 0.035);
+	--shell-section-border: rgba(255, 255, 255, 0.07);
+	--shell-row-hover: rgba(255, 255, 255, 0.03);
+	--nav-bg: linear-gradient(180deg, #161618 0%, #0e0e10 100%);
+	--nav-border: #262629;
+
+	/* Dark-theme semantic color tweaks (brighter for contrast on dark) */
+	--color-danger: #f87171;
+	--color-danger-soft: rgba(248, 113, 113, 0.12);
+	--color-success: #4ade80;
+	--color-success-soft: rgba(74, 222, 128, 0.12);
+	--color-warning: #fbbf24;
+	--color-warning-soft: rgba(251, 191, 36, 0.15);
+}
+
+/* ── Body / workspace ─────────────────────────────────────────────────────── */
+body.has-shell {
+	margin: 0;
+	min-height: 100vh;
+	background: var(--shell-workspace-bg);
+	background-image: none;
+}
+
+/* ── Top bar ──────────────────────────────────────────────────────────────── */
+body.has-shell #headerBox {
+	position: fixed;
+	top: 0; left: 0; right: 0; bottom: auto;
+	width: 100%;
+	height: var(--shell-topbar-h);
+	display: flex;
+	align-items: center;
+	padding: 0 16px;
+	background: var(--shell-topbar-bg);
+	border-bottom: 1px solid var(--nav-border);
+	z-index: 9000;
+}
+
+.nav-toggle {
+	width: 38px; height: 38px; flex-shrink: 0;
+	display: flex; align-items: center; justify-content: center;
+	border: none; background: transparent; color: var(--nav-toggle-ic); cursor: pointer;
+	border-radius: 7px; margin-right: 10px;
+	transition: background 120ms ease, color 120ms ease;
+}
+.nav-toggle:hover { background: rgba(255, 255, 255, 0.10); color: var(--nav-text-bright); }
+.nav-toggle svg { width: 20px; height: 20px; }
+
+body.has-shell #divLogo { position: relative; overflow: visible; }
+body.has-shell #divLogo img { height: 40px; }
+/* HUB badge in the shell: inline pill next to the logo (the legacy -35px absolute
+   offset was tuned for the old centered logo and collides with the BTC price in
+   the shell's left-aligned header). */
+body.has-shell .hub-superscript {
+	position: static;
+	display: inline-flex;
+	align-items: center;
+	margin-left: 8px;
+	top: auto; right: auto;
+	width: auto;
+	padding: 2px 7px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	background: #0e8a8a;
+	color: #ffffff;
+	border-radius: 4px;
+	align-self: center;
+}
+
+body.has-shell #btcPrice {
+	position: static; left: auto; bottom: auto;
+	margin-left: 16px; font-size: 0.95rem; color: var(--btc-text); white-space: nowrap;
+}
+
+body.has-shell .headerButtons {
+	position: static; right: auto; bottom: auto; margin-left: auto;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+.side-nav {
+	position: fixed;
+	top: var(--shell-topbar-h); left: 0;
+	width: var(--shell-sidebar-w);
+	height: calc(100vh - var(--shell-topbar-h));
+	background: var(--nav-bg);
+	border-right: 1px solid var(--nav-border);
+	overflow: hidden;
+	z-index: 8000;
+	transition: width 160ms ease;
+}
+.side-nav-scroll {
+	height: 100%; overflow-y: auto; overflow-x: hidden;
+	padding: 12px 8px 20px 8px; scrollbar-width: thin;
+}
+.side-nav-group { margin-bottom: 16px; }
+.side-nav-label {
+	font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+	color: var(--nav-text-muted); padding: 6px 10px 6px 12px; white-space: nowrap; overflow: hidden;
+}
+.side-nav-item {
+	display: flex; align-items: center; gap: 12px;
+	height: 44px; padding: 0 12px; margin-bottom: 2px;
+	border-radius: 8px; color: var(--nav-text) !important; white-space: nowrap; position: relative;
+	transition: background 120ms ease, color 120ms ease;
+}
+.side-nav-item:hover { background: var(--nav-item-hover-bg); color: var(--nav-text-bright) !important; }
+.side-nav-ic {
+	flex-shrink: 0; width: 22px; display: flex; align-items: center; justify-content: center;
+	color: var(--nav-ic);
+}
+.side-nav-item:hover .side-nav-ic { color: var(--nav-toggle-ic); }
+.nav-ic { width: 19px; height: 19px; }
+.side-nav-text { font-size: 0.98rem; overflow: hidden; text-overflow: ellipsis; }
+.side-nav-ext { margin-left: auto; font-size: 0.8rem; color: var(--nav-text-muted); }
+.side-nav-item.is-active {
+	background: var(--nav-item-active-bg); color: var(--nav-item-active-text) !important;
+}
+.side-nav-item.is-active .side-nav-ic { color: var(--nav-item-active-bar); }
+.side-nav-item.is-active::before {
+	content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
+	width: 3px; border-radius: 0 3px 3px 0; background: var(--nav-item-active-bar);
+}
+
+/* Collapsed rail */
+body.nav-collapsed .side-nav { width: var(--shell-sidebar-rail-w); }
+body.nav-collapsed .side-nav-text,
+body.nav-collapsed .side-nav-label,
+body.nav-collapsed .side-nav-ext { display: none; }
+body.nav-collapsed .side-nav-item { justify-content: center; padding: 0; gap: 0; }
+body.nav-collapsed .side-nav-group {
+	margin-bottom: 8px; padding-top: 8px; border-top: 1px solid var(--nav-border);
+}
+body.nav-collapsed .side-nav-group:first-child { border-top: 0; padding-top: 0; }
+
+/* ── Content inset ────────────────────────────────────────────────────────── */
+/* Neutralize legacy main{position:relative;top:70px} and handle both <main> and
+   <center><main> structures. */
+body.has-shell main {
+	position: static !important;
+	top: auto !important;
+	width: auto !important;
+	margin-left: var(--shell-sidebar-w);
+	padding: calc(var(--shell-topbar-h) + 22px) 26px calc(var(--shell-footer-h) + 24px) 26px;
+	min-height: 100vh;
+	box-sizing: border-box;
+	background: transparent;
+	transition: margin-left 160ms ease;
+}
+body.nav-collapsed main { margin-left: var(--shell-sidebar-rail-w); }
+
+body.has-shell > center { display: block; text-align: initial; }
+body.has-shell > center > main { margin-left: var(--shell-sidebar-w); }
+body.nav-collapsed > center > main { margin-left: var(--shell-sidebar-rail-w); }
+
+/* ── Content panel (the surface every view sits in) ───────────────────────── */
+/* View markup no longer carries inline max-width/text-align/margin (removed at
+   the source), so the shell controls layout cleanly without !important. Panel
+   sizes to content: short views compact, wide views fill via the .wide class the
+   view sets. */
+body.has-shell #contentBox {
+	background: var(--content-box-background-color);
+	border: 1px solid var(--shell-panel-border);
+	border-radius: 8px;
+	box-shadow: var(--shell-panel-shadow);
+	width: 100%;
+	max-width: 1100px;
+	margin: 0 auto;
+	padding: 0;
+	overflow-x: clip;
+	overflow-y: visible;
+	box-sizing: border-box;
+	text-align: left;
+}
+
+/* ── Bot preview ladder — ONE authoritative rule for instance AND Hub ──────────
+   Both the instance Create/Update view and the Hub bot-edit view inject the same
+   preview into #ordersBox. To guarantee they render identically, everything about
+   the preview's appearance is defined here and nowhere else. If the preview ever
+   looks different between the two, it's because something is overriding one of
+   these — fix it here, don't add a view-specific patch. */
+/* Only style the preview box when it actually has content (after Preview is
+   clicked). Empty #ordersBox stays hidden — jQuery's .hide()/.show() controls
+   display, so we must NOT force display here. */
+body.has-shell #ordersBox:not(:empty) {
+	background: var(--content-box-background-color) !important;
+	border: 1px solid var(--shell-preview-border) !important;
+	border-radius: 8px !important;
+	box-shadow: var(--shell-preview-shadow) !important;
+	width: fit-content !important;
+	max-width: 100% !important;
+	margin: 16px auto 24px auto !important;
+	padding: 24px 28px !important;
+	text-align: center;
+	overflow: visible !important;
+	box-sizing: border-box;
+	top: auto !important;
+}
+body.has-shell #ordersBox:empty {
+	display: none !important;
+	border: none !important;
+	box-shadow: none !important;
+	padding: 0 !important;
+}
+/* The ladder table: content-width (not 95% of panel — the base rule stretches it,
+   and stretched vs content-width is exactly what made instance ≠ Hub), centred,
+   with a subtle frame and clean row separators. !important overrides the base
+   #ordersTable width:95%. */
+body.has-shell #ordersBox #ordersTable {
+	width: max-content !important;
+	max-width: 100%;
+	margin: 16px auto 0 auto !important;
+	display: table !important;
+	border: none !important;
+	border-radius: 0 !important;
+	border-collapse: separate;
+	border-spacing: 0;
+	overflow: hidden;
+}
+body.has-shell #ordersBox #ordersTable th,
+body.has-shell #ordersBox #ordersTable td {
+	padding: 6px 16px;
+	white-space: nowrap;
+	border-bottom: 1px solid var(--shell-section-border);
+}
+body.has-shell #ordersBox #ordersTable tr:last-child td {
+	border-bottom: none;
+}
+/* Header row gets a slightly stronger divider. */
+body.has-shell #ordersBox #ordersTable tr:first-child th,
+body.has-shell #ordersBox #ordersTable tr:first-child td {
+	border-bottom: 1px solid var(--shell-section-border);
+	font-weight: 600;
+}
+/* The bot-preview ladder (#ordersBox content: balance summary + order steps table).
+   JS toggles visibility (hide/show), so no :empty handling needed here. */
+/* Wide data views opt in with class="wide" on #contentBox (deals/bots/history/
+   dashboard). */
+body.has-shell #contentBox.wide {
+	max-width: 1600px;
+}
+
+/* Title bar — clean full-width header, left-aligned, with a divider. */
+body.has-shell .contentHeaderBox {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	position: relative;
+	background-color: var(--shell-section-tint);
+	border: none;
+	border-bottom: 1px solid var(--shell-section-border);
+	border-radius: 8px 8px 0 0;
+	margin: 0;
+	width: 100%;
+	padding: 18px 24px;
+	text-align: left;
+	box-sizing: border-box;
+}
+body.has-shell .contentHeader,
+body.has-shell #headerText,
+body.has-shell .contentHeaderBox b {
+	font-size: 1.5rem;
+	font-weight: 600;
+	color: var(--content-box-color);
+}
+
+/* Content body: inner padding since the panel has padding:0 (lets the title bar
+   and tables span edge-to-edge). Direct children get gutters, except full-bleed
+   elements (title bar, tables, the deals data box). */
+body.has-shell #contentBox > *:not(.contentHeaderBox):not(table):not(#ordersTable):not(.botsDealsBox):not(.full-bleed):not(#update-button) {
+	padding-left: 24px;
+	padding-right: 24px;
+}
+body.has-shell .contentHeaderBox + * { padding-top: 20px; }
+body.has-shell #contentBox { padding-bottom: 16px; }
+
+/* Standard content-body wrapper used by simple views (backups, system tools) so
+   their content sits inset from the panel edge. Reuses the same 24px gutter as
+   direct children. */
+body.has-shell .view-body {
+	padding: 0 24px;
+	text-align: initial;
+}
+
+/* Table header: defined surface + crisp bottom edge. */
+
+/* The deals views wrap their content in <div style="position: relative;">, which
+   sits between #contentBox and the .contentHeaderBox. That wrapper breaks the
+   panel's border-radius clipping, so the header's top corners render square and
+   "collide" with the rounded panel edge (unlike Dashboard, where the header is a
+   direct child and its corners clip cleanly). display:contents removes the
+   wrapper from the box tree — its children render as if they were direct
+   children of #contentBox — so the header clips to the panel corners smoothly. */
+body.has-shell #contentBox > div[style*="position: relative"] {
+	display: contents;
+}
+
+/* Give the table content a small horizontal gutter from the panel edge so rows
+   don't butt against the rounded card border (most noticeable in light mode).
+   Applied as padding on the first/last cells so the table stays full-width and
+   horizontally scrollable — we inset the DATA, not the table. */
+body.has-shell #botsDeals th:first-child,
+body.has-shell #botsDeals td:first-child,
+body.has-shell #hubDeals th:first-child,
+body.has-shell #hubDeals td:first-child,
+body.has-shell #hubBots th:first-child,
+body.has-shell #hubBots td:first-child {
+	padding-left: 24px;
+}
+body.has-shell #botsDeals th:last-child,
+body.has-shell #botsDeals td:last-child,
+body.has-shell #hubDeals th:last-child,
+body.has-shell #hubDeals td:last-child,
+body.has-shell #hubBots th:last-child,
+body.has-shell #hubBots td:last-child {
+	padding-right: 24px;
+}
+
+/* Horizontal-scroll behaviour for the wide deals table.
+   Problem: with width:auto/min-width:100%, at medium viewport widths the columns
+   compress and cells wrap awkwardly before finally scrolling — that
+   half-wrapped/half-scrolled state looks broken. Fix: give the table a fixed
+   min-width in px so it keeps a stable layout and simply scrolls horizontally
+   below that width, with the scroll contained neatly inside the panel. The
+   header row stays single-line so it never wraps mid-scroll. */
+body.has-shell #botsDeals,
+body.has-shell #hubDeals,
+body.has-shell #hubBots {
+	min-width: 1140px;
+}
+body.has-shell #botsDeals thead th,
+body.has-shell #hubDeals thead th,
+body.has-shell #hubBots thead th {
+	white-space: nowrap;
+}
+/* Contain the horizontal scroll to the table area with clean rounded bottom
+   corners matching the panel. */
+body.has-shell .botsDealsBox {
+	border-radius: 0 0 8px 8px;
+}
+body.has-shell #ordersTable thead th,
+body.has-shell table.tablesorter thead th,
+body.has-shell thead.tablesorter-headerRow th {
+	background-color: var(--shell-section-tint);
+	border-bottom: 2px solid var(--shell-section-border);
+}
+body.has-shell table:not(#botsCreate):not(#botsDeals):not(#hubDeals):not(#hubBots) tbody tr:hover { background-color: var(--shell-row-hover); }
+
+/* Bot ID (a UUID) wraps to two lines in the fixed-width form table — keep it on
+   one line. */
+body.has-shell #botIdRow td { white-space: nowrap; }
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+body.has-shell #footerBox {
+	left: 0; width: 100%; z-index: 9999; padding-left: 14px;
+}
+
+/* ── Column selector — modernized popover behaviour ───────────────────────── */
+/* The legacy wrapper is position:fixed z-index:6000 (below the 8000 sidebar) and
+   pinned left:10px, sliding out from the far edge behind the nav. Lift it above
+   the chrome, clear the sidebar, and fix the slide-out distance so it exits
+   smoothly to the left of the content rather than vanishing. */
+body.has-shell .botDealSelectorWrapper {
+	z-index: 9700 !important;
+	left: calc(var(--shell-sidebar-w) + 14px) !important;
+	top: calc(var(--shell-topbar-h) + 10px) !important;
+}
+body.nav-collapsed .botDealSelectorWrapper {
+	left: calc(var(--shell-sidebar-rail-w) + 14px) !important;
+}
+/* Close state slides out toward the sidebar edge and fades — distance accounts
+   for the new left offset so it doesn't jump. */
+body.has-shell .botDealSelectorWrapper {
+	transform: translateX(calc(-1 * (var(--shell-sidebar-w) + 200px)));
+}
+body.has-shell .botDealSelectorWrapper.is-visible {
+	transform: translateX(0);
+}
+/* The column-selector popup: lift above chrome + give it a modern surface. */
+body.has-shell .botDealSelector {
+	z-index: 9700 !important;
+	border: 1px solid var(--shell-panel-border) !important;
+	border-radius: 12px !important;
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25) !important;
+	padding: 12px !important;
+}
+
+/* ── Modals / overlays above the shell chrome ─────────────────────────────── */
+/* Overlay must sit BELOW its dialog or the gray backdrop covers it and eats
+   clicks. Dialog above chrome. */
+body.has-shell .ui-widget-overlay { z-index: 99990 !important; position: fixed !important; background: #000 !important; opacity: 0.45 !important; }
+body.has-shell .ui-dialog,
+body.has-shell .jconfirm { z-index: 100000 !important; position: fixed !important; }
+/* Confirm-dialog buttons (jconfirm) sit on a light button surface in BOTH themes.
+   The action text is set inline to semantic color vars, which in dark mode become
+   light tints (e.g. --color-danger #f87171, --color-neutral #b8b8b8) that are
+   low-contrast — sometimes nearly invisible — on that light button. Force darker,
+   saturated, readable label colors for every semantic variant so the pause,
+   disable-bot, delete-bot, and confirm dialogs read correctly in both themes. */
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-success"],
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-success"] {
+	color: #157a3a !important;
+}
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-danger"],
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-danger"] {
+	color: #c11510 !important;
+}
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-warning"],
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-warning"] {
+	color: #b56a0f !important;
+}
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-neutral"],
+body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-neutral"] {
+	color: #444444 !important;
+}
+body.has-shell #spinner-overlay { z-index: 99000 !important; }
+/* Modal HOST containers (#modalDealEdit etc.) receive the dialog + overlay via
+   appendTo. Keep them position:static with z-index:auto so they create NO
+   stacking context of their own — that way the dialog's own z-index (100000)
+   and the overlay's (99990) resolve against the document root, where they
+   correctly sit above the sidebar (8000) and topbar (9000). Forcing a z-index
+   on the host was creating a context that trapped the dialog. */
+body.has-shell #modal,
+body.has-shell #modalDealEdit,
+body.has-shell #modalNotifications,
+body.has-shell #modalTvSettings {
+	position: static;
+	z-index: auto;
+}
+/* #notificationsBox is a fixed toast container, not a modal — left untouched. */
+
+/* ── Mobile: sidebar becomes off-canvas drawer ────────────────────────────── */
+@media (max-width: 860px) {
+	body.has-shell main,
+	body.has-shell > center > main { margin-left: 0; }
+	.side-nav {
+		transform: translateX(-100%);
+		transition: transform 180ms ease;
+		box-shadow: 2px 0 16px rgba(0, 0, 0, 0.4);
+		z-index: 9200;
+	}
+	body.nav-drawer-open .side-nav { transform: translateX(0); }
+	body.nav-drawer-open .side-nav-text,
+	body.nav-drawer-open .side-nav-label { display: block; }
+	body.nav-drawer-open .side-nav-item { justify-content: flex-start; padding: 0 12px; gap: 12px; }
+	body.has-shell #footerBox { padding-left: 14px; }
+	.nav-scrim {
+		display: none; position: fixed; inset: var(--shell-topbar-h) 0 0 0;
+		background: rgba(0, 0, 0, 0.45); z-index: 9100;
+	}
+	body.nav-drawer-open .nav-scrim { display: block; }
+
+	/* Column selector: sidebar is hidden on mobile, so don't offset by its width
+	   (that pushed the popup off the right edge, hiding the close button). Anchor
+	   near the left and constrain to the viewport. */
+	body.has-shell .botDealSelectorWrapper,
+	body.nav-collapsed .botDealSelectorWrapper {
+		left: 8px !important;
+		right: 8px !important;
+		width: auto !important;
+		max-width: calc(100vw - 16px) !important;
+	}
+	body.has-shell .botDealSelectorWrapper { transform: translateX(-120%); }
+	body.has-shell .botDealSelectorWrapper.is-visible { transform: translateX(0); }
+	body.has-shell .botDealSelector {
+		max-width: calc(100vw - 16px) !important;
+		box-sizing: border-box !important;
+	}
+
+	/* Portrait/narrow: the BTC price (nowrap) can consume the header width and
+	   push the theme/chat/bell icons off the right edge. Hide it on small screens
+	   and keep the icon cluster from shrinking so the bell stays reachable. */
+	body.has-shell #btcPrice { display: none !important; }
+	body.has-shell .headerButtons { flex-shrink: 0; margin-left: auto; }
+	body.has-shell #headerBox { padding: 0 10px; }
+}
+
+
+/* ── Home welcome pane (shell landing) ────────────────────────────────────── */
+.home-welcome {
+	max-width: 900px; margin: 0 auto; text-align: center; padding: 48px 32px 52px 32px;
+}
+.home-welcome-title {
+	font-size: 1.9rem; font-weight: 600; margin: 0 0 8px 0; color: var(--content-box-color);
+}
+.home-welcome-sub { font-size: 1.05rem; opacity: 0.7; margin: 0 0 34px 0; }
+.home-quick-grid {
+	display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;
+}
+.home-quick-card {
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	gap: 10px; padding: 26px 14px; border-radius: 10px;
+	border: 1px solid var(--shell-section-border); background: var(--content-box-background-color);
+	color: var(--content-box-color) !important;
+	transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.home-quick-card:hover {
+	transform: translateY(-2px); border-color: var(--nav-item-active-bar);
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.home-quick-ic { color: var(--nav-item-active-bar); display: flex; }
+.home-quick-ic svg { width: 30px; height: 30px; }
+.home-quick-label { font-size: 1.05rem; font-weight: 500; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COCKPIT SHELL — per-view header polish (deals summary, dashboard, spacing)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Header + summary layout, matching the Dashboard pattern:
+   - .contentHeaderBox holds ONLY the title (+ icon buttons top-right) → clean
+     gray strip with a divider, exactly like Dashboard's title.
+   - .view-summary is the row(s) BELOW it on the white surface (P/L, filters,
+     search) — like Dashboard's controls row. */
+body.has-shell .contentHeaderBox > .contentHeader,
+body.has-shell .contentHeaderBox > b.contentHeader {
+	margin-right: auto;
+}
+body.has-shell .contentHeaderBox .viewSettings {
+	display: flex;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+/* The summary/controls row on the white area below the title. */
+body.has-shell .view-summary,
+body.has-shell .dashboard-controls {
+	padding: 16px 24px 4px 24px;
+}
+body.has-shell .view-summary .summary-bar {
+	justify-content: flex-start;
+	margin-top: 0;
+	margin-bottom: 8px;
+	font-size: 1.2rem;
+}
+
+/* Back link in a view header (e.g. Create/Update Bot "← Bots"). */
+body.has-shell .contentHeaderBox .view-back-link {
+	font-size: 1.1rem;
+	text-decoration: none;
+	opacity: 0.65;
+	white-space: nowrap;
+}
+body.has-shell .contentHeaderBox .view-back-link:hover { opacity: 1; }
+/* Grouped header links (e.g. "← All Bots | ← Instance Bots") sit on the right of
+   the title strip, opposite the title. */
+body.has-shell .contentHeaderBox .view-header-links {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+	font-size: 1.1rem;
+	white-space: nowrap;
+}
+
+/* Create/Update Bot form: give the form body inner padding since the panel has
+   padding:0 (its header spans full width, form content should be inset). */
+body.has-shell #contentBox #errorMsg,
+body.has-shell #contentBox #botsCreate,
+body.has-shell #contentBox .botsDealsBox > form,
+body.has-shell #contentBox .botsDealsBox table#botsCreate {
+	padding-left: 24px;
+	padding-right: 24px;
+}
+body.has-shell #contentBox .botsDealsBox table#botsCreate {
+	width: auto;
+}
+
+/* Consistent top spacing: normalize the first element inside every panel so no
+   view starts lower than another. */
+body.has-shell #contentBox > *:first-child,
+body.has-shell #ordersBox > *:first-child {
+	margin-top: 0 !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIVE LOGS — left-aligned streaming rows (shell only)
+   The log rows (#dataBox > .logRow) inherit centering from a parent panel rule;
+   log output must be left-aligned to be readable. */
+body.has-shell #dataBox,
+body.has-shell #dataBox .logRow {
+	text-align: left;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INSTANCE CONFIGURATION — left-aligned form (shell only)
+   The config form's sections/tables render centered in the panel (a holdover
+   from the old page-centered layout), which looks wrong for a settings form.
+   Left-align the form content and give it the panel's content gutter so labels
+   and fields read as a normal left-aligned form. */
+body.has-shell #formConfig {
+	text-align: left;
+	padding-left: 24px;
+	padding-right: 24px;
+}
+body.has-shell #formConfig table#botsCreate {
+	margin-left: 0;
+	margin-right: 0;
+	width: auto;
+}
+/* Config label cells (first column) wrap long labels like "Deal Ratio Window:",
+   pushing the "?" tooltip onto the next line and crowding the input. Keep each
+   label + its tooltip on one line and give the column room. */
+/* Label cells in any botsCreate form table (Configuration AND the bot
+   Create/Update form) wrap long labels, pushing the "?" tooltip onto the next
+   line. Keep each label + its tooltip on one line across all such forms. */
+body.has-shell table#botsCreate td:first-child {
+	white-space: nowrap;
+	padding-right: 12px;
+}
+body.has-shell #formConfig table#botsCreate td:first-child {
+	vertical-align: middle;
+}
+/* But the tooltip popup lives INSIDE that label cell — restore normal wrapping
+   for its text so it stays contained in the bubble instead of overflowing. */
+body.has-shell table#botsCreate td:first-child .toolTipText {
+	white-space: normal;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HUB INSTANCE MANAGER — modernized controls (shell only)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The memory popup was position:fixed z-index:1000 left:10px — below the
+   sidebar (8000) and pinned to the far left, so it rendered BEHIND the nav (same
+   bug the column selector had). Lift above the chrome, clear the sidebar, and
+   give it a modern surface. */
+body.has-shell #hub-memory-container {
+	z-index: 9700 !important;
+	left: calc(var(--shell-sidebar-w) + 14px) !important;
+	top: calc(var(--shell-topbar-h) + 10px) !important;
+	border: 1px solid var(--shell-panel-border) !important;
+	border-radius: 12px !important;
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25) !important;
+	padding: 14px !important;
+	width: 230px !important;
+}
+body.nav-collapsed #hub-memory-container {
+	left: calc(var(--shell-sidebar-rail-w) + 14px) !important;
+}
+
+/* Override dropdowns were truncating ("Disabl", "Bo") because the table squeezed
+   them. Give the Telegram/3CQS selects and sandbox input sensible min-widths. */
+body.has-shell #instancesTable select.form-field,
+body.has-shell .hub-instances-table select.form-field,
+body.has-shell table#instances select.form-field {
+	min-width: 96px;
+}
+
+/* Unify the row action buttons into clean, equally-sized modern icon buttons.
+   They were three differently-styled coloured squares of slightly different
+   sizes; make them a consistent 30x28 with subtle colour accents on hover. */
+body.has-shell .hub-primary-btn,
+body.has-shell .hub-stop-btn,
+body.has-shell .hub-remove-btn {
+	width: 32px;
+	height: 30px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 7px;
+	border: 1px solid var(--shell-section-border);
+	transition: filter 120ms ease, transform 80ms ease;
+}
+body.has-shell .hub-primary-btn:hover,
+body.has-shell .hub-stop-btn:hover,
+body.has-shell .hub-remove-btn:hover {
+	filter: brightness(1.08);
+	transform: translateY(-1px);
+}
+body.has-shell .hub-primary-btn:active,
+body.has-shell .hub-stop-btn:active,
+body.has-shell .hub-remove-btn:active {
+	transform: translateY(0);
+}
+
+/* Toggle cells: stack the label above the switch with tighter, cleaner spacing. */
+body.has-shell .hub-toggle-cell {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	margin-right: 12px;
+	vertical-align: middle;
+}
+body.has-shell .hub-toggle-label {
+	font-size: 0.7rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.7;
+}
+
+/* Status indicator dot: slightly larger with a soft glow so running vs stopped
+   reads at a glance. */
+body.has-shell .hub-instance-status-indicator {
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+/* The "Add Instance" primary button: a touch more presence. */
+body.has-shell #toggle-add-form.hub-primary-btn {
+	width: auto;
+	border-radius: 8px;
+	font-weight: 600;
+}
+
+/* Update button: align it with the table/Add Instance content. It's a direct
+   child of #contentBox, but padding-left on an inline-block button adds internal
+   padding rather than offsetting it — so use margin-left to match the 24px
+   content gutter, and give it bottom breathing room. */
+body.has-shell #update-button {
+	display: inline-block;
+	border-radius: 8px;
+	font-weight: 600;
+	margin: 4px 0 20px 24px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HUB INSTANCE MANAGER — cockpit refresh (shell only)
+   Calmer colour language: desaturated action buttons that gain colour on hover,
+   a refined status indicator, zebra rows, and muted monospaced DB URLs so the
+   technical detail recedes and the table scans like a control panel.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Action buttons: solid saturated fills with white icons — crisp and clearly
+   readable (the low-opacity tints looked pale/washed out). Deepen slightly on
+   hover. */
+body.has-shell #botsDeals .hub-primary-btn,
+body.has-shell table#botsDeals .hub-primary-btn {
+	background-color: #16a34a !important;
+	border: 1px solid #15803d !important;
+}
+body.has-shell #botsDeals .hub-stop-btn,
+body.has-shell table#botsDeals .hub-stop-btn {
+	background-color: #e0891b !important;
+	border: 1px solid #c2740f !important;
+}
+body.has-shell #botsDeals .hub-remove-btn,
+body.has-shell table#botsDeals .hub-remove-btn {
+	background-color: #dc3545 !important;
+	border: 1px solid #b02a37 !important;
+}
+body.has-shell #botsDeals .hub-primary-btn .icon,
+body.has-shell #botsDeals .hub-stop-btn .icon,
+body.has-shell #botsDeals .hub-remove-btn .icon,
+body.has-shell table#botsDeals .hub-primary-btn .icon,
+body.has-shell table#botsDeals .hub-stop-btn .icon,
+body.has-shell table#botsDeals .hub-remove-btn .icon { background-color: #ffffff !important; }
+body.has-shell #botsDeals .hub-primary-btn:hover,
+body.has-shell table#botsDeals .hub-primary-btn:hover { background-color: #15803d !important; }
+body.has-shell #botsDeals .hub-stop-btn:hover,
+body.has-shell table#botsDeals .hub-stop-btn:hover { background-color: #c2740f !important; }
+body.has-shell #botsDeals .hub-remove-btn:hover,
+body.has-shell table#botsDeals .hub-remove-btn:hover { background-color: #b02a37 !important; }
+
+/* Refined status indicator: crisp dot with a soft themed ring. */
+body.has-shell .hub-instance-status-indicator {
+	width: 10px;
+	height: 10px;
+	box-shadow: 0 0 0 3px var(--shell-section-tint), 0 0 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Calmer row rhythm (no zebra — plain rows with a clear hover). */
+body.has-shell #botsDeals tbody tr:has(td.editable[data-field]) {
+	background-color: transparent !important;
+}
+body.has-shell #botsDeals tbody tr:has(td.editable[data-field]) td {
+	padding-top: 10px;
+	padding-bottom: 10px;
+}
+body.has-shell #botsDeals tbody tr:has(td.editable[data-field]):hover {
+	background-color: var(--shell-row-hover) !important;
+}
+
+/* MongoDB URLs: monospaced and muted so the connection strings recede into
+   technical background detail instead of dominating the row. */
+body.has-shell #botsDeals td[data-field="mongo_db_url"],
+body.has-shell #botsDeals td[data-field="mongo_db_url_override"],
+body.has-shell table#botsDeals td[data-field="mongo_db_url"],
+body.has-shell table#botsDeals td[data-field="mongo_db_url_override"] {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 0.95rem;
+	opacity: 0.82;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FILTER DROPDOWNS — instance/bot selectors on Hub Bots, Hub Deals, and the
+   instance Active Deals views. The base .form-field is a fixed 60px (sized for
+   tiny numeric inputs), which truncates instance/bot names like "Coinbase-Real".
+   Give these selects room to show their content, capped so they stay tidy and
+   mobile-friendly.
+   ═══════════════════════════════════════════════════════════════════════════ */
+body.has-shell #hub-instance-filter,
+body.has-shell #hub-bot-filter,
+body.has-shell #active-bot-filter {
+	width: auto !important;
+	min-width: 150px;
+	max-width: 100%;
+	padding: 4px 8px !important;
+	cursor: pointer;
+	box-sizing: border-box;
+}
+@media (max-width: 860px) {
+	body.has-shell #hub-instance-filter,
+	body.has-shell #hub-bot-filter,
+	body.has-shell #active-bot-filter {
+		min-width: 120px;
+		max-width: 60vw;
+	}
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INLINE INSTANCE MEMORY — live per-row memory readout under each instance name
+   in the Hub Instance Manager (replaces the old Memory popup button). Updated
+   automatically over the socket 'memory' room.
+   ═══════════════════════════════════════════════════════════════════════════ */
+body.has-shell .hub-status-cell {
+	white-space: nowrap;
+	vertical-align: top;
+	text-align: left;
+	padding-top: 12px;
+	width: 1%;
+}
+body.has-shell .hub-status-cell .hub-instance-status-indicator {
+	display: inline-block;
+	vertical-align: middle;
+}
+body.has-shell .hub-instance-memory {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin-top: 6px;
+	min-height: 14px;
+}
+body.has-shell .hub-instance-memory .hub-mem-metric {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 0.72rem;
+	opacity: 0.8;
+	white-space: nowrap;
+	line-height: 1.3;
+	color: var(--table-content-color);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONFIRM DIALOGS — keep rounded corners on typed dialogs. jconfirm's coloured
+   "type" variants (e.g. type: 'DELETE' → a 7px red top border) square off the
+   top corners. Round the whole box consistently so the instance delete dialog
+   matches the Hub's rounded look.
+   ═══════════════════════════════════════════════════════════════════════════ */
+body.has-shell .jconfirm .jconfirm-box,
+body.has-shell .jconfirm .jconfirm-box.jconfirm-type-red,
+body.has-shell .jconfirm .jconfirm-box.jconfirm-type-blue,
+body.has-shell .jconfirm .jconfirm-box.jconfirm-type-green,
+body.has-shell .jconfirm .jconfirm-box.jconfirm-type-orange {
+	border-radius: 8px !important;
+	overflow: hidden !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HUB HOMEPAGE — dashboard card refresh (shell only)
+   Brings the per-instance cards into the cockpit language: theme-aware borders,
+   a live status dot per card, semantic value colours, offline dimming, and the
+   Deals/Bots actions as subtle pill links. Structure/data unchanged.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Top totals strip as clean metric cards. */
+body.has-shell .hub-dash-totals-box {
+	display: inline-flex;
+	gap: 28px;
+	background: var(--shell-section-tint) !important;
+	border: 1px solid var(--shell-section-border) !important;
+	border-radius: 12px !important;
+	box-shadow: none !important;
+	padding: 14px 26px !important;
+}
+body.has-shell .hub-dash-totals-box .summary-bar p {
+	font-size: 1.15rem;
+}
+
+/* Grid: a touch more gap and a comfortable min column. */
+body.has-shell .hub-dash-grid {
+	gap: 16px;
+}
+
+/* Cards: theme-aware chrome, cleaner padding, cockpit panel shadow. */
+body.has-shell .hub-dash-card {
+	background: var(--content-box-background-color) !important;
+	border: 1px solid var(--shell-panel-border) !important;
+	border-radius: 12px !important;
+	box-shadow: var(--shell-panel-shadow) !important;
+	padding: 16px 18px !important;
+	transition: border-color 120ms ease, transform 80ms ease;
+}
+body.has-shell .hub-dash-card:hover {
+	border-color: var(--shell-section-border) !important;
+	transform: translateY(-1px);
+}
+body.has-shell .hub-dash-card.is-offline {
+	opacity: 0.6;
+}
+
+/* Title with inline status dot. */
+body.has-shell .hub-dash-card-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 1.25rem;
+	border-bottom: 1px solid var(--shell-section-border) !important;
+	padding-bottom: 10px;
+	margin-bottom: 10px;
+}
+body.has-shell .hub-dash-status {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+body.has-shell .hub-dash-status.is-online {
+	background-color: #1D9E75;
+	box-shadow: 0 0 0 3px rgba(29, 158, 117, 0.15);
+}
+body.has-shell .hub-dash-status.is-offline {
+	background-color: var(--nav-text-muted);
+}
+
+/* Rows: label muted, value clear. */
+body.has-shell .hub-dash-card-row {
+	padding: 4px 0;
+	font-size: 1.1rem;
+}
+body.has-shell .hub-dash-label {
+	opacity: 1;
+	color: var(--nav-text-muted);
+	font-size: 1.0rem;
+}
+body.has-shell .hub-dash-divider {
+	border-top: 1px solid var(--shell-section-border);
+	margin: 8px 0;
+}
+
+/* Action links as subtle pills. */
+body.has-shell .hub-dash-card-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+	padding-top: 10px;
+	border-top: 1px solid var(--shell-section-border);
+}
+body.has-shell .hub-dash-card-link {
+	font-size: 1.0rem;
+	opacity: 1;
+	padding: 3px 12px;
+	border-radius: 6px;
+	background-color: var(--shell-section-tint);
+	color: var(--link-color);
+	transition: background-color 120ms ease;
+}
+body.has-shell .hub-dash-card-link:hover {
+	background-color: var(--shell-row-hover);
+}
+
+/* Sandbox badge — restyled to the amber warning tint. */
+body.has-shell .hub-dash-sandbox-badge {
+	margin-left: auto;
+	font-size: 0.65rem;
+	padding: 2px 6px;
+	border-radius: 4px;
+	background-color: rgba(224, 137, 27, 0.15);
+	color: var(--color-warning);
+	letter-spacing: 0.04em;
+}
+
+/* Memory column in the Hub Instance Manager — dedicated non-editable column with
+   a live per-instance readout (Heap / Attributed). Compact monospace stacked
+   metrics; column sizes to content so it doesn't widen other columns. */
+body.has-shell #botsDeals td.hub-mem-cell {
+	white-space: nowrap;
+	width: 1%;
+	vertical-align: middle;
+}
+body.has-shell .hub-mem-cell .hub-mem-metric {
+	display: block;
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 0.9rem;
+	line-height: 1.2;
+	opacity: 0.85;
+	white-space: nowrap;
+}
+body.has-shell .hub-mem-cell .hub-mem-k {
+	display: inline-block;
+	width: 2.6em;
+	opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DEALS TABLE STATE MESSAGES — shown in place of the active-deals table while
+   deals are loading, or when there are none. Prevents the empty table from
+   rendering with collapsed/odd-looking headers.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.deals-state-msg {
+	padding: 32px 16px;
+	text-align: center;
+	color: var(--table-content-color);
+	opacity: 0.7;
+	font-size: 1.1rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRANSACTION EXPORT VIEW — intro copy, control row, and the (important) disclaimer box.
+   All theme-aware.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.transaction-export-intro {
+	max-width: 760px;
+	margin: 12px 0 20px;
+	line-height: 1.5;
+	color: var(--table-content-color);
+	font-size: 1.2rem;
+}
+/* Small navigational cross-reference from Deals History to Transaction Export,
+   so users hunting for a tax-tool import file are pointed to the right page
+   (which carries all the tax disclaimers). Purely a pointer — makes no tax claim. */
+.deals-history-xref {
+	margin: 12px 0 0;
+	font-size: 0.95rem;
+	opacity: 0.7;
+	color: var(--table-content-color);
+}
+.deals-history-xref a {
+	color: var(--nav-item-active-bar, #14b8b8);
+	text-decoration: none;
+}
+.deals-history-xref a:hover {
+	text-decoration: underline;
+}
+.transaction-export-intro p {
+	margin: 0 0 10px;
+}
+.transaction-export-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 14px 18px;
+	margin-bottom: 22px;
+	font-size: 1.2rem;
+}
+.transaction-export-controls .transaction-export-sandbox {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--table-content-color);
+	font-size: 1.15rem;
+	cursor: pointer;
+}
+.transaction-export-disclaimer {
+	max-width: 760px;
+	padding: 16px 20px;
+	border-radius: 8px;
+	background-color: var(--color-warning-soft);
+	border: 1px solid var(--color-warning);
+	color: var(--table-content-color);
+	line-height: 1.55;
+	font-size: 1.2rem;
+}
+.transaction-export-disclaimer a {
+	color: var(--link-color);
+}
+/* Give the transaction-export page breathing room inside the content card, matching the
+   inset used by other cockpit views. */
+body.has-shell #contentBox .transaction-export-intro,
+body.has-shell #contentBox .transaction-export-controls,
+body.has-shell #contentBox .transaction-export-disclaimer {
+	margin-left: 4px;
+	margin-right: 4px;
+}
+.transaction-export-page-pad {
+	padding: 8px 20px 24px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SYSTEM HEALTH CARD (System Tools page) — accurate per-instance resource
+   readout. Theme-aware, matches cockpit chrome.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.system-health-card {
+	margin: 4px 4px 22px;
+	padding: 16px 20px;
+	border-radius: 10px;
+	background-color: var(--table-background-color, var(--content-box-background-color));
+	border: 1px solid var(--table-border-color, rgba(128,128,128,0.25));
+}
+.system-health-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 14px;
+}
+.system-health-title {
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: var(--table-content-color);
+}
+.system-health-status {
+	font-size: 1.1rem;
+	padding: 2px 10px;
+	border-radius: 999px;
+	color: var(--table-content-color);
+	background-color: rgba(128,128,128,0.15);
+}
+.system-health-status.ok {
+	color: #0e9f6e;
+	background-color: rgba(20,184,166,0.14);
+}
+.system-health-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 14px 20px;
+}
+.system-health-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.system-health-stat-label {
+	font-size: 1.05rem;
+	color: var(--table-content-color);
+	opacity: 0.7;
+}
+.system-health-stat-value {
+	font-size: 1.35rem;
+	font-weight: 600;
+	color: var(--table-content-color);
+}
+.system-health-stat-sub {
+	font-size: 1.0rem;
+	color: var(--table-content-color);
+	opacity: 0.6;
+}
+/* Load figure colour coding — reuses the portfolio Risk % palette so the whole
+   app speaks one colour language: green healthy, amber busy, red saturated. */
+.health-load-low  { color: #1a9f00 !important; }
+.health-load-med  { color: #a85f00 !important; }
+.health-load-high { color: #d82715 !important; }
+[data-theme="dark"] .health-load-low  { color: #3ec43e !important; }
+[data-theme="dark"] .health-load-med  { color: #ffb700 !important; }
+[data-theme="dark"] .health-load-high { color: #f05040 !important; }
+.system-health-foot {
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid var(--table-border-color, rgba(128,128,128,0.2));
+	font-size: 1.05rem;
+	color: var(--table-content-color);
+	opacity: 0.65;
+}
+
+/* Homepage health strip — compact at-a-glance line under the welcome subtitle.
+   Reuses /api/system/health (same data as the System Tools card). */
+.home-health-strip {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px 12px;
+	width: fit-content;
+	max-width: 100%;
+	margin: 0 auto 30px;
+	padding: 10px 18px;
+	border-radius: 10px;
+	background: var(--table-header-background-color);
+	border: 1px solid var(--shell-section-border);
+	font-size: 1.05rem;
+	color: var(--table-content-color);
+}
+/* The shell forces #contentBox text-align:left and max-width:1100px for data
+   views, but the home welcome is an intentional centered hero at a cozier width
+   — restore both for it specifically (same specificity pattern as .wide). */
+body.has-shell #contentBox.home-welcome {
+	text-align: center;
+	max-width: 900px;
+}
+.home-health-strip-hidden {
+	display: none !important;
+}
+.home-health-label {
+	opacity: 0.65;
+}
+.home-health-val {
+	font-weight: 600;
+}
+.home-health-sep {
+	opacity: 0.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADD FUNDS ESTIMATOR — what-if bar on the active deals view. Projections
+   annotate the Price / Price Target cells in place (no new columns). Themed.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.addfunds-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 16px;
+	margin: 0 0 12px;
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: var(--table-header-background-color);
+	border: 1px solid var(--table-border-color);
+	border-left: 4px solid var(--nav-item-active-bar, #14b8b8);
+	color: var(--table-content-color);
+	font-size: 1.05rem;
+}
+.addfunds-bar-label {
+	font-weight: 600;
+}
+.addfunds-bar-note {
+	font-size: 0.92rem;
+	opacity: 0.85;
+	flex: 1 1 240px;
+}
+.addfunds-bar-close {
+	cursor: pointer;
+	font-size: 1.4rem;
+	line-height: 1;
+	opacity: 0.6;
+	padding: 0 4px;
+}
+.addfunds-bar-close:hover {
+	opacity: 1;
+}
+/* Projected values injected under the Price / Target cells. */
+.af-proj {
+	margin-top: 3px;
+	font-size: 0.9rem;
+	color: var(--link-color, #008aeb);
+	font-weight: 600;
+	white-space: nowrap;
+}
+/* Deals using a custom fill price stand out from market-price estimates so you
+   can tell them apart at a glance even when no input field is open. */
+.af-proj-override {
+	color: var(--color-warning, #c77700);
+}
+.af-proj-delta {
+	opacity: 0.8;
+}
+.af-override-tag {
+	font-weight: 700;
+	color: var(--color-warning, #c77700);
+	margin-left: 2px;
+}
+/* Per-deal price override input, revealed on Price-cell click. */
+.af-price-override-wrap {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 6px;
+}
+.af-price-override {
+	width: 90px;
+}
+.af-override-clear {
+	cursor: pointer;
+	opacity: 0.6;
+	font-size: 1.1rem;
+	line-height: 1;
+}
+.af-override-clear:hover {
+	opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRADING JOURNAL — entries auto-generate from closed deals; optional note +
+   AI reflection. Themed cards.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.journal-intro {
+	font-size: 1.05rem;
+	opacity: 0.8;
+	margin: 18px 4px 18px;
+	color: var(--table-content-color);
+}
+.journal-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 18px;
+	margin: 0 4px 20px;
+	font-size: 1.0rem;
+	color: var(--table-content-color);
+}
+.journal-state-msg {
+	padding: 28px 16px;
+	text-align: center;
+	color: var(--table-content-color);
+	opacity: 0.7;
+	font-size: 1.1rem;
+}
+.journal-entry {
+	margin: 0 4px 16px;
+	padding: 16px 18px;
+	border-radius: 8px;
+	background: var(--table-background-color, var(--content-box-background-color));
+	border: 1px solid var(--table-border-color);
+	border-left: 4px solid var(--nav-item-active-bar, #14b8b8);
+}
+.journal-entry-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px 16px;
+	margin-bottom: 8px;
+}
+.journal-pair {
+	font-size: 1.3rem;
+	font-weight: 600;
+	color: var(--table-content-color);
+}
+.journal-head-left {
+	display: inline-flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+	min-width: 0;
+}
+/* Deal ID shown next to the pair so entries for the same pair are
+   distinguishable at a glance and can be referenced/copied. Muted and
+   monospace so it reads as a technical identifier without competing with
+   the pair or profit. Wraps/truncates rather than pushing the profit off. */
+.journal-dealid {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 0.85rem;
+	opacity: 0.55;
+	color: var(--table-content-color);
+	word-break: break-all;
+	user-select: all;
+}
+.journal-profit {
+	font-size: 1.15rem;
+	font-weight: 600;
+}
+.journal-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 20px;
+	font-size: 0.95rem;
+	opacity: 0.8;
+	color: var(--table-content-color);
+	margin-bottom: 12px;
+}
+.journal-narrative {
+	position: relative;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border-radius: 6px;
+	background: var(--table-header-background-color);
+	font-size: 1.0rem;
+	line-height: 1.5;
+	color: var(--table-content-color);
+}
+.journal-narrative-label {
+	display: block;
+	font-size: 0.82rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	opacity: 0.6;
+	margin-bottom: 4px;
+}
+.journal-note-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.journal-note-label {
+	font-size: 0.9rem;
+	opacity: 0.7;
+	color: var(--table-content-color);
+}
+.journal-note {
+	width: 100%;
+	resize: vertical;
+	font-size: 1.0rem;
+}
+.journal-entry-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-top: 4px;
+}
+.journal-status {
+	font-size: 0.9rem;
+}
+.journal-status.ok {
+	color: var(--color-success, #0e9f6e);
+}
+.journal-status.err {
+	color: var(--color-warning, #e0891b);
+}
+
+/* Trading Journal — Load more button wrap */
+.journal-loadmore-wrap {
+	text-align: center;
+	margin: 8px 4px 24px;
+}
+
+/* Trading Journal — per-piece delete controls */
+.journal-narrative-del {
+	position: absolute;
+	top: 6px;
+	right: 8px;
+	cursor: pointer;
+	font-size: 1.2rem;
+	line-height: 1;
+	opacity: 0.4;
+	color: var(--table-content-color);
+	padding: 2px 4px;
+	border-radius: 4px;
+}
+.journal-narrative-del:hover {
+	opacity: 1;
+	color: var(--color-warning, #e0891b);
+	background: rgba(255, 255, 255, 0.06);
+}
+/* keep the reflection text clear of the x */
+.journal-narrative {
+	padding-right: 28px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRADING JOURNAL — stats strip, mood correlation, mood chips
+   ═══════════════════════════════════════════════════════════════════════════ */
+.journal-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 0 4px 16px;
+}
+/* Processing indicator shown while the (potentially slow) stats aggregation runs
+   so the stat tiles and mood panel don't just pop in. Occupies the same margin
+   box as .journal-stats to avoid layout jump. */
+.journal-stats-loading {
+	margin: 0 4px 16px;
+	padding: 12px 14px;
+	border-radius: 8px;
+	background: var(--table-background-color, var(--content-box-background-color));
+	border: 1px solid var(--table-border-color);
+	color: var(--table-content-color);
+	font-size: 0.95rem;
+	opacity: 0.85;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.journal-stats-spinner {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border: 2px solid var(--table-border-color);
+	border-top-color: var(--nav-item-active-bar, #14b8b8);
+	border-radius: 50%;
+	animation: journalSpin 0.7s linear infinite;
+}
+@keyframes journalSpin {
+	to { transform: rotate(360deg); }
+}
+.journal-stat {
+	flex: 1 1 auto;
+	min-width: 90px;
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: var(--table-background-color, var(--content-box-background-color));
+	border: 1px solid var(--table-border-color);
+}
+.journal-stat-label {
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	opacity: 0.6;
+	color: var(--table-content-color);
+	margin-bottom: 4px;
+}
+.journal-stat-val {
+	font-size: 1.25rem;
+	font-weight: 600;
+	color: var(--table-content-color);
+}
+.journal-stat-sub {
+	display: block;
+	font-size: 0.8rem;
+	font-weight: 400;
+	opacity: 0.6;
+	margin-top: 2px;
+}
+.journal-correlation {
+	margin: 0 4px 20px;
+	padding: 14px 16px;
+	border-radius: 8px;
+	background: var(--table-background-color, var(--content-box-background-color));
+	border: 1px solid var(--table-border-color);
+	border-left: 4px solid var(--nav-item-active-bar, #14b8b8);
+}
+.journal-corr-title {
+	font-size: 0.82rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	opacity: 0.6;
+	color: var(--table-content-color);
+	margin-bottom: 10px;
+}
+.journal-corr-empty {
+	font-size: 1.0rem;
+	line-height: 1.5;
+	opacity: 0.8;
+	color: var(--table-content-color);
+}
+.journal-corr-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 8px;
+}
+.journal-corr-mood {
+	flex: 0 0 130px;
+	font-size: 0.98rem;
+	color: var(--table-content-color);
+}
+.journal-corr-bar-wrap {
+	flex: 1 1 auto;
+	position: relative;
+	height: 22px;
+	background: var(--table-header-background-color);
+	border-radius: 4px;
+	overflow: hidden;
+	min-width: 80px;
+}
+.journal-corr-bar {
+	height: 100%;
+	background: var(--nav-item-active-bar, #14b8b8);
+	opacity: 0.55;
+}
+.journal-corr-pct {
+	position: absolute;
+	left: 8px;
+	top: 0;
+	line-height: 22px;
+	font-size: 0.85rem;
+	color: var(--table-content-color);
+}
+.journal-corr-meta {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	font-size: 0.85rem;
+}
+.journal-corr-n {
+	opacity: 0.55;
+	color: var(--table-content-color);
+}
+.journal-corr-foot {
+	font-size: 0.85rem;
+	opacity: 0.6;
+	color: var(--table-content-color);
+	margin-top: 10px;
+}
+.journal-mood-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 12px;
+	flex-wrap: wrap;
+}
+.journal-mood-label {
+	font-size: 0.9rem;
+	opacity: 0.7;
+	color: var(--table-content-color);
+	margin-right: 4px;
+}
+.journal-mood-chip {
+	cursor: pointer;
+	font-size: 1.25rem;
+	line-height: 1;
+	padding: 4px 6px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	filter: grayscale(0.7);
+	opacity: 0.65;
+	transition: filter 0.12s, opacity 0.12s, border-color 0.12s;
+}
+.journal-mood-chip:hover {
+	filter: grayscale(0);
+	opacity: 1;
+}
+.journal-mood-chip.active {
+	filter: grayscale(0);
+	opacity: 1;
+	border-color: var(--nav-item-active-bar, #14b8b8);
+	background: var(--table-header-background-color);
+}
+
+/* Active-deal health indicator — its own Health column.
+   Four running states render as coloured status dots; paused/error render as
+   small styled glyphs in the same sized slot so the column reads as one system.
+   Colours are theme-aware (light: calmer, dark: brighter) so they stay legible
+   in both modes — the previous emoji glyphs couldn't be tuned and were too bright
+   in light mode. The dots and error badge get a subtle 3D "orb" treatment (radial
+   gradient + soft highlight + drop/inset shadow) so they keep the dimensional feel
+   the old emoji had. Palette follows the standard traffic-light convention. */
+.deal-health {
+	cursor: default;
+	font-size: 1.0rem;
+	line-height: 1;
+}
+.deal-health-cell {
+	text-align: center;
+	white-space: nowrap;
+	width: 1%;
+}
+
+/* Coloured status dot (green / yellow / orange / red), rendered as a glossy orb. */
+.deal-health-dot {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	vertical-align: middle;
+	position: relative;
+	box-shadow: 0 1px 1.5px rgba(0,0,0,0.28), inset 0 -1px 2px rgba(0,0,0,0.22);
+}
+/* Soft top-left highlight (the "shine"). */
+.deal-health-dot::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 3.5px;
+	width: 4px;
+	height: 3px;
+	border-radius: 50%;
+	background: rgba(255,255,255,0.55);
+	filter: blur(0.5px);
+}
+/* Light mode — recognisable but not harsh. Radial gradient lightens toward the
+   top-left so each dot reads as a small sphere. */
+.deal-health-dot.dh-green  { background: radial-gradient(circle at 36% 32%, #43c018, #1a9f00 72%); }
+.deal-health-dot.dh-yellow { background: radial-gradient(circle at 36% 32%, #f5d64d, #e0b000 72%); }
+.deal-health-dot.dh-orange { background: radial-gradient(circle at 36% 32%, #f7a53d, #e8820c 72%); }
+.deal-health-dot.dh-red    { background: radial-gradient(circle at 36% 32%, #f0402c, #d82715 72%); }
+/* Dark mode — brighter so they stay visible on the dark background. */
+[data-theme="dark"] .deal-health-dot.dh-green  { background: radial-gradient(circle at 36% 32%, #66e066, #3ec43e 72%); }
+[data-theme="dark"] .deal-health-dot.dh-yellow { background: radial-gradient(circle at 36% 32%, #ffdd66, #f2c200 72%); }
+[data-theme="dark"] .deal-health-dot.dh-orange { background: radial-gradient(circle at 36% 32%, #ffb055, #ff9522 72%); }
+[data-theme="dark"] .deal-health-dot.dh-red    { background: radial-gradient(circle at 36% 32%, #ff7060, #f05040 72%); }
+
+/* Styled glyphs for paused / error, sized to match the dot slot. */
+.deal-health-glyph {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	vertical-align: middle;
+	position: relative;
+}
+/* Paused — two neutral grey bars (a pause symbol). Left flat; a bevelled pause
+   symbol reads oddly, and neutral grey already sets it apart from the colours. */
+.deal-health-glyph.dh-paused::before,
+.deal-health-glyph.dh-paused::after {
+	content: "";
+	position: absolute;
+	top: 1.5px;
+	width: 3px;
+	height: 11px;
+	border-radius: 1px;
+	background: #8a8a8a;
+}
+.deal-health-glyph.dh-paused::before { left: 2.5px; }
+.deal-health-glyph.dh-paused::after  { right: 2.5px; }
+[data-theme="dark"] .deal-health-glyph.dh-paused::before,
+[data-theme="dark"] .deal-health-glyph.dh-paused::after { background: #a8a8a8; }
+
+/* Error — a rounded-square badge with a "!", given the same 3D treatment as the
+   orbs (gradient + shadow + soft highlight) so it reads as part of the family. */
+.deal-health-glyph.dh-error {
+	border-radius: 3px;
+	box-shadow: 0 1px 1.5px rgba(0,0,0,0.28), inset 0 -1px 2px rgba(0,0,0,0.22);
+	background: radial-gradient(circle at 36% 30%, #f0402c, #d82715 72%);
+}
+[data-theme="dark"] .deal-health-glyph.dh-error {
+	background: radial-gradient(circle at 36% 30%, #ff7060, #f05040 72%);
+}
+.deal-health-glyph.dh-error::before {
+	content: "!";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	color: #ffffff;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	text-shadow: 0 1px 1px rgba(0,0,0,0.3);
+}
+/* Soft highlight on the error badge, matching the orbs. */
+.deal-health-glyph.dh-error::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 3.5px;
+	width: 4px;
+	height: 3px;
+	border-radius: 50%;
+	background: rgba(255,255,255,0.4);
+	filter: blur(0.5px);
+}
+
+
+/* ── Mobile fixes ─────────────────────────────────────────────────────────────
+   Narrow-viewport corrections for components that otherwise overflow their box. */
+@media screen and (max-width: 600px) {
+
+	/* Journal "Mood vs. outcome" rows: the mood label was a fixed 130px and the
+	   meta column was non-shrinking, so on a phone the row (mood + bar + meta +
+	   gaps) exceeded the panel width and spilled outside the box. Let the mood
+	   label shrink, tighten the gap, and allow the meta to shrink too. */
+	.journal-corr-row {
+		gap: 8px;
+	}
+	.journal-corr-mood {
+		flex: 1 1 90px;
+		min-width: 0;
+		font-size: 0.92rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.journal-corr-bar-wrap {
+		min-width: 60px;
+	}
+	.journal-corr-meta {
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+
+	/* Custom hover tooltip: a fixed 400px width overflows a ~380px phone screen.
+	   Constrain to the viewport so it never runs off the edge. */
+	.toolTip .toolTipText {
+		width: auto !important;
+		max-width: calc(100vw - 40px) !important;
+	}
+
+	/* Create/Update DCA Bot form table has a fixed width: 495px, and the lite-log
+	   panel a fixed 500px — both wider than a phone screen, causing horizontal
+	   overflow. Cap them to the available width on mobile. */
+	table#botsCreate {
+		width: 100% !important;
+		max-width: 100% !important;
+	}
+	.lite-log {
+		width: auto !important;
+		max-width: 100% !important;
+		box-sizing: border-box;
+	}
+
+	/* Many form inputs carry fixed inline widths (e.g. Configuration's 325px /
+	   350px fields). Inline width beats a CSS width, but max-width still caps it,
+	   so constrain every form field to its container on mobile — the inline width
+	   applies on desktop, the cap only bites when it would overflow the screen. */
+	.form-field {
+		max-width: 100% !important;
+		box-sizing: border-box;
+	}
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SYMBOT MASCOT — the animated logo character for the AI chat (symbot-mascot.js).
+   Faithful to the emblem; personality from motion + light only. States:
+   idle | thinking | positive | concerned. Two sizes: hero (empty chat) and
+   header (during a conversation). Animation is always on: the mascot is
+   rendered as markup with data-anim="on" and animates purely via these CSS
+   keyframes (the [data-anim="off"] rule below is kept as a static-logo escape
+   hatch but nothing sets it in normal use).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sbm-wrap { display: inline-flex; align-items: center; justify-content: center; }
+.sbm-mascot { display: block; width: 100%; height: 100%; overflow: visible; }
+.sbm-size-header .sbm-mascot { width: 30px;  height: 30px; }
+.sbm-size-hero   .sbm-mascot { width: 120px; height: 120px; }
+.sbm-size-hero, .sbm-size-header { transition: none; }
+
+/* transform-origins for the animatable groups */
+.sbm-mascot .sbm-body { transform-origin: center; transform-box: fill-box; }
+.sbm-mascot .sbm-ring { transform-origin: center; }
+.sbm-mascot .sbm-wave { transform-origin: center; transform-box: fill-box; }
+.sbm-mascot .sbm-arcs { transform-box: view-box; transform-origin: 35.6px 81.1px; }
+
+@keyframes sbmBreathe   { 0%,100%{transform:scale(1);}       50%{transform:scale(1.03);} }
+@keyframes sbmWavePulse { 0%,100%{opacity:0.85;}       50%{opacity:1;} }
+@keyframes sbmIdleAntenna { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-1.5px);} }
+@keyframes sbmThinkPulse{ 0%,100%{transform:scale(1);filter:brightness(1);} 50%{transform:scale(1.08);filter:brightness(1.06);} }
+@keyframes sbmPerk      { 0%{transform:translateY(0);} 30%{transform:translateY(-5px);} 55%{transform:translateY(0);} 72%{transform:translateY(-1.5px);} 100%{transform:translateY(0);} }
+@keyframes sbmArcSpin   { 0%{transform:rotate(0);} 100%{transform:rotate(360deg);} }
+@keyframes sbmTiltHold  { 0%{transform:rotate(0);} 12%{transform:rotate(-7deg);} 38%{transform:rotate(-7deg);} 50%{transform:rotate(0);} 62%{transform:rotate(7deg);} 88%{transform:rotate(7deg);} 100%{transform:rotate(0);} }
+@keyframes sbmSlowWave  { 0%,100%{transform:scale(1);} 50%{transform:scale(.96);} }
+
+/* IDLE — a calm, gentle glow on the face only (no heaving body scale/antenna bob) */
+/* IDLE — calm but clearly alive: a gentle 1.5% breath + a soft face glow.
+   (The 1.5% scale is subtle enough not to "heave" even on the large hero.) */
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="idle"] .sbm-body { animation: sbmBreathe 3.4s ease-in-out infinite; }
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="idle"] .sbm-wave { animation: sbmWavePulse 3.2s ease-in-out infinite; }
+
+/* THINKING — arcs spin evenly in place around the face + face pulses */
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="thinking"] .sbm-arcs { animation: sbmArcSpin 2.6s linear infinite; }
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="thinking"] .sbm-wave { animation: sbmThinkPulse 1.3s ease-in-out infinite; }
+
+/* POSITIVE — perk & brighten (good news only) */
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="positive"] .sbm-body { animation: sbmPerk 1.5s ease-in-out infinite; }
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="positive"] .sbm-wave { animation: sbmWavePulse 1.5s ease-in-out infinite; }
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="positive"] .sbm-ring { filter: saturate(1.2) brightness(1.05); }
+
+/* CONCERNED — deliberate tilt-with-hold, colors intact */
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="concerned"] .sbm-body { animation: sbmTiltHold 3.6s ease-in-out infinite; }
+.sbm-wrap[data-anim="on"] .sbm-mascot[data-state="concerned"] .sbm-wave { animation: sbmSlowWave 3.6s ease-in-out infinite; }
+
+/* Motion is gated by the JS-set data-anim attribute, which already honors the
+   user's explicit choice and (absent a choice) the OS reduced-motion hint. */
+.sbm-wrap[data-anim="off"] .sbm-mascot * { animation: none !important; }
+
+/* Mascot placement in the AI chat: small in the header, hero in the empty box. */
+.chat-mascot-header { display: inline-flex; align-items: center; flex-shrink: 0; }
+/* Only reserve spacing when a mascot is actually mounted, so an empty/unmounted
+   slot never leaves an awkward indent before the conversation dropdown. */
+.chat-mascot-header:empty { display: none; }
+.chat-mascot-header .sbm-wrap { margin-right: 6px; }
+/* The empty-state hero fills the chat box and centres vertically so the empty
+   state looks deliberate rather than floating near the top. */
+/* When only the hero is present, centre it in the box. Removed once messages exist. */
+#aiChatBox.chat-empty { display: flex; flex-direction: column; }
+.chat-mascot-hero {
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	gap: 12px; text-align: center; width: 100%; flex: 1 1 auto; min-height: 260px; box-sizing: border-box; padding: 20px;
+}
+.chat-mascot-hero-text { color: var(--table-content-color); opacity: 0.65; font-size: 1.05rem; max-width: 320px; }
+
+/* Inline "thinking" bubble shown in the chat while awaiting a response (follow-ups). */
+.chat-thinking-bubble { display: inline-flex; align-items: center; gap: 8px; }
+.chat-thinking-bubble .sbm-size-header .sbm-mascot { width: 26px; height: 26px; }
+.chat-thinking-dots { display: inline-flex; gap: 4px; }
+.chat-thinking-dots i {
+	width: 6px; height: 6px; border-radius: 50%; background: var(--table-content-color, #888);
+	opacity: 0.35; animation: sbmDot 1.2s ease-in-out infinite;
+}
+.chat-thinking-dots i:nth-child(2) { animation-delay: 0.2s; }
+.chat-thinking-dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes sbmDot { 0%,100%{opacity:0.25;transform:translateY(0);} 50%{opacity:0.9;transform:translateY(-3px);} }

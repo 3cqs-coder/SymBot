@@ -307,14 +307,16 @@
 			}
 		%>
 
-<center>
 <main>
+<center>
 
-	<div id="contentBox" style="width: 90%;">
+	<div id="contentBox">
 
-		<div class="contentHeaderBox" style="position: relative; text-align: center;">
-			<a href="#" onclick="window.location.href=window.location.pathname.replace(/\/bots\/.*$/,'/bots');return false;" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; text-decoration: none; opacity: 0.6;">&#8592; Bots</a>
+		<div class="contentHeaderBox">
 			<b id="headerText" class="contentHeader"></b>
+			<span class="view-header-links">
+				<a href="#" onclick="window.location.href=window.location.pathname.replace(/\/bots\/.*$/,'/bots');return false;" class="view-back-link">&#8592; Bots</a>
+			</span>
 		</div>
 
 		<div id="errorMsg" style="display: none;"><%- errorMsg %></div>
@@ -323,12 +325,12 @@
 
 			<%- include('./partialsBotForm') %>
 		</div>
+
+		<%- include('./partialsBotPreview') %>
 	</div>
 
-	<div id="ordersBox"></div>
-
-</main>
 </center>
+</main>
 
 
 <%- include('../../partialsFooterView'); %>

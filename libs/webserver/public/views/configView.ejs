@@ -49,7 +49,7 @@
 
 						ok: {
 								btnClass: 'btn-default',
-								text: '<div style="color: #4aa602;">Generate API Key</div>',
+								text: '<div style="color: var(--color-success);">Generate API Key</div>',
 								action: function () {
 
 									const uuid = genUUIDv4();
@@ -405,7 +405,7 @@
 			if (isSet) {
 
 				$status.html('&#10003; Set &nbsp;<span class="bot-cred-clear" data-field="' + field + '" style="cursor: pointer; color: var(--link-color); font-size: 12px;">[Clear]</span>');
-				$status.css('color', 'var(--green-color, #2ecc71)').show();
+				$status.css('color', 'var(--green-color, var(--color-success))').show();
 			}
 			else {
 
@@ -420,7 +420,7 @@
 
 			$('#bot_' + field).val('');
 			$('#bot_' + field + '_clear').val('1');
-			$('#bot_' + field + '_status').html('Will be cleared on save').css('color', 'var(--warning-color, #e67e22)');
+			$('#bot_' + field + '_status').html('Will be cleared on save').css('color', 'var(--warning-color, var(--color-warning))');
 		});
 
 		// Load exchanges dropdown, then load bot config and select current exchange
@@ -476,13 +476,13 @@
 
 			if (isSandbox) {
 
-				$('#sandboxModeLabel').html('<span style="color: #e67e22; font-weight: 600;">&#9888; Sandbox Mode (Paper Trading)</span>');
+				$('#sandboxModeLabel').html('<span style="color: var(--color-warning); font-weight: 600;">&#9888; Sandbox Mode (Paper Trading)</span>');
 				$('#sandboxModeToggle').text('Switch to Live Trading');
 				$('#sandboxModeDesc').text('No real trades will be placed. Safe for testing.');
 			}
 			else {
 
-				$('#sandboxModeLabel').html('<span style="color: #2ecc71; font-weight: 600;">&#9654; Live Trading</span>');
+				$('#sandboxModeLabel').html('<span style="color: var(--color-success); font-weight: 600;">&#9654; Live Trading</span>');
 				$('#sandboxModeToggle').text('Switch to Sandbox Mode');
 				$('#sandboxModeDesc').text('Real trades are active on this exchange.');
 			}
@@ -507,7 +507,7 @@
 				buttons: {
 					confirm: {
 						btnClass: 'btn-default',
-						text: '<div style="color: #c62828;">Switch to ' + goingTo + '</div>',
+						text: '<div style="color: var(--color-danger);">Switch to ' + goingTo + '</div>',
 						action: function() {
 
 							const newSandbox = goingToSandbox;
@@ -520,7 +520,7 @@
 								buttons: {
 									confirm: {
 										btnClass: 'btn-default',
-										text: '<div style="color: #c62828;">Confirm</div>',
+										text: '<div style="color: var(--color-danger);">Confirm</div>',
 										action: function() {
 
 											const pw = $('#sandboxConfirmPassword').val();
@@ -585,7 +585,7 @@
 			const exchangeChanged = selectedExchange && selectedExchange !== originalExchange;
 
 			const updateBotsHtml = exchangeChanged
-				? '<div style="font-size: 1.2rem; margin-top: 14px; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">'
+				? '<div style="font-size: 1.2rem; margin-top: 14px; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid var(--color-warning); border-radius: 2px;">'
 					+ '<b>&#9888; Exchange settings are saved to ' + ('<%= appData.bot_config %>'.split('/').pop().split('\\\\').pop()) + ' only.</b> Existing bots retain their original exchange. '
 					+ 'Bots with no active deals can be updated below. <b>Bots with active deals will be skipped.</b>'
 					+ '</div>'
@@ -602,7 +602,7 @@
 				buttons: {
 					confirm: {
 						btnClass: 'btn-default',
-						text: '<div style="color: #4aa602;">Save</div>',
+						text: '<div style="color: var(--color-success);">Save</div>',
 						action: function() {
 
 							const pw = $('#botConfigPassword').val();
@@ -722,7 +722,7 @@
 			// Mark the key for deletion on save — does not take effect until form is submitted
 			$('#sftp_private_key_clear').val('1');
 			$('#sftp_private_key').val('');
-			$('#sftp_private_key_status').html('Key will be cleared on save').css('color', 'var(--warning-color, #e67e22)');
+			$('#sftp_private_key_status').html('Key will be cleared on save').css('color', 'var(--warning-color, var(--color-warning))');
 		});
 
 		$('#showSftpPassphrase').on('click', function () {
@@ -903,9 +903,9 @@
 
 <main>
 
-	<div id="contentBox" style="max-width: 800px;">
+	<div id="contentBox">
 
-		<div class="contentHeaderBox" style="text-align: center;">
+		<div class="contentHeaderBox">
 			<b id="headerText" class="contentHeader">Configuration</b>
 		</div>
 
@@ -1474,7 +1474,7 @@
 						<input type="hidden" name="sftp_private_key_clear" id="sftp_private_key_clear" value="0">
 						<textarea name="sftp_private_key" id="sftp_private_key" class="form-field" style="width: 350px; height: 120px; font-family: monospace; font-size: 11px; resize: vertical;" placeholder="Paste private key here (leave blank to keep existing)"></textarea>
 						<% if (services['cron_backup']['sftp']['private_key_set']) { %>
-							<div id="sftp_private_key_status" style="margin-top: 4px; font-size: 12px; color: var(--green-color, #2ecc71);">&#10003; Private key is set &nbsp;<span id="sftp_clear_key" style="cursor: pointer; color: var(--link-color); font-size: 12px;">[Clear]</span></div>
+							<div id="sftp_private_key_status" style="margin-top: 4px; font-size: 12px; color: var(--green-color, var(--color-success));">&#10003; Private key is set &nbsp;<span id="sftp_clear_key" style="cursor: pointer; color: var(--link-color); font-size: 12px;">[Clear]</span></div>
 						<% } else { %>
 							<div id="sftp_private_key_status" style="margin-top: 4px; font-size: 12px; display: none;"></div>
 						<% } %>

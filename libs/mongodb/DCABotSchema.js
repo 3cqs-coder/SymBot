@@ -34,7 +34,8 @@ const DealSchema = new Schema({
 	orders: Object,
 	isStart: Number,
 	dealCount: Number,
-	dealMax: Number
+	dealMax: Number,
+	journal: Object
 }, {
 	collection: 'deals',
 	timestamps: true

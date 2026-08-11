@@ -1,0 +1,103 @@
+<%
+	// ── Data-driven navigation (backlog #75) ────────────────────────────────────
+	// Navigation is defined as DATA, not repeated markup. Each item:
+	//   [ href, label, page-key, icon-key, show ]
+	// grouped into labeled sections. Adding a page is one array line. The `show`
+	// flag folds context (Hub vs instance) into the data so one template renders
+	// the correct menu everywhere. `page-key` drives the active-page highlight,
+	// set client-side from the current path (see partialsHeaderView).
+	//
+	// Rendered into the persistent sidebar shell (#77). External links (target
+	// _blank) are marked with an `ext` flag so they get the right affordance and
+	// never receive the active-page state.
+
+	// isHub may be a bool or empty string depending on the view; normalize it.
+	var navIsHub = (typeof isHub !== 'undefined' && isHub !== '' && isHub);
+
+	// Some destinations differ between instance and Hub. Hub aggregates deals at
+	// /deals (unified) and has no per-instance /deals/active, /system, /logs, or
+	// bot-create. Resolve the right href per mode here so a link never points at a
+	// route that doesn't exist in the current context.
+	var hrefDeals     = navIsHub ? './deals'      : './deals/active';
+	var hrefDashboard = navIsHub ? './dashboard'  : './dashboard';
+
+	var navGroups = [
+		{ label: 'Trading', items: [
+			// href,                 label,                    key,         icon,        show,        ext
+			[ './bots/create',       'Create DCA Bot',         'bot-create','plus',      !navIsHub,   false ],
+			[ './bots',              'Manage DCA Bots',         'bots',      'bots',      true,        false ],
+			[ hrefDeals,             navIsHub ? 'Deals' : 'Active Deals', 'deals', 'activity', true,   false ],
+			[ hrefDashboard,         'Dashboard',               'dashboard', 'grid',      !navIsHub,   false ],
+			[ './deals/history',     'Deals History',           'history',   'history',   !navIsHub,   false ],
+			[ './manage',            'Manage Instances',        'manage',    'instances', navIsHub,    false ],
+			[ './news',              'News',                    'news',      'news',      navIsHub,    false ]
+		] },
+		{ label: 'Tools & Settings', items: [
+			[ 'https://www.symrank.com', 'Crypto Screener',      'symrank',   'external',  true,        true  ],
+			[ './deals/export',      'Transaction Export',      'transaction-export','download', !navIsHub, false ],
+			[ './journal',           'Trading Journal',         'journal',   'book',      !navIsHub,   false ],
+			[ './config',            'Configuration',           'config',    'gear',      true,        false ],
+			[ './system',            'System Tools',            'system',    'tools',     !navIsHub,   false ],
+			[ './backups',           'Backups',                 'backups',   'archive',   true,        false ],
+			[ './logs',              'Logs',                    'logs',      'list',      true,        false ]
+		] },
+		{ label: 'Account', items: [
+			[ './logout',            'Log Out',                 'logout',    'logout',    true,        false ]
+		] }
+	];
+
+	// Inline SVG path data — stroke-based, 24x24 viewBox. Quiet guides, not
+	// actions (kept muted via .nav-ic colour), consistent with the prior
+	// menu-icon philosophy but sharper than the old unicode glyphs.
+	var navIcons = {
+		plus:     '<path d="M12 5v14M5 12h14"/>',
+		bots:     '<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 4h6"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/>',
+		activity: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
+		grid:     '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+		history:  '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
+		external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+		gear:     '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.3 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.3 2.5h5l.3-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/>',
+		tools:    '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.7 2.7-2-2z"/>',
+		archive:  '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>',
+		download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
+		list:     '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+		book:     '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+		instances:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+		news:     '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+		logout:   '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'
+	};
+
+	function navIcon(key) {
+		return '<svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+			'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+			(navIcons[key] || '') + '</svg>';
+	}
+%>
+<aside class="side-nav" id="sideNav" aria-label="Main navigation">
+
+	<div class="side-nav-scroll">
+		<% navGroups.forEach(function(group) {
+			// A group renders only if at least one item is visible.
+			var visible = group.items.filter(function(it) { return it[4]; });
+			if (visible.length === 0) { return; }
+		%>
+			<div class="side-nav-group">
+				<div class="side-nav-label"><%= group.label %></div>
+				<% visible.forEach(function(item) {
+					var href = item[0], label = item[1], key = item[2], icon = item[3], ext = item[5];
+				%>
+					<a class="side-nav-item"
+					   href="<%= href %>"
+					   data-page="<%= key %>"
+					   <% if (ext) { %>target="_blank" rel="noopener" data-ext="1"<% } %>
+					   title="<%= label %>">
+						<span class="side-nav-ic"><%- navIcon(icon) %></span>
+						<span class="side-nav-text"><%= label %></span>
+						<% if (ext) { %><span class="side-nav-ext" aria-hidden="true">&#8599;</span><% } %>
+					</a>
+				<% }); %>
+			</div>
+		<% }); %>
+	</div>
+
+</aside>

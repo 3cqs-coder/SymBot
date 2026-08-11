@@ -102,10 +102,12 @@
 
 			const isSandbox  = portfolio && portfolio.is_sandbox;
 			const sandboxBadge = isSandbox ? ' <span class="hub-dash-sandbox-badge">SANDBOX</span>' : '';
+			const isOnline = !!portfolio;
+			const statusDot = '<span class="hub-dash-status ' + (isOnline ? 'is-online' : 'is-offline') + '"></span>';
 
 			container.append(
-				'<div class="hub-dash-card">' +
-					'<div class="hub-dash-card-title">' + inst.name + sandboxBadge + '</div>' +
+				'<div class="hub-dash-card' + (isOnline ? '' : ' is-offline') + '">' +
+					'<div class="hub-dash-card-title">' + statusDot + inst.name + sandboxBadge + '</div>' +
 					'<div class="hub-dash-card-row">' +
 						'<span class="hub-dash-label">Active Deals</span>' +
 						'<span style="font-weight:600;">' + inst.deals + '</span>' +
@@ -148,10 +150,10 @@
 
 <main>
 
-	<div id="contentBox" style="text-align: center; max-width: 900px; padding: 20px 16px;">
+	<div id="contentBox">
 
 		<!-- Combined totals box -->
-		<div style="text-align: center; margin-bottom: 24px;">
+		<div style="text-align: center; margin-bottom: 24px; padding-top: 24px;">
 			<div class="hub-dash-totals-box">
 				<div class="summary-bar" style="justify-content: center; gap: 28px; margin-top: 0;">
 					<p>Deals: <span id="hub-total-deals">—</span></p>
@@ -186,7 +188,7 @@
 			<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 16px 0 6px 0;">Tools &amp; Settings</div>
 
 			<div class="mainMenuItem">
-				<a href="https://www.symrank.com" target=_blank><span class="menu-icon">&#8599;</span> SymRank Crypto Screener</a>
+				<a href="https://www.symrank.com" target=_blank><span class="menu-icon">&#8599;</span> Crypto Screener</a>
 			</div>
 
 			<div class="mainMenuItem">

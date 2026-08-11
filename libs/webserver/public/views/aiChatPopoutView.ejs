@@ -20,6 +20,7 @@
 <body class="popout-body">
 
 <div id="popoutHeader">
+	<span id="chatMascotHeader" class="chat-mascot-header" title="Assistant"></span>
 	<span id="popoutTitle">AI Chat</span>
 	<div id="popoutHeaderBtns">
 		<div id="popoutMode" title="Toggle theme"></div>
@@ -45,6 +46,7 @@
 <script src="js/vendor/jquery/jquery.min.js"></script>
 <script src="js/vendor/marked/marked.min.js"></script>
 <script src="js/vendor/dompurify/purify.min.js"></script>
+<script src="js/symbot-mascot.js"></script>
 
 <script>
 
@@ -136,6 +138,14 @@
 		const $input      = $('#chatInput');
 		const $sendBtn    = $('#chatSendButton');
 
+		// ── Mascot (animated assistant) — shared controller in symbot-mascot.js ──
+		const mascot = (window.SymBot && SymBot.Mascot)
+			? SymBot.Mascot.attachToChat({ isAnalysis: function () { return window.AIChatConv_type === 'analysis'; } })
+			: null;
+		function mascotState(state) { if (mascot) mascot.setState(state); }
+		function mascotFlash(state, ms) { if (mascot) mascot.onError(); }
+		function updateMascotHero() { if (mascot) mascot.refresh(); }
+
 		function toggleInputState(disable) {
 
 			$input.prop('disabled', disable);
@@ -151,11 +161,15 @@
 
 			if (content === 'END_OF_CHAT') {
 
+				const finished = messageBuffer;
+
 				if ($currentMessageElement) {
 
 					messageBuffer = '';
 					$currentMessageElement = null;
 				}
+
+				if (mascot) mascot.onComplete(finished);
 
 				canSendMessage = true;
 				toggleInputState(false);
@@ -169,6 +183,7 @@
 
 					$currentMessageElement = $('<div>', { class: 'message bot-message' });
 					$chatBox.append($currentMessageElement);
+					if (mascot) mascot.onStreamChunk();
 				}
 
 				messageBuffer += content;
@@ -207,13 +222,15 @@
 			});
 
 			scrollToBottom();
+			updateMascotHero();
 		}
 		window.AIChatConv_renderHistory = renderHistory;
 
 		function postChatPrompt(userMessage, attachments) {
 
-			$spinner.show();
+			// Mascot "thinking" animation replaces the old center spinner.
 			toggleInputState(true);
+			if (mascot) mascot.onSend();
 
 			const payload = {
 				message: {
@@ -232,6 +249,7 @@
 				error: function(data) {
 
 					$spinner.hide();
+					mascotFlash('concerned', 2600);
 					toggleInputState(false);
 					alert('Error sending message: ' + JSON.stringify(data));
 				}
@@ -283,6 +301,11 @@
 				socket.on('connect', function() {
 
 					socket.emit('joinRooms', { rooms: [room] });
+					// A fresh analysis streams automatically after connect; show the
+					// mascot "thinking" state until the first chunk arrives.
+					if (messageBuffer === '' && $('#aiChatBox .message').length === 0) {
+						mascotState('thinking');
+					}
 				});
 
 				socket.on('data', function(data) {
@@ -324,9 +347,18 @@
 			// Apply theme immediately
 			applyMode(getMode());
 
+			// Keep the old spinner hidden — the mascot is the activity indicator.
+			$spinner.hide();
+
+			// An analysis popout streams immediately: the controller's refresh()
+			// shows the header mascot (no hero), and we start it in "thinking".
+			if (window.AIChatConv_type === 'analysis' && mascot) {
+				mascot.refresh();
+				mascot.setThinking();
+			}
+
 			if (!room) {
 
-				$spinner.hide();
 				$chatBox.html('<div style="padding:20px;color:var(--table-content-color);">No chat room specified.</div>');
 				return;
 			}

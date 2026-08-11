@@ -1,0 +1,199 @@
+<%- include('../../partialsHeaderView'); %>
+
+<script>
+
+	function getBots() {
+
+		$.ajax({
+					type: 'GET',
+					url: './api/bots',
+					data: {},
+					dataType: 'json',
+					success: function(data) {
+
+						populateBotSelect(data.data || []);
+					},
+					error: function(data) {
+
+						populateBotSelect([]);
+					}
+		});
+	}
+
+
+	function populateBotSelect(bots) {
+
+		let botArr = [];
+
+		bots.forEach((bot) => {
+
+			botArr.push({ 'id': bot.botId, 'name': bot.botName });
+		});
+
+		botArr = sortByKey(botArr, 'name');
+
+		const selector = ['<select id="botValue" class="form-field" style="width: 140px;">', '<option value="Default">All bots</option>'];
+
+		for (let i = 0; i < botArr.length; i++) {
+
+			selector.push(`<option value="${botArr[i].id}">${botArr[i].name}</option>`);
+		}
+
+		selector.push('</select>');
+
+		$('#botSelect').html(selector.join(''));
+	}
+
+
+	function confirmDownloadTransactionCsv() {
+
+		const from = $('#fromDate').val();
+		const to = $('#toDate').val() || from;
+		const includeSandbox = $('#includeSandbox').is(':checked');
+
+		let rangeText;
+
+		if (from) {
+
+			rangeText = 'deals closed from <b>' + from + '</b> to <b>' + to + '</b>';
+		}
+		else {
+
+			rangeText = '<b>all closed deals</b>';
+		}
+
+		const sandboxText = includeSandbox
+			? ' Sandbox deals <b>will</b> be included.'
+			: ' Sandbox deals will <b>not</b> be included.';
+
+		const content = '<div style="font-size: 1.2rem; text-align: left;">'
+			+ 'Download a transaction CSV for ' + rangeText + '?'
+			+ sandboxText
+			+ '<br><br>This exports your transactions for import into tax software. It does not calculate taxes, gains, or cost basis.'
+			+ '</div>';
+
+		$.confirm({
+
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: content,
+			buttons: {
+
+				ok: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-success);">Download CSV</div>',
+					action: function () {
+
+						downloadTransactionCsv();
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
+					action: function () { }
+				}
+			}
+		});
+	}
+
+
+	function downloadTransactionCsv() {
+
+		const tzData = getTimeZone();
+		const timeZoneOffset = tzData['offset'];
+
+		const from = $('#fromDate').val();
+		const to = $('#toDate').val() || from;
+		const botId = $('#botValue').val();
+		const includeSandbox = $('#includeSandbox').is(':checked');
+
+		const params = new URLSearchParams();
+
+		if (from) { params.set('from', from); }
+		if (to)   { params.set('to', to); }
+		if (botId && botId !== 'Default') { params.set('botId', botId); }
+		if (includeSandbox) { params.set('includeSandbox', 'true'); }
+
+		params.set('timeZoneOffset', timeZoneOffset);
+
+		// The endpoint streams the file with a Content-Disposition attachment
+		// header, so a direct navigation triggers the download.
+		window.location.href = './api/deals/export/transactions?' + params.toString();
+	}
+
+
+	$(document).ready(function() {
+
+		getBots();
+
+		$('#fromDate, #toDate').datepicker({
+
+			dateFormat: 'yy-mm-dd',
+			changeMonth: true,
+			changeYear: true,
+			onSelect: function(selectedDate, input) {
+
+				if (input.id === 'fromDate') {
+
+					$('#toDate').datepicker('option', 'minDate', selectedDate);
+				}
+				else {
+
+					$('#fromDate').datepicker('option', 'maxDate', selectedDate);
+				}
+			}
+		});
+
+		$('#downloadCsv').click(function() {
+
+			confirmDownloadTransactionCsv();
+		});
+	});
+
+</script>
+
+<center>
+<main>
+
+	<div id="contentBox" class="wide">
+
+		<div style="position: relative;">
+
+			<div class="contentHeaderBox">
+
+				<b class="contentHeader">Transaction Export</b>
+			</div>
+
+			<div class="transaction-export-page-pad">
+
+			<div class="transaction-export-intro">
+				<p>Export your closed deals as a per-transaction CSV you can import into crypto-tax software such as Koinly, CoinTracker, or CoinLedger. Each buy and sell is exported as its own transaction with fees, using the format these tools expect.</p>
+				<p>The date range filters by when each deal <b>closed</b>. A deal's earlier buy orders are always included so your tax software can match every sale to the purchases that built it &mdash; so you may see some transaction dates earlier than your start date. Leave the dates empty to export everything (recommended &mdash; let your tax tool sort transactions into tax years), or set a range to pull the deals that closed within it. Choose a bot to limit the export to that bot only.</p>
+			</div>
+
+			<div class="transaction-export-controls">
+				<span>Closed from: <input id="fromDate" class="form-field" style="width: 120px;" placeholder="all"></span>
+				<span>Closed to: <input id="toDate" class="form-field" style="width: 120px;" placeholder="all"></span>
+				<span>Bot: <span id="botSelect" style="display: inline-block;"></span></span>
+				<label class="transaction-export-sandbox"><input type="checkbox" id="includeSandbox"> Include sandbox deals</label>
+				<button id="downloadCsv" class="btnAll">Download CSV</button>
+			</div>
+
+			<div class="transaction-export-disclaimer">
+				<b>Important:</b> This file contains only the transactions SymBot executed on this account &mdash; it is <b>not</b> a tax return, and SymBot does <b>not</b> calculate your taxes, gains, or cost basis. Your tax software calculates gains from your complete account history. If you also connect this exchange to your tax tool directly (for example by API), do <b>not</b> import both, or transactions will be counted twice.
+				<br><br>
+				This export is provided for convenience only and may be incomplete for your overall tax picture (it does not include manual trades, transfers, or activity from other tools on the same account). It is <b>not tax advice</b>. Always review your transactions and have your return prepared or reviewed by a qualified tax professional. See also the disclaimer included with SymBot.
+				<br><br>
+				<b>Note:</b> Exports covering a large number of deals may take a while to generate and can briefly affect system performance while running.
+			</div>
+
+			</div>
+
+		</div>
+	</div>
+
+</main>
+</center>
+
+<%- include('../../partialsFooterView'); %>

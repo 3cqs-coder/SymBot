@@ -11,6 +11,7 @@ const ccxt = require('ccxt');
 const Table = require('easy-table');
 const Percentage = require('percentagejs');
 const Common = require(pathRoot + '/libs/app/Common.js');
+const AddFundsMath = require(pathRoot + '/libs/app/AddFundsMath.js');
 const Schema = require(pathRoot + '/libs/mongodb/DCABotSchema');
 const DbQueries = require(__dirname + '/DCABotDbQueries.js');
 
@@ -7056,29 +7057,28 @@ async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchange
 		amountWithFees = 0;
 	}
 
-	let totalFee = amountWithFees * totalFeeRate;
+	// Forward math (amount -> new average / target) is shared with the Add Funds
+	// Estimator via AddFundsMath so the calculator and the engine can never drift.
+	// estimateFunds solves for the amount above; this computes the resulting
+	// averages/targets from it, at the current market price.
+	const fwd = AddFundsMath.computeAddFundsForward({
+		'sum': sumFloat,
+		'qtySum': qtySumFloat,
+		'addAmount': amountWithFees,
+		'addPrice': currentPrice,
+		'price': currentPrice,
+		'exchangeFee': exchangeFee,
+		'targetProfitPercent': targetProfitPercent
+	});
 
-	// Round gross and fee
-	amountWithFees = Math.round((amountWithFees + Number.EPSILON) * 100) / 100;
-	totalFee = Math.round((totalFee + Number.EPSILON) * 100) / 100;
+	let totalFee = fwd.exchange_fee_total;
+	amountWithFees = fwd.add_amount_gross;
+	const amountWithoutFees = fwd.add_amount_net;
 
-	const amountWithoutFees = Math.round((amountWithFees - totalFee + Number.EPSILON) * 100) / 100;
-
-	// New average price (net-based)
-	const addedQty_net = amountWithoutFees / currentPrice;
-	const newQtySum_net = qtySumFloat + addedQty_net;
-	const newSum_net = sumFloat + amountWithoutFees;
-	const avgPrice_net = newQtySum_net > 0 ? newSum_net / newQtySum_net : 0;
-
-	// New average price (gross-based)
-	const addedQty_gross = amountWithFees / currentPrice;
-	const newQtySum_gross = qtySumFloat + addedQty_gross;
-	const newSum_gross = sumFloat + amountWithFees;
-	const avgPrice_gross = newQtySum_gross > 0 ? newSum_gross / newQtySum_gross : 0;
-
-	// Calculate new target price based on new average and desired profit + fees
-	const newTargetPrice_net = avgPrice_net * (1 + totalFeeRate + parseFloat(targetProfitPercent) / 100);
-	const newTargetPrice_gross = avgPrice_gross * (1 + totalFeeRate + parseFloat(targetProfitPercent) / 100);
+	const avgPrice_net = fwd.average_price_net;
+	const avgPrice_gross = fwd.average_price_gross;
+	const newTargetPrice_net = fwd.target_price_net;
+	const newTargetPrice_gross = fwd.target_price_gross;
 
 	// Process new estimated funds for average price accuracy
 	if (dealId != undefined && dealId != null && dealId != '') {

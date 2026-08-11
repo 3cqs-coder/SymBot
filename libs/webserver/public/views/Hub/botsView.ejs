@@ -288,6 +288,9 @@
 
 				if (err.status === 401) { window.location.href = './login'; return; }
 
+				// Don't leave the "Loading…" message hanging behind the alert.
+				$('#hubBotsLoadingMsg').text('Could not load bots.');
+
 				alertBox('Error fetching bots: ' + JSON.stringify(err), function() { setReloadTimeout(); });
 			}
 		});
@@ -377,6 +380,22 @@
 		}
 
 		$('#hubBots tbody').empty().append(contentArr.join(''));
+
+		// Reveal the table only once rows are in place; show a clear message when
+		// there are none. Avoids the empty table flashing with collapsed headers
+		// during the fetch. Matches the Active Deals loading pattern.
+		$('#hubBotsLoadingMsg').hide();
+
+		if (contentArr.length > 0) {
+
+			$('#hubBotsEmptyMsg').hide();
+			$('#hubBots').show();
+		}
+		else {
+
+			$('#hubBots').hide();
+			$('#hubBotsEmptyMsg').show();
+		}
 
 		$('#totalBots').html(totalBots);
 		$('#activeBots').html(activeBots);
@@ -491,6 +510,7 @@ $(document).ready(function() {
 		});
 
 		SymBot.UI.initColumnSelector();
+		SymBot.UI.initHeaderCorners('#hubBots');
 
 		initRefreshSelector();
 
@@ -505,7 +525,7 @@ $(document).ready(function() {
 
 	<%- include('../partialsColumnSelector') %>
 
-	<div id="contentBox">
+	<div id="contentBox" class="wide">
 
 		<div style="position: relative;">
 
@@ -517,7 +537,9 @@ $(document).ready(function() {
 					<select id="hubRefreshInterval" class="form-field" style="width: auto; cursor: pointer;" title="Refresh interval"></select>
 					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
 				</span>
+			</div>
 
+			<div class="view-summary">
 				<div class="summary-bar">
 					<p>Bots: <span id="totalBots"></span></p>
 					<p>Active: <span id="activeBots"></span></p>
@@ -533,7 +555,10 @@ $(document).ready(function() {
 
 			<div class="botsDealsBox" style="margin-top: 20px;">
 
-				<table id="hubBots" border=0 cellspacing=0 cellpadding=0>
+				<div id="hubBotsLoadingMsg" class="deals-state-msg">Loading bots&hellip;</div>
+				<div id="hubBotsEmptyMsg" class="deals-state-msg" style="display: none;">No bots found.</div>
+
+				<table id="hubBots" border=0 cellspacing=0 cellpadding=0 style="display: none;">
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">

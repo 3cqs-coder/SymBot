@@ -11,6 +11,11 @@
 
 	<title><%- appData.name %> <%- appData.version %></title>
 
+	<link rel="icon" href="/images/favicon.ico?v=<%- appData.version %>" sizes="any" />
+	<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png?v=<%- appData.version %>" />
+	<link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png?v=<%- appData.version %>" />
+	<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png?v=<%- appData.version %>" />
+
 	<link rel="stylesheet" href="/css/vendor/jquery-ui/jquery-ui.min.css" />
 	<link rel="stylesheet" href="/css/vendor/jquery-confirm/jquery-confirm.min.css" />
 	<link rel="stylesheet" href="/css/vendor/jquery-ui-timepicker-addon/jquery-ui-timepicker-addon.min.css" />
@@ -38,6 +43,7 @@
 	<script src="/js/vendor/tablesorter/widgets/widget-columnSelector.min.js"></script>
 	<script src="/js/vendor/tablesorter/widgets/widget-filter-formatter-jui.min.js"></script>
 	<script src="/js/symbot-ui.js?v=<%- appData.version %>"></script>
+	<script src="/js/symbot-mascot.js?v=<%- appData.version %>"></script>
 
 	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
@@ -57,6 +63,8 @@
 	$(document).ready(function() {
 
 		basePath = setBasePath();
+
+		if (document.querySelector('.side-nav')) { initShell(); }
 
 		if (isHub) {
 
@@ -207,6 +215,181 @@
 	}
 
 
+	// ── Cockpit shell (backlog #75/#77) ─────────────────────────────────────
+	// Persistent sidebar + top bar wiring: active-page highlight from the
+	// current path, collapse-to-rail state persisted in dataTracker, and the
+	// mobile off-canvas drawer. Nav content is rendered data-driven in
+	// partialsNavView.ejs. Purely presentational — no routing change.
+	function initShell() {
+
+		const isMobile = function() { return window.matchMedia('(max-width: 860px)').matches; };
+
+		const tracker = getDataTracker();
+
+		if (!isMobile() && tracker['navCollapsed']) {
+
+			$('body').addClass('nav-collapsed');
+			$('#navToggle').attr('aria-expanded', 'false');
+		}
+
+		markActiveNav();
+
+		// The dashboard route requires a timeZoneOffset query param (it derives the
+		// local day boundaries from it). The sidebar Dashboard link appears on every
+		// page, so decorate it here with the browser's offset — otherwise clicking
+		// Dashboard from anywhere sends no offset and the server throws.
+		decorateDashboardLinks();
+
+		$('#navToggle').on('click', function() {
+
+			if (isMobile()) {
+
+				$('body').toggleClass('nav-drawer-open');
+			}
+			else {
+
+				const collapsed = $('body').toggleClass('nav-collapsed').hasClass('nav-collapsed');
+
+				$('#navToggle').attr('aria-expanded', collapsed ? 'false' : 'true');
+
+				dataTracker = getDataTracker();
+				dataTracker['navCollapsed'] = collapsed;
+				updateDataTracker();
+			}
+		});
+
+		$('#navScrim').on('click', function() {
+
+			$('body').removeClass('nav-drawer-open');
+		});
+
+		$('#sideNav').on('click', '.side-nav-item', function() {
+
+			if (isMobile()) {
+
+				$('body').removeClass('nav-drawer-open');
+			}
+		});
+
+		$(window).on('resize', function() {
+
+			if (!isMobile()) {
+
+				$('body').removeClass('nav-drawer-open');
+			}
+		});
+	}
+
+
+	// Match the current path to a nav item and flag it active. Longest matching
+	// href wins so /deals/history beats /deals. External links never match, and
+	// an unrecognised path simply highlights nothing rather than guessing.
+	function markActiveNav() {
+
+		let path = window.location.pathname.replace(/\/+$/, '');
+
+		path = path.replace(/^\/instance\/[^\/]+/, '');
+
+		if (path === '' || path === '/') {
+
+			return;
+		}
+
+		let best = null;
+		let bestLen = -1;
+
+		$('#sideNav .side-nav-item').each(function() {
+
+			if ($(this).attr('data-ext')) {
+
+				return;
+			}
+
+			let href = ($(this).attr('href') || '').replace(/^\.\//, '/').replace(/\?.*$/, '').replace(/\/+$/, '');
+
+			if (href === '') {
+
+				return;
+			}
+
+			if ((path === href || path.endsWith(href)) && href.length > bestLen) {
+
+				best = this;
+				bestLen = href.length;
+			}
+		});
+
+		if (best) {
+
+			$(best).addClass('is-active');
+			return;
+		}
+
+		// Fallback for bot create/edit views that have no nav entry of their own.
+		// These pages are children of Manage DCA Bots (/bots) — you reach them from
+		// that list — so highlight that parent rather than nothing. Covers both the
+		// instance edit path (/bots/{botId}) and the Hub paths
+		// (/bots/{instanceId}/{botId} edit, /bots/{instanceId}/create). The instance
+		// Create page (/bots/create) has its own nav entry and matches in the main
+		// loop above, so it returns before reaching here.
+		if (/\/bots\/[^\/]+(\/[^\/]+)?$/.test(path)) {
+
+			let $manage = $('#sideNav .side-nav-item').filter(function() {
+
+				let href = ($(this).attr('href') || '').replace(/^\.\//, '/').replace(/\?.*$/, '').replace(/\/+$/, '');
+				return href === '/bots';
+			}).first();
+
+			if ($manage.length) {
+
+				$manage.addClass('is-active');
+			}
+		}
+	}
+
+
+	// Append the browser's timezone offset to any Dashboard link so the dashboard
+	// route always receives the timeZoneOffset param it requires. Safe to call on
+	// every page; skips links that already carry the param.
+	function decorateDashboardLinks() {
+
+		if (typeof getTimeZone !== 'function') {
+
+			return;
+		}
+
+		let offset;
+
+		try {
+
+			offset = encodeURIComponent(getTimeZone()['offset']);
+		}
+		catch (e) {
+
+			return;
+		}
+
+		if (offset == undefined || offset === '') {
+
+			return;
+		}
+
+		$('a[href*="dashboard"]').each(function() {
+
+			let href = $(this).attr('href') || '';
+
+			if (href.indexOf('timeZoneOffset=') !== -1) {
+
+				return;
+			}
+
+			const sep = (href.indexOf('?') !== -1) ? '&' : '?';
+
+			$(this).attr('href', href + sep + 'timeZoneOffset=' + offset);
+		});
+	}
+
+
 	function changeMode(mode) {
 
 		if (mode != undefined && mode != null && mode == 'dark') {
@@ -226,12 +409,23 @@
 	}
 
 
+	// Animated-mascot loader HTML, from the mascot module's single loaderHtml()
+	// source (shared with the conversation-load path). symbot-mascot.js is loaded
+	// on every page that opens the AI chat, so this is always available.
+	function aiLoaderHtml(caption) {
+		return SymBot.Mascot.loaderHtml(caption || 'Analyzing…');
+	}
+
 	function openAiChat(modalId, divId, header, content) {
 
 		let url = './api/ai/chat/view';
 		let data;
 
-		openModal(modalId, '#' + divId, header, 'Processing...');
+		// Show the animated loader instantly from server-rendered markup. Injected
+		// directly (not via openModal's async open callback, which does not re-fire
+		// on an already-open dialog) so there is never a white gap.
+		openModal(modalId, '#' + divId, header, '');
+		$('#' + divId).html(aiLoaderHtml('Analyzing…'));
 
 		if (content) {
 
@@ -1047,15 +1241,21 @@
 
 </head>
 
-<body>
+<body class="<%- (typeof isLoginPage !== 'undefined' && isLoginPage) ? '' : 'has-shell' %>">
 
 <div id="headerBox"> 
 
-	<div id="btcPrice"></div>
+	<% if (typeof isLoginPage === 'undefined' || !isLoginPage) { %>
+	<button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="true">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+	</button>
+	<% } %>
 
-	<div id="divLogo" style="position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: inline-block;">
+	<div id="divLogo">
 		<img id="logo" src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
+
+	<div id="btcPrice"></div>
 
 	<div class="headerButtons">
 		<div id="mode" class="headerIconBtn modeButton"></div>
@@ -1063,6 +1263,12 @@
 		<div id="notifications" class="headerIconBtn notificationButton"><span class="icon icon-bell" style="width:17px;height:17px;"></span><span class="notif-dot"></span></div>
 	</div>
 </div>
+
+<% if (typeof isLoginPage === 'undefined' || !isLoginPage) { %>
+<%- include('./partialsNavView'); %>
+
+<div class="nav-scrim" id="navScrim"></div>
+<% } %>
 
 <div id="spinner-overlay">
 	<div class="spinner-container"><span class="spinner"></span></div>

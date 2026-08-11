@@ -1,0 +1,593 @@
+<%- include('../../partialsHeaderView'); %>
+
+<script>
+
+	const journalAiEnabled = <%- aiEnabled ? 'true' : 'false' %>;
+	const getCurrencySymbol = <%- getCurrencySymbol %>;
+	const journalMoods = <%- moods %>;
+	const journalMoodById = {};
+	journalMoods.forEach(m => { journalMoodById[m.id] = m; });
+
+	function journalSym(code) {
+
+		return getCurrencySymbol(code) || '$';
+	}
+
+
+	function getBots() {
+
+		$.ajax({
+					type: 'GET',
+					url: './api/bots',
+					dataType: 'json',
+					success: function(data) { populateBotSelect(data.data || []); },
+					error: function() { populateBotSelect([]); }
+		});
+	}
+
+
+	function populateBotSelect(bots) {
+
+		let botArr = [];
+
+		bots.forEach((bot) => { botArr.push({ 'id': bot.botId, 'name': bot.botName }); });
+
+		botArr = sortByKey(botArr, 'name');
+
+		const opts = ['<option value="all">All bots</option>'];
+
+		for (let i = 0; i < botArr.length; i++) {
+
+			opts.push('<option value="' + botArr[i].id + '">' + botArr[i].name + '</option>');
+		}
+
+		$('#journalBotFilter').html(opts.join(''));
+	}
+
+
+	function fmtDate(d) {
+
+		const dt = new Date(d);
+		return dt.toLocaleString();
+	}
+
+
+	function fmtDuration(startD, endD) {
+
+		let secs = Math.max(0, Math.floor((new Date(endD).getTime() - new Date(startD).getTime()) / 1000));
+
+		const days = Math.floor(secs / 86400); secs -= days * 86400;
+		const hrs = Math.floor(secs / 3600); secs -= hrs * 3600;
+		const mins = Math.floor(secs / 60);
+
+		let out = '';
+		if (days > 0) { out += days + 'd '; }
+		if (hrs > 0) { out += hrs + 'h '; }
+		out += mins + 'm';
+
+		return out.trim();
+	}
+
+
+	function escapeHtml(s) {
+
+		return String(s == null ? '' : s)
+			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	}
+
+
+	// Ensures the "Delete note" button is present after a note is saved.
+	function ensureNoteDelBtn(dealId) {
+
+		const $entry = $('.journal-entry[data-dealid="' + dealId + '"]');
+
+		if ($entry.find('.journal-note-del').length) { return; }
+
+		const pair = $entry.find('.journal-pair').text();
+		const $saveBtn = $entry.find('.journal-save-btn');
+
+		const $del = $('<button type="button" class="btnAll journal-note-del">Delete note</button>')
+			.attr('data-dealid', dealId)
+			.attr('data-pair', pair);
+
+		$saveBtn.after($del);
+	}
+
+
+	// Pagination state.
+	let journalSkip = 0;
+	const journalPageSize = 25;
+	let journalLoading = false;
+
+
+	// Shared filter query string (bot + date range) used by both the list and
+	// the stats/correlation panel, so they always describe the same deals.
+	function journalFilterParams() {
+
+		const botId = $('#journalBotFilter').val() || 'all';
+		const from = $('#journalFrom').val();
+		const to = $('#journalTo').val();
+		const tz = getTimeZone().offset;
+
+		let qs = 'botId=' + encodeURIComponent(botId) + '&timeZoneOffset=' + encodeURIComponent(tz);
+		if (from) { qs += '&from=' + encodeURIComponent(from); }
+		if (to)   { qs += '&to=' + encodeURIComponent(to); }
+
+		return qs;
+	}
+
+
+	function fmtMins(mins) {
+
+		if (!mins || mins < 1) { return '<1m'; }
+		if (mins < 60) { return mins + 'm'; }
+		const h = Math.floor(mins / 60), m = mins % 60;
+		if (mins < 1440) { return h + 'h' + (m ? ' ' + m + 'm' : ''); }
+		const d = Math.floor(mins / 1440), rh = Math.round((mins % 1440) / 60);
+		return d + 'd' + (rh ? ' ' + rh + 'h' : '');
+	}
+
+
+	function renderStats(res) {
+
+		const s = res && res.summary;
+
+		if (!s || !s.total_deals) { $('#journalStats').hide(); $('#journalCorrelation').hide(); return; }
+
+		const profitClass = s.total_profit >= 0 ? 'profit-positive' : 'profit-negative';
+		const profitSign = s.total_profit >= 0 ? '+' : '';
+		const streakNice = s.current_streak_type
+			? (s.current_streak + (s.current_streak_type === 'win' ? (s.current_streak === 1 ? ' win' : ' wins') : (s.current_streak === 1 ? ' loss' : ' losses')))
+			: '—';
+
+		const cells = [
+			['Deals', s.total_deals],
+			['Win rate', s.win_rate + '%<span class="journal-stat-sub">' + s.wins + 'W / ' + s.losses + 'L</span>'],
+			['Total P/L', '<span class="' + profitClass + '">' + profitSign + s.total_profit.toFixed(2) + '</span>'],
+			['Avg hold', fmtMins(s.avg_duration_mins)],
+			['Current streak', streakNice],
+			['Best', s.best ? (escapeHtml(s.best.pair) + '<span class="journal-stat-sub">+' + s.best.profit_percent + '%</span>') : '—'],
+			['Worst', s.worst ? (escapeHtml(s.worst.pair) + '<span class="journal-stat-sub">' + s.worst.profit_percent + '%</span>') : '—']
+		];
+
+		$('#journalStats').html(
+			cells.map(c => '<div class="journal-stat"><div class="journal-stat-label">' + c[0] + '</div><div class="journal-stat-val">' + c[1] + '</div></div>').join('')
+		).show();
+
+		// Mood correlation — only meaningful once some deals are tagged.
+		const mc = (res && res.mood_correlation) || [];
+
+		if (!mc.length) {
+
+			$('#journalCorrelation').html(
+				'<div class="journal-corr-empty">Tag your deals with how they went (🎯 planned, 😰 anxious, 🎲 gambled…) and this panel will show how each mood correlates with your win rate &mdash; often the most revealing part of a trading journal.</div>'
+			).show();
+			return;
+		}
+
+		const bars = mc.map(m => {
+
+			const pClass = m.avg_profit >= 0 ? 'profit-positive' : 'profit-negative';
+			const pSign = m.avg_profit >= 0 ? '+' : '';
+
+			return '<div class="journal-corr-row">' +
+					'<div class="journal-corr-mood">' + m.emoji + ' ' + escapeHtml(m.label) + '</div>' +
+					'<div class="journal-corr-bar-wrap"><div class="journal-corr-bar" style="width:' + m.win_rate + '%;"></div><span class="journal-corr-pct">' + m.win_rate + '% win</span></div>' +
+					'<div class="journal-corr-meta"><span class="' + pClass + '">' + pSign + m.avg_profit.toFixed(2) + ' avg</span><span class="journal-corr-n">n=' + m.count + '</span></div>' +
+				'</div>';
+		}).join('');
+
+		const note = s.untagged_count > 0
+			? '<div class="journal-corr-foot">' + s.tagged_count + ' of ' + s.total_deals + ' deals tagged. Small samples can mislead &mdash; treat these as observations, not rules.</div>'
+			: '<div class="journal-corr-foot">Small samples can mislead &mdash; treat these as observations, not rules.</div>';
+
+		$('#journalCorrelation').html('<div class="journal-corr-title">Mood vs. outcome</div>' + bars + note).show();
+	}
+
+
+	function loadStats() {
+
+		// Show a processing indicator immediately so the panels don't just pop in
+		// once the (potentially slow) server aggregation returns. Reuses the stats
+		// container so layout doesn't jump.
+		$('#journalStatsLoading').show();
+		$('#journalStats').hide();
+		$('#journalCorrelation').hide();
+
+		$.ajax({
+					type: 'GET',
+					url: './api/journal/stats?' + journalFilterParams(),
+					dataType: 'json',
+					success: function(res) { $('#journalStatsLoading').hide(); renderStats(res); },
+					error: function() { $('#journalStatsLoading').hide(); $('#journalStats').hide(); $('#journalCorrelation').hide(); }
+		});
+	}
+
+
+	function loadJournal(append) {
+
+		if (journalLoading) { return; }
+		journalLoading = true;
+
+		if (!append) {
+
+			journalSkip = 0;
+			$('#journalList').html('');
+			$('#journalLoadMoreWrap').hide();
+			$('#journalLoading').show();
+			$('#journalEmpty').hide();
+		}
+		else {
+
+			$('#journalLoadMoreBtn').text('Loading…').prop('disabled', true);
+		}
+
+		let url = './api/journal?' + journalFilterParams() +
+				  '&limit=' + journalPageSize + '&skip=' + journalSkip;
+
+		$.ajax({
+					type: 'GET',
+					url: url,
+					dataType: 'json',
+					success: function(res) {
+
+						journalLoading = false;
+						renderJournal((res && res.data) || [], append, res && res.has_more);
+					},
+					error: function() {
+
+						journalLoading = false;
+						$('#journalLoading').hide();
+						$('#journalLoadMoreBtn').text('Load more').prop('disabled', false);
+
+						if (!append) {
+
+							$('#journalEmpty').text('Could not load journal entries.').show();
+						}
+					}
+		});
+	}
+
+
+	// Builds the mood picker row for an entry; the saved mood (if any) is active.
+	function moodPickerHtml(dealId, pair, currentMood) {
+
+		const chips = journalMoods.map(m => {
+
+			const active = m.id === currentMood ? ' active' : '';
+			return '<span class="journal-mood-chip' + active + '" data-dealid="' + dealId + '" data-pair="' + escapeHtml(pair) + '" data-mood="' + m.id + '" title="' + escapeHtml(m.label) + '">' + m.emoji + '</span>';
+		}).join('');
+
+		return '<div class="journal-mood-row"><span class="journal-mood-label">How did it go?</span>' + chips + '</div>';
+	}
+
+
+	function renderJournal(entries, append, hasMore) {
+
+		$('#journalLoading').hide();
+
+		if (!append && !entries.length) {
+
+			$('#journalEmpty').text('No closed deals in this range yet. Entries appear automatically as deals complete.').show();
+			$('#journalLoadMoreWrap').hide();
+			return;
+		}
+
+		const rows = [];
+
+		entries.forEach((e) => {
+
+			const sym = journalSym(e.profit_currency === 'base' ? e.pair.split('/')[0] : e.pair.split('/')[1]);
+			const profitClass = e.profit_percent >= 0 ? 'profit-positive' : 'profit-negative';
+			const profitSign = e.profit_percent >= 0 ? '+' : '';
+
+			const narrativeBlock = e.narrative
+				? '<div class="journal-narrative"><span class="journal-narrative-label">AI reflection</span>' +
+				  '<span class="journal-narrative-del" data-dealid="' + e.deal_id + '" data-pair="' + escapeHtml(e.pair) + '" title="Delete reflection">&times;</span>' +
+				  escapeHtml(e.narrative) + '</div>'
+				: '';
+
+			const aiBtn = journalAiEnabled
+				? '<button type="button" class="btnAll journal-ai-btn" data-dealid="' + e.deal_id + '">' + (e.narrative ? 'Regenerate AI reflection' : 'Generate AI reflection') + '</button>'
+				: '';
+
+			// Note delete only shows when a note is actually saved.
+			const noteDelBtn = (e.note && e.note.length)
+				? '<button type="button" class="btnAll journal-note-del" data-dealid="' + e.deal_id + '" data-pair="' + escapeHtml(e.pair) + '">Delete note</button>'
+				: '';
+
+			rows.push(
+				'<div class="journal-entry" data-dealid="' + e.deal_id + '">' +
+					'<div class="journal-entry-head">' +
+						'<span class="journal-head-left">' +
+							'<span class="journal-pair">' + escapeHtml(e.pair) + '</span>' +
+							'<span class="journal-dealid" title="Deal ID">' + escapeHtml(e.deal_id) + '</span>' +
+						'</span>' +
+						'<span class="journal-profit ' + profitClass + '">' + profitSign + e.profit_percent + '%  (' + sym + e.profit + ')</span>' +
+					'</div>' +
+					'<div class="journal-facts">' +
+						'<span>Bot: ' + escapeHtml(e.bot_name || '&mdash;') + '</span>' +
+						'<span>Closed: ' + fmtDate(e.date_end) + '</span>' +
+						'<span>Duration: ' + fmtDuration(e.date_start, e.date_end) + '</span>' +
+						'<span>Safety orders: ' + e.safety_orders + '</span>' +
+					'</div>' +
+					moodPickerHtml(e.deal_id, e.pair, e.mood) +
+					narrativeBlock +
+					'<div class="journal-note-wrap">' +
+						'<label class="journal-note-label">Notes</label>' +
+						'<textarea class="form-field journal-note" data-dealid="' + e.deal_id + '" rows="2" placeholder="Add your own notes on this deal (optional)">' + escapeHtml(e.note) + '</textarea>' +
+						'<div class="journal-entry-actions">' +
+							'<button type="button" class="btnAll journal-save-btn" data-dealid="' + e.deal_id + '">Save note</button>' +
+							noteDelBtn +
+							aiBtn +
+							'<span class="journal-status" data-dealid="' + e.deal_id + '"></span>' +
+						'</div>' +
+					'</div>' +
+				'</div>'
+			);
+		});
+
+		if (append) { $('#journalList').append(rows.join('')); }
+		else { $('#journalList').html(rows.join('')); }
+
+		journalSkip += entries.length;
+
+		// Show/hide the Load more button based on whether more pages exist.
+		if (hasMore) {
+
+			$('#journalLoadMoreBtn').text('Load more').prop('disabled', false);
+			$('#journalLoadMoreWrap').show();
+		}
+		else {
+
+			$('#journalLoadMoreWrap').hide();
+		}
+	}
+
+
+	function saveMood(dealId, mood, $chip) {
+
+		const $row = $chip.closest('.journal-mood-row');
+		const wasActive = $chip.hasClass('active');
+		const newMood = wasActive ? '' : mood;   // clicking the active mood clears it
+
+		$.ajax({
+					type: 'POST',
+					url: './api/journal/mood',
+					contentType: 'application/json',
+					data: JSON.stringify({ 'dealId': dealId, 'mood': newMood }),
+					dataType: 'json',
+					success: function(res) {
+
+						if (res && res.success) {
+
+							$row.find('.journal-mood-chip').removeClass('active');
+							if (newMood) { $chip.addClass('active'); }
+							// Recompute correlation to reflect the new tag.
+							loadStats();
+						}
+					}
+		});
+	}
+
+
+	function saveNote(dealId) {
+
+		const note = $('.journal-note[data-dealid="' + dealId + '"]').val();
+		const $status = $('.journal-status[data-dealid="' + dealId + '"]');
+
+		$status.text('Saving…').removeClass('ok err');
+
+		$.ajax({
+					type: 'POST',
+					url: './api/journal/note',
+					contentType: 'application/json',
+					data: JSON.stringify({ 'dealId': dealId, 'note': note }),
+					dataType: 'json',
+					success: function(res) {
+
+						if (res && res.success) {
+
+							$status.text('Saved').addClass('ok');
+
+							// Show/hide the note-delete button based on whether a note now exists.
+							if (note && note.length) { ensureNoteDelBtn(dealId); }
+							else { $('.journal-note-del[data-dealid="' + dealId + '"]').remove(); }
+						}
+						else { $status.text((res && res.data) || 'Save failed').addClass('err'); }
+
+						setTimeout(() => $status.text('').removeClass('ok err'), 3000);
+					},
+					error: function() {
+
+						$status.text('Save failed').addClass('err');
+					}
+		});
+	}
+
+
+	function generateNarrative(dealId) {
+
+		const $status = $('.journal-status[data-dealid="' + dealId + '"]');
+		const $btn = $('.journal-ai-btn[data-dealid="' + dealId + '"]');
+
+		$status.text('Generating reflection…').removeClass('ok err');
+		$btn.prop('disabled', true);
+
+		$.ajax({
+					type: 'POST',
+					url: './api/journal/narrative',
+					contentType: 'application/json',
+					data: JSON.stringify({ 'dealId': dealId }),
+					dataType: 'json',
+					success: function(res) {
+
+						$btn.prop('disabled', false);
+
+						if (res && res.success) {
+
+							const $entry = $('.journal-entry[data-dealid="' + dealId + '"]');
+							const pair = $entry.find('.journal-pair').text();
+							let $narr = $entry.find('.journal-narrative');
+
+							if (!$narr.length) {
+
+								$narr = $('<div class="journal-narrative"></div>');
+								$entry.find('.journal-facts').after($narr);
+							}
+
+							$narr.html(
+								'<span class="journal-narrative-label">AI reflection</span>' +
+								'<span class="journal-narrative-del" data-dealid="' + dealId + '" data-pair="' + escapeHtml(pair) + '" title="Delete reflection">&times;</span>' +
+								escapeHtml(res.data)
+							);
+							$btn.text('Regenerate AI reflection');
+							$status.text('Reflection added').addClass('ok');
+						}
+						else {
+
+							$status.text((res && res.data) || 'Generation failed').addClass('err');
+						}
+
+						setTimeout(() => $status.text('').removeClass('ok err'), 4000);
+					},
+					error: function() {
+
+						$btn.prop('disabled', false);
+						$status.text('Generation failed').addClass('err');
+					}
+		});
+	}
+
+
+	function deleteJournalPart(dealId, pair, part) {
+
+		const isNote = part === 'note';
+		const label = isNote ? 'note' : 'AI reflection';
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: 1.2rem; text-align: left;">Delete your ' + label + ' for this <b>' + escapeHtml(pair) + '</b> entry?<br><br>The deal itself is not affected. This cannot be undone.</div>',
+			buttons: {
+
+				ok: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-warning);">Delete ' + label + '</div>',
+					action: function() {
+
+						const $status = $('.journal-status[data-dealid="' + dealId + '"]');
+						$status.text('Deleting…').removeClass('ok err');
+
+						$.ajax({
+									type: 'POST',
+									url: './api/journal/delete',
+									contentType: 'application/json',
+									data: JSON.stringify({ 'dealId': dealId, 'part': part }),
+									dataType: 'json',
+									success: function(res) {
+
+										if (res && res.success) {
+
+											const $entry = $('.journal-entry[data-dealid="' + dealId + '"]');
+
+											if (isNote) {
+
+												$entry.find('.journal-note').val('');
+												$entry.find('.journal-note-del').remove();
+											}
+											else {
+
+												$entry.find('.journal-narrative').remove();
+												if (journalAiEnabled) { $entry.find('.journal-ai-btn').text('Generate AI reflection'); }
+											}
+
+											$status.text((isNote ? 'Note' : 'Reflection') + ' deleted').addClass('ok');
+											setTimeout(() => $status.text('').removeClass('ok err'), 3000);
+										}
+										else {
+
+											$status.text((res && res.data) || 'Delete failed').addClass('err');
+										}
+									},
+									error: function() {
+
+										$status.text('Delete failed').addClass('err');
+									}
+						});
+					}
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
+					action: function() { }
+				}
+			}
+		});
+	}
+
+
+	$(document).ready(function() {
+
+		getBots();
+		loadJournal(false);
+		loadStats();
+
+		$('#journalRefresh').click(function() { loadJournal(false); loadStats(); });
+		$('#journalBotFilter').on('change', function() { loadJournal(false); loadStats(); });
+		$('#journalLoadMoreBtn').click(function() { loadJournal(true); });
+
+		$(document).on('click', '.journal-save-btn', function() { saveNote($(this).attr('data-dealid')); });
+		$(document).on('click', '.journal-ai-btn', function() { generateNarrative($(this).attr('data-dealid')); });
+		$(document).on('click', '.journal-note-del', function() { deleteJournalPart($(this).attr('data-dealid'), $(this).attr('data-pair'), 'note'); });
+		$(document).on('click', '.journal-narrative-del', function() { deleteJournalPart($(this).attr('data-dealid'), $(this).attr('data-pair'), 'narrative'); });
+		$(document).on('click', '.journal-mood-chip', function() { saveMood($(this).attr('data-dealid'), $(this).attr('data-mood'), $(this)); });
+	});
+
+</script>
+
+<center>
+<main>
+
+	<div id="contentBox" class="wide">
+
+		<div class="contentHeaderBox">
+			<b class="contentHeader">Trading Journal</b>
+		</div>
+
+		<div class="view-body">
+
+			<p class="journal-intro">Every closed deal becomes a journal entry automatically &mdash; no blank pages to fill. Add your own notes on any deal<%- aiEnabled ? ', or generate a short AI reflection from the deal\'s own data' : '' %>.</p>
+
+			<div class="journal-filters">
+				<span>Bot: <select id="journalBotFilter" class="form-field" style="width: 140px;"><option value="all">All bots</option></select></span>
+				<span>From: <input type="date" id="journalFrom" class="form-field"></span>
+				<span>To: <input type="date" id="journalTo" class="form-field"></span>
+				<button type="button" id="journalRefresh" class="btnAll">Apply</button>
+			</div>
+
+			<div id="journalStatsLoading" class="journal-stats-loading" style="display: none;">
+				<span class="journal-stats-spinner"></span> Processing deal data&hellip;
+			</div>
+			<div id="journalStats" class="journal-stats" style="display: none;"></div>
+			<div id="journalCorrelation" class="journal-correlation" style="display: none;"></div>
+
+			<div id="journalLoading" class="journal-state-msg">Loading journal&hellip;</div>
+			<div id="journalEmpty" class="journal-state-msg" style="display: none;"></div>
+
+			<div id="journalList"></div>
+
+			<div id="journalLoadMoreWrap" class="journal-loadmore-wrap" style="display: none;">
+				<button type="button" id="journalLoadMoreBtn" class="btnAll">Load more</button>
+			</div>
+
+		</div>
+
+	</div>
+
+</main>
+</center>
+
+<%- include('../../partialsFooterView'); %>

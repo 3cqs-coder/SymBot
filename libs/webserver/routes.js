@@ -305,6 +305,36 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.get('/deals/export', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.viewTransactionExport(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get('/journal', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn) {
+
+			shareData.DCABotManager.viewJournal(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
 	router.get('/deals/history', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -342,6 +372,28 @@ function initRoutes(router, upload) {
 		if (req.session.loggedIn || validApiKey(req)) {
 
 			shareData.Common.showTradingView(req, res);
+		}
+		else {
+
+			res.redirect('/login');
+		}
+	});
+
+
+	router.get('/api/system/health', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.Common.getSystemHealth().then((data) => {
+
+				res.json({ 'date': new Date(), 'data': data });
+			})
+			.catch((e) => {
+
+				res.status(500).json({ 'error': 'Error getting system health' });
+			});
 		}
 		else {
 
@@ -472,6 +524,111 @@ function initRoutes(router, upload) {
 	});
 
 
+	router.get([ '/api/deals/export/transactions' ], (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiExportTransactionsCsv(req, res);
+		}
+		else {
+
+			redirectNotFound(res);
+		}
+	});
+
+
+	router.get('/api/journal', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiGetJournal(req, res);
+		}
+		else {
+
+			redirectNotFound(res);
+		}
+	});
+
+
+	router.post('/api/journal/note', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiSaveJournalNote(req, res);
+		}
+		else {
+
+			redirectNotFound(res);
+		}
+	});
+
+
+	router.post('/api/journal/mood', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiSaveJournalMood(req, res);
+		}
+		else {
+
+			redirectNotFound(res);
+		}
+	});
+
+
+	router.get('/api/journal/stats', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiGetJournalStats(req, res);
+		}
+		else {
+
+			redirectNotFound(res);
+		}
+	});
+
+
+	router.post('/api/journal/narrative', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiGenerateJournalNarrative(req, res);
+		}
+		else {
+
+			redirectNotFound(res);
+		}
+	});
+
+
+	router.post('/api/journal/delete', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (req.session.loggedIn || validApiKey(req)) {
+
+			shareData.DCABotManager.apiDeleteJournalEntry(req, res);
+		}
+		else {
+
+			redirectNotFound(res);
+		}
+	});
+
+
 	router.get([ '/api/deals', '/api/deals/completed', '/api/deals/:dealId/show' ], (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -534,7 +691,10 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.post([ '/api/deals/:dealId/add_funds' ], (req, res) => {
+	// Two ways to target: by dealId, or by botId (+ optional "pair" in the body)
+	// which resolves to the bot's single active deal — lets static signal sources
+	// add funds without knowing the dealId generated when the deal opened.
+	router.post([ '/api/deals/:dealId/add_funds', '/api/bots/:botId/add_funds' ], (req, res) => {
 
 		if (req.session.loggedIn || validApiKey(req)) {
 
@@ -573,7 +733,9 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.post([ '/api/deals/:dealId/panic_sell' ], (req, res) => {
+	// Target by dealId, or by botId (+ optional "pair" in the body) to resolve the
+	// bot's single active deal — emergency close without needing the dealId.
+	router.post([ '/api/deals/:dealId/panic_sell', '/api/bots/:botId/panic_sell' ], (req, res) => {
 
 		if (req.session.loggedIn || validApiKey(req)) {
 

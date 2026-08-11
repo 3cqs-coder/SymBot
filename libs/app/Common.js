@@ -1222,6 +1222,87 @@ async function getProcessInfo() {
 }
 
 
+// Accurate per-instance system health for the System Tools health card.
+//
+// MEMORY ACCURACY (mirrors the Hub #67 attribution model):
+//   process.memoryUsage().rss is PROCESS-WIDE. When this instance runs as a Hub
+//   worker thread, every instance in the Hub process shares the same rss, so rss
+//   is NOT attributable to one instance — the honest per-instance figure is
+//   heapUsed + external + arrayBuffers ("attributed"). When this instance runs
+//   standalone (its own process), rss IS its real footprint and is meaningful.
+//   We detect context via appData.parent_port (set only for Hub workers) and
+//   expose BOTH numbers plus which one is authoritative for this context, so the
+//   card never shows a misleading shared rss as if it were the instance's own.
+async function getSystemHealth() {
+
+	const mem = process.memoryUsage();
+
+	const bytesToMb = (b) => Number(((b || 0) / (1024 * 1024)).toFixed(2));
+
+	// Portion genuinely attributable to THIS instance (same formula as Hub Main.js).
+	const attributed = (mem.heapUsed || 0) + (mem.external || 0) + (mem.arrayBuffers || 0);
+
+	// Is this instance a Hub worker (shares the process) or standalone?
+	const isHubWorker = shareData.appData.parent_port != null;
+
+	// Uptime from when this instance started.
+	const started = shareData.appData.started ? new Date(shareData.appData.started) : null;
+	const uptimeSeconds = started ? Math.max(0, Math.floor((Date.now() - started.getTime()) / 1000)) : null;
+
+	// Active deal count (best-effort; never let it break the health payload).
+	let activeDeals = null;
+
+	try {
+
+		const deals = await shareData.DCABot.getActiveDeals(true);
+		activeDeals = Array.isArray(deals) ? deals.length : null;
+	}
+	catch (e) {
+
+		activeDeals = null;
+	}
+
+	// Host CPU load. os.loadavg() returns [1m, 5m, 15m] run-queue averages; pairing
+	// it with the core count lets the UI show an easy-to-read "% of cores" figure
+	// (raw load is meaningless without knowing how many cores it's spread across).
+	// On platforms that don't report load (e.g. Windows) loadavg() returns zeros.
+	const loadAvg = os.loadavg();
+	const cpuCount = Array.isArray(os.cpus()) ? os.cpus().length : null;
+
+	const obj = {
+					'pid': process.pid,
+					'is_hub_worker': isHubWorker,
+					'memory': {
+						// The figure to display prominently for this context:
+						// standalone -> rss (real process footprint);
+						// Hub worker -> attributed (rss would be the shared total).
+						'primary_mb': isHubWorker ? bytesToMb(attributed) : bytesToMb(mem.rss),
+						'primary_label': isHubWorker ? 'Attributed' : 'RSS',
+						'attributed_mb': bytesToMb(attributed),
+						'rss_mb': bytesToMb(mem.rss),
+						'heap_used_mb': bytesToMb(mem.heapUsed),
+						'heap_total_mb': bytesToMb(mem.heapTotal),
+						'external_mb': bytesToMb(mem.external),
+						'array_buffers_mb': bytesToMb(mem.arrayBuffers),
+						// rss is process-wide when running as a Hub worker — flag it so
+						// the UI can annotate rather than mislead.
+						'rss_is_shared': isHubWorker
+					},
+					'uptime_seconds': uptimeSeconds,
+					'started': started ? started.toISOString() : null,
+					'active_deals': activeDeals,
+					'load_avg': Array.isArray(loadAvg) ? loadAvg.map(l => Math.round(l * 100) / 100) : null,
+					'cpu_count': cpuCount,
+					'app_version': shareData.appData.version || null,
+					'platform': process.platform,
+					'host_total_mem_mb': bytesToMb(os.totalmem()),
+					'host_free_mem_mb': bytesToMb(os.freemem())
+				};
+
+	return obj;
+}
+
+
 function getTimeZone(date) {
 
 	let timeZoneOffset;
@@ -1392,6 +1473,50 @@ function dealDurationMinutes(dateStart, dateEnd) {
 
 	return minutes;
 
+}
+
+
+// Aggregate stats over an array of processed (closed) deals. This is the single
+// source of truth for the "how did a set of deals do" primitives that both the
+// dashboard (per-bot groups) and the Trading Journal (flat, filter-wide) need,
+// so the two can never drift on the definition of a win, a win rate, an average
+// duration, etc. Pure — no shareData, no I/O. A "win" is profit > 0.
+//   deals: array of objects with numeric `profit`, `safety_orders`, and
+//          `date_start` / `date_end` (Date or ms).
+// Returns raw aggregates plus the rounded presentation values the callers use.
+function computeDealSetStats(deals) {
+
+	deals = Array.isArray(deals) ? deals : [];
+
+	let total = 0;
+	let wins = 0;
+	let totalProfit = 0;
+	let durationSum = 0;
+	let soSum = 0;
+
+	for (const d of deals) {
+
+		const profit = typeof d.profit === 'number' ? d.profit : 0;
+
+		total++;
+		if (profit > 0) { wins++; }
+		totalProfit += profit;
+		durationSum += dealDurationMinutes(d.date_start, d.date_end);
+		soSum += (typeof d.safety_orders === 'number' ? d.safety_orders : 0);
+	}
+
+	return {
+		total: total,
+		wins: wins,
+		losses: total - wins,
+		total_profit: totalProfit,
+		duration_sum_mins: durationSum,
+		so_sum: soSum,
+		// Rounded presentation values (same rounding both callers used before).
+		win_rate: total > 0 ? Math.round((wins / total) * 100) : 0,
+		avg_duration_mins: total > 0 ? Math.round(durationSum / total) : 0,
+		avg_safety_orders: total > 0 ? Number((soSum / total).toFixed(1)) : 0
+	};
 }
 
 
@@ -2662,8 +2787,10 @@ module.exports = {
 	fetchURL,
 	getClientIp,
 	getProcessInfo,
+	getSystemHealth,
 	validateAppVersion,
 	dealDurationMinutes,
+	computeDealSetStats,
 	startSignals,
 	sendSocketMsg,
 	sendParentMsg,

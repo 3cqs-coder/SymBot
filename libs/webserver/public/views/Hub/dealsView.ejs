@@ -555,8 +555,18 @@
 
 			const pillContent = panicBtn + pauseBtn + cancelBtn + (stopBtn || '');
 
+			// Live health glyph (shared with the instance view via SymBot.UI).
+			const healthCell = SymBot.UI.dealHealthCell({
+				profitPerc: profitPerc,
+				soUsed: safetyUsed,
+				soMax: safetyMax,
+				hasError: !!dealError,
+				isPaused: !!(pause || pauseBuy || pauseSell)
+			});
+
 			contentArr.push(
 				'<tr data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '" data-instanceid="' + instanceId + '" data-botid="' + botId + '" data-botname="' + botName + '" data-exchange="' + (config['exchange'] || '') + '">' +
+				healthCell +
 				'<td>' + instanceName + '</td>' +
 				'<td>' + botName + '</td>' +
 				'<td>' + deal['pair'] + '</td>' +
@@ -587,6 +597,22 @@
 
 		$('#msgBox').html(msgBox ? '<div style="color: #386ec2;">' + msgBox + '</div>' : '');
 		$('#hubDeals tbody').empty().append(contentArr.join(''));
+
+		// Show the table only when there are rows to display; otherwise show a
+		// clear "no active deals" message. This avoids the empty table rendering
+		// with collapsed headers during load or when there are no deals.
+		$('#dealsLoadingMsg').hide();
+
+		if (contentArr.length > 0) {
+
+			$('#dealsEmptyMsg').hide();
+			$('#hubDeals').show();
+		}
+		else {
+
+			$('#hubDeals').hide();
+			$('#dealsEmptyMsg').show();
+		}
 
 		$('#totalProfit').removeClass('profit-positive profit-negative')
 			.addClass(totalProfit <= 0 ? 'profit-negative' : 'profit-positive')
@@ -714,9 +740,9 @@ $(document).ready(function() {
 			// Last column is actions — skip
 			if (col >= colCount - 1) return;
 
-			if (col === 2) {
+			if (col === 3) {
 
-				// Pair column — open TradingView chart
+				// Pair column — open TradingView chart (col 0 is Health)
 				const pair     = $(this).text().trim();
 				const exchange = row.attr('data-exchange') || '';
 
@@ -771,16 +797,23 @@ $(document).ready(function() {
 			},
 			durationLength: 4,
 			durationLabels: '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
+			textExtraction: {
+				0: function(node) {
+					// Sort the Health column by its numeric rank, not the emoji.
+					return node.getAttribute('data-health-rank') || '0';
+				}
+			},
 			headers: {
-				3: { sorter: 'duration' },
-				4: { sorter: 'currency' },
+				4: { sorter: 'duration' },
 				5: { sorter: 'currency' },
 				6: { sorter: 'currency' },
-				7: { sorter: 'currency' }
+				7: { sorter: 'currency' },
+				8: { sorter: 'currency' }
 			}
 		});
 
 		SymBot.UI.initColumnSelector();
+		SymBot.UI.initHeaderCorners('#hubDeals');
 
 		initRefreshSelector();
 
@@ -795,7 +828,7 @@ $(document).ready(function() {
 
 	<%- include('../partialsColumnSelector') %>
 
-	<div id="contentBox">
+	<div id="contentBox" class="wide">
 
 		<div style="position: relative;">
 
@@ -807,7 +840,9 @@ $(document).ready(function() {
 					<select id="hubRefreshInterval" class="form-field" style="width: auto; cursor: pointer;" title="Refresh interval"></select>
 					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
 				</span>
+			</div>
 
+			<div class="view-summary">
 				<div class="summary-bar">
 					<p>Active P/L: <span id="totalProfit"></span></p>
 					<p>In Deals: <span id="inDeals"></span></p>
@@ -831,11 +866,14 @@ $(document).ready(function() {
 
 			<div class="botsDealsBox">
 
-				<table id="hubDeals" border=0 cellspacing=0 cellpadding=0>
+				<div id="dealsLoadingMsg" class="deals-state-msg">Loading active deals&hellip;</div>
+				<div id="dealsEmptyMsg" class="deals-state-msg" style="display: none;">No active deals.</div>
+
+				<table id="hubDeals" border=0 cellspacing=0 cellpadding=0 style="display: none;">
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Instance</th> <th>Bot Name</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Health</th> <th>Instance</th> <th>Bot Name</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Target</th> <th>Volume</th> <th>Profit</th> <th>Profit %</th> <th>Safety Orders</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 

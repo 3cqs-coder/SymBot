@@ -215,7 +215,7 @@
 
 						ok: {
 								btnClass: 'btn-default',
-								text: '<div style="color: #1a9f00;">Download CSV</div>',
+								text: '<div style="color: var(--color-success);">Download CSV</div>',
 								action: function () {
 
 									const appName = '<%- appData.name %>';
@@ -226,7 +226,7 @@
 						cancel: {
 
 								 btnClass: 'btn-default',
-								 text: '<div style="color: #000000;">Cancel</div>',	
+								 text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 								 action: function () { }
 							 }
 				 }
@@ -331,6 +331,9 @@ function getDealSym(pair, profitCurrency) {
 		});
 
 
+		SymBot.UI.initHeaderCorners('#botsDeals');
+
+
 		$('#csvDownload').click(function() {
 
 			csvDownloadConfirm(csvDataArr);
@@ -354,7 +357,7 @@ function getDealSym(pair, profitCurrency) {
 <center>
 <main>
 
-	<div id="contentBox">
+	<div id="contentBox" class="wide">
 
 		<div style="position: relative;">
 
@@ -363,16 +366,19 @@ function getDealSym(pair, profitCurrency) {
 				<b class="contentHeader">DCA Bot Deals History</b>
 
 				<span class="viewSettings">
-					<span id="csvDownload" class="viewIconBtn"><span class="icon icon-download" style="width:13px;height:13px;"></span></span>
+					<span id="csvDownload" class="viewIconBtn" title="Download deal history (CSV)"><span class="icon icon-download" style="width:13px;height:13px;"></span></span>
 				</span>
+			</div>
 
-				<span style="display: flex; justify-content: center; font-size: 1.2rem; gap: 20px; margin-top: 10px; margin-bottom: 0;">
+			<div class="view-summary">
+				<span style="display: flex; justify-content: flex-start; font-size: 1.05rem; gap: 20px; margin-top: 0; margin-bottom: 0;">
 					<p style="margin-top: 0; margin-bottom: 0;">Total P/L: <span id="totalProfit"></span></p>
 					<p style="margin-top: 0; margin-bottom: 0;">Deals: <span id="totalDeals"></span></p>
 				</span>
 
-				<div style="margin-top: 10px; margin-bottom: 0;">From: <input id="fromDate" class="form-field" style="width: 100px;"> &nbsp; To: <input id="toDate" class="form-field" style="width: 100px;"> &nbsp; Bot: <div id="botSelect" style="display: inline-block"></div> <button id="submit" class="btnAll">Search</button></div>
+				<div style="margin-top: 14px; margin-bottom: 0;">From: <input id="fromDate" class="form-field" style="width: 100px;"> &nbsp; To: <input id="toDate" class="form-field" style="width: 100px;"> &nbsp; Bot: <div id="botSelect" style="display: inline-block"></div> <button id="submit" class="btnAll">Search</button></div>
 
+				<div class="deals-history-xref">This CSV has one row per deal. Looking for a per-transaction CSV to import into crypto-tax software? See <a href="./deals/export">Transaction Export</a>.</div>
 			</div>
 
 			<div class="botsDealsBox">

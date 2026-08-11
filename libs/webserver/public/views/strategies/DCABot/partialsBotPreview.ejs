@@ -1,0 +1,6 @@
+<%# Shared bot-preview container. Included identically by the instance
+    Create/Update view and the Hub bot-edit view so the order-steps preview
+    ALWAYS renders the same in both. The JS (symbot-bot-form.js) injects the
+    summary + #ordersTable into #ordersBox after "Preview Bot" is clicked.
+    Do NOT inline #ordersBox in either view — include this partial instead. %>
+<div id="ordersBox"></div>

@@ -8,8 +8,9 @@
 <body>
 
     <div class="aiChatContainer">
-        <div id="aiChatSpinner" class="spinner-dynamic-container" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"><div class="spinner-dynamic"></div></div>
+        <div id="aiChatSpinner" class="spinner-dynamic-container" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none;"><div class="spinner-dynamic"></div></div>
         <div id="chatConversationBar">
+            <span id="chatMascotHeader" class="chat-mascot-header" title="Assistant"></span>
             <select id="conversationSelect" class="form-field" title="Saved conversations" style="flex:1; min-width:0;"><option value="">New conversation</option></select>
             <button id="chatSaveBtn" class="btn btn-default" title="Save">Save</button>
             <button id="chatDeleteBtn" class="btn btn-default" title="Delete" style="display:none;">Delete</button>
@@ -31,6 +32,26 @@
 			let messageBuffer = '';
 			let canSendMessage = true;
 
+			// Determine analysis-vs-chat up front from the payload, BEFORE the mascot
+			// controller runs its first layout — otherwise the empty-state hero flashes
+			// before we know this is an analysis. An analysis has real bodyData content.
+			const content = <%- JSON.stringify(bodyData) %> || {};
+			const contentOrigObj = { ...content };
+			const _isAnalysis = content && Object.keys(content).length > 0;
+			window.AIChatConv_type = _isAnalysis ? 'analysis' : 'chat';
+
+			// ── Mascot (animated assistant) — all logic lives in symbot-mascot.js ──
+			// so the modal and popout behave identically. Thin wrappers below just
+			// forward to the shared controller at the right chat moments.
+			const mascot = (window.SymBot && SymBot.Mascot)
+				? SymBot.Mascot.attachToChat({ isAnalysis: function () { return window.AIChatConv_type === 'analysis'; } })
+				: null;
+			function mascotState(state) { if (mascot) mascot.setState(state); }
+			function mascotFlash(state, ms) { if (mascot) mascot.onError(); }
+			function updateMascotHero() { if (mascot) mascot.refresh(); }
+			// For an analysis, start in thinking straight away (content streams next).
+			if (mascot && _isAnalysis) mascot.setThinking();
+
 			const room = 'chat' + Math.random().toString(36).slice(2) + Math.floor(Date.now() / 1000);
 			const basePath = './';
 			// Pending file attachments — declared first to avoid temporal dead zone
@@ -45,13 +66,10 @@
 			window.AIChatConv_sessionStart = 0;
 			window.AIChatConv_firstMessage = null;
 			window.AIChatConv_savedName    = null;
-			window.AIChatConv_type         = 'chat';
 			window.AIChatConv_dealId       = '';
 
 		// Expose room on container so pop-out button can read it
 		$('.aiChatContainer').data('room', room);
-			const content = <%- JSON.stringify(bodyData) %> || {};
-			const contentOrigObj = { ...content };
 
 			if (!contentOrigObj.message || typeof contentOrigObj.message !== 'object') {
 				
@@ -125,8 +143,9 @@
 	
 			function postChatPrompt(content) {
 
-				$('#aiChatSpinner').show();
+				// Mascot handles the activity indicator (header thinking + inline bubble).
 				toggleInputState(true);
+				if (mascot) mascot.onSend();
 	
 				$.ajax({
 					type: 'POST',
@@ -138,6 +157,7 @@
 					error: function(data) {
 
 						$('#aiChatSpinner').hide();
+						mascotFlash('concerned', 2600);
 
 						toggleInputState(false);
 						alertBox('Error: ' + JSON.stringify(data));
@@ -149,10 +169,17 @@
 
 				if (content === 'END_OF_CHAT') {
 
+					// React to the tone of the completed answer, from structured cues
+					// (not free-form sentiment). Concern always wins over positive so
+					// the mascot is never cheerful about a loss or warning.
+					const finished = messageBuffer;
+
 					if ($currentMessageElement) {
 						messageBuffer = '';
 						$currentMessageElement = null;
 					}
+
+					if (mascot) mascot.onComplete(finished);
 
 					canSendMessage = true; // Allow sending messages
 					toggleInputState(false); // Enable input box and button
@@ -169,6 +196,7 @@
 						});
 
 						$chatBox.append($currentMessageElement);
+						if (mascot) mascot.onStreamChunk();
 					}
 	
 					messageBuffer += content;
@@ -198,6 +226,7 @@
 					}
 				});
 				$chatBox.scrollTop($chatBox.prop('scrollHeight'));
+				updateMascotHero();
 			}
 			window.AIChatConv_renderHistory = renderHistory;
 
@@ -349,12 +378,18 @@
 				window.AIChatConv_dealId = (contentOrigObj.message && contentOrigObj.message.dealId) || '';
 				$('.aiChatContainer').data('dealId', window.AIChatConv_dealId);
 
+				// An analysis streams immediately — suppress the empty-state hero and
+				// show the header mascot in "thinking" from the start.
+				// Analysis streams immediately — controller shows header "thinking".
+				if (mascot) { mascot.refresh(); mascot.setThinking(); }
+
 				postChatPrompt(contentOrigObj);
 			}
 			else {
 
 				$('#aiChatSpinner').hide();
 				$('#aiChatBox').empty();
+				updateMascotHero();
 			}
 		});
 	</script>

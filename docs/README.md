@@ -1,7 +1,6 @@
 
 
 
-
 ![SymBot Logo](https://user-images.githubusercontent.com/111208586/221390681-d13b9bce-dafb-4b55-a6f1-1bc5218cd204.png)
 
 SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser or with simple built-in APIs. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
@@ -11,8 +10,34 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/m8TyEpBaCg)
 
 
+## Understanding SymBot
+
+**New to automated crypto trading?** This section walks through how it all works, step by step. If you're already familiar with DCA bots, feel free to skip ahead to [Requirements](#requirements).
+
+**Dollar Cost Averaging (DCA)** is a simple idea: instead of buying an asset — say Bitcoin — all at once, you spread your buys out. If Bitcoin's price falls after your first buy, you buy again at the lower price (and depending on your settings, in a larger amount), which pulls down your *average* entry cost — so the price only has to recover part of the way for the position to turn a profit. When it reaches your target, the position closes and the cycle can begin again. SymBot automates the entire process for you: it watches the market, places those follow-up buys (called **safety orders**) automatically, and closes each **deal** when it hits your profit target — all running on your own server, with your exchange keys staying in your hands.
+
+With that in mind, here's a simple way to picture how the pieces fit together.
+
+Think of SymBot as a real-world business that you own. It's the entire operation... the building, the electrical and plumbing systems, the phone lines, the computers, the accounting department... everything that keeps the business running. It's the infrastructure that allows your trading operation to function.
+
+Now think of each bot as one of your managers. Every manager is responsible for a team of employees, and those employees are your deals. Just like in a real business, your managers and employees need working capital to do their jobs.
+
+Where do your managers get the work in the first place? Think of signals as your sales leads. A lead is a tip that an opportunity might be worth pursuing... and just like in a real business, a manager doesn't chase every lead that comes across the desk. You decide which leads your managers are allowed to act on, using each bot's start conditions. A good lead in the right market can be the beginning of a profitable deal; a weak one might be better left alone. Signals can come from sources like 3CQS or your own setup, but the important part is the same: they're the leads that tell your managers when it might be time to put someone to work... they don't guarantee a sale, and it's still up to you to decide which ones are worth acting on.
+
+That same restraint applies to how much you take on. If business is slow, you probably wouldn't hire ten new managers and hundreds of employees just to have them standing around. The same principle applies to trading: you don't want to run more bots or open more deals than your capital and market conditions can comfortably support. Good risk management is really just good business management... adjusting your workforce to match the workload.
+
+One of the fun features in SymBot is that you can even use AI to "chat" with your employees (your deals). Ask them how things are going, why they're taking so long, or when they think they might close a profitable sale. Just don't be too hard on them... they're simply following the instructions you gave them.
+
+The goal isn't to build the biggest business. It's to build one that's efficient, well-managed, and profitable over the long run.
+
+If you take away just two things, make it these. First, always be sure you can fully cover all your bots. Every deal a bot opens may need funding all the way down through its safety orders, so your capital has to be able to support the worst case, not just the best one. This is exactly why SymBot calculates a **risk percentage** for you... it shows how much of your portfolio you'd be committing if every bot ran to its maximum. Keep an eye on it, and don't let it get ahead of what you can actually cover.
+
+Second, patience is key. DCA trading rewards discipline over urgency. Deals can take time to close in profit, and that's normal... it's the strategy working, not failing. Resist the urge to overextend, chase, or micromanage. A calm, well-funded operation almost always beats a busy, overstretched one.
+
+
 ## Table of Contents
 
+- [Understanding SymBot](#understanding-symbot)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Installation Video](#installation-video)
@@ -24,7 +49,12 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [Advanced Setup](#advanced-setup)
 - [Reverse Proxy Setup](#reverse-proxy-setup)
 - [Circuit Breaker](#circuit-breaker)
+- [Deal Health Indicator](#deal-health-indicator)
+- [Add Funds Estimator](#add-funds-estimator)
 - [Portfolio Summary Bar](#portfolio-summary-bar)
+- [Transaction Export](#transaction-export)
+- [Trading Journal](#trading-journal)
+- [System Health](#system-health)
 - [Artificial Intelligence (AI)](#artificial-intelligence-ai)
   - [AI Chat](#ai-chat)
   - [AI Chat Conversations](#ai-chat-conversations)
@@ -35,6 +65,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 - [API Sample Usage](#api-sample-usage)
 - [WebSocket API](#websocket-api)
 - [Webhooks](#webhooks)
+  - [Using TradingView](#using-tradingview)
 - [Backup and Restore Features](#backup-and-restore-features)
 - [Reset or Configure SymBot](#reset-or-configure-symbot)
 - [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
@@ -44,7 +75,7 @@ SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging)
 ## Requirements
 
 - Linux, MacOS, or Windows based system
-- [Node.js](https://nodejs.org) v20.19 or later must be installed on your system
+- [Node.js](https://nodejs.org) v22 or later must be installed on your system
 - [MongoDB](https://www.mongodb.com) installed or a cloud host provider
 - Access to a cryptocurrency exchange such as Binance or Coinbase
 - Reliable high-speed internet connection
@@ -148,14 +179,16 @@ In addition to instance management, SymBot Hub provides unified views that aggre
 
 All views refresh automatically and pause when a confirmation dialog is open to prevent stale data from overwriting pending actions.
 
-#### Memory Usage Panel
+#### Memory Usage
 
-The Hub memory panel reports two different things, and the distinction matters:
+Because every instance runs as a worker thread inside the single Hub process, they share that process's resident memory (RSS), so RSS cannot be attributed to any individual instance. Instead, the Manage Instances view shows a per-instance **Memory** column with two figures for each online instance:
 
-- **Process** — a single RSS figure for the whole Hub process, shown once at the top. Every instance runs as a worker thread inside that one process and shares its resident memory, so RSS cannot be attributed to any individual instance.
-- **Per instance** — *Attributed* is the memory genuinely belonging to that instance: its heap plus its off-heap buffers (`External` and `Array Buffers`). This is the figure to compare between instances when working out which one is heavy.
+- **Heap** — that instance's JavaScript heap usage.
+- **Attr** (*Attributed*) — the memory genuinely belonging to that instance: its heap plus its off-heap buffers (`External` and `Array Buffers`). This is the figure to compare between instances when working out which one is heavy.
 
-Because the instances share a process, the per-instance Attributed figures will normally sum to less than process RSS — the difference is shared runtime, buffers and allocator overhead. After upgrading, an instance that has not yet restarted reports only its heap until it does.
+Because the instances share a process, the per-instance Attributed figures will normally sum to less than the whole process's memory — the difference is shared runtime, buffers and allocator overhead. After upgrading, an instance that has not yet restarted reports only its heap until it does.
+
+Alongside memory, the view shows a single **Host load** figure in the "Managed Instances" header rather than repeating it on every row — because CPU load is host-level and identical for every instance sharing a machine. The host load is shown as a percentage of CPU cores (color-coded green/amber/red, the same convention as the System Health card and portfolio Risk %), with the raw 1/5/15-minute averages and core count beside it. It reflects how busy the underlying server is, and appears once at least one online instance is reporting it, so instances that predate this feature simply don't contribute a load reading until they restart on the newer version.
 
 ### Starting SymBot Hub
 
@@ -413,6 +446,8 @@ This protection is on by default and requires no configuration. The tracking is 
 
 Note that this protects the SymBot login specifically. It complements — and does not replace — the operating-system and network measures described above, and any protection provided by a reverse proxy or firewall in front of SymBot.
 
+Because the protection works per source IP address, it assumes SymBot sees the real client address. When running behind a reverse proxy (the recommended setup — see [Reverse Proxy Setup](#reverse-proxy-setup)), SymBot honours the `X-Forwarded-For` / `CF-Connecting-IP` headers your proxy sets, which is correct. If instead SymBot is exposed directly to the internet without a trusted proxy, those headers can be forged by a client to make each attempt appear to come from a different address, which can dilute the per-IP throttle. This is inherent to any IP-based protection; running behind a properly configured reverse proxy (and not forwarding those headers from untrusted sources) is the recommended way to keep the client address trustworthy.
+
 ## Reverse Proxy Setup
 
 A reverse proxy is a special type of web server that receives requests, forwards them to another web server somewhere else, receives a reply, and forwards the reply to the original requester. Although there are many reasons to use a reverse proxy, they are generally used to help increase performance, security, and reliability. Two popular open-source software packages that can act as a reverse proxy are [Apache](https://apache.org) and [NGINX](https://nginx.org).
@@ -423,7 +458,7 @@ This is how requests will work when using a reverse proxy in front of SymBot:
 
 There are many different ways to set up either Apache or NGINX as a reverse proxy that can be used in front of SymBot, so this is just a basic guide. You may need to change configuration parameters depending on your operating system, version of these software packages, or if you're already running one of them on your system (server). The commands described here will also vary depending on your operating system.
 
-If setting up a reverse proxy seems too advanced, a great alternative is to use a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks) instead. This can also automatically encrypt all of your traffic without installing any additional SSL certificates on your web server and system.
+If setting up a reverse proxy seems too advanced, a great alternative is to use a [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/) instead. This can also automatically encrypt all of your traffic without installing any additional SSL certificates on your web server and system.
 
 ### Apache
 
@@ -437,16 +472,16 @@ sudo apt-get update
 sudo apt-get install apache2
 ```
 
-3. Open the Apache configuration file:
+3. **Debian based systems (Ubuntu, etc.):** enable the Proxy and Rewrite modules with a single command, then skip to step 4:
 ```
-# Apache 2.4+
+sudo a2enmod proxy proxy_http proxy_wstunnel rewrite
+```
+
+   **Redhat based systems (CentOS, Fedora, etc.):** open the Apache modules configuration file instead:
+```
 sudo nano /etc/httpd/conf.modules.d/00-proxy.conf
-
-# Apache < 2.4
-sudo nano /etc/httpd/conf/httpd.conf
 ```
-
-4. Enable the Proxy and Rewrite modules by adding or uncommenting the below lines:
+   and add or uncomment the below lines:
 ```
 LoadModule proxy_module modules/mod_proxy.so
 LoadModule proxy_http_module modules/mod_proxy_http.so
@@ -454,12 +489,7 @@ LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
 LoadModule rewrite_module modules/mod_rewrite.so
 ```
 
-5. For Debian based systems, enable the modules using the following command:
-```
-sudo a2enmod proxy proxy_http proxy_wstunnel rewrite
-```
-
-6. Create a virtual host configuration file for your domain:
+4. Create a virtual host configuration file for your domain:
 ```
 # Debian based systems
 sudo nano /etc/apache2/sites-available/your-domain-name.com.conf
@@ -468,7 +498,7 @@ sudo nano /etc/apache2/sites-available/your-domain-name.com.conf
 sudo nano /etc/httpd/conf.d/your-domain-name.com.conf
 ```
 
-7. Add  the below configuration block and save:
+5. Add the below configuration block and save:
 ```
 <VirtualHost *:80>
 	ServerName your-domain-name.com
@@ -478,16 +508,16 @@ sudo nano /etc/httpd/conf.d/your-domain-name.com.conf
 	LimitRequestBody 272629760
 
 	RewriteEngine on
-	RewriteCond ${HTTP:Upgrade} websocket [NC]
-	RewriteCond ${HTTP:Connection} upgrade [NC]
-	RewriteRule .* "ws:/127.0.0.1:3000/$1" [P,L]
+	RewriteCond %{HTTP:Upgrade} websocket [NC]
+	RewriteCond %{HTTP:Connection} upgrade [NC]
+	RewriteRule ^/?(.*) "ws://127.0.0.1:3000/$1" [P,L]
 
 	ProxyPass / http://127.0.0.1:3000/
 	ProxyPassReverse / http://127.0.0.1:3000/
 	ProxyRequests off
 </VirtualHost>
 ```
-8. Restart Apache:
+6. Restart Apache:
 ```
 # Debian based systems
 sudo a2ensite your-domain-name.com
@@ -542,7 +572,7 @@ server {
 
 5. Restart NGINX:
 ```
-sudo systemctl nginx restart
+sudo systemctl restart nginx
 ```
 
 You should now be able to access SymBot by opening your web browser to http://your-domain-name.com
@@ -618,6 +648,47 @@ All circuit breaker settings are configurable in **Configuration → Circuit Bre
 | `repeat_alert_window_secs` | Window in seconds for detecting repeat CB activations and sending an elevated alert | `3600` |
 | `price_zero_alert_count` | Consecutive zero-price events before a Telegram alert is sent for that deal | `4` |
 
+## Deal Health Indicator
+
+The Active Deals view has a **Health** column (the first column) showing a small glyph for each deal, giving you an at-a-glance read on how it's doing without scanning the numbers. It is derived entirely from the deal's live state — you don't set it. Hovering over the glyph shows a short description of why it's in that state, and you can sort by the Health column to bring the deals that need attention to the top. The same Health column appears in the Hub's combined Active Deals view, so you get the same at-a-glance read across every instance at once.
+
+| Glyph | Meaning |
+|-------|---------|
+| 🟢 | In profit — the deal is currently above its break-even point |
+| 🟡 | Slightly underwater, with few or no safety orders used yet |
+| 🟠 | Underwater and working through its safety orders (roughly 40%+ used) |
+| 🔴 | Deep drawdown — most of the safety-order budget is consumed (roughly 75%+ used) |
+| ⏸️ | Paused (manually or automatically) |
+| ⚠️ | In an error state — check the logs |
+
+The thresholds are based on how far the deal has drawn down and how much of its configured safety-order budget it has consumed, so a deal that's down a little with plenty of safety orders left reads very differently from one that's down and nearly out of room. Error and paused states take precedence over the profit/drawdown glyphs. Sorting the column orders deals by how much attention they need, so 🔴 / ⚠️ / ⏸️ deals rise to the top.
+
+
+## Add Funds Estimator
+
+The Active Deals view has an **Add Funds Estimator** — a what-if tool for seeing how adding funds to your open deals would affect each one, *before* you actually add anything. Open it from the toolbar and enter an amount; the estimator shows, inline on every deal row, where that add would move the deal's key numbers. It is purely a projection — **nothing is bought and no deal is changed** until you use the actual Add Funds action on a deal.
+
+### What it shows
+
+For each open deal, once you enter an amount the estimator adds a projection beneath three columns:
+
+| Column | Projection |
+|--------|-----------|
+| **Price** | The new average entry price the deal would have after the add (shown as `→ avg <price>`). |
+| **Price Target** | The new take-profit target price, with the reduction from the current target in parentheses (e.g. `→ <price> (-4.07%)`). A lower target is easier to reach, so a larger reduction is generally better. |
+| **Profit %** | The projected current profit % the deal would show after the add, with the change from its current profit in parentheses (e.g. `→ -2.78% (+3.98%)`). A positive change means the add improves the deal's standing. |
+
+The projected profit is always evaluated at the deal's **current market price** — it answers "if I added these funds, what would my live profit % become right now," not what you'd make at target (that figure is the separate **Profit ≈** column, which is unaffected by an add).
+
+### Testing a different fill price
+
+By default the estimator assumes the add fills at the current market price. To test a specific price instead, click a deal's **Price** cell while the estimator is open — a small fill-price field appears for that row. Enter a price and all three projections for that deal recompute against it (the average shows a `@ <price>` tag so you can see which price is in effect). This lets you answer questions like "what if I add on a dip to $0.085 instead of at the current $0.095" — a lower fill price buys more of the asset, pulls the average down further, and improves the projected profit and target accordingly. Clear the field (or close the estimator) to return to the market-price assumption.
+
+### Accuracy
+
+The projected profit % is computed to reconcile exactly with the deal's live **Profit %** column: it uses the deal's real average cost basis and the same fee and slippage the running profit calculation applies, so at the current market price with no change it reproduces the deal's current profit exactly. Because the projection accounts for the exchange fee on the added purchase, the average and target it shows are net figures consistent with how the deal's real numbers are maintained.
+
+
 ## Portfolio Summary Bar
 
 The Active Deals view includes a live portfolio summary bar displayed below the deal statistics. It gives you an at-a-glance view of your overall account position without needing to navigate to the dashboard.
@@ -652,6 +723,64 @@ A Risk % above 100% means your configured Max Funds across all bots exceeds your
 ### Configuration
 
 The currencies shown in the Portfolio total are the same ones configured in **Configuration → Exchange Settings → Order Settings** under **Balance Currencies**. These are stored in `config/app.json` under `bots.exchange.default.account_balance_currencies`.
+
+
+## Transaction Export
+
+SymBot can export your closed deals as a per-transaction CSV file that you can import into popular cryptocurrency tax software such as Koinly, CoinTracker, or CoinLedger. You'll find it in the sidebar under **Tools & Settings → Transaction Export**.
+
+This is different from the CSV download on the **Deals History** page: that file has one row per deal (a summary of each completed deal's performance), whereas Transaction Export writes one row per individual buy and sell. Use Deals History to review how your deals performed, and Transaction Export when you need a per-transaction file for tax software.
+
+Each buy (base order and every safety order) and each sell is written as its own transaction row, including the exchange fees SymBot recorded for that order, in the widely supported "Universal" column format these tools expect (Date, Sent, Received, Fee, and so on). Dates are written in UTC.
+
+**How to use it:**
+
+- Leave the **Closed from** and **Closed to** dates empty to export every closed deal (recommended — let your tax tool sort transactions into tax years), or set a range to pull the deals that closed within it. The range filters by each deal's **close** date; a deal's earlier buy orders are always included so your tax software can match every sale to the purchases that built it, so you may see some transaction dates earlier than your start date.
+- Optionally choose a single **Bot** to limit the export to that bot's deals only.
+- Tick **Include sandbox deals** if you want paper-trading deals included. By default they are excluded, since they are not real transactions — so if you run only sandbox deals and get an empty file, this is why.
+- Click **Download CSV**. The file is named after your instance so exports from multiple instances stay distinct.
+
+**Important — please read:**
+
+This is a convenience feature, **not** a tax report. SymBot exports the transactions it executed on this account; it does **not** calculate your taxes, gains, or cost basis. Your tax software does that, using your complete account history.
+
+Cryptocurrency tax rules differ from country to country and change over time — including how cost basis is calculated, whether holdings are tracked per-wallet or pooled, and what counts as a taxable event. SymBot only sees its own deals, not everything in your exchange account (manual trades, transfers, deposits, or activity from other tools), so it deliberately exports **raw transactions** and leaves all tax calculations to software built for your jurisdiction.
+
+Because of this, the export may be incomplete for your overall tax picture, and if you also connect the same exchange to your tax software directly (for example by API), you should **not** import both or your transactions will be counted twice.
+
+SymBot and this export do **not** constitute tax advice. Always review your transactions and have your tax return prepared or reviewed by a qualified tax professional in your country. See also the [Disclaimer](#disclaimer).
+
+> **Note:** Exports covering a very large number of deals may take a little time to generate and can briefly affect system performance while running.
+
+
+## System Health
+
+The **System Tools** page shows a **System Health** card with an at-a-glance readout of the running instance: memory usage, uptime, active deal count, and CPU load, plus host memory, the SymBot version, and the process ID. The **Load** figure is shown as a percentage of the machine's CPU cores — a value that's meaningful without knowing the core count (50% means the box is working at half its core capacity) — and is color-coded green, amber, or red as it rises, matching the Risk % convention used elsewhere. The sub-line shows the raw 1-minute / 5-minute / 15-minute load averages and the core count for anyone who wants the underlying numbers; on platforms that don't report load (e.g. Windows) it shows just the core count. A compact version of the same information (uptime, memory, active deals, and load) also appears on the instance home page. Both refresh automatically every 30 seconds.
+
+The memory figure is reported accurately for how the instance is running. When SymBot runs **standalone** (its own process), the card shows real process memory (RSS). When an instance runs as a **Hub worker** (several instances share one process), RSS is process-wide and cannot be attributed to a single instance, so the card instead shows the memory genuinely attributable to that instance (heap + external + array buffers) and clearly notes that the process RSS is shared. This mirrors how the Hub dashboard attributes per-instance memory, so the number is never misleading in either mode.
+
+The same data is available over the API at `GET /api/system/health` (see the API section).
+
+
+## Trading Journal
+
+The **Trading Journal** turns your completed deals into a running record with no manual bookkeeping. Every closed deal automatically becomes a journal entry showing the pair, its deal ID (so multiple deals on the same pair are easy to tell apart and reference), the bot, when it closed, how long it ran, the profit (percent and amount), and how many safety orders were used — so the journal is useful the moment you open it, with nothing to fill in.
+
+For any entry you can add your own free-form **notes** (why you started it, what you'd do differently, anything worth remembering), which are saved with that deal. You can filter the journal by bot and by date range.
+
+If you have AI enabled (see [Artificial Intelligence (AI)](#artificial-intelligence-ai)), each entry also offers a **Generate AI reflection** button that writes a short, factual summary of how the deal went based on the deal's own data. The reflection is saved with the entry and can be regenerated at any time. When AI is not enabled, the journal works exactly the same minus that button.
+
+**At-a-glance stats.** Above the entries, a summary strip reflects every deal matching your current bot/date filter (not just the visible page): total deals, win rate (with the win/loss split), total realized profit/loss, average hold time, your current win-or-loss streak, and your best and worst deals by percentage. These use the same definitions as the dashboard — a "win" is any deal closed in profit — so the numbers line up with what you see elsewhere. While the figures are being computed a brief **Processing deal data…** indicator is shown in place of the strip, so it's clear the numbers are still being worked out rather than appearing to jump in. Computed figures are cached briefly per filter, so returning to a filter you've already viewed shows them right away; tagging a deal's mood refreshes them.
+
+**Mood tagging and the mood-vs-outcome view.** Each entry lets you tag how the deal went with a single mood — planned 🎯, confident 😌, neutral 😐, anxious 😰, or gambled 🎲 (tap the tag again to clear it). Once you've tagged some deals, a **Mood vs. outcome** panel shows the win rate and average profit for each mood, so you can see how your own state of mind lines up with your results — often the most useful thing a trading journal can show you. The panel is deliberately observational: it reports what happened and shows the sample size next to each mood, and it does not tell you what to do or imply that a small sample proves anything.
+
+The journal loads the most recent entries first, a page at a time. If you have more history than the current page, a **Load more** button appears at the bottom to pull in the next page — so accounts with a long history of closed deals stay fast and don't load everything at once.
+
+Your note and the AI reflection are managed independently. You can delete just the note (a **Delete note** button appears once a note is saved) or just the reflection (a small **×** on the reflection itself), each with its own confirmation. Deleting one leaves the other in place, and neither affects the underlying deal — the auto-generated entry always remains; only the piece you removed goes away.
+
+Notes and AI reflections are stored with each deal, so they persist and appear alongside the auto-generated facts whenever you revisit the journal.
+
+The journal is also available over the API: `GET /api/journal` (supports `botId`, `from`, `to`, `limit`, and `skip` query parameters for filtering and paging), `GET /api/journal/stats` (the summary + mood-vs-outcome figures for the same filter), `POST /api/journal/note`, `POST /api/journal/mood` (body: `dealId`, `mood` — one of the mood ids, or empty to clear), `POST /api/journal/narrative`, and `POST /api/journal/delete` (which takes a `part` of `note`, `narrative`, or `all`). See the API section for authentication details.
 
 
 ## Artificial Intelligence (AI)
@@ -763,6 +892,8 @@ The `ai` section of `config/app.json` stores all provider settings:
 ### AI Chat
 
 SymBot includes a built-in AI chat interface accessible from the header bar. Click the chat bubble icon to open a conversation window where you can ask questions, get trading advice, or continue a deal analysis in a free-form conversation. The AI retains the full conversation context for the duration of the session (up to 25 messages, with messages older than 2 hours automatically cleared).
+
+The chat features an animated assistant based on the SymBot logo. It appears as a friendly welcome in an empty chat and moves to a small spot in the header once a conversation begins, subtly reacting as it works and responds — for example, showing a processing animation while it thinks or analyzes a deal.
 
 #### Analyzing a Deal
 
@@ -987,6 +1118,14 @@ POST /api/bots/update
 GET /api/bots
 ```
 
+### System health
+
+Returns a JSON snapshot of the running instance: memory (context-aware — real RSS when standalone, attributed memory when running as a Hub worker), uptime, active deal count, CPU load (1/5/15-minute averages and core count), SymBot version, and host memory. No parameters.
+
+```
+GET /api/system/health
+```
+
 ### Enable bot
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -1042,6 +1181,19 @@ POST /api/deals/{dealId}/update_deal
 POST /api/deals/{dealId}/add_funds
 ```
 
+A deal can also be targeted by bot instead of by deal id. This is useful for external signal sources (such as TradingView alerts) that send a fixed message and do not know the deal id that was generated when the deal opened. When you use the bot endpoint, SymBot resolves the bot's currently active deal automatically.
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| volume   | number   | YES           |                      | Add funds to a deal by placing a manual safety order |
+| pair     | string   | NO            |                      | Required only for multi-pair bots, to select which pair's active deal to add to |
+
+```
+POST /api/bots/{botId}/add_funds
+```
+
+The bot endpoint resolves to the bot's single active deal. If the bot has more than one active deal (for example a multi-pair bot when no `pair` is supplied, or a pair configured to run concurrent deals), the request is rejected with a message asking you to specify a pair or use the deal id endpoint, so funds are never added to the wrong deal.
+
 ### Pause deal
 
 | **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
@@ -1074,6 +1226,18 @@ POST /api/deals/{dealId}/cancel
 ```
 POST /api/deals/{dealId}/panic_sell
 ```
+
+As with add funds, a deal can also be closed by bot instead of by deal id. SymBot resolves the bot's currently active deal automatically. This lets an external signal trigger an emergency close without knowing the deal id.
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| pair     | string   | NO            |                      | Required only for multi-pair bots, to select which pair's active deal to close |
+
+```
+POST /api/bots/{botId}/panic_sell
+```
+
+The bot endpoint resolves to the bot's single active deal. If more than one active deal matches, the request is rejected asking you to specify a pair or use the deal id endpoint, so the wrong deal is never closed.
 
 
 ### Get deal information
@@ -1108,6 +1272,22 @@ GET /api/deals
 
 ```
 GET /api/deals/completed
+```
+
+### Export transactions (CSV)
+
+Streams a per-transaction CSV of closed deals (buys, sells, and fees) formatted for import into cryptocurrency tax software such as Koinly, CoinTracker, or CoinLedger. Returns a downloadable CSV file rather than JSON. See the [Transaction Export](#transaction-export) section for details on the format and its limitations.
+
+| **Name** | **Type** | **Mandatory** | **Values (default)** | **Description** |
+|----------|----------|---------------|----------------------|-----------------|
+| from     | string   | NO            |                      | Start date (YYYY-MM-DD). Exports all completed deals if not specified |
+| to       | string   | NO            |                      | End date (YYYY-MM-DD). Defaults to the from date if not specified |
+| timeZoneOffset | string | NO          |                      | Interpret the date range using this timezone offset. Default is UTC |
+| botId    | string   | NO            |                      | Export transactions for the specified bot id only |
+| includeSandbox | string | NO          | true, false (false)  | Include sandbox (paper-trading) deals. Excluded by default |
+
+```
+GET /api/deals/export/transactions
 ```
 
 ### Start deal
@@ -1293,6 +1473,14 @@ curl -i -X GET \
 'http://127.0.0.1:3000/api/bots?active=true'
 ```
 
+#### System health
+```
+curl -i -X GET \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+http://127.0.0.1:3000/api/system/health
+```
+
 #### Enable bot
 ```
 curl -i -X POST \
@@ -1343,6 +1531,20 @@ curl -i -X POST \
 http://127.0.0.1:3000/api/deals/{dealId}/add_funds
 ```
 
+Or target the bot's active deal instead of a deal id (include `pair` only for multi-pair bots):
+
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{
+		"volume": 25,
+		"pair": "BTC/USD"
+	}' \
+http://127.0.0.1:3000/api/bots/{botId}/add_funds
+```
+
 #### Pause deal
 ```
 curl -i -X POST \
@@ -1374,6 +1576,19 @@ curl -i -X POST \
 http://127.0.0.1:3000/api/deals/{dealId}/panic_sell
 ```
 
+Or target the bot's active deal instead of a deal id (include `pair` only for multi-pair bots):
+
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{
+		"pair": "BTC/USD"
+	}' \
+http://127.0.0.1:3000/api/bots/{botId}/panic_sell
+```
+
 #### Get deal information
 ```
 curl -i -X GET \
@@ -1396,6 +1611,15 @@ curl -i -X GET \
 -H 'Accept: application/json' \
 -H 'api-key: {API-KEY}' \
 'http://127.0.0.1:3000/api/deals/completed?from=2023-03-01&timeZoneOffset=-00:00'
+```
+
+#### Export transactions (CSV)
+```
+curl -i -X GET \
+-H 'Accept: text/csv' \
+-H 'api-key: {API-KEY}' \
+-o transactions.csv \
+'http://127.0.0.1:3000/api/deals/export/transactions?from=2023-01-01&to=2023-12-31&timeZoneOffset=-00:00'
 ```
 
 #### Start deal
@@ -1622,6 +1846,95 @@ Remember if you ever change your API key or alter your server id, your token wil
 
 > **Circuit Breaker and webhooks:** If the circuit breaker is active when a `start_deal` webhook fires, SymBot returns `{ "success": false, "data": "Circuit Breaker Active: <reason>" }`. The deal is not created and the base order is not queued — your integration must handle this response and retry after the circuit breaker clears (default 60 seconds). This is intentional: SymBot cannot guarantee entry at the intended price if the base order were queued and placed after an unknown delay.
 
+### Using TradingView
+
+TradingView alerts can drive SymBot directly over webhooks. Because a TradingView alert sends a fixed message that you write ahead of time, every value in the request must be known when you create the alert — a bot id, a pair, your webhook token, and a volume are all fixed values, so they work well. The one thing a TradingView alert cannot know is the deal id that SymBot generates when a deal opens. For that reason, the deal actions used here are targeted **by bot**, not by deal id (see [Add funds to deal](#add-funds-to-deal) and [Panic sell deal](#panic-sell-deal)), so your alerts never need a deal id.
+
+A common setup is to let TradingView decide **when** to buy the base order and **when** to add each safety order, while SymBot still handles the take profit exit automatically. This section walks through that scenario end to end.
+
+#### 1. Configure the bot
+
+Create (or update) a bot with two key settings:
+
+- `startCondition` set to `api` so the bot only opens a deal when it receives a signal, rather than on its own.
+- `dcaMaxOrder` set to `0` so the bot places **no automatic safety orders**. Every safety order will instead come from a TradingView signal. (If you would rather have TradingView add *some* orders on top of a few automatic ones, set this to the number of automatic orders you want instead of `0`.)
+
+Leave `dcaTakeProfitPercent` set to your desired target — the bot will still close the deal automatically when the target is reached, with no signal required.
+
+```
+curl -i -X POST \
+-H 'Content-Type: application/json' \
+-H 'Accept: application/json' \
+-H 'api-key: {API-KEY}' \
+-d '{
+		"pair": [ "BTC/USD" ],
+		"botName": "TradingView BTC",
+		"active": true,
+		"firstOrderAmount": 20,
+		"dcaOrderAmount": 20,
+		"dcaOrderStepPercent": 1.0,
+		"dcaOrderSizeMultiplier": 1.0,
+		"dcaOrderStepPercentMultiplier": 1.0,
+		"dcaTakeProfitPercent": 1.5,
+		"dcaMaxOrder": 0,
+		"startCondition": "api"
+	}' \
+http://127.0.0.1:3000/api/bots/create
+```
+
+Note the `botId` returned when the bot is created — you will use it in every TradingView alert below.
+
+#### 2. Entry signal — open the deal (base order)
+
+In TradingView, create an alert for your entry condition and set its **Webhook URL** to your SymBot address ending in `/webhook/api/bots/{botId}/start_deal`. Paste this into the alert **Message** field:
+
+```
+{
+	"apiToken": "{API-TOKEN}",
+	"pair": "BTC/USD"
+}
+```
+
+When the alert fires, SymBot opens a new deal and places the base order. `pair` may be omitted for a single-pair bot; include it for multi-pair bots so the correct pair is used.
+
+#### 3. Safety order signal — add funds to the open deal
+
+Create a second alert for your "add a safety order" condition, with its **Webhook URL** ending in `/webhook/api/bots/{botId}/add_funds` and this **Message**:
+
+```
+{
+	"apiToken": "{API-TOKEN}",
+	"pair": "BTC/USD",
+	"volume": 20
+}
+```
+
+Each time this alert fires, SymBot places a manual safety order of `volume` on the bot's active deal. You can reuse the same alert as many times as your strategy needs. `pair` is only needed for multi-pair bots.
+
+#### 4. Take profit — automatic
+
+No signal is required to take profit. The bot closes the deal automatically when it reaches `dcaTakeProfitPercent`, using the average price across the base order and every safety order that was added.
+
+#### 5. Emergency close (optional)
+
+If you want a way to force-close a deal at the current market price from TradingView — for example on a hard stop condition — create an alert with its **Webhook URL** ending in `/webhook/api/bots/{botId}/panic_sell` and this **Message**:
+
+```
+{
+	"apiToken": "{API-TOKEN}",
+	"pair": "BTC/USD"
+}
+```
+
+> **Use panic sell only for emergencies.** It closes the deal immediately at the current market price, which may realize a loss. It is not a normal exit — routine profitable exits should be left to the bot's take profit target. Do not wire panic sell to your everyday sell condition.
+
+#### Notes and limits
+
+- **One active deal per pair.** By default a bot runs a single active deal per pair, so targeting by bot (and pair, for multi-pair bots) is unambiguous. If you have configured a pair to run concurrent deals, the bot endpoints cannot tell which deal you mean and will reject the request — in that case use the deal id endpoints with a deal id obtained from `GET /api/deals`.
+- **Circuit breaker.** The circuit breaker note above applies to `start_deal` here too. If it is active, the entry is rejected and must be retried after it clears.
+- **Security.** Your webhook token is the only credential in these requests, so treat it like a password: use HTTPS for your public SymBot URL and keep your alert messages private. If you change your API key or server id, the token changes automatically and you must update your alerts.
+- **Testing first.** Before wiring up TradingView, confirm each request works with `curl` (prepend `/webhook` and put `apiToken` in the body, exactly as the alert will), and watch the deal open, receive funds, and close in the SymBot interface.
+
 ## Backup and Restore Features
 
 SymBot offers built-in backup and restore capabilities that focus on safeguarding your database. These features can be accessed directly through the web interface, ensuring that your trading data is securely stored and easily recoverable.
@@ -1802,6 +2115,9 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 
 #### What is the difference between SymBot and SymBot Hub?
 - SymBot is the software used for trading, while SymBot Hub serves as a central platform to manage multiple SymBot instances, offering a simplified and more efficient way to access them. SymBot Hub includes a live dashboard, unified active deals and bots views across all instances, and a full bot management interface for creating, editing, and deleting bots on any instance without switching between them. While SymBot Hub is optional, it is highly recommended if you're running multiple SymBot instances.
+
+#### Why won't SymBot start, or why am I seeing an unsupported engine warning?
+- SymBot requires Node.js v22 or later. If you are running an older version, `npm install` may print an *unsupported engine* warning and the application may fail to start or behave unexpectedly. Check your version with `node --version` and upgrade if it is below v22. On systems with multiple Node.js versions installed, a version manager such as **nvm** can be used to select the correct one.
 
 #### How can I disable logging to file to save disk space?
 - While we do not recommend disabling logging to file, you have the option to do so by running adding the argument `clglite` when starting the application.

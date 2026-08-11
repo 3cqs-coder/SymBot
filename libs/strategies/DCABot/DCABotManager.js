@@ -10,6 +10,66 @@ let shareData;
 // Deal starts are serialised by DCABot.requestDealStart via dealStartQueue
 let symbolList = {};
 
+/*
+ * Journal stats cache.
+ *
+ * apiGetJournalStats fetches every closed deal matching the filter and runs
+ * getProcessedDeals over all of them — for an "all bots" history with many
+ * closed deals this is the slow part users feel each time they open the journal
+ * or switch filters. We cache the computed stats payload keyed on the filter
+ * dimensions (botId + date range + timezone).
+ *
+ * Memory is bounded deliberately: at most JOURNAL_STATS_CACHE_MAX entries, each
+ * a small summary object (a handful of numbers + a short mood array — NOT the
+ * deals themselves), evicted oldest-first (LRU-ish via Map insertion order). A
+ * short TTL means a newly closed deal is reflected within JOURNAL_STATS_CACHE_TTL
+ * without having to hook the trading hot path, and user-driven changes (mood
+ * saves) invalidate explicitly for immediacy.
+ */
+const JOURNAL_STATS_CACHE_MAX = 32;          // hard cap on entries (memory bound)
+const JOURNAL_STATS_CACHE_TTL = 30 * 1000;   // ms; auto-refresh window
+const journalStatsCache = new Map();          // key -> { at, payload }
+
+function journalStatsCacheGet(key) {
+
+	const hit = journalStatsCache.get(key);
+
+	if (!hit) { return null; }
+
+	if ((Date.now() - hit.at) > JOURNAL_STATS_CACHE_TTL) {
+
+		journalStatsCache.delete(key);
+		return null;
+	}
+
+	// Refresh recency (move to newest) so eviction is LRU-ish.
+	journalStatsCache.delete(key);
+	journalStatsCache.set(key, hit);
+
+	return hit.payload;
+}
+
+function journalStatsCacheSet(key, payload) {
+
+	if (journalStatsCache.has(key)) { journalStatsCache.delete(key); }
+
+	journalStatsCache.set(key, { at: Date.now(), payload: payload });
+
+	// Evict oldest entries beyond the cap.
+	while (journalStatsCache.size > JOURNAL_STATS_CACHE_MAX) {
+
+		const oldestKey = journalStatsCache.keys().next().value;
+		journalStatsCache.delete(oldestKey);
+	}
+}
+
+// Clears the whole stats cache. Called when saved data that feeds the stats
+// (currently mood tags) changes, so the next read recomputes.
+function journalStatsCacheClear() {
+
+	journalStatsCache.clear();
+}
+
 
 async function viewCreateUpdateBot(req, res, botId) {
 
@@ -55,7 +115,7 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 async function viewActiveDeals(req, res) {
 
-	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString(), 'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString() } );
+	res.render( 'strategies/DCABot/DCABotDealsActiveView', { 'appData': shareData.appData, 'convertBoolean': shareData.Common.convertBoolean.toString(), 'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString(), 'computeAddFundsForward': require(shareData.appData.path_root + '/libs/app/AddFundsMath.js').computeAddFundsForward.toString() } );
 }
 
 
@@ -98,6 +158,12 @@ async function viewBots(req, res) {
 async function viewHistoryDeals(req, res) {
 
 	res.render( 'strategies/DCABot/DCABotDealsHistoryView', { 'appData': shareData.appData, 'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString() } );
+}
+
+
+async function viewTransactionExport(req, res) {
+
+	res.render( 'strategies/DCABot/DCABotTransactionExportView', { 'appData': shareData.appData } );
 }
 
 
@@ -513,6 +579,77 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 
 		return obj;
 	}
+}
+
+
+// Streams a per-transaction CSV of closed deals formatted for crypto-tax tools
+// (Koinly Universal). Transactions only — never computes gains/cost basis/tax.
+// Mirrors apiGetDealsHistory's auth/query pattern.
+async function apiExportTransactionsCsv(req, res) {
+
+	const TransactionExport = require('../../app/TransactionExport.js');
+
+	let fromDate = req.query.from;
+	let toDate = req.query.to || fromDate;
+	const timeZoneOffset = req.query.timeZoneOffset || 'Z';
+	const botId = req.query.botId;
+	const includeSandbox = String(req.query.includeSandbox) === 'true';
+
+	let query = { 'sellData.date': { '$exists': true } };
+	let queryOptions = { sort: { 'sellData.date': 1 } };
+
+	if (fromDate) {
+
+		const dateFrom = new Date(`${fromDate}T00:00:00${timeZoneOffset}`);
+		const dateTo = new Date(new Date(`${toDate}T00:00:00${timeZoneOffset}`).getTime() + 86400000);
+
+		query['sellData.date'] = { '$gte': dateFrom, '$lt': dateTo };
+	}
+
+	if (botId && botId !== 'Default') {
+
+		query['botId'] = botId;
+	}
+
+	let deals = [];
+
+	try {
+
+		deals = await shareData.DCABot.getDeals(query, queryOptions) || [];
+	}
+	catch (e) {
+
+		shareData.Common.logger('Transaction export query error: ' + JSON.stringify(e));
+
+		res.status(500).send('Error generating transaction export');
+
+		return;
+	}
+
+	// Deals come back as Mongoose docs — normalize to plain objects.
+	const dealsPlain = JSON.parse(JSON.stringify(deals));
+
+	// Build the rows once, then serialize (avoids transforming twice).
+	const rows = TransactionExport.buildRows(dealsPlain, { includeSandbox: includeSandbox });
+	const csvBody = TransactionExport.rowsToCsv(rows);
+
+	// Diagnostic: helps explain an empty export (no matching deals vs. deals that
+	// produced no rows, e.g. all sandbox or none with filled orders).
+	shareData.Common.logger('Transaction export: ' + dealsPlain.length + ' deal(s) matched, ' + rows.length + ' transaction row(s) generated (includeSandbox=' + includeSandbox + ')');
+
+	// Prefix with the instance name so multiple instances' exports are distinct.
+	const rawName = (shareData.appData && shareData.appData.name) ? String(shareData.appData.name) : 'SymBot';
+	const safeName = rawName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'SymBot';
+	const fileName = safeName + '-transactions-' + (fromDate || 'all') + (fromDate ? '-to-' + toDate : '') + '.csv';
+
+	// UTF-8 BOM for spreadsheet apps, then the CSV.
+	const BOM = '\uFEFF';
+
+	res.set('Content-Type', 'text/csv; charset=utf-8');
+	res.set('Content-Disposition', 'attachment; filename="' + fileName + '"');
+	res.set('Cache-Control', 'no-store');
+
+	res.send(BOM + csvBody);
 }
 
 
@@ -1035,13 +1172,94 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 }
 
 
+/**
+ * Resolve the active deal id for a bot (and optionally a specific pair) so deal
+ * actions can be targeted with only static identifiers (botId + pair) instead of
+ * a per-deal dealId — useful for external signal sources that cannot capture the
+ * dealId returned when the deal opened.
+ *
+ * Returns { success, dealId, error }:
+ *   - success true + dealId  → exactly one active deal matched
+ *   - success false + error  → bot not found, no active deal, or (for multi-deal
+ *                              pairs) the match was ambiguous and needs a dealId
+ *
+ * Uses the same { botId, pair, status: 0 } lookup used throughout the bot engine.
+ */
+async function resolveActiveDealId(botId, pair) {
+
+	if (botId == undefined || botId == null || botId == '') {
+
+		return { 'success': false, 'error': 'Bot ID is required' };
+	}
+
+	const bots = await shareData.DCABot.getBots({ 'botId': botId });
+
+	if (!bots || bots.length == 0) {
+
+		return { 'success': false, 'error': 'Bot ID ' + botId + ' not found' };
+	}
+
+	const query = { 'botId': botId, 'status': 0 };
+
+	if (pair != undefined && pair != null && pair != '') {
+
+		// Match the bot's stored pair casing (pairs are stored upper-cased)
+		query['pair'] = pair.toUpperCase();
+	}
+
+	const deals = await shareData.DCABot.getDeals(query);
+
+	if (!deals || deals.length == 0) {
+
+		let msg = 'No active deal found for bot ' + botId;
+
+		if (query['pair'] != undefined) {
+
+			msg += ' and pair ' + query['pair'];
+		}
+
+		return { 'success': false, 'error': msg };
+	}
+
+	if (deals.length > 1) {
+
+		// More than one active deal (e.g. multi-pair bot with no pair given, or a
+		// pair configured for concurrent deals) — caller must specify a dealId.
+		return { 'success': false, 'error': 'Multiple active deals matched; specify a pair or use the deal id endpoint' };
+	}
+
+	return { 'success': true, 'dealId': deals[0]['dealId'] };
+}
+
+
 async function apiPanicSellDeal(req, res, sendResponse = true) {
 
 	let success = true;
 
 	let content = 'Success';
 
-	const dealId = req.params.dealId;
+	let dealId = req.params.dealId;
+
+	// If no dealId was given in the URL, resolve the bot's active deal from
+	// botId (+ optional pair) supplied by params or body. Leaves the dealId path
+	// completely unchanged when a dealId IS provided.
+	if (dealId == undefined || dealId == null || dealId == '') {
+
+		const botId = req.params.botId || req.body.botId;
+		const pair = req.body.pair;
+
+		const resolved = await resolveActiveDealId(botId, pair);
+
+		if (!resolved['success']) {
+
+			const resObj = { 'date': new Date(), 'success': false, 'data': resolved['error'] };
+			shareData.Common.logger('API Panic Sell Deal: ' + JSON.stringify(resObj));
+			if (sendResponse) { res.send(resObj); }
+			return resObj;
+		}
+
+		dealId = resolved['dealId'];
+	}
 
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
 
@@ -1209,8 +1427,30 @@ async function apiAddFundsDeal(req, res, sendResponse = true) {
 
 	let content = 'Success';
 	
-	const dealId = req.params.dealId;
+	let dealId = req.params.dealId;
 	const volume = parseFloat(req.body.volume);
+
+	// If no dealId was given in the URL, resolve the bot's active deal from
+	// botId (+ optional pair) supplied by params or body. Leaves the dealId path
+	// completely unchanged when a dealId IS provided.
+	if (dealId == undefined || dealId == null || dealId == '') {
+
+		const botId = req.params.botId || req.body.botId;
+		const pair = req.body.pair;
+
+		const resolved = await resolveActiveDealId(botId, pair);
+
+		if (!resolved['success']) {
+
+			const resObj = { 'date': new Date(), 'success': false, 'data': resolved['error'] };
+			shareData.Common.logger('API Add Funds: ' + JSON.stringify(resObj));
+			if (sendResponse) { res.send(resObj); }
+			return resObj;
+		}
+
+		dealId = resolved['dealId'];
+	}
+
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
 
 	if (volume == undefined || volume == null || volume == 0) {
@@ -2071,6 +2311,15 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
 	let maxDealsPerBot = 1;
 
+	// Default to UTC when no offset is supplied. The dashboard can be reached from
+	// navigation links that don't carry the browser's timezone offset (e.g. the
+	// persistent sidebar); without this guard a missing offset threw
+	// "Cannot read properties of undefined (reading 'replace')".
+	if (timeZoneOffset == undefined || timeZoneOffset == null || timeZoneOffset === '') {
+
+		timeZoneOffset = '+00:00';
+	}
+
 	const cleanedOffset = timeZoneOffset.replace(':', '');
     const offsetSign = cleanedOffset.startsWith('-') ? -1 : 1;
     const offsetHours = parseInt(cleanedOffset.slice(1, 3), 10);
@@ -2161,6 +2410,11 @@ async function getDashboardData({ duration, timeZoneOffset }) {
     const getBotKey = (botIdOrName) => botIdNameMap[botIdOrName] || botIdOrName;
 
     // Process completed deals
+    // Deals grouped by bot, so per-bot win rate / duration / SO can be computed
+    // via the shared Common.computeDealSetStats primitive (same definitions the
+    // Trading Journal uses) instead of duplicating the formulas here.
+    const deals_by_bot = {};
+
     complete_deals.forEach(deal => {
         const botKey = getBotKey(deal.botId || deal.bot_name);
 
@@ -2176,42 +2430,27 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         const dayKey = localDealEnd.toDateString();
         profit_by_day_map[dayKey] = (profit_by_day_map[dayKey] || 0) + (deal.profit || 0);
 
-        // Deal duration
-        const durationMinutes = shareData.Common.dealDurationMinutes(deal.date_start, deal.date_end);
-        if (!bot_deal_duration_map[botKey]) bot_deal_duration_map[botKey] = [];
-        bot_deal_duration_map[botKey].push(durationMinutes);
-
-        // Win rate
-        if (!win_rate_map[botKey]) win_rate_map[botKey] = { wins: 0, total: 0 };
-        win_rate_map[botKey].total++;
-        if ((deal.profit || 0) > 0) win_rate_map[botKey].wins++;
-
         // Profit by pair
         const pairKey = deal.pair || 'Unknown';
         pair_profit_map[pairKey] = (pair_profit_map[pairKey] || 0) + (deal.profit || 0);
 
-        // Safety order utilisation
-        if (!so_utilisation_map[botKey]) so_utilisation_map[botKey] = [];
-        so_utilisation_map[botKey].push(deal.safety_orders || 0);
+        // Collect per-bot for the shared stats pass below.
+        if (!deals_by_bot[botKey]) deals_by_bot[botKey] = [];
+        deals_by_bot[botKey].push(deal);
     });
 
-    // Average deal durations
-    for (const key in bot_deal_duration_map) {
-        const durations = bot_deal_duration_map[key];
-        bot_deal_duration_map[key] = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    // Per-bot win rate, average duration and average SO utilisation — one shared
+    // definition (Common.computeDealSetStats) rather than three hand-rolled
+    // reductions. Populates the same maps the rest of the function/consumers use.
+    for (const botKey in deals_by_bot) {
+        const stats = shareData.Common.computeDealSetStats(deals_by_bot[botKey]);
+        win_rate_map[botKey] = stats.win_rate;
+        bot_deal_duration_map[botKey] = stats.avg_duration_mins;
+        so_utilisation_map[botKey] = stats.avg_safety_orders;
     }
 
-    // Average SO utilisation
-    for (const key in so_utilisation_map) {
-        const sos = so_utilisation_map[key];
-        so_utilisation_map[key] = Number((sos.reduce((a, b) => a + b, 0) / sos.length).toFixed(1));
-    }
-
-    // Win rate as percentage
-    for (const key in win_rate_map) {
-        const { wins, total } = win_rate_map[key];
-        win_rate_map[key] = total > 0 ? Math.round((wins / total) * 100) : 0;
-    }
+    // (Per-bot duration, SO utilisation and win rate are computed above via
+    // Common.computeDealSetStats.)
 
     // Sort profit by day
     profit_by_day_map = Object.fromEntries(
@@ -2577,6 +2816,488 @@ function buildActiveChecked(botData) {
 }
 
 
+// ─── Trading Journal ────────────────────────────────────────────────────────
+// Entries auto-generate from closed deals (no blank-notebook to fill). Each
+// closed deal is already an entry with its facts (pair, dates, profit, safety
+// orders); the user optionally adds a note, and — if AI is enabled — can
+// generate a narrative. Only the note + narrative are persisted (onto the deal
+// as a `journal` field); everything else is derived live from deal data.
+
+function isAiEnabled() {
+
+	const ai = shareData?.appData?.ai;
+
+	if (ai == undefined || ai == null) { return false; }
+
+	// Enabled if a provider is configured on (openai or ollama).
+	return !!(ai.openai?.enabled || ai.ollama?.enabled || (ai.provider && ai.provider !== 'none'));
+}
+
+// Builds the Mongo query for journal/stats from the shared filter params
+// (bot + date range). Used by both the paginated list and the stats summary so
+// the two always describe the same set of deals.
+function buildJournalQuery(reqQuery) {
+
+	const fromDate = reqQuery.from;
+	const toDate = reqQuery.to || fromDate;
+	const timeZoneOffset = reqQuery.timeZoneOffset || 'Z';
+	const botId = reqQuery.botId;
+
+	let query = { 'sellData.date': { '$exists': true } };
+
+	if (fromDate) {
+
+		const dateFrom = new Date(`${fromDate}T00:00:00${timeZoneOffset}`);
+		const dateTo = new Date(new Date(`${toDate}T00:00:00${timeZoneOffset}`).getTime() + 86400000);
+
+		query['sellData.date'] = { '$gte': dateFrom, '$lt': dateTo };
+	}
+
+	if (botId && botId !== 'Default' && botId !== 'all') {
+
+		query['botId'] = botId;
+	}
+
+	return query;
+}
+
+
+// Builds journal entries: processed closed deals + any saved note/narrative.
+async function apiGetJournal(req, res, sendResponse = true) {
+
+	// Pagination: newest first, a page at a time, so production histories with
+	// thousands of closed deals don't all load at once.
+	let limit = parseInt(req.query.limit, 10);
+	if (!(limit > 0) || limit > 100) { limit = 25; }
+
+	let skip = parseInt(req.query.skip, 10);
+	if (!(skip >= 0)) { skip = 0; }
+
+	const query = buildJournalQuery(req.query);
+	// Fetch one extra to know whether another page exists.
+	const queryOptions = { sort: { 'sellData.date': -1 }, skip: skip, limit: limit + 1 };
+
+	let dealsRaw = await shareData.DCABot.getDeals(query, queryOptions) || [];
+
+	// Did we get the extra row? Then there's another page.
+	const hasMore = dealsRaw.length > limit;
+
+	if (hasMore) { dealsRaw = dealsRaw.slice(0, limit); }
+
+	// Map dealId -> saved journal (note/narrative) from the raw deal docs.
+	const savedByDeal = {};
+
+	for (const d of dealsRaw) {
+
+		if (d.journal != undefined && d.journal != null) {
+
+			savedByDeal[d.dealId] = d.journal;
+		}
+	}
+
+	const processed = await getProcessedDeals(dealsRaw);
+
+	const entries = processed.map(d => {
+
+		const saved = savedByDeal[d.deal_id] || {};
+
+		return {
+			...d,
+			note: typeof saved.note === 'string' ? saved.note : '',
+			narrative: typeof saved.narrative === 'string' ? saved.narrative : '',
+			narrative_at: saved.narrative_at || null,
+			mood: typeof saved.mood === 'string' ? saved.mood : ''
+		};
+	});
+
+	const obj = {
+		'date': new Date(),
+		'ai_enabled': isAiEnabled(),
+		'skip': skip,
+		'limit': limit,
+		'has_more': hasMore,
+		'data': entries
+	};
+
+	if (sendResponse) { res.send(obj); }
+	else { return obj; }
+}
+
+// Saves (or clears) the user's note on a deal's journal entry.
+async function apiSaveJournalNote(req, res) {
+
+	const body = req.body || {};
+	const dealId = body.dealId;
+	const note = typeof body.note === 'string' ? body.note : '';
+
+	let success = false;
+	let message = '';
+
+	if (dealId == undefined || dealId === '') {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Missing dealId' });
+		return;
+	}
+
+	const deals = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (deals && deals.length > 0) {
+
+		const deal = deals[0];
+		const journal = (deal.journal && typeof deal.journal === 'object') ? deal.journal : {};
+
+		journal.note = note;
+		journal.note_at = new Date();
+
+		const upd = await shareData.DCABot.updateDeal(deal.botId, dealId, { 'journal': journal });
+
+		success = upd?.success !== false;
+	}
+	else {
+
+		message = 'Deal ID ' + dealId + ' not found';
+	}
+
+	res.send({ 'date': new Date(), 'success': success, 'data': success ? 'Saved' : message });
+}
+
+
+// The fixed mood vocabulary. Keeping it a small closed set (rather than free
+// text) is what makes the mood→outcome correlation meaningful — every deal maps
+// to one of these buckets. Order here is the order shown in the UI.
+const JOURNAL_MOODS = [
+	{ id: 'planned',     label: 'Planned',     emoji: '\uD83C\uDFAF' },
+	{ id: 'confident',   label: 'Confident',   emoji: '\uD83D\uDE0C' },
+	{ id: 'neutral',     label: 'Neutral',     emoji: '\uD83D\uDE10' },
+	{ id: 'anxious',     label: 'Anxious',     emoji: '\uD83D\uDE30' },
+	{ id: 'gambled',     label: 'Gambled',     emoji: '\uD83C\uDFB2' }
+];
+
+function isValidMood(m) {
+
+	return m === '' || JOURNAL_MOODS.some(x => x.id === m);
+}
+
+// Saves (or clears, with '') the mood tag on a deal's journal entry.
+async function apiSaveJournalMood(req, res) {
+
+	const body = req.body || {};
+	const dealId = body.dealId;
+	const mood = typeof body.mood === 'string' ? body.mood : '';
+
+	if (dealId == undefined || dealId === '') {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Missing dealId' });
+		return;
+	}
+
+	if (!isValidMood(mood)) {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Invalid mood' });
+		return;
+	}
+
+	const deals = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (!deals || deals.length === 0) {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Deal ID ' + dealId + ' not found' });
+		return;
+	}
+
+	const deal = deals[0];
+	const journal = (deal.journal && typeof deal.journal === 'object') ? deal.journal : {};
+
+	if (mood === '') { delete journal.mood; }
+	else { journal.mood = mood; }
+
+	const upd = await shareData.DCABot.updateDeal(deal.botId, dealId, { 'journal': journal });
+	const success = upd?.success !== false;
+
+	// Mood tags feed the mood→outcome correlation, so a change invalidates the
+	// cached stats across all filters (a mood change can affect any bucket).
+	if (success) { journalStatsCacheClear(); }
+
+	res.send({ 'date': new Date(), 'success': success, 'data': success ? 'Saved' : 'Failed to save mood' });
+}
+
+
+// Summary stats + mood→outcome correlation over ALL deals matching the current
+// filter (not just the visible page). Reuses the app's own definitions: a "win"
+// is profit > 0 (same as getDashboardData), duration via dealDurationMinutes.
+// Deliberately observational — it reports what happened, draws no conclusions.
+async function apiGetJournalStats(req, res) {
+
+	// Cache key from the same dimensions buildJournalQuery uses. A cache hit skips
+	// the full closed-deal fetch + getProcessedDeals aggregation.
+	const cacheKey = [
+		(req.query.botId || 'all'),
+		(req.query.from || ''),
+		(req.query.to || ''),
+		(req.query.timeZoneOffset || 'Z')
+	].join('|');
+
+	const cached = journalStatsCacheGet(cacheKey);
+
+	if (cached) {
+
+		res.send(cached);
+		return;
+	}
+
+	const query = buildJournalQuery(req.query);
+
+	// No projection: getProcessedDeals needs the full deal shape (orders, config,
+	// sellData, etc.). This mirrors how the dashboard loads deals for its stats.
+	const dealsRaw = await shareData.DCABot.getDeals(query, { sort: { 'sellData.date': -1 } }) || [];
+	const deals = await getProcessedDeals(dealsRaw);
+
+	// Map saved mood back onto each processed deal.
+	const moodByDeal = {};
+	for (const d of dealsRaw) { if (d.journal && typeof d.journal.mood === 'string') { moodByDeal[d.dealId] = d.journal.mood; } }
+
+	// Base aggregates (win rate, total profit, avg duration) come from the shared
+	// primitive so the journal and dashboard can't drift on these definitions.
+	const base = shareData.Common.computeDealSetStats(deals);
+
+	let best = null;
+	let worst = null;
+
+	// Streaks are computed over deals in chronological order (oldest first).
+	const chrono = deals.slice().sort((a, b) => new Date(a.date_end) - new Date(b.date_end));
+	let curStreak = 0;
+	let curStreakType = null;   // 'win' | 'loss'
+
+	// Mood buckets: id -> { count, wins, profit }.
+	const moodStats = {};
+	for (const m of JOURNAL_MOODS) { moodStats[m.id] = { count: 0, wins: 0, profit: 0 }; }
+	let taggedCount = 0;
+
+	// Journal-only pass: best/worst by percent and mood bucketing. (The base
+	// win/profit/duration totals are already done by computeDealSetStats above.)
+	deals.forEach(d => {
+
+		const isWin = (typeof d.profit === 'number' ? d.profit : 0) > 0;
+
+		if (best === null || d.profit_percent > best.profit_percent) { best = d; }
+		if (worst === null || d.profit_percent < worst.profit_percent) { worst = d; }
+
+		const mood = moodByDeal[d.deal_id];
+		if (mood && moodStats[mood]) {
+
+			taggedCount++;
+			moodStats[mood].count++;
+			if (isWin) { moodStats[mood].wins++; }
+			moodStats[mood].profit += (typeof d.profit === 'number' ? d.profit : 0);
+		}
+	});
+
+	// Current streak from the most recent backwards.
+	for (let i = chrono.length - 1; i >= 0; i--) {
+
+		const isWin = (typeof chrono[i].profit === 'number' ? chrono[i].profit : 0) > 0;
+		const type = isWin ? 'win' : 'loss';
+
+		if (curStreakType === null) { curStreakType = type; curStreak = 1; }
+		else if (type === curStreakType) { curStreak++; }
+		else { break; }
+	}
+
+	// Shape the mood correlation for the client (only buckets that have deals).
+	const moodCorrelation = JOURNAL_MOODS
+		.filter(m => moodStats[m.id].count > 0)
+		.map(m => {
+
+			const s = moodStats[m.id];
+
+			return {
+				id: m.id,
+				label: m.label,
+				emoji: m.emoji,
+				count: s.count,
+				win_rate: s.count > 0 ? Math.round((s.wins / s.count) * 100) : 0,
+				avg_profit: s.count > 0 ? s.profit / s.count : 0
+			};
+		});
+
+	const summary = {
+		total_deals: base.total,
+		win_rate: base.win_rate,
+		wins: base.wins,
+		losses: base.losses,
+		total_profit: base.total_profit,
+		avg_duration_mins: base.avg_duration_mins,
+		current_streak: curStreak,
+		current_streak_type: curStreakType,
+		best: best ? { pair: best.pair, profit_percent: best.profit_percent } : null,
+		worst: worst ? { pair: worst.pair, profit_percent: worst.profit_percent } : null,
+		tagged_count: taggedCount,
+		untagged_count: base.total - taggedCount
+	};
+
+	const payload = { 'date': new Date(), 'moods': JOURNAL_MOODS, 'summary': summary, 'mood_correlation': moodCorrelation };
+
+	journalStatsCacheSet(cacheKey, payload);
+
+	res.send(payload);
+}
+
+
+// Generates an AI narrative for a closed deal and persists it. Gated on AI.
+async function apiGenerateJournalNarrative(req, res) {
+
+	const body = req.body || {};
+	const dealId = body.dealId;
+
+	if (!isAiEnabled()) {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'AI is not enabled' });
+		return;
+	}
+
+	if (dealId == undefined || dealId === '') {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Missing dealId' });
+		return;
+	}
+
+	const deals = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (!deals || deals.length === 0) {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Deal ID ' + dealId + ' not found' });
+		return;
+	}
+
+	const deal = deals[0];
+	const processed = await getProcessedDeals([deal]);
+
+	if (processed.length === 0) {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Deal is not closed or has no fills' });
+		return;
+	}
+
+	const p = processed[0];
+
+	// A compact, factual prompt built from the deal's own data. Kept concise so
+	// the narrative is a short reflective summary, not an essay.
+	const durationMs = new Date(p.date_end).getTime() - new Date(p.date_start).getTime();
+	const durationMins = Math.max(0, Math.round(durationMs / 60000));
+
+	let durationStr;
+	if (durationMins < 60) { durationStr = durationMins + ' minute(s)'; }
+	else if (durationMins < 1440) { durationStr = (Math.round(durationMins / 6) / 10) + ' hour(s)'; }
+	else { durationStr = (Math.round(durationMins / 144) / 10) + ' day(s)'; }
+
+	const prompt = 'Write a brief (2 sentence) factual trading-journal note for this completed DCA deal, '
+		+ 'using ONLY the numbers given. State what happened. Do NOT give advice, do NOT generalize '
+		+ 'about trading or markets, do NOT make claims about what is "possible" or about risk management, '
+		+ 'and do NOT predict the future. No disclaimers. '
+		+ 'Deal: pair ' + p.pair + ', result ' + (p.profit_percent >= 0 ? '+' : '') + p.profit_percent + '%, '
+		+ p.safety_orders + ' safety order(s) used, duration about ' + durationStr + '. '
+		+ 'First sentence: state the outcome (pair, profit/loss %, safety orders, duration). '
+		+ 'Second sentence: one neutral factual observation drawn only from those numbers.';
+
+	const aiBody = {
+		'message': {
+			'content': prompt,
+			'room': 'journal' + Math.floor(1000 + Math.random() * 90000),
+			'stream': false
+		}
+	};
+
+	let aiOut;
+
+	try {
+
+		aiOut = await shareData.AIClient.streamChat(JSON.stringify(aiBody));
+	}
+	catch (e) {
+
+		aiOut = { success: false, data: e.message };
+	}
+
+	if (!aiOut || !aiOut.success) {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': (aiOut && aiOut.data) || 'AI request failed' });
+		return;
+	}
+
+	const narrative = String(aiOut.data || '').trim();
+
+	// Persist the narrative onto the deal's journal.
+	const journal = (deal.journal && typeof deal.journal === 'object') ? deal.journal : {};
+	journal.narrative = narrative;
+	journal.narrative_at = new Date();
+
+	await shareData.DCABot.updateDeal(deal.botId, dealId, { 'journal': journal });
+
+	res.send({ 'date': new Date(), 'success': true, 'data': narrative });
+}
+
+// Clears the user's journal annotations for a deal. `part` selects what to
+// remove: 'note', 'narrative', or 'all' (default). Removes annotations only —
+// the underlying closed deal is untouched, so the auto-generated entry still
+// appears (just without the removed piece).
+async function apiDeleteJournalEntry(req, res) {
+
+	const body = req.body || {};
+	const dealId = body.dealId;
+	const part = (body.part === 'note' || body.part === 'narrative') ? body.part : 'all';
+
+	if (dealId == undefined || dealId === '') {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Missing dealId' });
+		return;
+	}
+
+	const deals = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (!deals || deals.length === 0) {
+
+		res.send({ 'date': new Date(), 'success': false, 'data': 'Deal ID ' + dealId + ' not found' });
+		return;
+	}
+
+	const deal = deals[0];
+	const journal = (deal.journal && typeof deal.journal === 'object') ? { ...deal.journal } : {};
+
+	if (part === 'note') {
+
+		delete journal.note;
+		delete journal.note_at;
+	}
+	else if (part === 'narrative') {
+
+		delete journal.narrative;
+		delete journal.narrative_at;
+	}
+	else {
+
+		// 'all' — clear everything.
+		for (const k in journal) { delete journal[k]; }
+	}
+
+	const upd = await shareData.DCABot.updateDeal(deal.botId, dealId, { 'journal': journal });
+
+	const success = upd?.success !== false;
+
+	res.send({ 'date': new Date(), 'success': success, 'data': success ? 'Deleted' : 'Failed to delete' });
+}
+
+
+function viewJournal(req, res) {
+
+	res.render('strategies/DCABot/DCABotJournalView', {
+		'appData': shareData.appData,
+		'getCurrencySymbol': shareData.Common.getCurrencySymbol.toString(),
+		'aiEnabled': isAiEnabled(),
+		'moods': JSON.stringify(JOURNAL_MOODS)
+	});
+}
+
+
 module.exports = {
 
 	apiStartDeal,
@@ -2585,6 +3306,15 @@ module.exports = {
 	apiGetBots,
 	apiGetActiveDeals,
 	apiGetDealsHistory,
+	apiExportTransactionsCsv,
+	viewTransactionExport,
+	apiGetJournal,
+	apiSaveJournalNote,
+	apiSaveJournalMood,
+	apiGetJournalStats,
+	apiGenerateJournalNarrative,
+	apiDeleteJournalEntry,
+	viewJournal,
 	apiShowDeal,
 	apiPauseDeal,
 	apiCancelDeal,

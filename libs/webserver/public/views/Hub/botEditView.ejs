@@ -203,23 +203,24 @@
 <main>
 <center>
 
-	<div id="contentBox" style="width: 90%;">
+	<div id="contentBox">
 
-		<div class="contentHeaderBox" style="position: relative; text-align: center;">
-			<div style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 1.0rem; white-space: nowrap;">
-				<a href="/bots" style="text-decoration: none; opacity: 0.6;">&#8592; All Bots</a>
-				<span style="opacity: 0.3; padding: 0 4px;">|</span>
-				<a href="/bots?instance=<%- instanceId %>" style="text-decoration: none; opacity: 0.6;">&#8592; <%- instanceName %> Bots</a>
-			</div>
+		<div class="contentHeaderBox">
 			<b id="headerText" class="contentHeader"></b>
+			<span class="view-header-links">
+				<a href="/bots" class="view-back-link">&#8592; All Bots</a>
+				<span style="opacity: 0.3; padding: 0 4px;">|</span>
+				<a href="/bots?instance=<%- instanceId %>" class="view-back-link">&#8592; <%- instanceName %> Bots</a>
+			</span>
 		</div>
 
 		<div class="botsDealsBox">
 
 			<%- include('../strategies/DCABot/partialsBotForm') %>
-	</div>
+		</div>
 
-	<div id="ordersBox"></div>
+		<%- include('../strategies/DCABot/partialsBotPreview') %>
+	</div>
 
 </center>
 </main>

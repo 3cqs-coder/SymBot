@@ -128,7 +128,12 @@
 	// ── Load a conversation into the room ────────────────────────────────────
 
 	function loadIntoRoom(conversation_id, onSuccess, onFail) {
-		$('#aiChatSpinner').show();
+		// Show the animated mascot loader while the saved conversation is fetched
+		// (replaces the old hidden spinner). renderHistory empties the box below.
+		$('#aiChatSpinner').hide();
+		if (window.SymBot && SymBot.Mascot && SymBot.Mascot.loaderHtml) {
+			$('#aiChatBox').html(SymBot.Mascot.loaderHtml('Loading conversation…'));
+		}
 		$.ajax({
 			type: 'POST', url: getBase() + 'api/ai/chat/conversations/load',
 			data: { conversation_id: conversation_id, room: getRoom() },
@@ -150,12 +155,16 @@
 					updateDeleteBtn();
 					if (onSuccess) onSuccess(res.data);
 				} else {
+					$('#aiChatBox').empty();
+					if (typeof window.AIChatConv_updateMascotHero === 'function') window.AIChatConv_updateMascotHero();
 					(typeof alertBox === 'function' ? alertBox : alert)('Could not load conversation.');
 					if (onFail) onFail();
 				}
 			},
 			error: function() {
 				$('#aiChatSpinner').hide();
+				$('#aiChatBox').empty();
+				if (typeof window.AIChatConv_updateMascotHero === 'function') window.AIChatConv_updateMascotHero();
 				if (onFail) onFail();
 			}
 		});
@@ -174,6 +183,8 @@
 		$('#chatAttachments').empty();
 		$('#conversationSelect').val('');
 		updateDeleteBtn();
+		// Re-show the empty-state mascot hero (the view registers this hook).
+		if (typeof window.AIChatConv_updateMascotHero === 'function') window.AIChatConv_updateMascotHero();
 		$.ajax({
 			type: 'POST',
 			url: getBase() + 'api/ai/chat/prompt',

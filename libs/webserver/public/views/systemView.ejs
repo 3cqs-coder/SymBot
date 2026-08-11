@@ -18,13 +18,13 @@ $.confirm({
 			<li>If you do not have a process manager to automatically restart  <%- appData.name %>, you will need to manually start it again.
 		</ul>
 
-	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">SHUTDOWN</span> <%- appData.name %></b>
+	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">SHUTDOWN</span> <%- appData.name %></b>
 	</form>
 	</div>`,
 	  buttons: {
 		  formSubmit: {
 			  btnClass: 'btn-default',
-			  text: '<div style="color: #d80f08;">Shutdown</div>',
+			  text: '<div style="color: var(--color-danger);">Shutdown</div>',
 			  action: function() {
 
 				const inputValue = parseFloat($('#confirmNum').val());
@@ -78,13 +78,13 @@ $.confirm({
 			<li>It is highly recommended to monitor logs and activity for a period of time after the update completes to ensure everything is working as expected.
 		</ul>
 
-	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">UPDATE</span> <%- appData.name_main %></b>
+	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">UPDATE</span> <%- appData.name_main %></b>
 	</form>
 	</div>`,
 	  buttons: {
 		  formSubmit: {
 			  btnClass: 'btn-default',
-			  text: '<div style="color: #d80f08;">Update</div>',
+			  text: '<div style="color: var(--color-danger);">Update</div>',
 			  action: function() {
 
 				const inputValue = parseFloat($('#confirmNum').val());
@@ -147,13 +147,13 @@ $.confirm({
 
 		<br><br>
 
-		<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">BACKUP</span> database</b>
+		<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">BACKUP</span> database</b>
 	</form>
 	</div>`,
 	  buttons: {
 		  formSubmit: {
 			  btnClass: 'btn-default',
-			  text: '<div style="color: #d80f08;">Backup</div>',
+			  text: '<div style="color: var(--color-danger);">Backup</div>',
 			  action: function() {
 
 				const inputValue = parseFloat($('#confirmNum').val());
@@ -236,13 +236,13 @@ $.confirm({
 	</form>
 
 	<br><br>
-	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">RESTORE</span> database</b>
+	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">RESTORE</span> database</b>
 	</form>
 	</div>`,
 	  buttons: {
 		  formSubmit: {
 			  btnClass: 'btn-default',
-			  text: '<div style="color: #d80f08;">Restore</div>',
+			  text: '<div style="color: var(--color-danger);">Restore</div>',
 			  action: function() {
 
 				const inputValue = parseFloat($('#confirmNum').val());
@@ -319,14 +319,14 @@ function loadRollbacks() {
 				$list.append(
 					'<div style="display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #3e3e3e;">' +
 					'<span style="font-size: 1.1rem; flex: 1;">v' + snap.version + ' &mdash; ' + date + '</span>' +
-					'<a href="javascript:void(0);" onclick="rollbackSystem(' + JSON.stringify(snap.snapshotName) + ');" style="color: #d80f08; font-size: 1.0rem;">Rollback</a>' +
+					'<a href="javascript:void(0);" onclick="rollbackSystem(' + JSON.stringify(snap.snapshotName) + ');" style="color: var(--color-danger); font-size: 1.0rem;">Rollback</a>' +
 					'</div>'
 				);
 			});
 		},
 		error: function() {
 
-			$('#rollback-list').html('<div style="color: #d80f08;">Failed to load rollback snapshots.</div>');
+			$('#rollback-list').html('<div style="color: var(--color-danger);">Failed to load rollback snapshots.</div>');
 		}
 	});
 }
@@ -344,12 +344,12 @@ function rollbackSystem(snapshotName) {
 			'If the update introduced database schema changes, rolling back the code may cause compatibility issues. ' +
 			'Review the logs after restart to confirm everything is working.</div><br>' +
 			'<input type="checkbox" id="rollbackConfirmBox" class="form-field" style="width: 20px;" /> ' +
-			'<b>Check the box to confirm <span style="color: #d80f08;">ROLLBACK</span></b>' +
+			'<b>Check the box to confirm <span style="color: var(--color-danger);">ROLLBACK</span></b>' +
 			'</div>',
 		buttons: {
 			formSubmit: {
 				btnClass: 'btn-default',
-				text: '<div style="color: #d80f08;">Rollback</div>',
+				text: '<div style="color: var(--color-danger);">Rollback</div>',
 				action: function() {
 
 					if (!$('#rollbackConfirmBox').prop('checked')) {
@@ -617,13 +617,150 @@ function processRestoreDb(password, convertData, resetServerId, resetAiChats) {
 }
 
 
+function renderSystemHealth(d) {
+
+	const mem = d.memory || {};
+
+	// Primary memory figure is already the correct one for this context
+	// (RSS standalone, Attributed when running as a Hub worker).
+	$('#memLabel').text('Memory (' + (mem.primary_label || 'RSS') + ')');
+	$('#memValue').text(mem.primary_mb != null ? mem.primary_mb.toLocaleString() + ' MB' : '—');
+
+	// Sub-line: show the heap breakdown; when RSS is process-shared (Hub worker),
+	// say so explicitly so the shared number is never mistaken for this instance's.
+	let memSub = 'Heap ' + (mem.heap_used_mb != null ? mem.heap_used_mb.toLocaleString() : '—') +
+				 ' / ' + (mem.heap_total_mb != null ? mem.heap_total_mb.toLocaleString() : '—') + ' MB';
+
+	if (mem.rss_is_shared) {
+
+		memSub += ' · process RSS ' + (mem.rss_mb != null ? mem.rss_mb.toLocaleString() : '—') + ' MB (shared by all instances)';
+	}
+
+	$('#memSub').text(memSub);
+
+	$('#uptimeValue').text(d.started ? timeDiff(new Date(d.started), new Date()) : '—');
+	$('#activeDealsValue').text(d.active_deals != null ? d.active_deals : '—');
+
+	// Load: show the 1-minute run-queue average as a "% of cores" figure, which is
+	// readable at a glance (raw load means nothing without the core count). The
+	// full 1m / 5m / 15m triple and core count go on the sub-line. Color-coded to
+	// match the Risk % convention elsewhere: green < 70%, amber 70–89%, red 90%+.
+	const load = d.load_avg;
+	const cores = d.cpu_count;
+
+	if (Array.isArray(load) && load.length >= 1 && cores > 0) {
+
+		const load1 = load[0];
+		const loadPct = Math.min(999, Math.round((load1 / cores) * 100));
+
+		$('#loadValue').text(loadPct + '%');
+
+		// Reuse the profit/risk color classes already in the stylesheet.
+		const loadClass = loadPct >= 90 ? 'health-load-high' : (loadPct >= 70 ? 'health-load-med' : 'health-load-low');
+		$('#loadValue').removeClass('health-load-low health-load-med health-load-high').addClass(loadClass);
+
+		$('#loadSub').text(load.map(l => l.toFixed(2)).join(' / ') + ' · ' + cores + (cores === 1 ? ' core' : ' cores'));
+	}
+	else {
+
+		// Platforms that don't report load (e.g. Windows) return zeros/empty.
+		$('#loadValue').text('—').removeClass('health-load-low health-load-med health-load-high');
+		$('#loadSub').text(cores > 0 ? (cores + (cores === 1 ? ' core' : ' cores')) : '');
+	}
+
+	// Foot: host memory context + app version + PID.
+	let foot = '';
+
+	if (d.host_free_mem_mb != null && d.host_total_mem_mb != null) {
+
+		// Host memory is at GB scale, so show GB for readability (e.g. "1.01 GB
+		// free of 3.78 GB" rather than "1,030.22 MB free of 3,868.12 MB"). The
+		// process-memory tile stays in MB, where the smaller figures read better.
+		const freeGb  = (d.host_free_mem_mb  / 1024).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const totalGb = (d.host_total_mem_mb / 1024).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+		foot = 'Host memory: ' + freeGb + ' GB free of ' + totalGb + ' GB';
+	}
+
+	if (d.app_version) { foot += (foot ? ' · ' : '') + 'SymBot v' + d.app_version; }
+
+	if (d.pid != null) { foot += (foot ? ' · ' : '') + 'PID ' + d.pid; }
+
+	$('#systemHealthFoot').text(foot);
+
+	$('#systemHealthStatus').text('Healthy').addClass('ok');
+}
+
+
+function loadSystemHealth() {
+
+	$.ajax({
+				type: 'GET',
+				url: './api/system/health',
+				dataType: 'json',
+				success: function(res) {
+
+					if (res && res.data) {
+
+						renderSystemHealth(res.data);
+					}
+				},
+				error: function() {
+
+					$('#systemHealthStatus').text('Unavailable').removeClass('ok');
+				}
+	});
+}
+
+
+$(document).ready(function() {
+
+	loadSystemHealth();
+
+	// Refresh on the same cadence the Hub cards use.
+	setInterval(loadSystemHealth, 30000);
+});
+
+
 </script>
 
 <main>
 
-	<div id="contentBox" style="text-align: center; max-width: 480px; margin-top: 40px;">
+	<div id="contentBox">
 
-	<div style="display: inline-block; text-align: left; font-size: 1.3rem; width: 80%;">
+	<div class="contentHeaderBox">
+		<b class="contentHeader">System Tools</b>
+	</div>
+
+	<div id="systemHealthCard" class="system-health-card">
+		<div class="system-health-head">
+			<span class="system-health-title">System Health</span>
+			<span id="systemHealthStatus" class="system-health-status">Loading…</span>
+		</div>
+		<div class="system-health-grid">
+			<div class="system-health-stat">
+				<span class="system-health-stat-label" id="memLabel">Memory</span>
+				<span class="system-health-stat-value" id="memValue">—</span>
+				<span class="system-health-stat-sub" id="memSub"></span>
+			</div>
+			<div class="system-health-stat">
+				<span class="system-health-stat-label">Load</span>
+				<span class="system-health-stat-value" id="loadValue">—</span>
+				<span class="system-health-stat-sub" id="loadSub"></span>
+			</div>
+			<div class="system-health-stat">
+				<span class="system-health-stat-label">Uptime</span>
+				<span class="system-health-stat-value" id="uptimeValue">—</span>
+			</div>
+			<div class="system-health-stat">
+				<span class="system-health-stat-label">Active Deals</span>
+				<span class="system-health-stat-value" id="activeDealsValue">—</span>
+			</div>
+		</div>
+		<div class="system-health-foot" id="systemHealthFoot"></div>
+	</div>
+
+	<div class="view-body">
 
 		<div class="mainMenuItem">
 			<a href="javascript:void(0);" onclick="backupDb();"><span class="menu-icon">&#9741;</span> Backup Database</a>

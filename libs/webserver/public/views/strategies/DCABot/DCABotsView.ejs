@@ -86,7 +86,7 @@
 
 									ok: {
 											btnClass: 'btn-default',
-											text: '<div style="color: #4aa602;">' + botText + ' Bot</div>',
+											text: '<div style="color: var(--color-success);">' + botText + ' Bot</div>',
 											action: function () {
 
 												$('#toggle' + botId).prop('disabled', false);
@@ -104,7 +104,7 @@
 										cancel: {
 
 									 		btnClass: 'btn-default',
-									 		text: '<div style="color: #000000;">Cancel</div>',	
+									 		text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 									 		action: function () {
 
 									 			setTimeout( function() {
@@ -126,7 +126,7 @@
 			boxWidth: '50%',
 			useBootstrap: false,
 			content: '<div style="font-size: 1.2rem; text-align: left;">' +
-				'<b style="color: #d80f08;">Delete ' + botName + '?</b><br><br>' +
+				'<b style="color: var(--color-danger);">Delete ' + botName + '?</b><br><br>' +
 				'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
 				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or cancelled first.' +
 				'</div><br>' +
@@ -136,7 +136,7 @@
 			buttons: {
 				confirm: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #d80f08;">Delete Bot</div>',
+					text: '<div style="color: var(--color-danger);">Delete Bot</div>',
 					action: function() {
 
 						const typed = this.$content.find('#deleteBotConfirmName').val().trim();
@@ -152,7 +152,7 @@
 				},
 				cancel: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #000000;">Cancel</div>',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
 					action: function() {}
 				}
 			},
@@ -310,6 +310,13 @@
 
 
 		SymBot.UI.initColumnSelector();
+		SymBot.UI.initHeaderCorners('#botsDeals');
+
+		// Reveal the table only after tablesorter, the column selector, and header
+		// styling have initialised — otherwise the raw server-rendered table flashes
+		// unsorted/unstyled during load. Matches the Active Deals loading pattern.
+		$('#botsLoadingMsg').hide();
+		$('#botsDeals').show();
 
 
 		// Check last active state
@@ -329,7 +336,7 @@
 
 	<%- include('../../partialsColumnSelector') %>
 
-	<div id="contentBox">
+	<div id="contentBox" class="wide">
 
 		<div style="position: relative;">
 
@@ -338,14 +345,19 @@
 				<span class="viewSettings">
 					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
 				</span>
-				<span style="display: flex; justify-content: center; font-size: 1.2rem; gap: 10px; margin-top: 10px; margin-bottom: 0;">
+			</div>
+
+			<div class="view-summary">
+				<span style="display: flex; justify-content: flex-start; align-items: center; font-size: 1.05rem; gap: 10px; margin: 0;">
 					<input id="showActive" name="showActive" type=checkbox> Show Active
 				</span>
 			</div>
 
 			<div class="botsDealsBox" style="margin-top: 20px;">
 
-				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
+				<div id="botsLoadingMsg" class="deals-state-msg">Loading bots&hellip;</div>
+
+				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0 style="display: none;">
 
 					<thead style="position: sticky; top: 0; z-index: 1000;">
 						<tr class="tableHeader">
@@ -470,7 +482,9 @@
 						<td><%- sandBox %></td>
 						<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>
 						<td style="width: 1%; white-space: nowrap; text-align: center;">
-							<button class="hub-remove-btn" title="Delete bot" style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;"><span class="icon icon-cancel" style="width:13px;height:13px;pointer-events:none;"></span></button>
+							<div class="pill-group">
+								<span class="pill-btn pill-danger" title="Delete bot">&#10005;</span>
+							</div>
 						</td>
 					</tr>
 

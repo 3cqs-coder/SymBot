@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const colors = require('colors');
 
 const pathRoot = path.resolve(__dirname, '..', '..', '..'); 
@@ -98,6 +99,13 @@ async function processWorkerTaskMessage(SymBot, message) {
 
 		const memoryUsage = process.memoryUsage();
 
+		// Host CPU load. os.loadavg() is host-level (every worker in this process
+		// shares the same host, so this is the same for all of them) — it reports
+		// how loaded the machine hosting these instances is. Paired with the core
+		// count so the Hub can show an easy-to-read "% of cores" figure.
+		const loadAvg = os.loadavg();
+		const cpuCount = Array.isArray(os.cpus()) ? os.cpus().length : null;
+
 		// rss is process-wide (shared by every worker thread in this process), so it
 		// cannot be attributed to a single instance. heapUsed + external + arrayBuffers
 		// is the portion attributable to THIS worker, including its off-heap buffers.
@@ -109,7 +117,9 @@ async function processWorkerTaskMessage(SymBot, message) {
 				'heapTotal': memoryUsage.heapTotal,
 				'heapUsed': memoryUsage.heapUsed,
 				'external': memoryUsage.external || 0,
-				'arrayBuffers': memoryUsage.arrayBuffers || 0
+				'arrayBuffers': memoryUsage.arrayBuffers || 0,
+				'loadAvg': Array.isArray(loadAvg) ? loadAvg.map(l => Math.round(l * 100) / 100) : null,
+				'cpuCount': cpuCount
 			}
 		});
 	}

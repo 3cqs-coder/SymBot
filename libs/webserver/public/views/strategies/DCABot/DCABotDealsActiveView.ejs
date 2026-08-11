@@ -50,6 +50,11 @@
 
 	const convertBoolean = new Function('return ' + `<%- convertBoolean %>`)();
 
+	// Shared forward add-funds math — the SAME server function (from AddFundsMath.js,
+	// also used by estimateFunds) reconstituted here so the Add Funds Estimator can
+	// never drift from the engine.
+	const computeAddFundsForward = new Function('return ' + `<%- computeAddFundsForward %>`)();
+
 
 	var cbCountdownTimer = null;
 
@@ -158,7 +163,21 @@
 			clearTimeout(timeOutId);
 		}
 
-		timeOutId = setTimeout(() => { getActiveDeals(); }, 5000);
+		timeOutId = setTimeout(() => {
+
+			// Keep refreshing normally so estimates stay realtime (important in a
+			// volatile market). Only defer a refresh when the user is actively
+			// typing in a per-deal fill-price field, so it isn't yanked out from
+			// under them mid-entry. Resumes immediately once they leave the field.
+			if ($('.af-price-override:focus').length > 0) {
+
+				setReloadTimeout();
+				return;
+			}
+
+			getActiveDeals();
+
+		}, 5000);
 	}
 
 
@@ -214,7 +233,7 @@
 					buttons: {
 								formSubmit: {
 												btnClass: 'btn-default',
-												text: '<div style="color: #d80f08;">Close Deal</div>',
+												text: '<div style="color: var(--color-danger);">Close Deal</div>',
 												action: function () {
 
 													let confirmNum = this.$content.find('#confirmNum').val();
@@ -231,7 +250,7 @@
 							 	cancel: {
 
 									 		btnClass: 'btn-default',
-									 		text: '<div style="color: #000000;">Cancel</div>',	
+									 		text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 										 	action: function () { }
 									 	}
 							 },
@@ -263,7 +282,7 @@
 
 								ok: {
 										btnClass: 'btn-default',
-										text: '<div style="color: #d80f08;">Disable Bot</div>',
+										text: '<div style="color: var(--color-danger);">Disable Bot</div>',
 										action: function () {
 
 											stopBot(selector, data);
@@ -272,7 +291,7 @@
 							 	cancel: {
 
 									 		btnClass: 'btn-default',
-									 		text: '<div style="color: #000000;">Cancel</div>',	
+									 		text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 										 	action: function () { setReloadTimeout(); }
 									 	}
 							 }
@@ -292,7 +311,7 @@
 
 								ok: {
 										btnClass: 'btn-default',
-										text: '<div style="color: #1a9f00;">Download CSV</div>',
+										text: '<div style="color: var(--color-success);">Download CSV</div>',
 										action: function () {
 
 											const appName = '<%- appData.name %>';
@@ -303,7 +322,7 @@
 								cancel: {
 
 										 btnClass: 'btn-default',
-										 text: '<div style="color: #000000;">Cancel</div>',	
+										 text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 										 action: function () { }
 								 	}
 						 }
@@ -317,20 +336,15 @@
 
 		const header = 'AI Analysis ' + dealId;
 
-		const htmlContent = `
-			<div class="aiChatContainer">
-				<div id="aiChatSpinner" class="spinner-dynamic-container" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"><div class="spinner-dynamic"></div></div>
-
-				Please wait...
-			</div>
-		`;
-
 		const orders = dealTracker[dealId]['orders'];
 		const pair = dealTracker[dealId]['config']['pair'];
 		const exchange = dealTracker[dealId]['config']['exchange'];
 
-		// Open modal immediately with spinner
-		openModal(modalId, '#modal', header, htmlContent);
+		// Show the animated mascot loader instantly (server-rendered markup, pure
+		// CSS — no mount timing). openAiChat re-shows the same loader after the
+		// fetch, so it's seamless with no white gap.
+		openModal(modalId, '#modal', header, '');
+		$('#modal').html(aiLoaderHtml('Analyzing this deal…'));
 
 		// Params for OHLCV fetch
 		const params = {
@@ -601,13 +615,13 @@
 			<input id="dealPauseSell" name="dealPauseSell" type=checkbox class="form-field"> &nbsp; <b>Pause Sell</b>
 
 			<br><br>
-			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">PAUSE / RESUME</span> deal</b>
+			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">PAUSE / RESUME</span> deal</b>
 			</form>
 			</div>`,
 			buttons: {
 				  formSubmit: {
 					  btnClass: 'btn-default',
-					  text: '<div style="color: #d80f08;">Pause / Resume Deal</div>',
+					  text: '<div style="color: var(--color-danger);">Pause / Resume Deal</div>',
 					  action: function() {
 
 						const inputValue = parseFloat($('#confirmNum').val());
@@ -628,7 +642,7 @@
 				},
 		  		cancel: {
 			 		btnClass: 'btn-default',
-			  		text: '<div style="color: #000000;">Cancel</div>',
+			  		text: '<div style="color: var(--color-neutral);">Cancel</div>',
 			  		action: function() {},
 				},
 			},
@@ -714,13 +728,13 @@
 			<form action="" style="display: inline;">
 			This will cancel and remove the active deal from any further trading without selling any assets already bought from previous orders
 			<br><br>
-			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #d80f08;">CANCEL</span> deal</b>
+			<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">CANCEL</span> deal</b>
 			</form>
 			</div>`,
 	  		buttons: {
 		  		formSubmit: {
 			  		btnClass: 'btn-default',
-			  		text: '<div style="color: #d80f08;">Cancel Deal</div>',
+			  		text: '<div style="color: var(--color-danger);">Cancel Deal</div>',
 			  		action: function() {
 
 				  		const inputValue = parseFloat($('#confirmNum').val());
@@ -738,7 +752,7 @@
 		  		},
 		  		cancel: {
 			  		btnClass: 'btn-default',
-			  		text: '<div style="color: #000000;">Cancel</div>',
+			  		text: '<div style="color: var(--color-neutral);">Cancel</div>',
 			  		action: function() {},
 				},
 			},
@@ -803,13 +817,13 @@
       	<form action="" style="display: inline;">
         <input type="text" id="confirmNum" class="form-field" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;" required />
 		<br><br>
-        <input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: #1a9f00;">ADD FUNDS</span> to deal</b>
+        <input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-success);">ADD FUNDS</span> to deal</b>
 		</form>
     	</div>`,
   			buttons: {
   				formSubmit: {
   					btnClass: 'btn-default',
-  					text: '<div style="color: #1a9f00;">Add Funds</div>',
+  					text: '<div style="color: var(--color-success);">Add Funds</div>',
   					action: function() {
 
   						const inputValue = parseFloat($('#confirmNum').val());
@@ -831,7 +845,7 @@
   				},
   				cancel: {
   					btnClass: 'btn-default',
-  					text: '<div style="color: #000000;">Cancel</div>',
+  					text: '<div style="color: var(--color-neutral);">Cancel</div>',
   					action: function() {},
   				},
   			},
@@ -1029,6 +1043,16 @@
 				profitPercClass = 'profit-negative';
 			}
 
+			// Live health glyph for this deal (no user input; from state only).
+			// Uses the shared SymBot.UI helper so instance and Hub render identically.
+			const healthCell = SymBot.UI.dealHealthCell({
+				profitPerc: profitPerc,
+				soUsed: deal['info']['safety_orders_used'],
+				soMax: config['dcaMaxOrder'],
+				hasError: !!dealError,
+				isPaused: !!(pause || pauseBuy || pauseSell)
+			});
+
 			if (deal['info']['deal_max'] == 0) {
 
 				deal['info']['deal_max'] = '&#8734;';
@@ -1113,7 +1137,21 @@
 				.replace(/"/g, '&quot;')
 				.replace(/'/g, '&#39;');
 
-			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '"  data-estimates="' + estimates + '">');
+			// Raw values the Add Funds Estimator needs per deal (invested sum + base
+			// qty from filled orders, current price, fee %, target %). Kept as data
+			// attributes so the client bar reads them directly.
+			const afSum = deal['orders'].filter(o => o.filled).reduce((a, o) => a + Number(o.amount), 0);
+			const afQty = deal['orders'].filter(o => o.filled).reduce((a, o) => a + Number(o.qty || o.qtyFilled || 0), 0);
+			const afPrice = Number(deal['info']['price_last']);
+			const afFee = Number(config['exchangeFee']);
+			const afTarget = Number(config['dcaTakeProfitPercent']);
+			// Real cost basis + live profit % so the estimator's projected profit
+			// reconciles exactly with the Profit % column (calculateProfit basis).
+			const afAvg = Number(deal['info']['price_average']);
+			const afProfit = Number(deal['info']['profit_percentage']);
+
+			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '"  data-estimates="' + estimates + '" data-af-sum="' + afSum + '" data-af-qty="' + afQty + '" data-af-price="' + afPrice + '" data-af-fee="' + afFee + '" data-af-target="' + afTarget + '" data-af-avg="' + afAvg + '" data-af-profit="' + afProfit + '" data-af-sym="' + dealSym + '">');
+			contentArr.push(healthCell);
 			contentArr.push('<td>' + deal['info']['bot_name'] + '</td>');
 			contentArr.push('<td id="dealid-cell">' + dealId + '</td>');
 			contentArr.push('<td>' + deal['pair'] + '</td>');
@@ -1160,6 +1198,22 @@
 
 		$('#botsDeals tbody').append(contentArr.join(''));
 
+		// Show the table only when there are rows to display; otherwise show a
+		// clear "no active deals" message. This avoids the empty table rendering
+		// with collapsed headers during load or when there are no deals.
+		$('#dealsLoadingMsg').hide();
+
+		if (contentArr.length > 0) {
+
+			$('#dealsEmptyMsg').hide();
+			$('#botsDeals').show();
+		}
+		else {
+
+			$('#botsDeals').hide();
+			$('#dealsEmptyMsg').show();
+		}
+
 		$('#totalProfit').removeClass('profit-positive profit-negative').addClass(profitTotalClass);
 		const summarySym = deals.length > 0 ? getDealSym(deals[0]['info']['pair'], deals[0]['config']['profitCurrency']) : '$';
 		$('#totalProfit').html(summarySym + totalProfit.toFixed(2));
@@ -1169,6 +1223,8 @@
 		$('#projectedProfit').html(summarySym + (Math.round(totalProjectedProfit * 100) / 100).toFixed(2));
 
 		$('#botsDeals').tablesorter().trigger('update');
+
+		$(document).trigger('dealsTableUpdated');
 
 		resizeBotsDeals();
 
@@ -1185,18 +1241,23 @@ function getDealSym(pair, profitCurrency) {
 }
 
 
+
+
 $(document).ready(function() {
  
 		let tooltipDisplayTime = {};
 
 		function getTooltipText(id) {
 
-			for (var key in actionButtons) {
+			// Match the id EXACTLY against an action key. Previously this used
+			// id.startsWith(key), so any id beginning with a key collided — e.g. the
+			// Add Funds Estimator elements (addFundsEstToggle, addFundsEstBar,
+			// addFundsAmount) all start with "add" and wrongly showed the row action's
+			// "Add funds to deal" tooltip. Those elements carry their own native title
+			// attributes, so exact matching leaves them intact.
+			if (Object.prototype.hasOwnProperty.call(actionButtons, id)) {
 
-				if (id.startsWith(key)) {
-
-					return actionButtons[key]['tooltip'];
-				}
+				return actionButtons[id]['tooltip'];
 			}
 
 			return null;
@@ -1405,7 +1466,13 @@ $(document).ready(function() {
 			durationLabels : '(?:years|year|y),(?:days|day|d),(?:hours|hour|h),(?:minutes|minute|min|m),(?:seconds|second|sec|s)',
 			textExtraction: {
 
-				9: function(node) {
+				0: function(node) {
+
+					// Sort the Health column by its numeric rank (higher = needs
+					// more attention), not by the emoji glyph.
+					return node.getAttribute('data-health-rank') || '0';
+				},
+				10: function(node) {
 
 					if (node.innerHTML.indexOf('%') != -1) {
 
@@ -1415,7 +1482,7 @@ $(document).ready(function() {
 
 					return node.innerHTML;
 				},
-				11: function(node) {
+				12: function(node) {
 
 					if (node.innerHTML.indexOf('%') != -1) {
 
@@ -1429,11 +1496,8 @@ $(document).ready(function() {
 			headers: {
 
 				// Set "sorter : false" (no quotes) to disable the column
-				3: {
-					sorter: "duration"
-				},
 				4: {
-					sorter: "currency"
+					sorter: "duration"
 				},
 				5: {
 					sorter: "currency"
@@ -1444,11 +1508,19 @@ $(document).ready(function() {
 				7: {
 					sorter: "currency"
 				},
-				10: {
+				8: {
+					sorter: "currency"
+				},
+				11: {
 					sorter: "currency"
 				}
 			}
 		});
+
+		// Rounded header corners must follow the first/last VISIBLE column, not the
+		// first/last DOM cell (the column selector hides columns via a stylesheet
+		// nth-child rule). Shared helper handles it on load + on columnUpdate.
+		SymBot.UI.initHeaderCorners('#botsDeals');
 
 
 		$('#csvDownload').click(function() {
@@ -1463,17 +1535,259 @@ $(document).ready(function() {
 		});
 
 
+		// ── Add Funds Estimator ────────────────────────────────────────────────
+		// Per-deal hypothetical fill-price overrides, keyed by dealId.
+		const addFundsPriceOverride = {};
+
+		function addFundsActive() {
+
+			return $('#addFundsEstBar').is(':visible') && parseFloat($('#addFundsAmount').val()) > 0;
+		}
+
+		// Count the decimal places a deal's own displayed price uses, so projected
+		// values match the asset's real precision (e.g. 0.0623, not 0.06230424...).
+		function priceDecimals(valStr) {
+
+			const s = String(valStr);
+			const dot = s.indexOf('.');
+			return dot === -1 ? 0 : (s.length - dot - 1);
+		}
+
+		function fmtAtPrecision(value, refPriceStr, sym) {
+
+			const decimals = Math.min(Math.max(priceDecimals(refPriceStr), 2), 12);
+			const rounded = Number(value).toFixed(decimals);
+			// Trim trailing zeros but keep at least 2 decimals for currency feel.
+			return sym + convertNotation(rounded);
+		}
+
+		// Cell indexes in #botsDeals: Price = 5, Price Target = 6 (col 0 is Health).
+		const AF_PRICE_COL = 5;
+		const AF_TARGET_COL = 6;
+		// Profit % column (Health 0, Bot 1, Deal 2, Pair 3, Duration 4, Price 5,
+		// Target 6, Volume 7, Profit 8, Profit-base 9, Profit % 10).
+		const AF_PROFIT_COL = 10;
+
+		function clearAddFundsProjections() {
+
+			$('#botsDeals tbody tr').each(function() {
+
+				$(this).find('.af-proj').remove();
+				$(this).find('.af-price-override-wrap').remove();
+			});
+		}
+
+		// Wipe all per-deal fill-price overrides (on close, so a fresh open starts
+		// at market price for every deal).
+		function clearAddFundsOverrides() {
+
+			for (const k in addFundsPriceOverride) { delete addFundsPriceOverride[k]; }
+		}
+
+		function renderAddFundsProjections() {
+
+			const amount = parseFloat($('#addFundsAmount').val());
+
+			$('#botsDeals tbody tr').each(function() {
+
+				const $row = $(this);
+				const dealId = $row.attr('data-dealid');
+
+				if (!dealId) { return; }
+
+				$row.find('.af-proj').remove();
+
+				const sym = $row.attr('data-af-sym') || '$';
+				const marketPrice = parseFloat($row.attr('data-af-price'));
+				const override = addFundsPriceOverride[dealId];
+				const fillPrice = (override != null && isFinite(override) && override > 0) ? override : marketPrice;
+
+				if (!(amount > 0)) { return; }
+
+				const est = computeAddFundsForward({
+					sum: parseFloat($row.attr('data-af-sum')),
+					qtySum: parseFloat($row.attr('data-af-qty')),
+					addAmount: amount,
+					addPrice: fillPrice,
+					price: marketPrice,
+					exchangeFee: parseFloat($row.attr('data-af-fee')),
+					targetProfitPercent: parseFloat($row.attr('data-af-target')),
+					// Projected-profit inputs: real basis + live column values so the
+					// projection reconciles with the Profit % column exactly. Profit is
+					// always evaluated at the current MARKET price, never the fill price.
+					marketPrice: marketPrice,
+					currentAverageReal: parseFloat($row.attr('data-af-avg')),
+					currentProfitPercent: parseFloat($row.attr('data-af-profit'))
+				});
+
+				if (!est.valid) { return; }
+
+				const $priceCell = $row.find('td').eq(AF_PRICE_COL);
+				const $targetCell = $row.find('td').eq(AF_TARGET_COL);
+
+				// Reference precision from the deal's own displayed price (strip the
+				// currency symbol) so projections match the asset's tick size.
+				const refPriceStr = ($priceCell.clone().children().remove().end().text() || '').replace(/[^0-9.]/g, '');
+
+				const isOverridden = (override != null && isFinite(override) && override > 0);
+				const projClass = isOverridden ? 'af-proj af-proj-override' : 'af-proj';
+
+				// New average shown under the Price cell; new target under Target cell.
+				const overrideTag = isOverridden
+					? ' <span class="af-override-tag">@ ' + convertNotation(override) + '</span>'
+					: '';
+
+				$priceCell.append(
+					'<div class="' + projClass + '">&rarr; avg ' + fmtAtPrecision(est.average_price_net, refPriceStr, sym) +
+					overrideTag + '</div>'
+				);
+
+				const tChange = est.target_price_change_percent;
+				const tChangeStr = (tChange > 0 ? ' (-' + tChange.toFixed(2) + '%)' : '');
+
+				$targetCell.append(
+					'<div class="' + projClass + '">&rarr; ' + fmtAtPrecision(est.target_price_net, refPriceStr, sym) +
+					'<span class="af-proj-delta">' + tChangeStr + '</span></div>'
+				);
+
+				// Projected profit % at current market after the add. Reconciles with
+				// the Profit % column by construction (basis-anchored + self-calibrated
+				// deduction in computeAddFundsForward). Only shown when valid.
+				if (est.projected_profit_valid) {
+
+					const $profitCell = $row.find('td').eq(AF_PROFIT_COL);
+					const pChange = est.projected_profit_change_percent;
+
+					// Positive change = profit improved (less negative / more positive).
+					const pChangeStr = (isFinite(pChange) && Math.abs(pChange) >= 0.005)
+						? ' (' + (pChange > 0 ? '+' : '') + pChange.toFixed(2) + '%)'
+						: '';
+
+					$profitCell.append(
+						'<div class="' + projClass + '">&rarr; ' + est.projected_profit_percent.toFixed(2) + '%' +
+						'<span class="af-proj-delta">' + pChangeStr + '</span></div>'
+					);
+				}
+			});
+		}
+
+		function refreshAddFunds() {
+
+			if (addFundsActive()) {
+
+				renderAddFundsProjections();
+			}
+			else {
+
+				clearAddFundsProjections();
+			}
+		}
+
+		// Toggle the bar from the toolbar.
+		$('#addFundsEstToggle').click(function() {
+
+			const $bar = $('#addFundsEstBar');
+
+			if ($bar.is(':visible')) {
+
+				$bar.hide();
+				clearAddFundsOverrides();
+				clearAddFundsProjections();
+			}
+			else {
+
+				$bar.show();
+				$('#addFundsAmount').focus();
+				refreshAddFunds();
+			}
+		});
+
+		// Close (×) hides and reverts.
+		$('#addFundsClose').click(function() {
+
+			$('#addFundsEstBar').hide();
+			$('#addFundsAmount').val('');
+			clearAddFundsOverrides();
+			clearAddFundsProjections();
+		});
+
+		// Realtime as the user types the amount.
+		$('#addFundsAmount').on('input', function() {
+
+			refreshAddFunds();
+		});
+
+		// Per-deal price override: click a deal's Price cell (while the bar is
+		// active) to reveal a small fill-price field for that row only.
+		$(document).on('click', '#botsDeals tbody tr td', function(e) {
+
+			if (!addFundsActive()) { return; }
+			if ($(this).index() !== AF_PRICE_COL) { return; }
+			if ($(e.target).closest('.af-price-override-wrap').length) { return; }
+
+			const $row = $(this).closest('tr');
+			const dealId = $row.attr('data-dealid');
+
+			if ($(this).find('.af-price-override-wrap').length) { return; }
+
+			e.stopPropagation();
+
+			const current = addFundsPriceOverride[dealId] != null ? addFundsPriceOverride[dealId] : '';
+
+			const $wrap = $('<span class="af-price-override-wrap"></span>');
+			const $inp = $('<input type="number" step="any" min="0" class="form-field af-price-override" placeholder="fill price">').val(current);
+			const $clr = $('<span class="af-override-clear" title="Use market price">&times;</span>');
+
+			$wrap.append($inp).append($clr);
+			$(this).append($wrap);
+			$inp.focus();
+
+			$inp.on('click', function(ev) { ev.stopPropagation(); });
+
+			$inp.on('input', function() {
+
+				const v = parseFloat($(this).val());
+
+				if (isFinite(v) && v > 0) { addFundsPriceOverride[dealId] = v; }
+				else { delete addFundsPriceOverride[dealId]; }
+
+				renderAddFundsProjections();
+			});
+
+			$clr.on('click', function(ev) {
+
+				ev.stopPropagation();
+				delete addFundsPriceOverride[dealId];
+				renderAddFundsProjections();
+			});
+		});
+
+		// Re-apply projections after each table refresh (rows get rebuilt).
+		$(document).on('dealsTableUpdated', function() {
+
+			refreshAddFunds();
+		});
+
+
 		// Row click — data cols open order history or trading view
 		$(document).on('click', '#botsDeals tbody tr td', function() {
 
 			let col = $(this).index();
+
+			// When the Add Funds Estimator is active, the Price cell is used to set
+			// a per-deal fill-price override — don't open the order-history modal.
+			if (typeof addFundsActive === 'function' && addFundsActive() && col === AF_PRICE_COL) {
+
+				return;
+			}
+
 			let row = $(this).closest('tr');
 			let content = $(this).text();
 			let colCount = $(row).find('td').length;
 
-			if (col == 2) {
+			if (col == 3) {
 
-				// TradingView Chart
+				// TradingView Chart (Pair column; col 0 is Health)
 				let pair = content;
 				let dealId = row.data('dealid');
 				let exchange = dealTracker[dealId]['config']['exchange'].toUpperCase();
@@ -1573,7 +1887,7 @@ $(document).ready(function() {
 		</div>
 	</div>
 
-	<div id="contentBox">
+	<div id="contentBox" class="wide">
 
 		<div style="position: relative;">
 
@@ -1582,10 +1896,13 @@ $(document).ready(function() {
 				<b class="contentHeader">Active DCA Bot Deals</b>
 
 				<span class="viewSettings">
-					<span id="csvDownload" class="viewIconBtn"><span class="icon icon-download" style="width:13px;height:13px;"></span></span>
+					<span id="addFundsEstToggle" class="viewIconBtn" title="Add Funds Estimator"><span class="icon icon-add" style="width:13px;height:13px;"></span></span>
+					<span id="csvDownload" class="viewIconBtn" title="Download active deals (CSV)"><span class="icon icon-download" style="width:13px;height:13px;"></span></span>
 					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
 				</span>
+			</div>
 
+			<div class="view-summary">
 				<div class="summary-bar">
 					<p>Active P/L: <span id="totalProfit"></span></p>
 					<p>Projected Profit: <span id="projectedProfit"></span></p>
@@ -1611,11 +1928,23 @@ $(document).ready(function() {
 
 			<div class="botsDealsBox">
 
-				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0>
+				<div id="addFundsEstBar" class="addfunds-bar" style="display: none;">
+					<span class="addfunds-bar-label">Add Funds Estimator</span>
+					<span class="addfunds-bar-field">
+						Amount: <input id="addFundsAmount" class="form-field" type="number" min="0" step="any" placeholder="0.00" style="width: 120px;">
+					</span>
+					<span class="addfunds-bar-note">What-if only &mdash; nothing is added. Estimates update in realtime; click a deal's <b>price</b> to test a different fill price for that deal.</span>
+					<span id="addFundsClose" class="addfunds-bar-close" title="Close">&times;</span>
+				</div>
+
+				<div id="dealsLoadingMsg" class="deals-state-msg">Loading active deals&hellip;</div>
+				<div id="dealsEmptyMsg" class="deals-state-msg" style="display: none;">No active deals.</div>
+
+				<table id="botsDeals" border=0 cellspacing=0 cellpadding=0 style="display: none;">
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>Profit &asymp;</th> <th>TP</th> <th>Safety Orders</th> <th>Max Funds</th> </th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Health</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>Profit &asymp;</th> <th>TP</th> <th>Safety Orders</th> <th>Max Funds</th> </th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 
