@@ -7,11 +7,11 @@
 	let confirmStart = false;
 
 	const isUpdate     = <%- botUpdate ? 'true' : 'false' %>;
-	const instanceId   = '<%- instanceId %>';
-	const botId        = '<%- botData.botId || "" %>';
-	const instanceName = '<%- instanceName %>';
-	const pairButtons  = <%- JSON.stringify(scData && scData.pair_buttons ? scData.pair_buttons : []) %>;
-	const startConditionsMeta = <%- JSON.stringify(scData && scData.start_conditions_metadata ? scData.start_conditions_metadata : {}) %>;
+	const instanceId   = <%- JSON.stringify(String(instanceId || '')).replace(/</g, '\\u003c') %>;
+	const botId        = <%- JSON.stringify(String(botData.botId || '')).replace(/</g, '\\u003c') %>;
+	const instanceName = <%- JSON.stringify(String(instanceName || '')).replace(/</g, '\\u003c') %>;
+	const pairButtons  = <%- JSON.stringify(scData && scData.pair_buttons ? scData.pair_buttons : []).replace(/</g, '\\u003c') %>;
+	const startConditionsMeta = <%- JSON.stringify(scData && scData.start_conditions_metadata ? scData.start_conditions_metadata : {}).replace(/</g, '\\u003c') %>;
 	const botText      = isUpdate ? 'Update Bot' : 'Create Bot';
 
 
@@ -43,6 +43,15 @@
 			dcaOrderSizeMultiplier:        $('#dcaOrderSizeMultiplier').val(),
 			dcaOrderStepPercentMultiplier: $('#dcaOrderStepPercentMultiplier').val(),
 			dcaTakeProfitPercent:          $('#dcaTakeProfitPercent').val(),
+			dcaStopLossEnabled:            $('#dcaStopLossEnabled').val(),
+			dcaStopLossPercent:            $('#dcaStopLossPercent').val(),
+			dcaStopLossReference:          $('#dcaStopLossReference').val(),
+			dcaStopLossMoveBreakeven:      $('#dcaStopLossMoveBreakeven').val(),
+			dcaStopLossBreakevenTrigger:   $('#dcaStopLossBreakevenTrigger').val(),
+			dcaTrailingStopEnabled:        $('#dcaTrailingStopEnabled').val(),
+			dcaTrailingStopDistance:       $('#dcaTrailingStopDistance').val(),
+			dcaTrailingActivateProfit:     $('#dcaTrailingActivateProfit').val(),
+			dcaTrailingReplacesTakeProfit: $('#dcaTrailingReplacesTakeProfit').val(),
 			dealMax:                       $('#dealMax').val(),
 			pairMax:                       $('#pairMax').val(),
 			pairDealsMax:                  $('#pairDealsMax').val(),
@@ -175,7 +184,7 @@
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">' + botText + '?</div>',
+					content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' + botText + '?</div>',
 					buttons: {
 						ok: {
 							btnClass: 'btn-default',
@@ -210,9 +219,11 @@
 			<span class="view-header-links">
 				<a href="/bots" class="view-back-link">&#8592; All Bots</a>
 				<span style="opacity: 0.3; padding: 0 4px;">|</span>
-				<a href="/bots?instance=<%- instanceId %>" class="view-back-link">&#8592; <%- instanceName %> Bots</a>
+				<a href="/bots?instance=<%= encodeURIComponent(instanceId || '') %>" class="view-back-link">&#8592; <%= instanceName %> Bots</a>
 			</span>
 		</div>
+
+		<%- include('../strategies/DCABot/partialsSignalBotAlerts') %>
 
 		<div class="botsDealsBox">
 

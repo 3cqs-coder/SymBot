@@ -93,6 +93,14 @@ async function helpCommand(ctx) {
 
 	}
 
+	// Guard against a missing/unreadable help.txt — otherwise data stays undefined and .replace() throws,
+	// and because this handler is invoked un-awaited that would surface as an unhandled rejection.
+	if (data == null) {
+
+		sendMessage(id, 'Help is currently unavailable.');
+		return;
+	}
+
 	data = data.replace(/\{APP_NAME\}/g, shareData.appData.name);
 
 	sendMessage(id, data);
@@ -110,7 +118,15 @@ async function sendMessage(id, msg) {
 
 		if (bot && shareData.appData.telegram_enabled) {
 
-			bot.telegram.sendMessage(id, msg).catch(err => logError(err, id));
+			// Telegram rejects messages over 4096 characters, and it fetches any URL in the text to build a
+			// "web page preview" — for an API URL that returns JSON (e.g. a failed exchange /currencies
+			// call) that preview arrives as a bogus file attachment on the alert. Cap the length and turn
+			// link previews OFF so notifications stay plain, self-contained text.
+			let text = String(msg == null ? '' : msg);
+
+			if (text.length > 4000) { text = text.slice(0, 4000) + '\n… (truncated)'; }
+
+			bot.telegram.sendMessage(id, text, { 'disable_web_page_preview': true }).catch(err => logError(err, id));
 		}
 	}
 }

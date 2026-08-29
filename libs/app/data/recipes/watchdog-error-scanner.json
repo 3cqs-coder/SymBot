@@ -1,0 +1,31 @@
+{
+  "id": "core/watchdog-error-scanner",
+  "version": "1.1",
+  "min_symbot_version": "7.0",
+  "name": "Error sentinel",
+  "description": "Scans the logs on a schedule and alerts you ONLY when an error type is new or spiking versus the previous days — quiet when everything is normal. Read-only: it looks at logs, it never places or changes a trade.",
+  "author": "core",
+  "categories": [
+    "monitoring",
+    "alerting"
+  ],
+  "icon": "shield-alert",
+  "requires_ai": false,
+  "type": "error_watchdog",
+  "kind": "cron",
+  "cron": "0 * * * *",
+  "enabled": false,
+  "settings": {
+    "target_days": 1,
+    "baseline_days": 3,
+    "notifications": [
+      {
+        "type": "browser",
+        "target": {},
+        "on": [
+          "always"
+        ]
+      }
+    ]
+  }
+}

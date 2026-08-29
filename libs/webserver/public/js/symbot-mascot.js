@@ -56,7 +56,7 @@
 		/**
 		 * Unified chat controller — the SINGLE place that wires the mascot into an
 		 * AI chat surface (modal OR popout). Both views call this instead of each
-		 * duplicating mount/hero/state logic, so behaviour stays identical.
+		 * duplicating mount/hero/state logic, so behavior stays identical.
 		 *
 		 * The mascot is rendered as hardcoded markup (SVG_INNER_STATIC) with
 		 * data-anim="on" baked in, so it animates via CSS the instant it is in the
@@ -108,11 +108,6 @@
 				const heroSvg = document.querySelector('#chatMascotHeroArt .sbm-mascot');
 				if (heroSvg) heroSvg.setAttribute('data-state', state);
 			}
-			function flash(state, ms) {
-				setState(state);
-				setTimeout(function () { setState('idle'); }, ms || 2200);
-			}
-
 			// Decide which mascot is visible. Analysis = header only (always streaming).
 			// Chat = big hero when empty, small header once a conversation is underway.
 			function layout() {

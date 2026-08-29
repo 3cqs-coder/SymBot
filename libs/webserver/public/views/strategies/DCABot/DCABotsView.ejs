@@ -81,7 +81,7 @@
 						title: false,
 						boxWidth: '50%',
 						useBootstrap: false,
-						content: '<div style="font-size: 1.2rem; text-align: left;">' + botText + ' ' + botName + '?</div>',
+						content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' + botText + ' ' + botName + '?</div>',
 						buttons: {
 
 									ok: {
@@ -125,10 +125,10 @@
 			title: false,
 			boxWidth: '50%',
 			useBootstrap: false,
-			content: '<div style="font-size: 1.2rem; text-align: left;">' +
+			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' +
 				'<b style="color: var(--color-danger);">Delete ' + botName + '?</b><br><br>' +
-				'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
-				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or cancelled first.' +
+				'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
+				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or canceled first.' +
 				'</div><br>' +
 				'Type the bot name to confirm:<br>' +
 				'<form action="" style="display: inline;"><input type="text" id="deleteBotConfirmName" class="form-field" style="width: 100%; margin-top: 6px; box-sizing: border-box;" required /></form>' +
@@ -250,7 +250,10 @@
 			let colCount = $(row).find('td').length;
 
 			let botId = $(row).data('botid');
-			let botName = $(row).data('botname');
+			// Escape at read: botName is DB/user-controlled and is only ever concatenated into HTML dialog
+			// content (delete confirm + deletion alert), so escaping with the shared escaper here closes the
+			// stored-XSS round-trip that jQuery.data() (browser-decoded) otherwise reopens.
+			let botName = (window.SymBot && SymBot.UI && SymBot.UI.esc) ? SymBot.UI.esc($(row).data('botname')) : $(row).data('botname');
 
 			if (col == (colCount - 1)) {
 
@@ -313,7 +316,7 @@
 		SymBot.UI.initHeaderCorners('#botsDeals');
 
 		// Reveal the table only after tablesorter, the column selector, and header
-		// styling have initialised — otherwise the raw server-rendered table flashes
+		// styling have initialized — otherwise the raw server-rendered table flashes
 		// unsorted/unstyled during load. Matches the Active Deals loading pattern.
 		$('#botsLoadingMsg').hide();
 		$('#botsDeals').show();
@@ -456,12 +459,12 @@
 			}
 	%>
 
-					<tr data-botid="<%- bot['botId'] %>" data-botname="<%- bot['botName'] %>" style="vertical-align: top;">
+					<tr data-botid="<%- bot['botId'] %>" data-botname="<%= bot['botName'] %>" style="vertical-align: top;">
 						<td class="date-cell" data-date="<%= bot['createdAt'] %>"></td>
 						<td class="date-cell" data-date="<%= bot['updatedAt'] %>"></td>						
-						<td><%- bot['botName'] %></td>
-						<td><%- exchange %></td>
-						<td style="max-width: 150px;"><%- pair.toUpperCase() %></td>
+						<td><%= bot['botName'] %></td>
+						<td><%= exchange %></td>
+						<td style="max-width: 150px;"><%= pair.toUpperCase() %></td>
 						<td><%- bot['config']['firstOrderAmount'] %></td>
 						<td><%- bot['config']['dcaOrderAmount'] %></td>
 						<td><%- bot['config']['dcaMaxOrder'] %></td>

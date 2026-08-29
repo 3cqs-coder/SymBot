@@ -58,7 +58,7 @@
 	--link-color: #008aeb;
 	--table-content-color: #3e3e3e;
 	--table-background-color: #e2e2e2;
-	--table-background-hover-color: #c5c5c5;
+	--table-background-hover-color: #d6d6d6;
 	--table-border: 1px solid #cdcdcd;
 	--table-border-color: #cdcdcd;
 	--table-header-background-color: #e2e2e2;
@@ -69,6 +69,41 @@
 	--dialog-background-color: #ffffff;
 	--modify-buttons-color: 0 0 0 rgb(0, 0, 0);
 	--body-bg: linear-gradient(to bottom, #565656 0%, black 100%);
+
+	/* ── Design tokens (added for a consistent look across views) ─────────────────
+	   Typography scale: 1rem = 12px (see html{}). Names describe ROLE not size, so the
+	   whole scale can be tuned in one place. */
+	--fs-page-title: 1.65rem;   /* = the existing .contentHeader */
+	--fs-section:    1.3rem;     /* section / card headings */
+	--fs-dialog-title: 1.2rem;  /* jQuery-confirm dialog titles (the app-wide modal heading size) */
+	--fs-subhead:    1.15rem;
+	--fs-content:    1.15rem;    /* primary readable data rows/lists — the size the trading tables
+	                               (deals, journal, bots) already render at; card/list views
+	                               (schedules, access) reference this so every data view matches */
+	--fs-body:       1rem;
+	--fs-label:      0.92rem;    /* uppercase field labels */
+	--fs-small:      0.9rem;
+	--fs-micro:      0.8rem;
+	--fs-stat:       1.67rem;    /* large KPI/stat numbers (dashboard tiles) */
+	--fw-normal: 400;
+	--fw-medium: 600;
+	--fw-bold:   700;
+	/* One canonical monospace stack — reference via var(--font-mono) instead of re-declaring it,
+	   so code/log/secret fields stay consistent everywhere. */
+	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	/* Surfaces & spacing */
+	--radius-card:  8px;
+	--radius-input: 6px;
+	--card-pad:     18px 20px;
+	--card-gap:     18px;
+	--label-color:  #7a7a7a;
+	/* Canonical semantic colors (these were previously only referenced as fallbacks;
+	   defining them here makes them the single source of truth). Values match the most
+	   common existing fallback so nothing shifts. */
+	--color-success: #2e9e4f;
+	--color-danger:  #d05050;
+	--color-warning: #d08700;
+	--input-background-color: #ffffff;
 }
 
 
@@ -88,6 +123,14 @@
 	--dialog-background-color: #222222;
 	--modify-buttons-color: 0 0 0 rgb(216, 216, 216, 1);
 	--body-bg: linear-gradient(to bottom, #4a4a4a 0%, #0d0d0d 100%);
+
+	/* Design tokens — dark theme overrides (only the values that change; the sizes/radii
+	   are inherited from :root). */
+	--label-color:  #8f8f8f;
+	--color-success: #35c07f;
+	--color-danger:  #ef5b52;
+	--color-warning: #e0a53a;
+	--input-background-color: #1a1a1a;
 }
 
 
@@ -99,6 +142,9 @@
 html {
 
 	font-family: "Heebo", sans-serif;
+	/* The single root anchor for the whole type scale. Every other font-size in the app is
+	   expressed in rem/em (or a --fs-* token, which are themselves rem), so changing this one
+	   value rescales the entire UI uniformly. Keep this the ONLY px font-size in the app. */
 	font-size: 12px;
 }
 
@@ -306,7 +352,7 @@ a:visited {
     position: absolute;
     top: 5px;
     right: -35px;
-    font-size: 12px;
+    font-size: var(--fs-body);
     color: #000;
     background: #fff;
     width: 32px;
@@ -1226,7 +1272,9 @@ form textarea {
 	border-radius: 5px;
 	box-sizing: border-box;
 	outline: none;
-	font-size: 16px;
+	/* ≈16px at the 12px root — kept large enough to avoid mobile focus-zoom, but expressed
+	   in rem so it still tracks the root font-size like everything else. */
+	font-size: 1.33rem;
 	font-family: inherit;
 	line-height: 1.4;
 	-webkit-user-select: text;
@@ -1269,7 +1317,7 @@ form textarea {
 
 #ordersTable {
 
-	font-size: 1.0rem;
+	font-size: var(--fs-content);
 	width: 95%;
 	cursor: pointer;
 }
@@ -1495,37 +1543,67 @@ table#botsDeals td:last-child, table#hubDeals td:last-child, table#hubBots td:la
 
 
 
+/* Keep the Bot Name on one line — names like "SymSync 90" otherwise wrap at the space,
+   which looks worst when the Add Funds Estimator widens the table. */
+table#botsDeals td.cell-botname { white-space: nowrap; }
+
 table#botsDeals td, table#hubDeals td, table#hubBots td {
 
-	padding: 5px;
+	/* Softer than the old grid: normal weight (not bold everywhere), a touch more vertical room,
+	   and a faint row separator instead of a hard 1px line. Horizontal padding stays at the
+	   original 5px so the table width is unchanged and columns like Bot Name don't start wrapping. */
+	padding: 6px 5px;
 	color: var(--table-content-color);
-	font-weight: bold;
-	border-bottom: var(--table-border);
+	font-weight: normal;
+	border-bottom: 1px solid rgba(128, 128, 128, 0.16);
 }
 
 
+/* Clean white/base rows with a very subtle zebra for scannability (replaces the solid gray block).
+   Works in both themes via a translucent overlay. */
 table#botsDeals tr:nth-child(even), table#hubDeals tr:nth-child(even), table#hubBots tr:nth-child(even) {
 
-	background: var(--table-background-color);
+	background: rgba(128, 128, 128, 0.06);
 }
 
 
 table#botsDeals tr:nth-child(odd), table#hubDeals tr:nth-child(odd), table#hubBots tr:nth-child(odd) {
 
-	background: var(--table-background-color);
+	background: var(--content-box-background-color);
 }
 
 
-table#botsDeals tr:nth-child(1), table#hubDeals tr:nth-child(1), table#hubBots tr:nth-child(1) {
-
-}
-
-
-table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
+table#botsDeals tbody tr:hover, table#hubDeals tbody tr:hover, table#hubBots tbody tr:hover {
 
 	background-color: var(--table-background-hover-color);
 	cursor: pointer;
 }
+
+
+/* Shared read-only data-table style — the same look the Access Control cards and the Audit Log use,
+   promoted here so any read-only listing (e.g. Signal Activity) can reuse it instead of re-styling a
+   table. A wrapper scrolls the table on narrow screens; cells get comfortable padding at the content
+   font size, headers are quiet and never wrap, and a genuinely unbreakable token wraps rather than
+   forcing the table wider. */
+.data-tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
+
+.data-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: var(--fs-content); }
+
+.data-table th, .data-table td {
+	text-align: left;
+	padding: 7px 10px;
+	border-bottom: 1px solid var(--table-border-color, #333);
+	vertical-align: top;
+	overflow-wrap: anywhere;
+}
+
+.data-table th { opacity: 0.7; font-weight: var(--fw-medium); white-space: nowrap; }
+
+/* No zebra striping: rows are separated by the cell border, and the shell's row-hover highlight is
+   too close to a faint zebra tint to read clearly on top of it. This matches the Audit Log, which
+   also relies on the border + hover rather than striping. */
+
+.data-empty { opacity: 0.55; padding: 12px 2px; text-align: center; }
 
 
 #notificationsBox {
@@ -1627,6 +1705,301 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 	border-radius: 5px;
 }
 
+/* Optional subtitle under a page title (e.g. "Manage your …"). */
+.contentSub {
+	font-size: var(--fs-small);
+	color: var(--label-color);
+	margin: 4px 0 0 2px;
+}
+
+
+/* ── Shared card / section system ────────────────────────────────────────────────
+   One reusable set of classes so every view (config, schedules, access, bots, hub…)
+   presents sections the same way instead of each inventing inline styles. */
+.card {
+	background-color: var(--content-box-background-color);
+	color: var(--content-box-color);
+	border: 1px solid var(--table-border-color);
+	border-radius: var(--radius-card);
+	padding: var(--card-pad);
+	margin-bottom: var(--card-gap);
+	width: 99%;
+}
+
+/* Heading row inside a card. Emoji + Title-Case title (matches SymBot's other views).
+   Generous space below so the heading never touches the content under it. */
+.section-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--fs-section);
+	font-weight: var(--fw-medium);
+	margin: 0 0 12px 0;
+}
+
+.section-sub {
+	font-size: var(--fs-small);
+	color: var(--label-color);
+	margin: -6px 0 14px 0;
+}
+
+/* ── Live deal-edit modal ────────────────────────────────────────────────────
+   Grouped like the Create/Update bot form: each field group sits in its own .card
+   headed by a .section-title (icon + Title-Case), so the modal reads uniformly with
+   the config and bot-edit views instead of one long flat list. */
+.dealEditModal {
+	text-align: left;
+}
+/* The hidden "?" tooltip bubbles (.toolTipText, position:absolute, 400px wide, visibility:hidden)
+   still expand this dialog's scroll area, and jQuery-UI's .ui-dialog-content is overflow:auto — so
+   a phantom horizontal scrollbar appears even when nothing needs scrolling. Clip the X axis (as
+   #contentBox does everywhere else) while keeping vertical scrolling. Scoped to the deal modal so
+   other modals are unaffected. */
+/* Belt-and-suspenders against a phantom horizontal scrollbar from off-screen "?" bubbles. */
+.ui-dialog-content.dealEditModal {
+	overflow-x: hidden;
+}
+/* The deal modal is a narrow, vertically-scrolling dialog, so a "?" bubble rendered inside it is
+   clipped by the scroll box (right edge, or the bottom for the last rows) and cramped if sized to
+   fit. Instead the bubbles are hidden with display:none (so they take no space and can't create a
+   phantom scrollbar) and shown on hover as a FIXED-position bubble positioned by JS (see
+   DCABotDealsActiveView.ejs) — full width, readable, and flipped to stay on screen. */
+.dealEditModal .toolTip .toolTipText {
+	display: none;
+	/* pre-line: collapse the source indentation but PRESERVE authored line breaks; generous
+	   line-height so the wrapped hint reads as spaced lines, not one mashed block. */
+	white-space: pre-line;
+	line-height: 1.5;
+}
+/* The bubble floats free (fixed-positioned, may flip to stay on screen), so the arrow is driven by
+   JS instead of being pinned: --tip-arrow-top sets its vertical offset (aligned to the icon) and
+   data-arrow picks the edge — "right" (default) puts it on the bubble's left edge pointing at an
+   icon to its left; "left" flips it to the right edge; "none" hides it when the bubble is nudged
+   away from the icon. Keeps the arrow consistent with the rest of the UI. */
+.dealEditModal .toolTip .toolTipText::after {
+	top: var(--tip-arrow-top, 14px);
+	right: 100%;
+	left: auto;
+	border-color: transparent #525252 transparent transparent;
+}
+.dealEditModal .toolTip .toolTipText[data-arrow="left"]::after {
+	right: auto;
+	left: 100%;
+	border-color: transparent transparent transparent #525252;
+}
+.dealEditModal .toolTip .toolTipText[data-arrow="none"]::after {
+	display: none;
+}
+.dealEditModal .card {
+	width: auto;
+}
+.dealEditModal table.dealEditTable {
+	/* width:auto (not 100%) so the label and its input stay adjacent instead of being pushed to
+	   opposite edges when the dialog is wide — matches the compact bot Create/Update form. */
+	width: auto;
+	font-size: 1.2rem;
+	border-collapse: collapse;
+}
+.dealEditModal table.dealEditTable tr {
+	vertical-align: top;
+}
+.dealEditModal table.dealEditTable td {
+	padding: 5px 6px;
+	vertical-align: middle;
+}
+.dealEditModal table.dealEditTable td:first-child {
+	white-space: nowrap;
+	color: var(--label-color);
+	padding-right: 12px;
+}
+.dealEditActions {
+	margin-top: 4px;
+}
+
+/* One-or-more-line description under a section heading — readable (not tiny), muted. */
+.section-desc {
+	font-size: var(--fs-body);
+	line-height: 1.5;
+	color: var(--table-content-color);
+	opacity: 0.85;
+	margin: 0 0 14px 0;
+}
+
+/* A hairline under the section heading, so a card reads as titled content. */
+.section-divider {
+	border: 0;
+	border-top: 1px solid var(--table-border-color);
+	margin: 10px 0 16px 0;
+	opacity: 0.7;
+}
+
+/* Field label — Title Case (NOT uppercase; SymBot uses normal-case labels), muted and a touch
+   heavier than body so it reads as a label without shouting. */
+.fieldLabel {
+	display: block;
+	/* No explicit font-size: inherit the ambient label size so a .fieldLabel matches the plain
+	   <label>s beside it. In the config form (#contentBox is 1.2rem) both render at 1.2rem;
+	   forcing --fs-body here previously made "Pair Buttons" / "Webhook API Token" smaller than
+	   siblings like "Token ID:". */
+	font-weight: var(--fw-medium);
+	color: var(--label-color);
+	margin: 0 0 5px 2px;
+}
+
+/* Responsive two-column form grid (Host/Port, Username/Password pairs). Collapses to one
+   column on narrow screens. */
+.formGrid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 14px 18px;
+	align-items: start;
+}
+.formGrid.cols-3 { grid-template-columns: 2fr 1fr 1fr; }
+.formGrid .col-span-2 { grid-column: 1 / -1; }
+@media (max-width: 720px) {
+	.formGrid, .formGrid.cols-3 { grid-template-columns: 1fr; }
+}
+
+/* A single field block: label above its input, consistent spacing between rows. */
+.formRow { margin-bottom: 14px; }
+.formRow:last-child { margin-bottom: 0; }
+
+/* Breathing room + label/input alignment for the config settings tables (the shared SMTP block and
+   the collapsible 3CQS / Telegram / AI / backups / exchange / circuit-breaker sections, which were
+   packed tight with cellpadding=0 and whose label cells top-defaulted, leaving a label floating
+   above a multi-line input cell). Cells top-align, and the label cell gets a little extra top
+   padding so the label lines up with the input's text line rather than the cell top. */
+.mailerTable,
+#formConfig table {
+	margin-top: 12px;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+.mailerTable > tbody > tr > td,
+#formConfig table > tbody > tr > td {
+	padding: 5px 16px 5px 0;
+	vertical-align: top;
+}
+/* The label column: nudge down so it sits on the input's text baseline. */
+#formConfig table > tbody > tr > td:first-child,
+.mailerTable > tbody > tr > td:first-child {
+	padding-top: 9px;
+	white-space: nowrap;
+}
+/* The whole left column (field labels) stays NORMAL weight to match the Create/Update bot form,
+   which uses plain (non-bold) labels — the muted label color already sets them apart from the
+   values, so bold isn't needed and the lighter look reads cleaner across a long settings form.
+   The color is applied below; only the tooltip popup text is left untouched. */
+.mailerTable > tbody > tr > td:first-child,
+#formConfig table > tbody > tr > td:first-child {
+	font-weight: var(--fw-normal);
+}
+.mailerTable > tbody > tr > td:first-child .toolTipText,
+#formConfig table > tbody > tr > td:first-child .toolTipText {
+	font-weight: var(--fw-normal);
+}
+
+/* ── Notifications "Filter notifications" panel ───────────────────────────────
+   The event/channel matrix was full-width, which stranded the channel checkboxes far to the right
+   of each event label with a wide blank gap between — hard to tell which checkbox belonged to which
+   event. Constrain the grid, add a header band and grouped category rows, and separate each row so
+   the eye can follow one event across to its three channels. All colors come from the shared table
+   tokens, so it tracks the light/dark theme. */
+#notif_matrix {
+	width: auto;
+	max-width: 560px;
+	border: 1px solid var(--table-border-color);
+	border-collapse: collapse;
+}
+#notif_matrix thead th {
+	background: var(--table-header-background-color);
+	border-bottom: 1px solid var(--table-border-color);
+	font-weight: var(--fw-medium);
+	padding: 8px 12px;
+	text-align: center;
+}
+#notif_matrix thead th:first-child { text-align: left; }
+#notif_matrix thead th:not(:first-child) { width: 84px; }
+#notif_matrix tbody td { padding: 6px 12px; }
+#notif_matrix tr.notif-event-row { border-top: 1px solid var(--table-border-color); }
+#notif_matrix tr.notif-event-row:hover { background: var(--table-background-hover-color); }
+#notif_matrix td.notif-event { white-space: nowrap; }
+#notif_matrix td.notif-ch { text-align: center; width: 84px; }
+/* Category band (Trading, System, …) — a subtle filled row so groups read as groups. */
+#notif_matrix tr.notif-cat td {
+	background: var(--table-background-color);
+	border-top: 1px solid var(--table-border-color);
+	padding: 6px 12px;
+	font-weight: var(--fw-medium);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: var(--fs-body);
+	opacity: 0.9;
+}
+/* The severity of each event, shown muted next to its label. */
+#notif_matrix .notif-ev-sev { opacity: 0.55; font-size: var(--fs-body); }
+
+/* The control blocks under the matrix (minimum severity, quiet hours, email recipients) get their own
+   labeled sub-group so they stop blurring into one white block. */
+.notif-subgroup { margin-top: 16px; max-width: 560px; }
+.notif-subgroup-title {
+	font-weight: var(--fw-medium);
+	font-size: var(--fs-content);
+	margin-bottom: 6px;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--table-border-color);
+}
+/* Lay each control block's fields as an evenly-spaced, wrapping row instead of table cells that
+   stretch apart. flex-wrap keeps them tidy inside the 560px sub-group on any width; the consistent
+   gap replaces the ragged auto-spacing a table produced. */
+.notif-field-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.notif-field { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* Collapsible section headers (3CQS, Telegram, AI, Database Backups, SFTP) are a bare <b> that the
+   collapse script moves into a .config-section-toggle; the non-collapsible cards use .section-title
+   (1.3rem). Size the <b> to match so EVERY config section heading is the same — otherwise a
+   1.3rem card heading like "Scheduled AI Tasks" looks larger than the ~1rem collapsible ones. */
+#formConfig .config-section-toggle > b,
+#formConfig > div.card > b {
+	font-size: var(--fs-section);
+	font-weight: var(--fw-medium);
+}
+
+/* Config settings tables are FORMS, not data grids, so they must NOT get the shell's data-table
+   row-hover highlight (a global `body.has-shell table:not(#…):not(#…)… tbody tr:hover` rule whose
+   four :not(#id) selectors give it high specificity — !important is needed to override it here).
+   EXCEPT the notification-filter matrix (#notif_matrix): it IS a data grid with its own intended row
+   hover and opaque category-header rows, so it must keep its background — otherwise this override
+   stripped a hovered category header to transparent and revealed the white card behind it. */
+body.has-shell #formConfig table:not(#notif_matrix) tbody tr:hover,
+body.has-shell #formConfig table:not(#notif_matrix) tbody tr:hover td,
+body.has-shell .mailerTable tbody tr:hover,
+body.has-shell .mailerTable tbody tr:hover td {
+	background-color: transparent !important;
+}
+
+
+/* ── Login screen — one clean centered card (matches the shared card system) ──────── */
+.loginWrap { display: flex; justify-content: center; padding: 9vh 16px 16px; }
+.loginCard { width: 100%; max-width: 380px; }
+.loginBrand { font-size: var(--fs-page-title); font-weight: var(--fw-bold); margin: 0 0 2px 0; }
+.loginForm { margin-top: 18px; }
+.loginForm .form-field { width: 100%; }
+.loginHint { font-size: var(--fs-small); color: var(--label-color); margin: 5px 0 0 2px; }
+.loginBtn {
+	width: 100%;
+	margin-top: 6px;
+	padding: 10px 12px;
+	font-size: var(--fs-subhead);
+	font-weight: var(--fw-medium);
+	color: #ffffff;
+	background-color: var(--link-color);
+	border: 0;
+	border-radius: var(--radius-input);
+	cursor: pointer;
+}
+.loginBtn:hover { filter: brightness(1.06); }
+
 
 .botsDealsBox {
 
@@ -1708,14 +2081,14 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 		padding: 4px 0;
 	}
 
-	/* Balance age spans full width centred below the grid */
+	/* Balance age spans full width centered below the grid */
 	#portfolioBalanceAge {
 		grid-column: 1 / -1;
 	}
 }
 
 
-/* Portfolio risk bar colour coding — matches profit-positive/negative colours */
+/* Portfolio risk bar color coding — matches profit-positive/negative colors */
 .portfolio-risk-low  { color: #1a9f00; }
 .portfolio-risk-mid  { color: #a85f00; }
 .portfolio-risk-high { color: #d82715; }
@@ -1724,7 +2097,7 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 [data-theme="dark"] .portfolio-risk-mid  { color: #ffb700; }
 [data-theme="dark"] .portfolio-risk-high { color: #f05040; }
 
-/* Available funds colouring reuses existing profit classes */
+/* Available funds coloring reuses existing profit classes */
 #portfolioAvail.profit-positive { color: inherit; }
 #portfolioAvail.profit-negative { color: #d82715; }
 
@@ -1756,6 +2129,13 @@ table#botsDeals tr:hover, table#hubDeals tr:hover, table#hubBots tr:hover {
 	border: 1px solid #525252;
 	color: #ffffff;
 	text-align: left;
+	/* Always wrap INSIDE the box. white-space is inherited, and some hosts — notably the config
+	   label column (#formConfig td:first-child) — set white-space:nowrap; without this reset a long
+	   tooltip would render as one unwrapped line that spills past the dark background (looking
+	   transparent/unreadable) and out of bounds. overflow-wrap breaks any long unbroken token
+	   (an IANA timezone, a URL) so it can't overflow either. */
+	white-space: normal;
+	overflow-wrap: break-word;
 	padding: 10px;
 	margin-left: 15px;
 	border-radius: 5px;
@@ -2129,8 +2509,8 @@ body[data-theme="dark"].has-shell #csvDownload .icon {
 }
 
 
-/* ─── Profit / loss colour classes ────────────────────────────────────────── */
-/* Used in active deals and deal history tables instead of inline hex colours.  */
+/* ─── Profit / loss color classes ────────────────────────────────────────── */
+/* Used in active deals and deal history tables instead of inline hex colors.  */
 /* Defined here so they respect the current theme rather than being hardcoded.  */
 
 table#botsDeals td.profit-positive,
@@ -2182,7 +2562,7 @@ table#hubDeals td.profit-negative,
 }
 
 
-/* Set mask icon colour directly — !important beats jQuery UI and cascade order */
+/* Set mask icon color directly — !important beats jQuery UI and cascade order */
 .ai-popout-btn .icon {
 
 	background-color: #555555 !important;
@@ -2326,7 +2706,7 @@ table#hubDeals td.profit-negative,
 
 
 /* ─── Navigation menu icons ────────────────────────────────────────────────── */
-/* Separate colour from link text so icons read as quiet guides, not actions    */
+/* Separate color from link text so icons read as quiet guides, not actions    */
 
 .menu-icon {
 	color: #888888;
@@ -2591,6 +2971,12 @@ body.popout-body #chatInputContainer {
 	--color-success-soft: rgba(74, 222, 128, 0.12);
 	--color-warning: #fbbf24;
 	--color-warning-soft: rgba(251, 191, 36, 0.15);
+	/* --color-neutral is defined at :root as var(--content-box-color). The dark override of
+	   --content-box-color lives on the body-level [data-theme="dark"] selector, NOT on :root, so the
+	   :root definition would resolve against the light value (#000) and render black on dark. Re-declare
+	   it here — on the same body element that carries the dark --content-box-color — so neutral hints and
+	   labels take the readable dark-theme text color instead of black. */
+	--color-neutral: var(--content-box-color);
 }
 
 /* ── Body / workspace ─────────────────────────────────────────────────────── */
@@ -2638,7 +3024,7 @@ body.has-shell .hub-superscript {
 	top: auto; right: auto;
 	width: auto;
 	padding: 2px 7px;
-	font-size: 11px;
+	font-size: var(--fs-small);
 	font-weight: 700;
 	letter-spacing: 0.05em;
 	background: #0e8a8a;
@@ -2690,7 +3076,7 @@ body.has-shell .headerButtons {
 }
 .side-nav-item:hover .side-nav-ic { color: var(--nav-toggle-ic); }
 .nav-ic { width: 19px; height: 19px; }
-.side-nav-text { font-size: 0.98rem; overflow: hidden; text-overflow: ellipsis; }
+.side-nav-text { font-size: 1.08rem; overflow: hidden; text-overflow: ellipsis; }
 .side-nav-ext { margin-left: auto; font-size: 0.8rem; color: var(--nav-text-muted); }
 .side-nav-item.is-active {
 	background: var(--nav-item-active-bg); color: var(--nav-item-active-text) !important;
@@ -2731,6 +3117,95 @@ body.nav-collapsed main { margin-left: var(--shell-sidebar-rail-w); }
 body.has-shell > center { display: block; text-align: initial; }
 body.has-shell > center > main { margin-left: var(--shell-sidebar-w); }
 body.nav-collapsed > center > main { margin-left: var(--shell-sidebar-rail-w); }
+
+/* ── Configuration-mode banner ────────────────────────────────────────────────
+   Shown on EVERY page (login included) when the instance is in config mode — a fresh
+   install with no database configured, not trading yet. On the login page (no shell)
+   it sits in normal flow at the top; on a shell page it is fixed above the top bar and
+   the whole shell (top bar, sidebar, main content) is shifted down by its height so it
+   never overlaps. Deliberately loud (amber) so it can't be missed. */
+:root { --cfg-banner-h: 44px; }
+
+#configModeBanner {
+	background: #f5c518;
+	color: #1a1a1a;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px 12px;
+	flex-wrap: wrap;
+	padding: 10px 16px;
+	text-align: center;
+	line-height: 1.3;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+}
+#configModeBanner .cfg-badge {
+	background: #1a1a1a;
+	color: #f5c518;
+	font-weight: 700;
+	letter-spacing: 0.6px;
+	padding: 3px 9px;
+	border-radius: 4px;
+	font-size: var(--fs-label, 0.78rem);
+	white-space: nowrap;
+}
+#configModeBanner .cfg-text { font-weight: 600; font-size: var(--fs-body, 0.95rem); }
+#configModeBanner a { color: #1a1a1a; text-decoration: underline; font-weight: 700; }
+
+/* "Still on the default password" security nudge. It reuses the exact same fixed top-strip mechanics as
+   the config-mode banner (the two never show at once — the nudge only appears once the bot is live), but
+   a distinct security-red so it can never be mistaken for config mode. Non-blocking: it never gates login
+   or trading; it just urges the operator to set their own password, and clears the instant they do. */
+#defaultPassBanner {
+	background: #b3261e;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px 12px;
+	flex-wrap: wrap;
+	padding: 10px 16px;
+	text-align: center;
+	line-height: 1.3;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+}
+#defaultPassBanner .cfg-badge {
+	background: #fff;
+	color: #b3261e;
+	font-weight: 700;
+	letter-spacing: 0.6px;
+	padding: 3px 9px;
+	border-radius: 4px;
+	font-size: var(--fs-label, 0.78rem);
+	white-space: nowrap;
+}
+#defaultPassBanner .cfg-text { font-weight: 600; font-size: var(--fs-body, 0.95rem); }
+#defaultPassBanner a { color: #fff; text-decoration: underline; font-weight: 700; }
+
+/* The top bar is position:fixed (z-index 9999) on every page, login included, so a banner must be
+   fixed ABOVE it (z-index 10000) and the top bar pushed down by the banner's height — on ALL banner
+   pages, not just shell ones, or the fixed header would cover the banner. Both banners share these
+   layout rules; they are mutually exclusive so only one strip is ever present. */
+body.config-mode #configModeBanner,
+body.default-pass #defaultPassBanner {
+	position: fixed;
+	top: 0; left: 0; right: 0;
+	height: var(--cfg-banner-h);
+	box-sizing: border-box;
+	padding: 0 16px;
+	overflow: hidden;
+	z-index: 10000;
+}
+body.config-mode #headerBox,
+body.default-pass #headerBox { top: var(--cfg-banner-h); }
+/* Shell pages additionally shift the sidebar + main content down so nothing hides behind the banner. */
+body.has-shell.config-mode .side-nav,
+body.has-shell.default-pass .side-nav {
+	top: calc(var(--shell-topbar-h) + var(--cfg-banner-h));
+	height: calc(100vh - var(--shell-topbar-h) - var(--cfg-banner-h));
+}
+body.has-shell.config-mode main,
+body.has-shell.default-pass main { padding-top: calc(var(--shell-topbar-h) + var(--cfg-banner-h) + 22px); }
 
 /* ── Content panel (the surface every view sits in) ───────────────────────── */
 /* View markup no longer carries inline max-width/text-align/margin (removed at
@@ -2782,7 +3257,7 @@ body.has-shell #ordersBox:empty {
 	padding: 0 !important;
 }
 /* The ladder table: content-width (not 95% of panel — the base rule stretches it,
-   and stretched vs content-width is exactly what made instance ≠ Hub), centred,
+   and stretched vs content-width is exactly what made instance ≠ Hub), centered,
    with a subtle frame and clean row separators. !important overrides the base
    #ordersTable width:95%. */
 body.has-shell #ordersBox #ordersTable {
@@ -2847,9 +3322,28 @@ body.has-shell .contentHeaderBox b {
 /* Content body: inner padding since the panel has padding:0 (lets the title bar
    and tables span edge-to-edge). Direct children get gutters, except full-bleed
    elements (title bar, tables, the deals data box). */
-body.has-shell #contentBox > *:not(.contentHeaderBox):not(table):not(#ordersTable):not(.botsDealsBox):not(.full-bleed):not(#update-button) {
+body.has-shell #contentBox > *:not(.contentHeaderBox):not(table):not(#ordersTable):not(.botsDealsBox):not(.full-bleed):not(#update-button):not(.card) {
 	padding-left: 24px;
 	padding-right: 24px;
+}
+
+/* A .card that is a DIRECT child of #contentBox (e.g. the Access Control page) should
+   FLOAT inset from the panel edge — the same look as cards nested inside #formConfig on
+   the Configuration page — rather than absorbing the 24px gutter as its own padding and
+   sitting flush to the panel border. Margin (not padding) insets the border; the card keeps
+   its normal internal padding, so its content lines up with the config cards. */
+body.has-shell #contentBox > .card {
+	margin-left: 24px;
+	margin-right: 24px;
+	width: auto;
+}
+
+/* A floated card sitting directly under the page header bar should have a visible GAP
+   above it (a margin), not the header-spacing baked in as internal top padding — otherwise
+   the card border sits flush against the header and the title feels crowded. */
+body.has-shell .contentHeaderBox + .card {
+	margin-top: 20px;
+	padding-top: 18px;
 }
 body.has-shell .contentHeaderBox + * { padding-top: 20px; }
 body.has-shell #contentBox { padding-bottom: 16px; }
@@ -2896,7 +3390,7 @@ body.has-shell #hubBots td:last-child {
 	padding-right: 24px;
 }
 
-/* Horizontal-scroll behaviour for the wide deals table.
+/* Horizontal-scroll behavior for the wide deals table.
    Problem: with width:auto/min-width:100%, at medium viewport widths the columns
    compress and cells wrap awkwardly before finally scrolling — that
    half-wrapped/half-scrolled state looks broken. Fix: give the table a fixed
@@ -2924,7 +3418,13 @@ body.has-shell thead.tablesorter-headerRow th {
 	background-color: var(--shell-section-tint);
 	border-bottom: 2px solid var(--shell-section-border);
 }
-body.has-shell table:not(#botsCreate):not(#botsDeals):not(#hubDeals):not(#hubBots) tbody tr:hover { background-color: var(--shell-row-hover); }
+body.has-shell table:not(#botsCreate):not(#botsDeals):not(#hubDeals):not(#hubBots):not(.dealEditTable):not(.data-table):not(.ac-table) tbody tr:hover { background-color: var(--shell-row-hover); }
+
+/* Read-only data tables (Signal Activity, Access Control cards, the Audit Log) use the SAME row-hover
+   color as the trading tables (Active Deals, Manage Bots) so every table in the app highlights a row
+   the same way — excluded from the subtle shell hover above and given the shared table hover here. */
+body.has-shell .data-table tbody tr:hover,
+body.has-shell .ac-table tbody tr:hover { background-color: var(--table-background-hover-color); }
 
 /* Bot ID (a UUID) wraps to two lines in the fixed-width form table — keep it on
    one line. */
@@ -2935,7 +3435,7 @@ body.has-shell #footerBox {
 	left: 0; width: 100%; z-index: 9999; padding-left: 14px;
 }
 
-/* ── Column selector — modernized popover behaviour ───────────────────────── */
+/* ── Column selector — modernized popover behavior ───────────────────────── */
 /* The legacy wrapper is position:fixed z-index:6000 (below the 8000 sidebar) and
    pinned left:10px, sliding out from the far edge behind the nav. Lift it above
    the chrome, clear the sidebar, and fix the slide-out distance so it exits
@@ -2976,22 +3476,42 @@ body.has-shell .jconfirm { z-index: 100000 !important; position: fixed !importan
    light tints (e.g. --color-danger #f87171, --color-neutral #b8b8b8) that are
    low-contrast — sometimes nearly invisible — on that light button. Force darker,
    saturated, readable label colors for every semantic variant so the pause,
-   disable-bot, delete-bot, and confirm dialogs read correctly in both themes. */
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-success"],
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-success"] {
+   disable-bot, delete-bot, and confirm dialogs read correctly in both themes.
+   Not scoped to the app shell: the popout chat window (body.popout-body) shows the
+   same dialogs, so the fix must apply to every jconfirm dialog regardless of body. */
+.jconfirm .jconfirm-buttons button div[style*="--color-success"],
+.jconfirm .jconfirm-buttons button div[style*="color-success"] {
 	color: #157a3a !important;
 }
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-danger"],
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-danger"] {
+.jconfirm .jconfirm-buttons button div[style*="--color-danger"],
+.jconfirm .jconfirm-buttons button div[style*="color-danger"] {
 	color: #c11510 !important;
 }
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-warning"],
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-warning"] {
+.jconfirm .jconfirm-buttons button div[style*="--color-warning"],
+.jconfirm .jconfirm-buttons button div[style*="color-warning"] {
 	color: #b56a0f !important;
 }
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="--color-neutral"],
-body.has-shell .jconfirm .jconfirm-buttons button div[style*="color-neutral"] {
+.jconfirm .jconfirm-buttons button div[style*="--color-neutral"],
+.jconfirm .jconfirm-buttons button div[style*="color-neutral"] {
 	color: #444444 !important;
+}
+/* jQuery-confirm dialogs hardcode a percentage boxWidth (typically 50%), which becomes an unusably
+   narrow column on a phone. Constrain every confirm / alert / password dialog to most of the viewport
+   on small screens, regardless of the per-call boxWidth — one rule fixes them all app-wide. */
+@media (max-width: 600px) {
+	.jconfirm .jconfirm-box { width: 92vw !important; max-width: 92vw !important; }
+	/* Dashboard KPI charts carry an inline min-width:300px that overflows a phone and is clipped (the
+	   content panel is overflow-x: clip). Let them shrink to fit the viewport. */
+	.chart-container { min-width: 0 !important; }
+	/* Notification preferences matrix: fixed 84px channel columns + nowrap event labels exceed a phone
+	   width, so let its wrapper scroll horizontally instead of clipping the right edge. */
+	#notif_matrix_wrap { overflow-x: auto; }
+	/* The config-mode / default-password banners are a fixed height on desktop; on a phone the longer
+	   text would clip, so give them room to wrap to two lines and grow the shell offset to match by
+	   bumping the banner-height variable that the header, sidebar and main content all derive from. */
+	:root { --cfg-banner-h: 64px; }
+	#configModeBanner, #defaultPassBanner { overflow: visible; }
+	#configModeBanner .cfg-text, #defaultPassBanner .cfg-text { font-size: var(--fs-label, 0.8rem); }
 }
 body.has-shell #spinner-overlay { z-index: 99000 !important; }
 /* Modal HOST containers (#modalDealEdit etc.) receive the dialog + overlay via
@@ -3029,6 +3549,11 @@ body.has-shell #modalTvSettings {
 		background: rgba(0, 0, 0, 0.45); z-index: 9100;
 	}
 	body.nav-drawer-open .nav-scrim { display: block; }
+	/* When a top banner (config-mode / default-password) is shown, the top bar is pushed down by the
+	   banner height, so start the drawer scrim below it too — matching the sidebar offset — instead of
+	   dimming part of the still-visible header. */
+	body.config-mode .nav-scrim,
+	body.default-pass .nav-scrim { top: calc(var(--shell-topbar-h) + var(--cfg-banner-h)); }
 
 	/* Column selector: sidebar is hidden on mobile, so don't offset by its width
 	   (that pushed the popup off the right edge, hiding the close button). Anchor
@@ -3145,6 +3670,19 @@ body.has-shell #contentBox .botsDealsBox table#botsCreate {
 	width: auto;
 }
 
+/* Hub Create/Update Bot form: the shared partialsBotForm wraps its cards in a <form>
+   ONLY on an instance (which passes formAction); the Hub omits formAction, so its cards
+   render as direct children of .botsDealsBox — outside the <form> that carries the 24px
+   side gutter above. Float those bare cards in by the same 24px (margin, so the card
+   border insets to exactly where the instance's form-padded cards sit) so the Hub bot
+   Create/Update view matches the instance. Instance cards are .botsDealsBox > form > .card,
+   so this rule targets the Hub case only. */
+body.has-shell #contentBox .botsDealsBox > .card {
+	margin-left: 24px;
+	margin-right: 24px;
+	width: auto;
+}
+
 /* Consistent top spacing: normalize the first element inside every panel so no
    view starts lower than another. */
 body.has-shell #contentBox > *:first-child,
@@ -3189,13 +3727,14 @@ body.has-shell table#botsCreate td:first-child {
 	padding-right: 12px;
 }
 body.has-shell #formConfig table#botsCreate td:first-child {
-	vertical-align: middle;
+	/* Top-align (not middle): when the input cell has extra stacked content — e.g. the 3CQS
+	   "Register at …" link under the field — middle centers the label between them so it looks
+	   like it is floating. Top keeps the label on the input's line for single- AND multi-line rows. */
+	vertical-align: top;
+	padding-top: 9px;
 }
-/* But the tooltip popup lives INSIDE that label cell — restore normal wrapping
-   for its text so it stays contained in the bubble instead of overflowing. */
-body.has-shell table#botsCreate td:first-child .toolTipText {
-	white-space: normal;
-}
+/* (Tooltip wrapping inside label cells is handled globally by the base .toolTipText rule, which
+   forces white-space:normal so a long popup can never overflow its bubble — no per-form patch needed.) */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HUB INSTANCE MANAGER — modernized controls (shell only)
@@ -3228,8 +3767,8 @@ body.has-shell table#instances select.form-field {
 }
 
 /* Unify the row action buttons into clean, equally-sized modern icon buttons.
-   They were three differently-styled coloured squares of slightly different
-   sizes; make them a consistent 30x28 with subtle colour accents on hover. */
+   They were three differently-styled colored squares of slightly different
+   sizes; make them a consistent 30x28 with subtle color accents on hover. */
 body.has-shell .hub-primary-btn,
 body.has-shell .hub-stop-btn,
 body.has-shell .hub-remove-btn {
@@ -3300,7 +3839,7 @@ body.has-shell #update-button {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HUB INSTANCE MANAGER — cockpit refresh (shell only)
-   Calmer colour language: desaturated action buttons that gain colour on hover,
+   Calmer color language: desaturated action buttons that gain color on hover,
    a refined status indicator, zebra rows, and muted monospaced DB URLs so the
    technical detail recedes and the table scans like a control panel.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -3425,7 +3964,7 @@ body.has-shell .hub-instance-memory .hub-mem-metric {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CONFIRM DIALOGS — keep rounded corners on typed dialogs. jconfirm's coloured
+   CONFIRM DIALOGS — keep rounded corners on typed dialogs. jconfirm's colored
    "type" variants (e.g. type: 'DELETE' → a 7px red top border) square off the
    top corners. Round the whole box consistently so the instance delete dialog
    matches the Hub's rounded look.
@@ -3442,7 +3981,7 @@ body.has-shell .jconfirm .jconfirm-box.jconfirm-type-orange {
 /* ═══════════════════════════════════════════════════════════════════════════
    HUB HOMEPAGE — dashboard card refresh (shell only)
    Brings the per-instance cards into the cockpit language: theme-aware borders,
-   a live status dot per card, semantic value colours, offline dimming, and the
+   a live status dot per card, semantic value colors, offline dimming, and the
    Deals/Bots actions as subtle pill links. Structure/data unchanged.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -3609,7 +4148,10 @@ body.has-shell .hub-mem-cell .hub-mem-k {
 	color: var(--table-content-color);
 }
 .deals-history-xref a {
-	color: var(--nav-item-active-bar, #14b8b8);
+	/* Use the semantic, theme-aware link color (blue in light, light-blue in dark) — the teal
+	   --nav-item-active-bar is a UI-chrome accent and rendered at only ~2.45:1 on the white
+	   light-mode card. */
+	color: var(--link-color);
 	text-decoration: none;
 }
 .deals-history-xref a:hover {
@@ -3717,8 +4259,8 @@ body.has-shell #contentBox .transaction-export-disclaimer {
 	color: var(--table-content-color);
 	opacity: 0.6;
 }
-/* Load figure colour coding — reuses the portfolio Risk % palette so the whole
-   app speaks one colour language: green healthy, amber busy, red saturated. */
+/* Load figure color coding — reuses the portfolio Risk % palette so the whole
+   app speaks one color language: green healthy, amber busy, red saturated. */
 .health-load-low  { color: #1a9f00 !important; }
 .health-load-med  { color: #a85f00 !important; }
 .health-load-high { color: #d82715 !important; }
@@ -3854,7 +4396,7 @@ body.has-shell #contentBox.home-welcome {
    AI reflection. Themed cards.
    ═══════════════════════════════════════════════════════════════════════════ */
 .journal-intro {
-	font-size: 1.05rem;
+	font-size: 1.2rem;
 	opacity: 0.8;
 	margin: 18px 4px 18px;
 	color: var(--table-content-color);
@@ -3865,7 +4407,7 @@ body.has-shell #contentBox.home-welcome {
 	align-items: center;
 	gap: 10px 18px;
 	margin: 0 4px 20px;
-	font-size: 1.0rem;
+	font-size: 1.15rem;
 	color: var(--table-content-color);
 }
 .journal-state-msg {
@@ -3873,7 +4415,7 @@ body.has-shell #contentBox.home-welcome {
 	text-align: center;
 	color: var(--table-content-color);
 	opacity: 0.7;
-	font-size: 1.1rem;
+	font-size: 1.2rem;
 }
 .journal-entry {
 	margin: 0 4px 16px;
@@ -3909,11 +4451,24 @@ body.has-shell #contentBox.home-welcome {
    the pair or profit. Wraps/truncates rather than pushing the profit off. */
 .journal-dealid {
 	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-	font-size: 0.85rem;
+	font-size: 0.95rem;
 	opacity: 0.55;
 	color: var(--table-content-color);
 	word-break: break-all;
 	user-select: all;
+}
+/* Flags a deal that closed but could not sell all its coin (retries exhausted) — distinct from a clean
+   finish so the untracked remainder is visible and can be reconciled. */
+.journal-partial-badge {
+	font-size: 0.72rem;
+	white-space: nowrap;
+	margin-left: 6px;
+	padding: 1px 6px;
+	border-radius: 8px;
+	background: #e8a13a;
+	color: #1a1a1a;
+	font-weight: 600;
+	cursor: help;
 }
 .journal-profit {
 	font-size: 1.15rem;
@@ -3923,7 +4478,7 @@ body.has-shell #contentBox.home-welcome {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px 20px;
-	font-size: 0.95rem;
+	font-size: 1.15rem;
 	opacity: 0.8;
 	color: var(--table-content-color);
 	margin-bottom: 12px;
@@ -3934,13 +4489,13 @@ body.has-shell #contentBox.home-welcome {
 	padding: 10px 12px;
 	border-radius: 6px;
 	background: var(--table-header-background-color);
-	font-size: 1.0rem;
+	font-size: 1.15rem;
 	line-height: 1.5;
 	color: var(--table-content-color);
 }
 .journal-narrative-label {
 	display: block;
-	font-size: 0.82rem;
+	font-size: 0.92rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	opacity: 0.6;
@@ -3952,14 +4507,20 @@ body.has-shell #contentBox.home-welcome {
 	gap: 6px;
 }
 .journal-note-label {
-	font-size: 0.9rem;
+	font-size: 1.0rem;
 	opacity: 0.7;
 	color: var(--table-content-color);
 }
 .journal-note {
 	width: 100%;
 	resize: vertical;
-	font-size: 1.0rem;
+	font-size: 1.15rem;
+	/* Textareas default to the browser's monospace UA font; without this the notes field
+	   (and its placeholder) renders in a typewriter font that clashes with the rest of the
+	   card. Inherit the app font so it matches the surrounding Heebo text. */
+	font-family: inherit;
+	line-height: 1.4;
+	padding: 6px 8px;
 }
 .journal-entry-actions {
 	display: flex;
@@ -3969,7 +4530,7 @@ body.has-shell #contentBox.home-welcome {
 	margin-top: 4px;
 }
 .journal-status {
-	font-size: 0.9rem;
+	font-size: 0.95rem;
 }
 .journal-status.ok {
 	color: var(--color-success, #0e9f6e);
@@ -4026,7 +4587,7 @@ body.has-shell #contentBox.home-welcome {
 	background: var(--table-background-color, var(--content-box-background-color));
 	border: 1px solid var(--table-border-color);
 	color: var(--table-content-color);
-	font-size: 0.95rem;
+	font-size: 1.05rem;
 	opacity: 0.85;
 	display: flex;
 	align-items: center;
@@ -4053,7 +4614,7 @@ body.has-shell #contentBox.home-welcome {
 	border: 1px solid var(--table-border-color);
 }
 .journal-stat-label {
-	font-size: 0.78rem;
+	font-size: 0.9rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	opacity: 0.6;
@@ -4067,7 +4628,7 @@ body.has-shell #contentBox.home-welcome {
 }
 .journal-stat-sub {
 	display: block;
-	font-size: 0.8rem;
+	font-size: 0.9rem;
 	font-weight: 400;
 	opacity: 0.6;
 	margin-top: 2px;
@@ -4081,7 +4642,7 @@ body.has-shell #contentBox.home-welcome {
 	border-left: 4px solid var(--nav-item-active-bar, #14b8b8);
 }
 .journal-corr-title {
-	font-size: 0.82rem;
+	font-size: 0.92rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	opacity: 0.6;
@@ -4089,7 +4650,7 @@ body.has-shell #contentBox.home-welcome {
 	margin-bottom: 10px;
 }
 .journal-corr-empty {
-	font-size: 1.0rem;
+	font-size: 1.1rem;
 	line-height: 1.5;
 	opacity: 0.8;
 	color: var(--table-content-color);
@@ -4152,20 +4713,25 @@ body.has-shell #contentBox.home-welcome {
 	flex-wrap: wrap;
 }
 .journal-mood-label {
-	font-size: 0.9rem;
+	/* Match the parallel "Notes" label (.journal-note-label) so the two read as a set;
+	   was 0.9rem, which looked noticeably smaller than the rest of the card text. */
+	font-size: 1.0rem;
 	opacity: 0.7;
 	color: var(--table-content-color);
 	margin-right: 4px;
 }
 .journal-mood-chip {
 	cursor: pointer;
-	font-size: 1.25rem;
+	/* Emojis are the interactive control on this row, so size them a step above body text
+	   rather than below it (was 1.25rem, which read as small next to the facts). The dim,
+	   desaturated look still signals "not selected" but stays clearly legible. */
+	font-size: 1.5rem;
 	line-height: 1;
 	padding: 4px 6px;
 	border-radius: 6px;
 	border: 1px solid transparent;
-	filter: grayscale(0.7);
-	opacity: 0.65;
+	filter: grayscale(0.5);
+	opacity: 0.8;
 	transition: filter 0.12s, opacity 0.12s, border-color 0.12s;
 }
 .journal-mood-chip:hover {
@@ -4180,9 +4746,9 @@ body.has-shell #contentBox.home-welcome {
 }
 
 /* Active-deal health indicator — its own Health column.
-   Four running states render as coloured status dots; paused/error render as
+   Four running states render as colored status dots; paused/error render as
    small styled glyphs in the same sized slot so the column reads as one system.
-   Colours are theme-aware (light: calmer, dark: brighter) so they stay legible
+   Colors are theme-aware (light: calmer, dark: brighter) so they stay legible
    in both modes — the previous emoji glyphs couldn't be tuned and were too bright
    in light mode. The dots and error badge get a subtle 3D "orb" treatment (radial
    gradient + soft highlight + drop/inset shadow) so they keep the dimensional feel
@@ -4198,7 +4764,7 @@ body.has-shell #contentBox.home-welcome {
 	width: 1%;
 }
 
-/* Coloured status dot (green / yellow / orange / red), rendered as a glossy orb. */
+/* Colored status dot (green / yellow / orange / red), rendered as a glossy orb. */
 .deal-health-dot {
 	display: inline-block;
 	width: 14px;
@@ -4220,17 +4786,27 @@ body.has-shell #contentBox.home-welcome {
 	background: rgba(255,255,255,0.55);
 	filter: blur(0.5px);
 }
-/* Light mode — recognisable but not harsh. Radial gradient lightens toward the
+/* Light mode — recognizable but not harsh. Radial gradient lightens toward the
    top-left so each dot reads as a small sphere. */
 .deal-health-dot.dh-green  { background: radial-gradient(circle at 36% 32%, #43c018, #1a9f00 72%); }
 .deal-health-dot.dh-yellow { background: radial-gradient(circle at 36% 32%, #f5d64d, #e0b000 72%); }
 .deal-health-dot.dh-orange { background: radial-gradient(circle at 36% 32%, #f7a53d, #e8820c 72%); }
 .deal-health-dot.dh-red    { background: radial-gradient(circle at 36% 32%, #f0402c, #d82715 72%); }
+/* Pending — a just-resumed deal whose live figures haven't arrived yet. Neutral gray so it reads as
+   "not yet known", never as a good/bad health state. */
+.deal-health-dot.dh-pending { background: radial-gradient(circle at 36% 32%, #c4c8cc, #9aa0a6 72%); }
 /* Dark mode — brighter so they stay visible on the dark background. */
 [data-theme="dark"] .deal-health-dot.dh-green  { background: radial-gradient(circle at 36% 32%, #66e066, #3ec43e 72%); }
 [data-theme="dark"] .deal-health-dot.dh-yellow { background: radial-gradient(circle at 36% 32%, #ffdd66, #f2c200 72%); }
 [data-theme="dark"] .deal-health-dot.dh-orange { background: radial-gradient(circle at 36% 32%, #ffb055, #ff9522 72%); }
 [data-theme="dark"] .deal-health-dot.dh-red    { background: radial-gradient(circle at 36% 32%, #ff7060, #f05040 72%); }
+[data-theme="dark"] .deal-health-dot.dh-pending { background: radial-gradient(circle at 36% 32%, #d6dade, #a8aeb4 72%); }
+
+/* Stop-loss annotation inside the Target cell (SymBot.UI.stopLossCell), instance + Hub deal views. Uses the
+   same theme-aware red as the negative-profit text so it stays legible in dark mode (a plain #c0392b was a
+   muddy low-contrast red on the dark table). */
+.sl-annot { font-size: 0.82em; color: #d82715; }
+[data-theme="dark"] .sl-annot { color: #f05040; }
 
 /* Styled glyphs for paused / error, sized to match the dot slot. */
 .deal-health-glyph {
@@ -4240,8 +4816,8 @@ body.has-shell #contentBox.home-welcome {
 	vertical-align: middle;
 	position: relative;
 }
-/* Paused — two neutral grey bars (a pause symbol). Left flat; a bevelled pause
-   symbol reads oddly, and neutral grey already sets it apart from the colours. */
+/* Paused — two neutral gray bars (a pause symbol). Left flat; a bevelled pause
+   symbol reads oddly, and neutral gray already sets it apart from the colors. */
 .deal-health-glyph.dh-paused::before,
 .deal-health-glyph.dh-paused::after {
 	content: "";
@@ -4274,7 +4850,7 @@ body.has-shell #contentBox.home-welcome {
 	left: 50%;
 	transform: translate(-50%, -50%);
 	color: #ffffff;
-	font-size: 10px;
+	font-size: 0.85rem;
 	font-weight: 700;
 	line-height: 1;
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -4349,6 +4925,37 @@ body.has-shell #contentBox.home-welcome {
 		max-width: 100% !important;
 		box-sizing: border-box;
 	}
+
+	/* Settings tables (Access & Credentials, Exchange Settings, Email/SMTP, and every #formConfig
+	   section) are a rigid two-column label|input layout whose label column is white-space:nowrap, so
+	   on a phone the input column is pushed off the right edge and CLIPPED — the wrapper is
+	   overflow-x: clip, not scroll, so those fields become unreachable. Capping the table width alone
+	   (above) does not help: the columns' min-content still overflows. Collapse each row to a single
+	   stacked block instead — the label sits on its own line above its full-width input — which fixes
+	   every settings section at once with no per-field patch. */
+	#formConfig table,
+	#formConfig table > tbody,
+	#formConfig table > tbody > tr,
+	#formConfig table > tbody > tr > td,
+	.mailerTable,
+	.mailerTable > tbody,
+	.mailerTable > tbody > tr,
+	.mailerTable > tbody > tr > td {
+		display: block !important;
+		width: 100% !important;
+		max-width: 100% !important;
+		box-sizing: border-box;
+		/* Labels (and the colspan provider sub-headings like "OpenAI — platform.openai.com …") are
+		   white-space:nowrap for the desktop 2-column layout; a higher-specificity base rule sets it, so
+		   override with !important or the nowrap text spills past the screen edge and is clipped. */
+		white-space: normal !important;
+	}
+	/* Stacked spacing: the label sits directly above its full-width input; drop the desktop
+	   inter-column right gutter and top-alignment padding. */
+	#formConfig table > tbody > tr > td,
+	.mailerTable > tbody > tr > td {
+		padding: 4px 0 8px 0 !important;
+	}
 }
 
 
@@ -4411,9 +5018,9 @@ body.has-shell #contentBox.home-welcome {
    slot never leaves an awkward indent before the conversation dropdown. */
 .chat-mascot-header:empty { display: none; }
 .chat-mascot-header .sbm-wrap { margin-right: 6px; }
-/* The empty-state hero fills the chat box and centres vertically so the empty
+/* The empty-state hero fills the chat box and centers vertically so the empty
    state looks deliberate rather than floating near the top. */
-/* When only the hero is present, centre it in the box. Removed once messages exist. */
+/* When only the hero is present, center it in the box. Removed once messages exist. */
 #aiChatBox.chat-empty { display: flex; flex-direction: column; }
 .chat-mascot-hero {
 	display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -4432,3 +5039,58 @@ body.has-shell #contentBox.home-welcome {
 .chat-thinking-dots i:nth-child(2) { animation-delay: 0.2s; }
 .chat-thinking-dots i:nth-child(3) { animation-delay: 0.4s; }
 @keyframes sbmDot { 0%,100%{opacity:0.25;transform:translateY(0);} 50%{opacity:0.9;transform:translateY(-3px);} }
+
+/* ── Shared modal component ──────────────────────────────────────────────────
+   Used by Access Control and Schedules (and future dialogs) so modal styling
+   lives in one place. `.modal-pad` = a simple padded box; `.modal-flex` = a
+   structured, scrollable box with head/body/foot. */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; display: none; }
+.modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; padding: 70px 12px 24px; overflow-y: auto; }
+.modal-box { width: 100%; max-width: 600px; background: var(--content-box-background-color, #fff); color: var(--content-box-color, #222); border: 1px solid var(--table-border-color, #ccc); border-radius: 8px; box-shadow: 0 12px 44px rgba(0,0,0,0.45); }
+/* Cap the padded modal to the viewport and let it scroll inside itself (the flex modals
+   already do this), so on a short screen the Create/Cancel buttons are reachable by scrolling
+   within the modal instead of the modal running off the bottom of the page. */
+.modal-box.modal-pad { padding: 18px 20px; font-size: var(--fs-content); max-height: calc(100vh - 94px); overflow-y: auto; }
+.modal-box.modal-flex { display: flex; flex-direction: column; max-height: calc(100vh - 108px); }
+/* On short viewports, trim the overlay's top gap so the modal gets nearly the full height. */
+@media (max-height: 640px) {
+	.modal-overlay.open { padding-top: 16px; padding-bottom: 16px; }
+	.modal-box.modal-pad { max-height: calc(100vh - 32px); }
+	.modal-box.modal-flex { max-height: calc(100vh - 32px); }
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--table-border-color, #ccc); }
+.modal-head b { font-size: var(--fs-dialog-title); }
+/* Modal body content reads at the same --fs-content size as the page data views, so a
+   dialog never feels smaller than the view it opened from. Helper text (.ac-sub, <small>,
+   tooltips) keeps its own smaller size by declaring it explicitly. */
+.modal-body { padding: 14px 16px; overflow-y: auto; font-size: var(--fs-content); }
+.modal-foot { padding: 10px 16px; border-top: 1px solid var(--table-border-color, #ccc); display: flex; align-items: center; gap: 10px; }
+.modal-close { font-size: 1.4rem; line-height: 1; text-decoration: none; color: var(--content-box-color, #222); opacity: 0.6; cursor: pointer; }
+.modal-close:hover { opacity: 1; }
+
+
+/* ── Section-header icons (extend the shared .icon mask system; renders identically on every
+   browser/OS/mobile, single-color via currentColor, self-contained). Defined once, reused by class. */
+.icon-lock{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%2017a2%202%200%200%200%202-2%202%202%200%200%200-4%200%202%202%200%200%200%202%202zm6-9h-1V6A5%205%200%200%200%207%206v2H6a2%202%200%200%200-2%202v10a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V10a2%202%200%200%200-2-2zM9%206a3%203%200%200%201%206%200v2H9V6z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%2017a2%202%200%200%200%202-2%202%202%200%200%200-4%200%202%202%200%200%200%202%202zm6-9h-1V6A5%205%200%200%200%207%206v2H6a2%202%200%200%200-2%202v10a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V10a2%202%200%200%200-2-2zM9%206a3%203%200%200%201%206%200v2H9V6z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-key{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M7%2014a2%202%200%201%201%200-4%202%202%200%200%201%200%204zm5.65-4A5.99%205.99%200%200%200%207%206a6%206%200%201%200%205.65%208H17v3h3v-3h2v-4h-9.35z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M7%2014a2%202%200%201%201%200-4%202%202%200%200%201%200%204zm5.65-4A5.99%205.99%200%200%200%207%206a6%206%200%201%200%205.65%208H17v3h3v-3h2v-4h-9.35z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-coins{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%202a10%2010%200%201%200%200%2020%2010%2010%200%200%200%200-20zm.88%2015.76V19h-1.75v-1.29c-1.1-.23-2.03-.94-2.1-2.18h1.29c.06.66.51%201.18%201.69%201.18%201.27%200%201.56-.63%201.56-1.03%200-.54-.29-1.05-1.76-1.4-1.63-.4-2.75-1.06-2.75-2.41%200-1.13.91-1.87%202.07-2.11V8h1.75v1.29c1.19.29%201.79%201.19%201.83%202.17h-1.29c-.03-.7-.4-1.18-1.42-1.18-.97%200-1.55.44-1.55%201.06%200%20.55.42.9%201.76%201.24%201.34.35%202.75.93%202.75%202.58-.01%201.2-.9%201.86-2.08%202.11z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%202a10%2010%200%201%200%200%2020%2010%2010%200%200%200%200-20zm.88%2015.76V19h-1.75v-1.29c-1.1-.23-2.03-.94-2.1-2.18h1.29c.06.66.51%201.18%201.69%201.18%201.27%200%201.56-.63%201.56-1.03%200-.54-.29-1.05-1.76-1.4-1.63-.4-2.75-1.06-2.75-2.41%200-1.13.91-1.87%202.07-2.11V8h1.75v1.29c1.19.29%201.79%201.19%201.83%202.17h-1.29c-.03-.7-.4-1.18-1.42-1.18-.97%200-1.55.44-1.55%201.06%200%20.55.42.9%201.76%201.24%201.34.35%202.75.93%202.75%202.58-.01%201.2-.9%201.86-2.08%202.11z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-users{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M16%2011a3%203%200%201%200%200-6%203%203%200%200%200%200%206zm-8%200a3%203%200%201%200%200-6%203%203%200%200%200%200%206zm0%202c-2.67%200-8%201.34-8%204v3h16v-3c0-2.66-5.33-4-8-4zm8%200c-.29%200-.62.02-.97.05C16.19%2013.89%2017%2015.02%2017%2017v3h7v-3c0-2.66-5.33-4-8-4z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M16%2011a3%203%200%201%200%200-6%203%203%200%200%200%200%206zm-8%200a3%203%200%201%200%200-6%203%203%200%200%200%200%206zm0%202c-2.67%200-8%201.34-8%204v3h16v-3c0-2.66-5.33-4-8-4zm8%200c-.29%200-.62.02-.97.05C16.19%2013.89%2017%2015.02%2017%2017v3h7v-3c0-2.66-5.33-4-8-4z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-list{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M4%204h16v3H4V4zm0%206h16v3H4v-3zm0%206h10v3H4v-3z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M4%204h16v3H4V4zm0%206h16v3H4v-3zm0%206h10v3H4v-3z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-settings{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M19.14%2012.94c.04-.3.06-.61.06-.94s-.02-.64-.06-.94l2.03-1.58a.5.5%200%200%200%20.12-.61l-1.92-3.32a.5.5%200%200%200-.59-.22l-2.39.96a7%207%200%200%200-1.62-.94l-.36-2.54a.5.5%200%200%200-.5-.42h-3.84a.5.5%200%200%200-.5.42l-.36%202.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5%200%200%200-.59.22L2.7%208.87a.5.5%200%200%200%20.12.61l2.03%201.58c-.04.3-.06.62-.06.94s.02.64.06.94l-2.03%201.58a.5.5%200%200%200-.12.61l1.92%203.32c.14.24.42.34.68.22l2.39-.96c.5.38%201.03.7%201.62.94l.36%202.54c.05.24.25.42.5.42h3.84c.25%200%20.46-.18.5-.42l.36-2.54c.59-.24%201.13-.56%201.62-.94l2.39.96c.26.12.54.02.68-.22l1.92-3.32a.5.5%200%200%200-.12-.61l-2.03-1.58zM12%2015.6a3.6%203.6%200%201%201%200-7.2%203.6%203.6%200%200%201%200%207.2z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M19.14%2012.94c.04-.3.06-.61.06-.94s-.02-.64-.06-.94l2.03-1.58a.5.5%200%200%200%20.12-.61l-1.92-3.32a.5.5%200%200%200-.59-.22l-2.39.96a7%207%200%200%200-1.62-.94l-.36-2.54a.5.5%200%200%200-.5-.42h-3.84a.5.5%200%200%200-.5.42l-.36%202.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5%200%200%200-.59.22L2.7%208.87a.5.5%200%200%200%20.12.61l2.03%201.58c-.04.3-.06.62-.06.94s.02.64.06.94l-2.03%201.58a.5.5%200%200%200-.12.61l1.92%203.32c.14.24.42.34.68.22l2.39-.96c.5.38%201.03.7%201.62.94l.36%202.54c.05.24.25.42.5.42h3.84c.25%200%20.46-.18.5-.42l.36-2.54c.59-.24%201.13-.56%201.62-.94l2.39.96c.26.12.54.02.68-.22l1.92-3.32a.5.5%200%200%200-.12-.61l-2.03-1.58zM12%2015.6a3.6%203.6%200%201%201%200-7.2%203.6%203.6%200%200%201%200%207.2z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-calendar{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M19%204h-1V2h-2v2H8V2H6v2H5a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2V6a2%202%200%200%200-2-2zm0%2016H5V10h14v10z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M19%204h-1V2h-2v2H8V2H6v2H5a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2V6a2%202%200%200%200-2-2zm0%2016H5V10h14v10z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-save{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M17%203H5a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2V7l-4-4zm-5%2016a3%203%200%201%201%200-6%203%203%200%200%201%200%206zM6%206h9v4H6V6z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M17%203H5a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2V7l-4-4zm-5%2016a3%203%200%201%201%200-6%203%203%200%200%201%200%206zM6%206h9v4H6V6z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-shield{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%201%203%205v6c0%205.55%203.84%2010.74%209%2012%205.16-1.26%209-6.45%209-12V5l-9-4z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%201%203%205v6c0%205.55%203.84%2010.74%209%2012%205.16-1.26%209-6.45%209-12V5l-9-4z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-lifebuoy{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%202a10%2010%200%201%200%200%2020%2010%2010%200%200%200%200-20zm0%204c1.3%200%202.5.42%203.48%201.11L13.4%209.19a3.98%203.98%200%200%200-2.8%200L8.52%207.11A5.96%205.96%200%200%201%2012%206zM6%2012c0-1.3.42-2.5%201.11-3.48l2.08%202.08a3.98%203.98%200%200%200%200%202.8l-2.08%202.08A5.96%205.96%200%200%201%206%2012zm6%206c-1.3%200-2.5-.42-3.48-1.11l2.08-2.08c.87.32%201.81.32%202.68%200l2.08%202.08A5.96%205.96%200%200%201%2012%2018zm4.89-2.52-2.08-2.08c.32-.87.32-1.81%200-2.68l2.08-2.08A5.96%205.96%200%200%201%2018%2012c0%201.3-.42%202.5-1.11%203.48z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%202a10%2010%200%201%200%200%2020%2010%2010%200%200%200%200-20zm0%204c1.3%200%202.5.42%203.48%201.11L13.4%209.19a3.98%203.98%200%200%200-2.8%200L8.52%207.11A5.96%205.96%200%200%201%2012%206zM6%2012c0-1.3.42-2.5%201.11-3.48l2.08%202.08a3.98%203.98%200%200%200%200%202.8l-2.08%202.08A5.96%205.96%200%200%201%206%2012zm6%206c-1.3%200-2.5-.42-3.48-1.11l2.08-2.08c.87.32%201.81.32%202.68%200l2.08%202.08A5.96%205.96%200%200%201%2012%2018zm4.89-2.52-2.08-2.08c.32-.87.32-1.81%200-2.68l2.08-2.08A5.96%205.96%200%200%201%2018%2012c0%201.3-.42%202.5-1.11%203.48z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-bank{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M4%2010h2v7H4v-7zm5%200h2v7H9v-7zM2%2019h20v2H2v-2zm12-9h2v7h-2v-7zm4%200h2v7h-2v-7zM12%201%202%206v2h20V6L12%201z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M4%2010h2v7H4v-7zm5%200h2v7H9v-7zM2%2019h20v2H2v-2zm12-9h2v7h-2v-7zm4%200h2v7h-2v-7zM12%201%202%206v2h20V6L12%201z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-mode{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M17%207H7a5%205%200%200%200%200%2010h10a5%205%200%200%200%200-10zm0%208a3%203%200%201%201%200-6%203%203%200%200%201%200%206z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M17%207H7a5%205%200%200%200%200%2010h10a5%205%200%200%200%200-10zm0%208a3%203%200%201%201%200-6%203%203%200%200%201%200%206z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-mail{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M20%204H4a2%202%200%200%200-2%202v12a2%202%200%200%200%202%202h16a2%202%200%200%200%202-2V6a2%202%200%200%200-2-2zm0%204-8%205-8-5V6l8%205%208-5v2z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M20%204H4a2%202%200%200%200-2%202v12a2%202%200%200%200%202%202h16a2%202%200%200%200%202-2V6a2%202%200%200%200-2-2zm0%204-8%205-8-5V6l8%205%208-5v2z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-target{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%202a10%2010%200%201%200%200%2020%2010%2010%200%200%200%200-20zm0%2016a6%206%200%201%201%200-12%206%206%200%200%201%200%2012zm0-4a2%202%200%201%200%200-4%202%202%200%200%200%200%204z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M12%202a10%2010%200%201%200%200%2020%2010%2010%200%200%200%200-20zm0%2016a6%206%200%201%201%200-12%206%206%200%200%201%200%2012zm0-4a2%202%200%201%200%200-4%202%202%200%200%200%200%204z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-play{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M8%205v14l11-7z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M8%205v14l11-7z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-folder{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M10%204H4a2%202%200%200%200-2%202v12a2%202%200%200%200%202%202h16a2%202%200%200%200%202-2V8a2%202%200%200%200-2-2h-8l-2-2z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M10%204H4a2%202%200%200%200-2%202v12a2%202%200%200%200%202%202h16a2%202%200%200%200%202-2V8a2%202%200%200%200-2-2h-8l-2-2z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-tool{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M22.7%2019l-9.1-9.1c.9-2.3.4-5-1.5-6.9a5.9%205.9%200%200%200-6.4-1.3L9%206%206%209%201.6%204.7C.4%206.6.7%209.3%202.6%2011.2c1.9%201.9%204.6%202.4%206.9%201.5l9.1%209.1c.4.4%201%20.4%201.4%200l2.7-2.7c.4-.4.4-1%200-1.4z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M22.7%2019l-9.1-9.1c.9-2.3.4-5-1.5-6.9a5.9%205.9%200%200%200-6.4-1.3L9%206%206%209%201.6%204.7C.4%206.6.7%209.3%202.6%2011.2c1.9%201.9%204.6%202.4%206.9%201.5l9.1%209.1c.4.4%201%20.4%201.4%200l2.7-2.7c.4-.4.4-1%200-1.4z%22%2F%3E%3C%2Fsvg%3E");}
+.icon-brain{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M13%203a4%204%200%200%200-4%204v.1A4%204%200%200%200%206%2011a4%204%200%200%200%201%202.6V17a3%203%200%200%200%206%200V3zm-2%200v14a1%201%200%200%201-2%200v-4H8a2%202%200%200%201%200-4h1V7a2%202%200%200%201%202-2z%22%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M13%203a4%204%200%200%200-4%204v.1A4%204%200%200%200%206%2011a4%204%200%200%200%201%202.6V17a3%203%200%200%200%206%200V3zm-2%200v14a1%201%200%200%201-2%200v-4H8a2%202%200%200%201%200-4h1V7a2%202%200%200%201%202-2z%22%2F%3E%3C%2Fsvg%3E");}
+
+/* Icon sizing inside a section heading — matches the heading, subtle accent color, aligned. */
+.section-title > .icon,
+#formConfig > div.card > b > .icon,
+#formConfig .config-section-toggle b > .icon{width:1.15rem;height:1.15rem;color:var(--link-color);position:relative;top:1px;margin-right:2px;}

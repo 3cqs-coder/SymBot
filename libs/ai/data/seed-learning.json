@@ -1,0 +1,7746 @@
+{
+	"manifest": {
+		"format": "symbot-ai-learning",
+		"version": 1,
+		"source": "seed",
+		"created": 1750000000000,
+		"count": 966,
+		"checksum": "be684ff03b2898b40666f7bef6b46ab26afb1a9ffb253673346dd54e0a691271",
+		"symbot_version": "7.0",
+		"tools_version": "8db1484880f1cf85",
+		"license": "CC0-1.0",
+		"description": "SymBot AI learning starter corpus",
+		"author": null,
+		"language": "en"
+	},
+	"records": [
+		{
+			"question": "what's open right now?",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my open deals",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "open deals?",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list all my active positions",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "can you show me everything I currently have running?",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades are still active?",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a rundown of my current deals",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what positions do I have going at the moment",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull up my open trades with the key numbers",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "I want to see my active deals and their entry prices",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "display open positions please",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats currently in play?",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the deals that are open, pairs and targets and all",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many deals are running and on what pairs?",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list open deals with safety orders used",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what am I holding open at the moment",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "gimme my open positions",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "current open deals overview",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "could you list out the trades I have open with avg entry and target?",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show active deals",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "open trades summary",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "let me see my running positions",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me each open deal and how many safety orders it's used",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list my currently active trades",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the state of my open deals, just the basics",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "i wanna check my open positions",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "open positions with pair and target price",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "can u show all deals currently open",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "active deals list",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's running in my account right now",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me my open deals and their average entry",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how are my open deals doing?",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my total unrealized pnl right now",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deal is losing the most?",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my positions are underwater?",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my open deals by profit and loss",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "who's my biggest gainer right now",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the live P/L on each open deal",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my worst performing open trade at the moment",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "am I up or down overall on my open positions?",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are in the red?",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total open profit please",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much am I down across all my open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trade is bleeding the most",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "sort open positions from biggest loser to biggest winner",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the unrealized gain on my open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show current profit or loss for everything I've got open",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which positions are green and which are red",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the pnl breakdown of my open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how's the performance on my active trades looking",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which open deal has the worst drawdown right now",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my open deals, are they making money?",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me the biggest loser among my open positions",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals are deepest underwater",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "live pnl summary for open trades",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my net unrealized across open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank open positions by current gain",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which one is furthest in profit right now",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much profit am I sitting on unrealized",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me losers first for my open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are any of my trades losing money right now",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me winners and losers of my open book",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total unrealized gain or loss on the open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which position is hurting me the most today",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "of my open trades, how are they performing pnl wise",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whos winning and whos losing right now",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check the profit status on all open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are closest to hitting take profit?",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's most likely to close soon",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the deals nearest their target",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which position is about to take profit?",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals are almost at their tp",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trade will close first?",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my open deals by how close they are to closing in profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "anything about to hit its take profit target?",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are nearest to completing",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the soonest deal to close",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "of my open positions which is nearest to closing in profit?",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show deals approaching take profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades are right on the edge of their target price",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats gonna close next",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals closest to tp please",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my open deals is closest to finishing",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how close am I to closing any deals in profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me positions that are nearly at target",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deal needs the smallest move to hit take profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list deals ordered by distance to take profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any deals about to wrap up soon?",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades are closest to their sell target",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats closest to take profit right now",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "nearest deal to profit target",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which positions are nearly ready to sell for profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me what deal is likeliest to close today",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats about to trigger take profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "closest deals to closing in the green",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which one is closest to its tp target",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me what's near the finish line",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deal is going to hit target soonest",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "positions closest to take-profit, top of the list",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what are my oldest open deals?",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which position has been open the longest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me my most stagnant trades",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals have been sitting open forever",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "longest running deals please",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's been open the most days",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find my stalest positions",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades have been dragging on the longest?",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show oldest deals first",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals are the most stuck / oldest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my open deals is the most ancient",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list positions by age, oldest at the top",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats been hanging around unclosed the longest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my longest-held open trade?",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "oldest active positions",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what trades started the longest time ago and still haven't closed",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are the oldest still open",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find deals that have gone stagnant",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my open deals by how long they've been open",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my dustiest deal",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which position has been alive the longest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the oldest deals in my book",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals open longest, list em",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my most long-lived open trade",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals refuse to close, oldest ones",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find the trades that have been open the greatest number of days",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "oldest open deal on the account?",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me positions that have aged the most",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats been idle and open the longest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my stalest open deals, sorted by age",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trade has stagnated the longest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list the deals I opened earliest that are still active",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are near max safety orders?",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what positions have used almost all their safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades have the least DCA cushion left?",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me deals running out of averaging down room",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are almost out of safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals have used most of their safety order ladder",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "positions close to max safety orders please",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades have barely any safety orders left",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show deals that are nearly maxed on their SOs",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my deals has the least room to average down",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's dangerously close to using all safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals with the fewest safety orders remaining",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which positions have burned through their DCA ladder",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me trades near their max safety order count",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats running low on safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals have almost no averaging room left",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "positions that have nearly exhausted their safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show deals with little DCA cushion remaining",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals are at risk because they used up their safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which open deal is closest to max safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "trades running out of safety orders, list them",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which positions have deployed most of their safety orders already",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's nearly tapped out on safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals that maxed out or nearly maxed their safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades have used up their DCA budget",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats got the least safety order cushion right now",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show positions near the end of their safety order ladder",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals have few safety orders to spare",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals are near maxed safeties",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me deals that have nearly all safety orders filled",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how am I doing overall?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my win rate this month?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total profit this week please",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a summary of my trading performance",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much have I made in the last <n> days?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my success rate lately",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me overall stats for the past week",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "average profit percent across all my closed deals?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many deals did I close this month",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "am I profitable right now?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the big picture on my returns",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how long does a deal usually stay open on average?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "performance recap for the last quarter",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my avg deal duration",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me my overall gain since the start",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how's my portfolio been performing this week?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summary of profits and win rate for today",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what percentage of my trades are winners overall",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me my numbers for the last <n> days",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much total return did the bots generate this year?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "quick performance check please",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the average return per closed trade",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how have my trades done in aggregate?",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my hit rate and total gains this month",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "overall profitability rundown",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many completed deals and what win % last <n> days",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a snapshot of how the account is doing",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my cumulative profit so far",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did I do better this week than usual? just the totals",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "report my average profit and deal count for the month",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how successful have my trades been overall",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the mean time my deals are open",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total gains and win rate, last <n> days",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how's business? overall trading results please",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the top-line performance figures",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my roi this week from closed deals",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which pair is my most profitable?",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my coins by profit",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my worst performing pair?",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "best and worst markets please",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trading pair has the highest win rate?",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me profit broken down by pair",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what coin makes me the most money",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which pairs are losing me money",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "most traded pair?",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank markets by success rate",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "top <n> pairs by gains",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my least profitable coin",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which symbol performs best for me",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a leaderboard of pairs by return",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what pair should I stop trading, worst one?",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare my coins by profitability",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which market do I win on most often",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "break down performance per trading pair",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the top earning coin this month",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pairs sorted from best to worst profit",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which coin has the best hit rate",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the most and least profitable markets",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my go-to pair, the one I trade the most?",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank each symbol by realized gains",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which pairs are dragging down my results",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "best coin by win percentage overall",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "per-pair profit table please",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which market gives me the biggest returns",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list coins from most to least traded",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my strongest pair and my weakest pair",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show pair rankings by average profit %",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which coins are actually worth trading for me",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "profit by symbol, highest first",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what pair loses the most on average",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me which market has been my best bet",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot is performing the best?",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my bots by profit",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my worst bot?",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare my strategies by returns",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my bots had the best win rate overall?",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which strategy makes the most money",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me bot profit rankings",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot should I turn off, the least profitable one",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "leaderboard of my bots by realized gains",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how do my bots stack up against each other",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "best performing strategy this month",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot wins most often",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank strategies by success rate",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my top earning bot",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare profitability across all bots",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot is underperforming",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show each bot's profit side by side",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which strategy has the highest win percentage",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my bots ranked from best to worst",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot brings in the biggest returns",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me the most and least profitable bots",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how's each bot doing on profit",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which strategy is dragging me down",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "bot performance comparison please",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the win rate of each bot",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my strategies performs worst",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank the bots by average profit",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot has been my money maker",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me realized profit per bot",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot closed the most winning trades",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "stack ranking of strategies by return",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whos my best bot and whos my worst",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show bots ordered by profitability",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot is the most consistent winner",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare the two strategies profit-wise",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list my bots",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what bots do I have configured?",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me my bot settings",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bots are enabled?",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the take profit on my bots",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the max safety orders for each bot",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my bots are turned off",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the config of all my strategies",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many bots do I have set up",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list the DCA bots and their parameters",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the take-profit percentage configured",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me which bots are active vs paused",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what safety order settings am I running",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "display all bot configurations",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which strategies are currently disabled",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what pairs is each bot set to trade",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a rundown of my bot setups",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what are my current bot settings",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list every bot I've created",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bots exist and are they on or off",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's my deviation setting on the bots",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull up my strategy configurations",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how are my bots configured",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show enabled and disabled bots",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what max active deals is each bot allowed",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list bots with their take profit and SO count",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "do I have any bots switched off right now",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the settings for all configured strategies",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats configured on my bots, tp and safety orders",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me a list of my trading bots",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bots are running and how are they tuned",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the profit target set on each bot",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "enumerate my bots and their config",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are all my bots enabled or is one paused",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me the settings behind my strategies",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals closed recently?",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me my last few completed trades",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what finished lately",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list the most recent closed deals",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what were my last trades and how'd they end",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "recently completed deals please",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the latest closed positions",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what just closed out",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the last handful of finished deals",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades wrapped up most recently",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show recent deal outcomes",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what were the results of my last closed deals",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull up recently finished trades",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what closed in the last little while",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list my newest completed deals",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me deals that just wrapped",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "latest finished deals and their profit",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "recent closed trades rundown",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the most recent deal that completed",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the last few deals that ended",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any deals close today?",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a list of recently closed positions",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what completed deals do we have from lately",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the recent trade history that closed",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals finished up most recently and how",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what are the last deals to close",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "display recently ended deals",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list closed deals from the past day or so",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats been closing out lately",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the recent finished trades and outcomes",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals have completed most recently",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the freshest closed deals",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "recently closed trades, most recent first",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "How much of my capital is actually deployed right now?",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the overall portfolio picture",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my dry powder looking like?",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "How much cash do I have free versus tied up in deals?",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "portfolio summary please",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "If every safety order fills, how much would I be committed for total?",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my max commitment across the whole account if all the SOs trigger",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much money is currently working vs sitting idle",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "Show me funds deployed against funds available.",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much powder do i have left to deploy",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats tied up overall in the bot?",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "Give me a high level capital overview",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what portion of my bankroll is in play right now",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the total capital allocation summary",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much free capital is left to open new deals",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summarize my deployed vs reserved funds",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my overall utilization of funds",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much is committed and how much is still spare",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "portfolio overview - deployed, available, worst case commitment",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much of my stack is out there working",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me the big picture on my capital usage",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me deployed capital and remaining buying power",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my capital breakdown, in-use versus uncommitted",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my current fund deployment ratio",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "quick capital summary — used and free",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how committed am i overall right now",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much have I put to work so far",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the money overview: working capital and spare",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "break down my exposure by quote currency",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which coin is tying up the most of my money?",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show exposure per pair",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my exposure split across USDT and USDC",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "exposure by currency please",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "where is most of my capital concentrated by coin",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which quote currency am I most exposed to?",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a per-pair exposure breakdown",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "do I have a shortfall in any particular currency?",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how is my exposure distributed across the different quotes",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me exposure grouped by coin",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which pair has the biggest chunk of my funds committed",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "per currency exposure and any gaps",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "break my committed capital down by base asset",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show which currencies would come up short if deals ladder down",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "exposure breakdown across all my pairs",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much of each stablecoin is committed",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which markets carry the heaviest exposure",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my pairs by how much theyve tied up",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my exposure per exchange currency",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "where's my concentration risk by coin",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me exposure figures for each quote asset",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which currency has a potential shortfall for the safety orders",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "exposure by coin, biggest first",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what pairs are hogging my capital",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show a currency-by-currency view of committed funds",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how spread out is my exposure between quotes",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me exposure per pair and per currency",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which asset am i most heavily deployed into",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "do i have enough of each quote coin to cover all the safeties",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the exposure map by currency",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the per coin allocation of my open positions",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list exposure grouped per trading pair",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many deals are underwater by more than <n>?",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which is my worst performing open deal",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how deep underwater am I across everything?",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the risk on my open positions",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any deals close to hitting their stop loss?",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many trades are more than <n> in the red",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the downside picture on active deals",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my open risk look like",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total floating loss across the book?",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many positions are underwater past <n> percent",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are any of my deals near their stop?",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summarize the danger across my open trades",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how bad is it right now on the open deals",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the stop loss picture across active positions",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count the deals that are deep in the red",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many of my deals are getting close to being stopped out",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "risk report on open deals please",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "am I sitting on big paper losses anywhere?",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the worst drawdown among my current deals",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show deals that are dangerously close to stop-loss",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the overall downside exposure on live deals",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a risk snapshot of the open book",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total open loss and how many deals are badly down",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is anything about to trip its stop loss",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the P/L and stop-loss risk on all open deals",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much USDT do I have?",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my available balance",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much USDC is in my account",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check my balances",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what funds do I have on the exchange right now",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my account balance",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much free cash is on my binance account",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my current balance per currency",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much do I have available to trade",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me my wallet balances",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much bitcoin do i hold",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me my balances per exchange",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my cash on hand",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "available funds on each exchange?",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the balance tracker",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much usdt is free to use",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my balance on kucoin",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list all my currency balances",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much cash have I got sitting idle in the exchange",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the balance for each of my quote coins",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check how much ETH is in my wallet",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "do I have enough USDT balance available",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the cached balance figures",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much stablecoin do i have on hand",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show funds available on my exchanges",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my free USDC balance",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "balances please, all currencies",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much cash is available in the account",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my total balance by exchange and coin",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much money do I currently have to spend",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me the balance on my account",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much usdt and usdc is available",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats my spendable balance right now",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the circuit breaker tripped?",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the circuit breaker status",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is my kill switch active right now",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "has the safety halt kicked in?",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is trading currently halted by the breaker",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "when does the circuit breaker clear",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the breaker enabled?",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did the circuit breaker trip today",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats going on with the safety cutoff",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the bot paused by the circuit breaker",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me if the kill switch is on",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the emergency halt active",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how long until the breaker resets",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the trading breaker currently engaged",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check the circuit breaker for me",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is my safety breaker turned on in settings",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "has the auto halt triggered",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the status of the trade halt mechanism",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the breaker blocking new deals right now",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "when will the circuit breaker lift",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did my kill switch fire",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the protection halt in effect",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me if trading is frozen by the breaker",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the circuit breaker feature even switched on",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the current state of the safety breaker",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the halt still in place or has it cleared",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "circuit breaker check please",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "am I currently locked out by the circuit breaker",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the bots emergency brake engaged",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me whether the breaker has tripped and when it clears",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is new deal creation blocked by the safety cutout",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "whats the breaker doing, tripped or clear",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the circuit breaker armed and has it activated",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deal id is my BTC one?",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find the id for my newest deal",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the deal id for the XLM position?",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "resolve my oldest deal to an id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the id of the SOL trade",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "the ETH deal, what's its id?",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "look up my most recent position's id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "I mean the DOGE one, which deal is that?",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "map my biggest deal to a deal id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is the identifier for the XRP position I opened last?",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find the deal id for my ADA trade",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which one is the AVAX deal, id please",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my latest deal - can you get its id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "turn the MATIC position into an actual deal id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deal id corresponds to my LINK trade",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "get me the id behind the newest position",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "the first deal I ever started, what's the id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "identify the deal id for my BTC/USD trade",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deal is the DOT one? need the id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull the id for my current SOL position",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "the trade on ETH, resolve it to an id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find id for my most profitable deal",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "grab the deal id for my oldest open trade",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "the newest deal, hand me its id",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull up deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "get the full summary for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "details on deal <deal> please",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "look up deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me everything on <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "fetch deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "open the record for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the status of deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summary for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show deal <deal> in full",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "I want the details of <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "read out the summary of <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "can you display <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the current state of deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "bring up deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the full deal summary for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "retrieve deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deal card for <deal> please",
+			"route": null,
+			"tools": [
+				"get_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the order ladder for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list the safety orders on <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what orders have filled on deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the full order stack for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders filled on <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the base and safety orders for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "where's the next safety order for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "the order ladder on <deal>, please",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the next SO price for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "break down the orders for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me each safety order fill for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what price did the safety orders fill at on <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the DCA ladder for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how deep is the safety order ladder on <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list the filled orders and the pending one for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "the orders on my <deal> deal, all of them",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show fill amounts and times for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which safety orders are done on <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the ladder of orders for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "next safety order and the ones already filled for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "all safety orders on <deal> please",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what happened with deal <deal> from start to finish",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "walk me through deal <deal> blow by blow",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "reconcile deal <deal> in detail",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the full story of <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "I want the timeline for deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "narrate what went on with <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "a play-by-play of <deal> please",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "reconstruct the whole history of <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deep dive on what happened in <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me the sequence of events for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the enriched timeline of <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "reconcile <deal> - what actually happened",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "full narrative of deal <deal> from open to now",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "break down step by step how <deal> played out",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "trace deal <deal> through its whole life",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a timeline reconstruction of <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how did <deal> unfold over time",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "blow-by-blow of <deal> please",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "reconcile and narrate deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the full timeline and narrative for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_timeline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the raw log events for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what do the logs say about <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull the log entries for deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "dump the events logged for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the log events tied to <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "raw event log for <deal> please",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the logged events for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list the log lines for deal <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the event log for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what events got recorded for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me everything the logs captured for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the raw events for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what did the system log for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the log trail for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "events in the log for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "the logged events for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the log records for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list logged events for <deal>",
+			"route": null,
+			"tools": [
+				"get_deal_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why is deal <deal> stuck",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's wrong with <deal>",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deal <deal> isn't placing orders, why",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "troubleshoot <deal> for me",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why won't <deal> close",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "figure out why <deal> is frozen",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "<deal> seems broken, what's going on",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "diagnose why <deal> isn't buying",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why is <deal> not triggering safety orders",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's blocking deal <deal>",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "<deal> is halted, why",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why did <deal> fail",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "something's off with <deal>, can you troubleshoot",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why is <deal> hung up",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deal <deal> won't take profit, what's the issue",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "diagnose the problem with <deal>",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why isn't <deal> doing anything",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's causing <deal> to be stuck",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why is <deal> stalled",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why is <deal> stuck and not selling",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me all my BTC deals",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how have my ETH deals done",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list every SOL/USD deal I have",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull up my XRP positions",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my AVAX deals - all of them",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me every LINK deal",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how are my MATIC positions doing overall",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list deals for DOT",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me the ATOM deals I've run",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "all my UNI trades please",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's the performance of my BTC/USD deals",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull deals on the ETH pair",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my XRP/USD deal history",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a rundown of my ADA deals",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my LINK/USD trades, list them",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show all deals for the MATIC market",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what have my DOT deals returned",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull every ATOM position on the books",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summarize my deals on the SOL pair",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list all the BTC deals I've got going",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my deals are paused right now",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me all the stuck deals",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's currently frozen",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list every paused deal and why",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any deals halted at the moment",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which positions are on hold",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the deals that are stuck and the reason",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are there any paused deals",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me everything that's paused",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals aren't running right now and why",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list all frozen positions with reasons",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me my halted deals",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals got paused",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "anything stuck across all my deals",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull up the paused deals list",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's on pause and for what reason",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "do I have any deals in a stuck state",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show all currently suspended deals",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the rundown of paused/stuck deals",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades are frozen and the cause",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "everything halted right now, please",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me deals sitting paused",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are any of my positions stuck at the moment",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list the paused deals and their pause reasons",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search the logs for insufficient funds",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "grep the log file for canceled orders",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find any mention of disconnects in the logs",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "look through the logs for timeout",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "can you search the log for rate limit",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any mention of websocket in the logs?",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "scan the logs for the phrase connection refused",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check the log file for API key errors",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find lines about safety order in the logs",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search logs for margin",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "grep logs for exchange maintenance",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "look up 'order filled' in the log",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "anything in the logs mentioning nonce?",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "pull up log lines containing take profit",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search the logfile for the word 'panic'",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "do a log search for balance too low",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find where the logs say deal closed",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "logs mentioning binance anywhere?",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search through logs for 'retry'",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "hunt in the logs for signature invalid",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me any log entries about throttling",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "grep the log for DCA",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search logs for the term liquidation",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find log references to price deviation",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "can you look in the logs for stop loss",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search log files for the string 'ECONNRESET'",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any log lines about pair not found?",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "comb the logs for the word 'rejected'",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "look for webhook in the logs",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search the logs for min notional",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find anything in the log about slippage",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "grep logfile for 'unauthorized'",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search logs where it mentions funding rate",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "trawl the logs for order placed",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check logs for the phrase 'circuit breaker'",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "look in the log file for base order",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "search logs mentioning maintenance window",
+			"route": null,
+			"tools": [
+				"search_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders were placed today?",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count the base orders filled this week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many orders did the bot place yesterday",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the order count for the last <n>h",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total fills today, base vs safety",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders in the past hour",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "number of base orders this month?",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "break down orders per deal for today",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many orders got filled overall",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count safety orders across all deals this week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many fills in the last <n> days",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tally up the base orders since yesterday",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "orders placed this morning?",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many SOs triggered today",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count of filled orders per deal this week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many base orders opened in the last day",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a count of safety orders yesterday",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many trades filled overall this week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "number of orders executed in the past <n> hours",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders per deal today",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count all fills for the last month",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many base vs safety orders were placed this week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "orders filled count, today please",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders have gone off in the last hour",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total number of orders across every deal today",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many base orders did each deal open this week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count orders placed since midnight",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many fills yesterday, split by type",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many orders in total the past week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me safety order counts for each deal today",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many orders were executed last <n> hours",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count of base orders opened overall",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders this month per deal",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "number of filled orders today",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many trades did we place over the last week",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tally the fills for the past <n> days",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many base orders got triggered yesterday",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count today's orders broken out per deal",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any errors lately?",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's gone wrong recently",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summarize recent problems across my deals",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are there any issues I should know about",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me recent failures",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "anything broken today?",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a rundown of errors from the last day",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "has anything failed recently",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what problems have come up lately",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "were there any insufficient funds errors",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summarize what went wrong this week",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are my deals hitting any errors",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me about recent trading problems",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any retries exhausted or failures?",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what issues has the bot run into",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me a summary of errors",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "anything going sideways with the deals",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "recent problems overview please",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "have there been any invalid order errors",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is everything healthy or are there errors",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any critical problems in the last <n>h",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "round up the errors from today",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did we trip any safeguards or get errors recently",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what's gone wrong across the board lately",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are there problems I need to look at",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any error conditions in the deals right now",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summarize genuine issues, not routine stuff",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "has the bot thrown any errors this week",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the recent trouble report",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "anything failing on the exchange side lately",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did the bot restart today?",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many times has SymBot restarted this week",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "has the bot rebooted lately",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count the restarts in the last <n> hours",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many restarts today",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did SymBot reboot at all this morning",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "number of times the bot started up this week",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how often did the bot restart yesterday",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did symbot reload itself today",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many reboots overall",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count how many times the process restarted this month",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "has the bot been restarting a lot",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any restarts in the past hour?",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did the service restart in the last week",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "tell me the restart count for today",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many bot restarts over the last <n>h",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "has symbot booted up more than once today",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "number of restarts since yesterday",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did it reboot overnight",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many times has the bot relaunched this week",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count restarts in the last month",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "was there a restart today at all",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how frequently is the bot restarting",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did SymBot go down and restart recently",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total restart count for the past <n> days",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many times did the bot restart in the last day",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "have there been any restarts this week",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "restart tally for today please",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did the bot restart itself after a crash today",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many times has symbot started up in <n>h",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count of bot reboots yesterday",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many times did the authentication error happen",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count how often insufficient funds appears in the logs",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "when did the errors spike",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count invalid price by hour",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how often does the circuit breaker trip",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "was there a burst of network timeouts around this time",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "group the errors by hour to see when they happened",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how frequently do disconnects occur in the logs",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "count each error type separately",
+			"route": null,
+			"tools": [
+				"analyze_logs"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what happened between <n>am and <n>:<n>am",
+			"route": null,
+			"tools": [
+				"get_events_in_window"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me everything that happened around that time",
+			"route": null,
+			"tools": [
+				"get_events_in_window"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what events occurred between those two timestamps",
+			"route": null,
+			"tools": [
+				"get_events_in_window"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "give me the sequence of events in that window",
+			"route": null,
+			"tools": [
+				"get_events_in_window"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what was happening around the restart",
+			"route": null,
+			"tools": [
+				"get_events_in_window"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show all events from the last incident window",
+			"route": null,
+			"tools": [
+				"get_events_in_window"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what went wrong around <n> this morning",
+			"route": null,
+			"tools": [
+				"find_incident"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "was there an outage that affected my deals",
+			"route": null,
+			"tools": [
+				"find_incident"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why did a batch of deals close at once",
+			"route": null,
+			"tools": [
+				"find_incident"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "investigate the incident around that time",
+			"route": null,
+			"tools": [
+				"find_incident"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "was there an api failure that hit my deals",
+			"route": null,
+			"tools": [
+				"find_incident"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "correlate the errors with the deals that finished",
+			"route": null,
+			"tools": [
+				"find_incident"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what caused all those deals to finish together",
+			"route": null,
+			"tools": [
+				"find_incident"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "were there any garbage prices",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check for bad or crazy prices",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why did a deal show a crazy profit",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "scan for price glitches",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "were there any implausible prices in the logs",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "find any impossible profit numbers",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "check for zero or invalid prices",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did any deal get a wrong price",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "look for anomalous prices",
+			"route": null,
+			"tools": [
+				"scan_price_anomalies"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are closest to profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals will close soon",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are most likely to close",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals will close soonest",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals closest to taking profit",
+			"route": null,
+			"tools": [
+				"get_deals_closest_to_take_profit"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my total unrealized profit and loss",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deal is losing the most right now",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my open deals by unrealized pnl",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which open deals are underwater",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show live status of my open deals",
+			"route": null,
+			"tools": [
+				"get_open_deals_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list my open deals",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals do i have open",
+			"route": null,
+			"tools": [
+				"list_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my recent completed deals",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what deals closed recently",
+			"route": null,
+			"tools": [
+				"list_recent_completed_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how did my deals for this pair perform",
+			"route": null,
+			"tools": [
+				"get_deals_for_pair"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are paused or stuck",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why is a deal not trading",
+			"route": null,
+			"tools": [
+				"get_paused_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my win rate this month",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "summarize my trading performance",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how am i doing overall",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my total profit",
+			"route": null,
+			"tools": [
+				"get_performance_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which pairs are the most profitable",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my best pair",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which pair is most traded",
+			"route": null,
+			"tools": [
+				"get_pair_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot performs best",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare my bots",
+			"route": null,
+			"tools": [
+				"get_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list my bots and their settings",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bots are enabled",
+			"route": null,
+			"tools": [
+				"list_bots"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my portfolio summary",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much dry powder do i have",
+			"route": null,
+			"tools": [
+				"get_portfolio_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much am i exposed by coin",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my exposure per pair",
+			"route": null,
+			"tools": [
+				"get_exposure_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my risk across all open deals",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how deep in the red am i",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are near their stop loss",
+			"route": null,
+			"tools": [
+				"get_open_risk_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my deals are the oldest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals have been open the longest",
+			"route": null,
+			"tools": [
+				"find_oldest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are near their max safety orders",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals have the least room to average down",
+			"route": null,
+			"tools": [
+				"find_deals_near_max_safety_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why did this deal fail",
+			"route": null,
+			"tools": [
+				"diagnose_deal"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what errors happened recently",
+			"route": null,
+			"tools": [
+				"summarize_recent_errors"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many times did symbot restart",
+			"route": null,
+			"tools": [
+				"count_restarts"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the order ladder for a deal",
+			"route": null,
+			"tools": [
+				"get_deal_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders were placed today",
+			"route": null,
+			"tools": [
+				"count_orders"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my account balance",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much usdc do i have available",
+			"route": null,
+			"tools": [
+				"get_balance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the circuit breaker active",
+			"route": null,
+			"tools": [
+				"get_circuit_breaker_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is the id of my newest deal",
+			"route": null,
+			"tools": [
+				"find_deal_id"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are errors higher than usual today?",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is today unusual for errors?",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are my errors spiking compared to the baseline?",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "break down my errors this week versus the prior baseline",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is anything out of the ordinary in the logs?",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are error rates abnormal today?",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how does today compare to normal for errors?",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "any unusual spike in errors?",
+			"route": null,
+			"tools": [
+				"analyze_error_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why did this deal do worse than my winners?",
+			"route": null,
+			"tools": [
+				"compare_deal_to_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare my worst SOL deal to the ones that recovered",
+			"route": null,
+			"tools": [
+				"compare_deal_to_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what did this losing deal do differently?",
+			"route": null,
+			"tools": [
+				"compare_deal_to_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why did my KERNEL deal underperform?",
+			"route": null,
+			"tools": [
+				"compare_deal_to_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "contrast this deal with my successful ones",
+			"route": null,
+			"tools": [
+				"compare_deal_to_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why did that deal do so much worse than usual?",
+			"route": null,
+			"tools": [
+				"compare_deal_to_baseline"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many deals did I close each month?",
+			"route": null,
+			"tools": [
+				"get_deals_over_time"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my monthly profit breakdown this year",
+			"route": null,
+			"tools": [
+				"get_deals_over_time"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "profit per week over the last quarter",
+			"route": null,
+			"tools": [
+				"get_deals_over_time"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many deals closed per day this week?",
+			"route": null,
+			"tools": [
+				"get_deals_over_time"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my monthly deal volume trend",
+			"route": null,
+			"tools": [
+				"get_deals_over_time"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my profit by month over the last year",
+			"route": null,
+			"tools": [
+				"get_deals_over_time"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals closed each week over time",
+			"route": null,
+			"tools": [
+				"get_deals_over_time"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my most profitable deals",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my biggest winners",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my worst losing trades",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "top <n> best deals",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "biggest losers",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "rank my best and worst deals",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which trades made the most money",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my largest losers",
+			"route": null,
+			"tools": [
+				"get_top_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what scheduled tasks do i have",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "list my schedules",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is any schedule failing",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did my backup run",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "when does my next backup run",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show my automations",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "are my scheduled reports running",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which schedules are enabled",
+			"route": null,
+			"tools": [
+				"list_schedules"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what changed recently",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show the audit log",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "who created an api key",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show recent logins",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what admin actions happened this week",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "recent account changes",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what settings were changed",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "who revoked a key",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "audit trail",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deals are underwater by more than <n>",
+			"route": null,
+			"tools": [
+				"get_drawdown_risk"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "my worst drawdown positions",
+			"route": null,
+			"tools": [
+				"get_drawdown_risk"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "riskiest open deals",
+			"route": null,
+			"tools": [
+				"get_drawdown_risk"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals deep in the red with no safety orders left",
+			"route": null,
+			"tools": [
+				"get_drawdown_risk"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show positions underwater beyond <n> percent",
+			"route": null,
+			"tools": [
+				"get_drawdown_risk"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which open deals are most at risk",
+			"route": null,
+			"tools": [
+				"get_drawdown_risk"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "deals that used most of their safety ladder and are down",
+			"route": null,
+			"tools": [
+				"get_drawdown_risk"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how is SymSync <n> doing compared to SymSync <n>",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare my bots",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare bot performance",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which of my bots is better",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "bot A vs bot B",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compare these two bots",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how do my bots stack up against each other",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which bot performs better",
+			"route": null,
+			"tools": [
+				"compare_bot_performance"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "who has logged in recently",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "who logged in",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "recent login activity",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show login history",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "who signed in lately",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "recent sign-ins",
+			"route": null,
+			"tools": [
+				"list_audit_events"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders are used across all my open deals",
+			"route": null,
+			"tools": [
+				"get_open_orders_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total safety orders in play",
+			"route": null,
+			"tools": [
+				"get_open_orders_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "total safety orders across my open positions",
+			"route": null,
+			"tools": [
+				"get_open_orders_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "average safety orders per open deal",
+			"route": null,
+			"tools": [
+				"get_open_orders_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many safety orders total right now",
+			"route": null,
+			"tools": [
+				"get_open_orders_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which open deal has the most safety orders",
+			"route": null,
+			"tools": [
+				"get_open_orders_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how deep are my ladders overall",
+			"route": null,
+			"tools": [
+				"get_open_orders_summary"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "did my tradingview alert arrive",
+			"route": null,
+			"tools": [
+				"get_signal_activity"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "why didnt a deal open for a pair",
+			"route": null,
+			"tools": [
+				"get_signal_activity"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many signals were rejected and why",
+			"route": null,
+			"tools": [
+				"get_signal_activity"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how many signals did my bot get today",
+			"route": null,
+			"tools": [
+				"get_signal_activity"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is my signal source working",
+			"route": null,
+			"tools": [
+				"get_signal_activity"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show recent signal activity and outcomes",
+			"route": null,
+			"tools": [
+				"get_signal_activity"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which exchanges am i trading on?",
+			"route": null,
+			"tools": [
+				"get_exchanges"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what exchange do i use?",
+			"route": null,
+			"tools": [
+				"get_exchanges"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "am i trading live or in sandbox?",
+			"route": null,
+			"tools": [
+				"get_exchanges"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is my most recently opened deal?",
+			"route": null,
+			"tools": [
+				"find_newest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "show me my newest open deal",
+			"route": null,
+			"tools": [
+				"find_newest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "which deal did i open most recently?",
+			"route": null,
+			"tools": [
+				"find_newest_open_deals"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how long has symbot been running",
+			"route": null,
+			"tools": [
+				"get_system_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how long has it been up",
+			"route": null,
+			"tools": [
+				"get_system_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is the uptime",
+			"route": null,
+			"tools": [
+				"get_system_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much memory is symbot using",
+			"route": null,
+			"tools": [
+				"get_system_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what is the current cpu load",
+			"route": null,
+			"tools": [
+				"get_system_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "what version am i running",
+			"route": null,
+			"tools": [
+				"get_system_status"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "is the system healthy",
+			"route": null,
+			"tools": [
+				"get_system_status"
+			],
+			"confidence": "medium"
+		},
+		{
+			"question": "what is <n> to the power of <n>",
+			"route": null,
+			"tools": [
+				"calculate"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "how much bigger is the fourth safety order at a <n> size scale",
+			"route": null,
+			"tools": [
+				"calculate"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "calculate <n> times <n> to the fourth minus <n>",
+			"route": null,
+			"tools": [
+				"calculate"
+			],
+			"confidence": "high"
+		},
+		{
+			"question": "compute the compounded safety order size",
+			"route": null,
+			"tools": [
+				"calculate"
+			],
+			"confidence": "medium"
+		},
+		{
+			"question": "work out the math on this",
+			"route": null,
+			"tools": [
+				"calculate"
+			],
+			"confidence": "medium"
+		}
+	]
+}

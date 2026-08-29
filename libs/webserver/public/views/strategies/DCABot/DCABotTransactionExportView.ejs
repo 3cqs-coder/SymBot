@@ -2,23 +2,7 @@
 
 <script>
 
-	function getBots() {
-
-		$.ajax({
-					type: 'GET',
-					url: './api/bots',
-					data: {},
-					dataType: 'json',
-					success: function(data) {
-
-						populateBotSelect(data.data || []);
-					},
-					error: function(data) {
-
-						populateBotSelect([]);
-					}
-		});
-	}
+	function getBots() { SymBot.UI.fetchBots(populateBotSelect); }
 
 
 	function populateBotSelect(bots) {
@@ -66,7 +50,7 @@
 			? ' Sandbox deals <b>will</b> be included.'
 			: ' Sandbox deals will <b>not</b> be included.';
 
-		const content = '<div style="font-size: 1.2rem; text-align: left;">'
+		const content = '<div style="font-size: var(--fs-dialog-title); text-align: left;">'
 			+ 'Download a transaction CSV for ' + rangeText + '?'
 			+ sandboxText
 			+ '<br><br>This exports your transactions for import into tax software. It does not calculate taxes, gains, or cost basis.'

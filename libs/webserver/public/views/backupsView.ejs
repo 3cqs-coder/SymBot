@@ -1,31 +1,115 @@
 <%- include('./partialsHeaderView'); %>
 
+<script>
+
+	function hubBackupNowRun() {
+
+		fetch('./api/hub/backup', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+			.then(function (r) { return r.json(); })
+			.then(function (j) { if (j && j.success) { location.reload(); } else { alert('Backup failed: ' + ((j && j.error) || 'unknown')); } })
+			.catch(function () { alert('Backup request failed'); });
+	}
+
+	function hubBackupNow() {
+
+		// Confirm before taking the snapshot. A backup is non-destructive (it only creates a new
+		// snapshot), so a simple confirm is enough — no check-the-box gate like the restore uses.
+		if (window.SymBot && typeof SymBot.UI.confirmDialog === 'function') {
+
+			SymBot.UI.confirmDialog({
+				content: 'Take a backup of the Hub control-plane database now?<br><br>'
+					+ 'This snapshots the Hub\'s <b>users, API keys and audit log</b>. It does not affect any trading instance.',
+				confirmText: '<div>Backup now</div>',
+				onConfirm: function () { hubBackupNowRun(); }
+			});
+		}
+		else if (confirm('Take a backup of the Hub control-plane database now?')) {
+
+			hubBackupNowRun();
+		}
+	}
+
+	function hubRestoreRun(file) {
+
+		fetch('./api/hub/restore', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ file: file }) })
+			.then(function (r) { return r.json(); })
+			.then(function (j) { if (j && j.success) { alert('Hub database restored.'); location.reload(); } else { alert('Restore failed: ' + ((j && j.error) || 'unknown')); } })
+			.catch(function () { alert('Restore request failed'); });
+	}
+
+	function hubRestore(file) {
+
+		// This replaces the entire Hub control-plane database (all Hub users, API keys and the
+		// audit log). Gate it with the same styled, check-the-box confirmation used for the other
+		// heavy system actions rather than a bare browser prompt.
+		if (window.SymBot && typeof SymBot.UI.confirmDialog === 'function') {
+
+			SymBot.UI.confirmDialog({
+				content: 'Restore the Hub database from <b>' + String(file).replace(/[&<>"]/g, '') + '</b>?<br><br>'
+					+ 'The current Hub <b>users, API keys and audit log</b> will be replaced with this snapshot. '
+					+ 'A safety snapshot of the current state is taken first, so this is reversible.<br><br>'
+					+ '<input type="checkbox" id="hubRestoreConfirm" class="form-field" style="width:20px;" /> '
+					+ '<b>Check the box to confirm the <span style="color: var(--color-danger);">restore</span></b>',
+				confirmText: '<div style="color: var(--color-danger);">Restore Hub database</div>',
+				onConfirm: function () {
+					if (!$('#hubRestoreConfirm').prop('checked')) { alert('You must check the box to confirm the restore.'); return false; }
+					hubRestoreRun(file);
+				}
+			});
+		}
+		else if (confirm('Restore the Hub database from ' + file + '? The current Hub users, API keys and audit log will be replaced (a safety snapshot is taken first).')) {
+
+			hubRestoreRun(file);
+		}
+	}
+
+</script>
+
 
 <main>
 
 	<div id="contentBox">
 
 		<div class="contentHeaderBox">
-			<b class="contentHeader"><%- appData.name %> Backups</b>
+			<b class="contentHeader"><%= appData.name_display || appData.name %> Backups</b>
 		</div>
+
+		<% var showHub = (typeof isHub !== 'undefined' && isHub && typeof hubBackups !== 'undefined' && hubBackups); %>
+
+		<% if (showHub) { %>
+
+			<div id="hubBackupsBox" class="botsDealsBox" style="width: 100%; margin-bottom: 18px;">
+
+				<div class="view-body">
+
+					<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0;">
+						<b>Hub Control-Plane Backups</b>
+						<button type="button" class="btn" onclick="hubBackupNow()">Backup Now</button>
+					</div>
+
+					<div style="font-size: var(--fs-body); opacity: 0.8; padding-bottom: 10px;">
+						The Hub's own database of users, API keys and the audit log. Snapshots are also taken automatically at startup, daily, and before any reset.
+					</div>
+
+					<%- include('./partialsFileList', { listFiles: hubBackups, downloadBase: './backups/hub/download/', restoreBase: './backups/hub/', emptyText: 'No Hub backups yet.' }) %>
+
+				</div>
+			</div>
+
+		<% } %>
 
 
 		<div id="dataBox" class="botsDealsBox" style="width: 100%;">
 
 			<div class="view-body">
 
-			<% 
-				for (let i = 0; i < files.length; i++) {
-					
-					let fileName = files[i]['name'].split(/[\\\/]/).pop();
-					let size = files[i]['size_human'];
-			%>
+				<% if (showHub) { %>
+					<div style="padding: 6px 0;"><b>Instance System Backups</b></div>
+				<% } %>
 
-				<div class="mainMenuItem" style="justify-content: space-between;">
-					<a href="./backups/download/<%- fileName %>"><%- fileName %></a> <%- size %>
-				</div>
-			
-			<% } %>
+				<%- include('./partialsInstancesMap') %>
+
+				<%- include('./partialsFileList', { listFiles: files, downloadBase: './backups/download/', emptyText: 'No backups yet.' }) %>
 
 			</div>
 		</div>

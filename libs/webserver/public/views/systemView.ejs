@@ -4,119 +4,39 @@
 
 function shutDownSystem() {
 
-$.confirm({
-	  title: false,
-	  boxWidth: "50%",
-	  useBootstrap: false,
-	  content: `<div style="font-size: 1.2rem; text-align: left;">Shutdown <%- appData.name %>?<br><br>
-	<form action="" style="display: inline;">
+	SymBot.UI.confirmWithCheckbox({
+		content: `Shutdown <%= appData.name_display || appData.name %>?<br><br>
 	<B>WARNING:</b>
-
 		<ul>
-			<li>This will shutdown <%- appData.name %>.
+			<li>This will shutdown <%= appData.name_display || appData.name %>.
 			<li>All functionality will stop and will only resume after the system is back up.
-			<li>If you do not have a process manager to automatically restart  <%- appData.name %>, you will need to manually start it again.
-		</ul>
-
-	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">SHUTDOWN</span> <%- appData.name %></b>
-	</form>
-	</div>`,
-	  buttons: {
-		  formSubmit: {
-			  btnClass: 'btn-default',
-			  text: '<div style="color: var(--color-danger);">Shutdown</div>',
-			  action: function() {
-
-				const inputValue = parseFloat($('#confirmNum').val());
-				const confirmBox = $('#confirmBox').prop('checked');
-
-				if (!confirmBox) {
-
-					alertBox('You must check the box to confirm shutdown', function() {});
-				}
-				else {
-
-					processShutDown();
-				 }
-			  },
-		  },
-		  cancel: {
-			  btnClass: 'btn-default',
-			  text: '<div style="color: #000000;">Cancel</div>',
-			  action: function() {},
-		},
-	},
-	  onContentReady: function() {
-
-		$('#confirmBox').prop('checked', false);
-
-		let jc = this;
-		  this.$content.find("form").on("submit", function(e) {
-			e.preventDefault();
-			  jc.$$formSubmit.trigger("click");
-		  });
-	  },
-  });
+			<li>If you do not have a process manager to automatically restart  <%= appData.name_display || appData.name %>, you will need to manually start it again.
+		</ul>`,
+		confirmLabel: 'Check the box to confirm <span style="color: var(--color-danger);">SHUTDOWN</span> <%= appData.name_display || appData.name %>',
+		confirmText: '<div style="color: var(--color-danger);">Shutdown</div>',
+		warn: 'You must check the box to confirm shutdown',
+		onConfirm: processShutDown
+	});
 }
 
 
 function updateSystem() {
 
-$.confirm({
-	  title: false,
-	  boxWidth: "50%",
-	  useBootstrap: false,
-	  content: `<div style="font-size: 1.2rem; text-align: left;">Update <%- appData.name_main %>?<br><br>
-	<form action="" style="display: inline;">
+	SymBot.UI.confirmWithCheckbox({
+		content: `Update <%- appData.name_main %>?<br><br>
 	<B>WARNING:</b>
-
 		<ul>
 			<li>This will update <%- appData.name_main %> and all Hub instances to the latest version.
 			<li>All functionality will stop and will only resume after the system is back online.
 			<li><%- appData.name_main %> will shutdown after the update completes. You must start it manually if you do not have a process manager that does it automatically.
 			<li>Performing a backup before updating the system is strongly recommended
 			<li>It is highly recommended to monitor logs and activity for a period of time after the update completes to ensure everything is working as expected.
-		</ul>
-
-	<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check the box to confirm <span style="color: var(--color-danger);">UPDATE</span> <%- appData.name_main %></b>
-	</form>
-	</div>`,
-	  buttons: {
-		  formSubmit: {
-			  btnClass: 'btn-default',
-			  text: '<div style="color: var(--color-danger);">Update</div>',
-			  action: function() {
-
-				const inputValue = parseFloat($('#confirmNum').val());
-				const confirmBox = $('#confirmBox').prop('checked');
-
-				if (!confirmBox) {
-
-					alertBox('You must check the box to confirm update', function() {});
-				}
-				else {
-
-					processUpdate();
-				 }
-			  },
-		  },
-		  cancel: {
-			  btnClass: 'btn-default',
-			  text: '<div style="color: #000000;">Cancel</div>',
-			  action: function() {},
-		},
-	},
-	  onContentReady: function() {
-
-		$('#confirmBox').prop('checked', false);
-
-		let jc = this;
-		  this.$content.find("form").on("submit", function(e) {
-			e.preventDefault();
-			  jc.$$formSubmit.trigger("click");
-		  });
-	  },
-  });
+		</ul>`,
+		confirmLabel: 'Check the box to confirm <span style="color: var(--color-danger);">UPDATE</span> <%- appData.name_main %>',
+		confirmText: '<div style="color: var(--color-danger);">Update</div>',
+		warn: 'You must check the box to confirm update',
+		onConfirm: processUpdate
+	});
 }
 
 
@@ -126,12 +46,12 @@ $.confirm({
 	  title: false,
 	  boxWidth: "50%",
 	  useBootstrap: false,
-	  content: `<div style="font-size: 1.2rem; text-align: left;">Backup <%- appData.name %> Database?<br><br>
+	  content: `<div style="font-size: var(--fs-dialog-title); text-align: left;">Backup <%= appData.name_display || appData.name %> Database?<br><br>
 	<form autocomplete="off" action="" style="display: inline;">
 		<B>WARNING:</b>
 
 		<ul>
-			<li>This will create a realtime backup of the <%- appData.name %> database.
+			<li>This will create a realtime backup of the <%= appData.name_display || appData.name %> database.
 			<li>This could cause delays in other functionality while processing and data may change during the backup process.
 			<li>Write your password down in a safe place. You will not be able to restore the database without it.
 		</ul>
@@ -144,6 +64,10 @@ $.confirm({
 
 		<br><br>
 		<input type="checkbox" id="includeChatsBackup" class="form-field" style="width: 20px;" /> <b>Include AI chats</b>
+		<br>
+		<input type="checkbox" id="includeSchedulesBackup" class="form-field" style="width: 20px;" /> <b>Include schedules</b> <span style="color: #888;">(includes stored backup/SFTP credentials)</span>
+		<br>
+		<input type="checkbox" id="includeConfigBackup" class="form-field" style="width: 20px;" /> <b>Include configuration</b> <span style="color: #888;">(app settings + exchange keys; makes the backup portable but it then carries your keys &mdash; keep it safe, and it only opens on a server using the same app password)</span>
 
 		<br><br>
 
@@ -176,7 +100,9 @@ $.confirm({
 				else {
 
 					const includeChats = $('#includeChatsBackup').prop('checked');
-					processBackupDb(password, includeChats);
+					const includeSchedules = $('#includeSchedulesBackup').prop('checked');
+					const includeConfig = $('#includeConfigBackup').prop('checked');
+					processBackupDb(password, includeChats, includeSchedules, includeConfig);
 				 }
 			  },
 		  },
@@ -191,6 +117,10 @@ $.confirm({
 		$('#confirmBox').prop('checked', false);
 		$('#includeChatsBackup').simpleSwitch();
 		$('#includeChatsBackup').prop('checked', false);
+		$('#includeSchedulesBackup').simpleSwitch();
+		$('#includeSchedulesBackup').prop('checked', true);
+		$('#includeConfigBackup').simpleSwitch();
+		$('#includeConfigBackup').prop('checked', false);
 
 		let jc = this;
 		  this.$content.find("form").on("submit", function(e) {
@@ -208,16 +138,16 @@ $.confirm({
 	  title: false,
 	  boxWidth: "50%",
 	  useBootstrap: false,
-	  content: `<div style="font-size: 1.2rem; text-align: left;">Restore <%- appData.name %> Database?<br><br>
+	  content: `<div style="font-size: var(--fs-dialog-title); text-align: left;">Restore <%= appData.name_display || appData.name %> Database?<br><br>
 	<form action="" style="display: inline;">
 		<B>WARNING:</b> 
 		
 		<ul>
-			<li>This will delete all existing data in the <%- appData.name %> database.
+			<li>This will delete all existing data in the <%= appData.name_display || appData.name %> database.
 			<li>All bots and functionality will resume at the same point the backup was created.
 			<li>Be aware of any assets or orders on your exchange that may have already been previously bought, sold, etc.
 			<li>If you are restoring the database to a different server or instance from where the backup was created, you may need to reset the server ID.
-			<li><%- appData.name %> will shutdown after the restore completes. You must start it manually if you do not have a process manager that does it automatically.
+			<li><%= appData.name_display || appData.name %> will shutdown after the restore completes. You must start it manually if you do not have a process manager that does it automatically.
 		</ul>
 	
 	<form id="restore-form" autocomplete="off" onsubmit="event.preventDefault();">
@@ -233,6 +163,10 @@ $.confirm({
 		<input id="resetAiChats" name="resetAiChats" type=checkbox class="form-field"> &nbsp; <b>Reset AI chat history</b>
 		<br>
 		<input id="convertData" name="convertData" type=checkbox class="form-field"> &nbsp; <b>Convert all bots and deals to sandbox mode</b>
+		<br>
+		<input id="restoreSchedules" name="restoreSchedules" type=checkbox class="form-field"> &nbsp; <b>Restore schedules</b> <span style="color: #888;">(overwrites this instance's schedules &amp; backup settings)</span>
+		<br>
+		<input id="restoreConfig" name="restoreConfig" type=checkbox class="form-field"> &nbsp; <b>Restore configuration</b> <span style="color: #888;">(only if the backup includes it; overwrites this server's settings, exchange keys &amp; app password with the backup's &mdash; sign in afterward with the source server's app password)</span>
 	</form>
 
 	<br><br>
@@ -262,7 +196,9 @@ $.confirm({
 				}
 				else {
 
-					processRestoreDb(password, convertData, resetServerId, resetAiChats);
+					const includeSchedules = $('#restoreSchedules').prop('checked');
+					const restoreConfig = $('#restoreConfig').prop('checked');
+					processRestoreDb(password, convertData, resetServerId, resetAiChats, includeSchedules, restoreConfig);
 				 }
 			  },
 		  },
@@ -281,6 +217,12 @@ $.confirm({
 		$('#resetServerId').prop('checked', false);
 		$('#resetAiChats').simpleSwitch();
 		$('#resetAiChats').prop('checked', false);
+
+		$('#restoreSchedules').simpleSwitch();
+		$('#restoreSchedules').prop('checked', false);
+
+		$('#restoreConfig').simpleSwitch();
+		$('#restoreConfig').prop('checked', false);
 	},
 	onContentReady: function() {
 
@@ -315,11 +257,11 @@ function loadRollbacks() {
 
 			data.data.forEach(function(snap) {
 
-				const date = snap.date ? new Date(snap.date).toLocaleString() : 'Unknown date';
+				const date = snap.date ? dateConvertLocal(snap.date) : 'Unknown date';
 				$list.append(
-					'<div style="display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #3e3e3e;">' +
+					'<div style="display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--table-border-color);">' +
 					'<span style="font-size: 1.1rem; flex: 1;">v' + snap.version + ' &mdash; ' + date + '</span>' +
-					'<a href="javascript:void(0);" onclick="rollbackSystem(' + JSON.stringify(snap.snapshotName) + ');" style="color: var(--color-danger); font-size: 1.0rem;">Rollback</a>' +
+					'<a href="javascript:void(0);" onclick="rollbackSystem(' + JSON.stringify(snap.snapshotName) + ');" style="color: var(--color-danger); font-size: var(--fs-body);">Rollback</a>' +
 					'</div>'
 				);
 			});
@@ -334,43 +276,17 @@ function loadRollbacks() {
 
 function rollbackSystem(snapshotName) {
 
-	$.confirm({
-		title: false,
-		boxWidth: '50%',
-		useBootstrap: false,
-		content: '<div style="font-size: 1.2rem; text-align: left;">Rollback to ' + snapshotName + '?<br><br>' +
-			'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+	// Shared checkbox-confirm scaffold (SymBot.UI.confirmWithCheckbox).
+	SymBot.UI.confirmWithCheckbox({
+		content: 'Rollback to ' + snapshotName + '?<br><br>' +
+			'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
 			'<b>Note:</b> Rollback restores code files only. The database is not affected. ' +
 			'If the update introduced database schema changes, rolling back the code may cause compatibility issues. ' +
-			'Review the logs after restart to confirm everything is working.</div><br>' +
-			'<input type="checkbox" id="rollbackConfirmBox" class="form-field" style="width: 20px;" /> ' +
-			'<b>Check the box to confirm <span style="color: var(--color-danger);">ROLLBACK</span></b>' +
-			'</div>',
-		buttons: {
-			formSubmit: {
-				btnClass: 'btn-default',
-				text: '<div style="color: var(--color-danger);">Rollback</div>',
-				action: function() {
-
-					if (!$('#rollbackConfirmBox').prop('checked')) {
-
-						alertBox('You must check the box to confirm rollback', function() {});
-						return false;
-					}
-
-					processRollback(snapshotName);
-				}
-			},
-			cancel: {
-				btnClass: 'btn-default',
-				text: '<div style="color: #000000;">Cancel</div>',
-				action: function() {}
-			}
-		},
-		onContentReady: function() {
-
-			$('#rollbackConfirmBox').prop('checked', false);
-		}
+			'Review the logs after restart to confirm everything is working.</div>',
+		confirmLabel: 'Check the box to confirm <span style="color: var(--color-danger);">ROLLBACK</span>',
+		confirmText: '<div style="color: var(--color-danger);">Rollback</div>',
+		warn: 'You must check the box to confirm rollback',
+		onConfirm: function() { processRollback(snapshotName); }
 	});
 }
 
@@ -413,7 +329,7 @@ function showRollbacks() {
 		title: false,
 		boxWidth: '60%',
 		useBootstrap: false,
-		content: '<div style="font-size: 1.2rem; text-align: left;">Rollback System<br><br>' +
+		content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Rollback System<br><br>' +
 			'<div id="rollback-list" style="font-size: 1.1rem; min-height: 40px;">Loading...</div>' +
 			'</div>',
 		buttons: {
@@ -497,11 +413,13 @@ $.ajax({
 }
 
 
-function processBackupDb(password, includeChats) {
+function processBackupDb(password, includeChats, includeSchedules, includeConfig) {
 
 	const requestBody = new URLSearchParams();
 	requestBody.append('password', password);
 	requestBody.append('include_chats', includeChats ? 'true' : 'false');
+	requestBody.append('include_schedules', includeSchedules ? 'true' : 'false');
+	requestBody.append('include_config', includeConfig ? 'true' : 'false');
 
 	$('#spinner-overlay').fadeIn(100);
 
@@ -541,7 +459,7 @@ function processBackupDb(password, includeChats) {
 					URL.revokeObjectURL(url);
 					document.body.removeChild(link);
 					$('#spinner-overlay').fadeOut(100);
-					alertBox('Database backup ' + filename + ' successful! Your download should start automatically.', function() {});
+					alertBox('System backup ' + filename + ' successful! Your download should start automatically.', function() {});
 				});
 			}
 			else {
@@ -555,12 +473,12 @@ function processBackupDb(password, includeChats) {
 
 			$('#spinner-overlay').fadeOut(100);
 
-			alertBox(error.message || 'Error occurred while trying to backup the database.', function() {});
+			alertBox(error.message || 'Error occurred while trying to create the system backup.', function() {});
 		});
 }
 
 
-function processRestoreDb(password, convertData, resetServerId, resetAiChats) {
+function processRestoreDb(password, convertData, resetServerId, resetAiChats, includeSchedules, restoreConfig) {
 
 	const fileInput = $('#file-input')[0]; // Assuming you have an input with id="file-input"
 	const file = fileInput.files[0];
@@ -577,6 +495,8 @@ function processRestoreDb(password, convertData, resetServerId, resetAiChats) {
 	formData.append('convertData', convertData);
 	formData.append('resetServerId', resetServerId);
 	formData.append('resetAiChats', resetAiChats || false);
+	formData.append('includeSchedules', includeSchedules !== false);
+	formData.append('restoreConfig', restoreConfig === true);
 	formData.append('password', password);
 
 	$('#spinner-overlay').fadeIn(100);
@@ -671,15 +591,17 @@ function renderSystemHealth(d) {
 	// Foot: host memory context + app version + PID.
 	let foot = '';
 
-	if (d.host_free_mem_mb != null && d.host_total_mem_mb != null) {
+	if (d.host_available_mem_mb != null && d.host_total_mem_mb != null) {
 
-		// Host memory is at GB scale, so show GB for readability (e.g. "1.01 GB
-		// free of 3.78 GB" rather than "1,030.22 MB free of 3,868.12 MB"). The
-		// process-memory tile stays in MB, where the smaller figures read better.
-		const freeGb  = (d.host_free_mem_mb  / 1024).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-		const totalGb = (d.host_total_mem_mb / 1024).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		// Host memory is at GB scale, so show GB for readability (e.g. "1.01 GB available of 3.78 GB").
+		// The figure is AVAILABLE memory — accurate on Linux (MemAvailable) and Windows; on an OS that
+		// only reports free pages (macOS) it is labeled "free" so the number is never overstated as
+		// availability. The process-memory tile stays in MB, where the smaller figures read better.
+		const availGb = (d.host_available_mem_mb / 1024).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const totalGb = (d.host_total_mem_mb    / 1024).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const memWord = (d.host_mem_basis === 'available') ? 'available' : 'free';
 
-		foot = 'Host memory: ' + freeGb + ' GB free of ' + totalGb + ' GB';
+		foot = 'Host memory: ' + availGb + ' GB ' + memWord + ' of ' + totalGb + ' GB';
 	}
 
 	if (d.app_version) { foot += (foot ? ' · ' : '') + 'SymBot v' + d.app_version; }
@@ -763,11 +685,11 @@ $(document).ready(function() {
 	<div class="view-body">
 
 		<div class="mainMenuItem">
-			<a href="javascript:void(0);" onclick="backupDb();"><span class="menu-icon">&#9741;</span> Backup Database</a>
+			<a href="javascript:void(0);" onclick="backupDb();"><span class="menu-icon">&#9741;</span> Create System Backup</a>
 		</div>
 
 		<div class="mainMenuItem">
-			<a href="javascript:void(0);" onclick="restoreDb();"><span class="menu-icon">&#8601;</span> Restore Database</a>
+			<a href="javascript:void(0);" onclick="restoreDb();"><span class="menu-icon">&#8601;</span> Restore System Backup</a>
 		</div>
 
 		<div class="mainMenuItem">

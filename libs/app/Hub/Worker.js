@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const colors = require('colors');
@@ -22,14 +21,38 @@ async function processWorkerTask(instanceData) {
 		const instanceName = instanceData.name;
 		const prefData = `[WORKER-LOG] [${instanceName}] `;
 
-		// Override all console methods to send messages back to the main thread
+		// Relay log lines to the Hub. Previously this posted ONE cross-thread message per line — a
+		// firehose under normal trading. Now lines are BATCHED and flushed together on a short timer
+		// (or when the buffer fills), collapsing many postMessages into one; the Hub logs each line
+		// identically. EXCEPTION: an `error` line is relayed immediately (flushing any pending batch
+		// first to preserve order) — a worker may crash right after logging it, and that line is
+		// exactly what must reach the Hub, so it is never left sitting in a buffer.
+		const LOG_FLUSH_MS = 400;
+		const LOG_BATCH_MAX = 250;
+		let logBuffer = [];
+		let logFlushTimer = null;
+
+		function flushLogs() {
+			if (logFlushTimer) { clearTimeout(logFlushTimer); logFlushTimer = null; }
+			if (!logBuffer.length) { return; }
+			const lines = logBuffer;
+			logBuffer = [];
+			parentPort.postMessage({ type: WORKER_TO_HUB.LOG_BATCH, lines });
+		}
+
 		function sendLog(level, msg) {
-			
-			parentPort.postMessage({
-				type: WORKER_TO_HUB.LOG,
-				level,
-				data: prefData + msg
-			});
+
+			const line = prefData + msg;
+
+			if (level === 'error') {
+				flushLogs();
+				parentPort.postMessage({ type: WORKER_TO_HUB.LOG_BATCH, lines: [ line ] });
+				return;
+			}
+
+			logBuffer.push(line);
+			if (logBuffer.length >= LOG_BATCH_MAX) { flushLogs(); }
+			else if (!logFlushTimer) { logFlushTimer = setTimeout(flushLogs, LOG_FLUSH_MS); if (logFlushTimer.unref) { logFlushTimer.unref(); } }
 		}
 
 		// Override console methods
@@ -44,18 +67,24 @@ async function processWorkerTask(instanceData) {
 			};
 		});
 
-		// Override stream writes
+		// Override stream writes. Like the console.* overrides above, this RELAYS the line to the
+		// Hub (the canonical path — Hub.logger prefixes, files, and broadcasts it) and does NOT also
+		// forward the raw chunk to the parent stdout. Previously it did both, so a direct stdout
+		// write appeared twice on the Hub console (once relayed+prefixed, once raw). The write
+		// contract is still honored: the callback fires and we return true.
 		function overrideWrite(stream, level, prefix = '') {
-
-			const origWrite = stream.write.bind(stream);
 
 			stream.write = (chunk, encoding, callback) => {
 
-				const text = Buffer.isBuffer(chunk) ? chunk.toString(encoding) : chunk;
+				const enc = (typeof encoding === 'string') ? encoding : undefined;
+				const text = Buffer.isBuffer(chunk) ? chunk.toString(enc) : chunk;
 
 				sendLog(level, prefix + text);
 
-				return origWrite(chunk, encoding, callback);
+				const cb = (typeof encoding === 'function') ? encoding : callback;
+				if (typeof cb === 'function') { cb(); }
+
+				return true;
 			};
 		}
 
@@ -124,78 +153,104 @@ async function processWorkerTaskMessage(SymBot, message) {
 		});
 	}
 
+	// Aggregated AI-learning pack pushed down by the Hub — validate + import (patterns only).
+	if (message.type === HUB_TO_WORKER.LEARNING_PACK) {
+
+		try {
+
+			if (SymBot && SymBot.AIClient && typeof SymBot.AIClient.importHubLearningPack === 'function') {
+
+				await SymBot.AIClient.importHubLearningPack(message.payload);
+			}
+		}
+		catch (e) { /* best-effort; a learning import must never disturb the worker */ }
+	}
+
 	// Get worker instance active deals
 	if (message.type === HUB_TO_WORKER.DEALS_ACTIVE) {
 
-		// Use apiGetActiveDeals (not DCABot.getActiveDeals) so the portfolio
-		// summary is included — needed by the Hub dashboard cards.
-		// Pass a mock req with empty query so req.query access doesn't throw.
-		const mockReq = { query: {} };
-		const result = await SymBot.DCABotManager.apiGetActiveDeals(mockReq, null, false);
+		try {
+			// Use apiGetActiveDeals (not DCABot.getActiveDeals) so the portfolio
+			// summary is included — needed by the Hub dashboard cards.
+			// Pass a mock req with empty query so req.query access doesn't throw.
+			const mockReq = { query: {} };
+			const result = await SymBot.DCABotManager.apiGetActiveDeals(mockReq, null, false);
 
-		parentPort.postMessage({
+			parentPort.postMessage({
 
-			type: WORKER_TO_HUB.DEALS_ACTIVE_RECEIVED,
-			id: message.id,
-			data: {
-					'name':      message.name,
-					'deals':     result.data     || [],
-					'portfolio': result.portfolio || null
-				  }
-		});
+				type: WORKER_TO_HUB.DEALS_ACTIVE_RECEIVED,
+				id: message.id,
+				requestId: message.requestId,   // echo so the Hub matches THIS poll, not an overlapping one
+				data: {
+						'name':      message.name,
+						'deals':     result.data     || [],
+						'portfolio': result.portfolio || null
+					  }
+			});
+		}
+		catch (e) {
+			// ALWAYS reply so the Hub's poll resolves immediately instead of hitting its 5s timeout and
+			// dropping this instance from the dashboard refresh. Empty data + an error the Hub can log.
+			try { parentPort.postMessage({ type: WORKER_TO_HUB.DEALS_ACTIVE_RECEIVED, id: message.id, requestId: message.requestId, data: { 'name': message.name, 'deals': [], 'portfolio': null, 'error': (e && e.message) || 'deals fetch failed' } }); } catch (_) {}
+		}
 	}
 	
 	// System pause received for SymBot worker
 	if (message.type === HUB_TO_WORKER.SYSTEM_PAUSE) {
-	
-		parentPort.postMessage({
-	
-			type: WORKER_TO_HUB.SYSTEM_PAUSE_RECEIVED
-		});
-	
-		const data = message.data;
-	
-		const isPause = data.pause;
-		const pauseMessage = data.message;
-	
-		await SymBot.System.pause(isPause, pauseMessage);
+
+		// Acknowledge FIRST so the Hub never waits on the pause taking effect, then apply it guarded —
+		// a pause failure must not throw out of the message handler.
+		try { parentPort.postMessage({ type: WORKER_TO_HUB.SYSTEM_PAUSE_RECEIVED }); } catch (_) {}
+
+		try {
+			const data = message.data || {};
+			await SymBot.System.pause(data.pause, data.message);
+		}
+		catch (e) { try { SymBot.Common.logger('Hub SYSTEM_PAUSE failed: ' + ((e && e.message) || e)); } catch (_) {} }
 	}
 
 	// Get worker instance bots
 	if (message.type === HUB_TO_WORKER.BOTS_ACTIVE) {
 
-		const botsRaw = await SymBot.DCABot.getBots({});
-		const bots = [];
+		try {
+			const botsRaw = await SymBot.DCABot.getBots({});
+			const bots = [];
 
-		if (botsRaw && botsRaw.length > 0) {
+			if (botsRaw && botsRaw.length > 0) {
 
-			for (let i = 0; i < botsRaw.length; i++) {
+				for (let i = 0; i < botsRaw.length; i++) {
 
-				let bot = JSON.parse(JSON.stringify(botsRaw[i]));
+					let bot = JSON.parse(JSON.stringify(botsRaw[i]));
 
-				bot = await SymBot.DCABot.removeDbKeys(bot);
+					bot = await SymBot.DCABot.removeDbKeys(bot);
 
-				const config = JSON.parse(JSON.stringify(bot.config || {}));
-				const maxFundsObj = await SymBot.DCABot.calculateMaxFunds(config);
+					const config = JSON.parse(JSON.stringify(bot.config || {}));
+					const maxFundsObj = await SymBot.DCABot.calculateMaxFunds(config);
 
-				delete bot.date;
-				delete bot.config;
+					delete bot.date;
+					delete bot.config;
 
-				const botData = Object.assign({}, bot, config, maxFundsObj);
+					const botData = Object.assign({}, bot, config, maxFundsObj);
 
-				bots.push(botData);
+					bots.push(botData);
+				}
 			}
+
+			parentPort.postMessage({
+
+				type: WORKER_TO_HUB.BOTS_ACTIVE_RECEIVED,
+				id: message.id,
+				requestId: message.requestId,   // echo so the Hub matches THIS poll, not an overlapping one
+				data: {
+						'name': message.name,
+						'bots': bots
+					  }
+			});
 		}
-
-		parentPort.postMessage({
-
-			type: WORKER_TO_HUB.BOTS_ACTIVE_RECEIVED,
-			id: message.id,
-			data: {
-					'name': message.name,
-					'bots': bots
-				  }
-		});
+		catch (e) {
+			// Always reply so the Hub poll resolves instead of stalling for 5s and dropping this instance.
+			try { parentPort.postMessage({ type: WORKER_TO_HUB.BOTS_ACTIVE_RECEIVED, id: message.id, requestId: message.requestId, data: { 'name': message.name, 'bots': [], 'error': (e && e.message) || 'bots fetch failed' } }); } catch (_) {}
+		}
 	}
 
 	// Deal action received — cancel, stop, panic_sell, pause, update_deal
@@ -330,8 +385,9 @@ async function processWorkerTaskMessage(SymBot, message) {
 				const scStrings  = SymBot.DCABotManager.buildStartConditionStrings(botsConfig, data.botData || {});
 				const symString  = SymBot.DCABotManager.buildSymbolString(data.symbols || [], data.botData || {});
 				const actChecked = SymBot.DCABotManager.buildActiveChecked(data.botData || {});
+				const isSignal   = SymBot.DCABotManager.buildIsSignalBot(data.botData || {});
 
-				result = { 'success': true, 'data': Object.assign({}, scStrings, { symbolString: symString, activeChecked: actChecked }) };
+				result = { 'success': true, 'data': Object.assign({}, scStrings, { symbolString: symString, activeChecked: actChecked, isSignalBot: isSignal }) };
 			}
 			else if (action === 'get_start_conditions') {
 

@@ -1,0 +1,60 @@
+<%
+	/*
+	 * Shared client-side behavior for the SMTP / mailer settings block. Included inside the
+	 * existing <script> of both the instance config page (configView.ejs) and the Hub config page
+	 * (Hub/configView.ejs) so the "show password" toggle and the "Send test" verification live in
+	 * ONE place instead of being copy-pasted (and drifting) between the two pages.
+	 */
+%>
+		$('#showMailerPassword').on('click', function () {
+
+			const input = $('#mailer_password');
+			const type = input.attr('type') === 'password' ? 'text' : 'password';
+
+			input.attr('type', type);
+			$(this).text(type === 'password' ? 'Show' : 'Hide');
+		});
+
+		// Verify the SMTP settings currently in the form (without saving). A blank password
+		// field tells the server to test with the stored password.
+		$('#testMailerBtn').on('click', function () {
+
+			const $btn = $(this);
+			const $out = $('#mailerTestResult');
+
+			$out.css('color', 'var(--text-color)').text('Testing…');
+			$btn.prop('disabled', true);
+
+			$.ajax({
+				url: './api/mailer/test',
+				method: 'POST',
+				contentType: 'application/json',
+				data: JSON.stringify({
+					mailer_host: $('#mailer_host').val(),
+					mailer_port: $('#mailer_port').val(),
+					mailer_secure: $('#mailer_secure').is(':checked'),
+					mailer_user: $('#mailer_user').val(),
+					mailer_password: $('#mailer_password').val(),
+					mailer_from: $('#mailer_from').val(),
+					mailer_test_to: $('#mailer_test_to').val()
+				})
+			}).done(function (resp) {
+
+				if (resp && resp.success) {
+
+					$out.css('color', 'var(--green-color, var(--color-success))')
+						.text('✓ Success' + (resp.sent_to ? ' — test sent to ' + resp.sent_to : ''));
+				}
+				else {
+
+					$out.css('color', 'var(--warning-color, var(--color-warning))')
+						.text('✗ ' + ((resp && resp.error) || 'Failed'));
+				}
+			}).fail(function () {
+
+				$out.css('color', 'var(--warning-color, var(--color-warning))').text('✗ Request failed');
+			}).always(function () {
+
+				$btn.prop('disabled', false);
+			});
+		});

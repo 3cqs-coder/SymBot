@@ -1,7 +1,7 @@
 
 <div id="footerBox">
 	<span>
-		<a style="color: #b2b2b2;" href="https://www.3cqs.com" target=_blank><%- appData.name %> v<%- appData.version %> - 3CQS.com</a>
+		<a style="color: #b2b2b2;" href="https://www.3cqs.com" target=_blank><%= appData.name_display || appData.name %> v<%- appData.version %> - 3CQS.com</a>
 	</span>
 	<% if (appData.update_available) { %>
 		<span>

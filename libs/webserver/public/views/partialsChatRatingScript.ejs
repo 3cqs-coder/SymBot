@@ -1,0 +1,27 @@
+<script>
+// Shared, minimal 👍/👎 control for a finished AI answer. Kept in ONE partial so the
+// chat modal and the pop-out render (and behave) identically instead of duplicating it.
+// Pure: given the target message element and the outcome id, it appends a single faint
+// line that collapses to a small thank-you on click. Nothing shows unless the server
+// sends an outcome id — i.e. only when AI Learning is enabled — so it never crowds the
+// chat by default.
+window.SymBotChatRating = window.SymBotChatRating || {
+	attach: function($messageEl, id) {
+
+		if (!id || !$messageEl || !$messageEl.length || $messageEl.find('.ai-rate').length) { return; }
+
+		var $rate = $('<div class="ai-rate">').css({ 'margin-top': '3px', 'font-size': '0.8rem', 'opacity': '0.45', 'line-height': '1' });
+
+		var send = function(rating) {
+			$.ajax({ type: 'POST', url: './api/ai/learning/rate', contentType: 'application/json', data: JSON.stringify({ id: id, rating: rating }) }).always(function(){});
+			$rate.css('opacity', '0.5').html('<span style="font-size:0.75rem;">Thanks for the feedback</span>');
+		};
+
+		$('<span title="Helpful" style="cursor:pointer;">👍</span>').on('click', function(){ send(1); }).appendTo($rate);
+		$('<span title="Not helpful" style="cursor:pointer;margin-left:8px;">👎</span>').on('click', function(){ send(-1); }).appendTo($rate);
+		$rate.on('mouseenter', function(){ $rate.css('opacity', '0.9'); }).on('mouseleave', function(){ if ($rate.text().indexOf('Thanks') === -1) { $rate.css('opacity', '0.45'); } });
+
+		$messageEl.append($rate);
+	}
+};
+</script>

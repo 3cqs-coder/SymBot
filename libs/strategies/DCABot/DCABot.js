@@ -12,8 +12,11 @@ const Table = require('easy-table');
 const Percentage = require('percentagejs');
 const Common = require(pathRoot + '/libs/app/Common.js');
 const AddFundsMath = require(pathRoot + '/libs/app/AddFundsMath.js');
+const portfolioGuard = require(pathRoot + '/libs/strategies/DCABot/portfolioGuard.js');
 const Schema = require(pathRoot + '/libs/mongodb/DCABotSchema');
 const DbQueries = require(__dirname + '/DCABotDbQueries.js');
+const PriceGuard = require(__dirname + '/priceGuard.js');
+const StopLoss = require(__dirname + '/stopLoss.js');
 
 const Bots = Schema.Bots;
 const Deals = Schema.Deals;
@@ -49,6 +52,108 @@ const maxPartialSellRetries = 10;
 // Delay in milliseconds between partial fill retry attempts
 const partialSellRetryDelayMs = 3000;
 
+
+// Shortfall of a fill versus the requested quantity, as a percent. Single source of truth for the
+// "how complete is this fill?" question, shared by both the buy and sell partial-fill gates so the
+// same threshold logic decides a genuine partial from an effectively-complete fill (e.g. an exchange
+// that reports a 100%-executed IOC order with a "partially filled" status). A zero/undefined fill
+// returns 0 — the caller treats "no reported fill" as its own case, never as a partial.
+function partialFillShortfallPercent(filledQty, requestedQty) {
+
+	const filled = Number(filledQty) || 0;
+	const requested = Number(requestedQty) || 0;
+
+	if (filled <= 0 || requested <= 0) { return 0; }
+
+	return ((requested - filled) / requested) * 100;
+}
+
+
+// Shared partial-fill retry loop for BOTH buys and sells. After an order fills only part of the
+// requested quantity, re-place the outstanding remainder until the fill is within threshold, the
+// remainder falls below the exchange minimum, the retry cap is reached, or the deal is canceled /
+// panic-sold. Everything that differs between a buy and a sell is injected, so the loop itself lives in
+// ONE place: the price side (a buy lifts the ask, a sell hits the bid), the order placement (placeOrder),
+// how each fill is booked (onFill), and an optional hook when an attempt fills nothing (onEmptyFill, e.g.
+// an NSF settle-wait on the exchange-cancelled sell path). It is pure of ladder/credit/finalize logic —
+// the caller does the pre-loop work (e.g. a settlement delay) and the post-loop work (credit or finalize)
+// and books the exact quantity from the returned totals. Read-only of module state; never throws into the
+// trading loop beyond what the injected callbacks/order calls already do.
+async function retryPartialFill({
+	side,                 // 'buy' | 'sell' — selects the retry price (ask for a buy, bid for a sell)
+	exchange, pair, dealId,
+	requestedQty,         // the full quantity the original order asked for
+	initialFilledQty,     // what already filled before the retries (accumulated into the running total)
+	fallbackPrice,        // price to use if the fresh ticker has no ask/bid
+	placeOrder,           // async ({ qty, price }) => orderResult (buyOrder / sellOrder wrapper)
+	onFill,               // async (filledQty, orderResult, priceFiltered) => void — side-specific bookkeeping
+	onEmptyFill = null,   // async (orderResult) => void — optional, when an attempt fills nothing
+	isAborted,            // () => boolean — cancel / panic requested (stops the loop)
+	threshold = partialSellFillThresholdPercent,
+	maxRetries = maxPartialSellRetries,
+	delayMs = partialSellRetryDelayMs,
+	logLabel = 'Partial fill',
+	io = null             // test-only dependency injection; production always uses the real module I/O
+}) {
+
+	// Injected I/O for tests; defaults to the real module functions (no behavior change in production).
+	const _io = io || { getSymbol, filterPrice, filterAmount, orderFilledQty, delay: Common.delay, log: (m) => Common.logger(m) };
+	const _log = (m) => { try { _io.log(colors.bgYellow.bold(m)); } catch (e) { /* logging must never break the loop */ } };
+
+	let totalFilled  = Number(initialFilledQty) || 0;
+	let qtyRemaining = Number(requestedQty) - totalFilled;
+	let retryCount   = 0;
+
+	while (retryCount < maxRetries && qtyRemaining > 0) {
+
+		if (typeof isAborted === 'function' && isAborted()) { break; }
+
+		await _io.delay(delayMs);
+
+		retryCount++;
+
+		// Fresh price for this attempt — a BUY lifts the ask, a SELL hits the bid.
+		const symbolDataRetry = await _io.getSymbol(exchange, pair);
+		const symbolRetry     = symbolDataRetry.data;
+		const priceRetry      = (side === 'buy' ? symbolRetry?.ask : symbolRetry?.bid) ?? fallbackPrice;
+		const priceFiltered   = await _io.filterPrice(exchange, pair, priceRetry);
+
+		// Remaining quantity must still meet the exchange minimum after the precision filter.
+		const qtyRemainingFiltered = await _io.filterAmount(exchange, pair, qtyRemaining);
+
+		if (!qtyRemainingFiltered || Number(qtyRemainingFiltered) <= 0) {
+
+			_log(logLabel + ' retry halted for deal ID ' + dealId + ' — remaining ' + qtyRemaining + ' is below the exchange minimum. Accepting fill.');
+			break;
+		}
+
+		_log(logLabel + ' retry ' + retryCount + '/' + maxRetries + ' for deal ID ' + dealId + ' — remaining ' + qtyRemainingFiltered);
+
+		const orderResult    = await placeOrder({ qty: qtyRemainingFiltered, price: priceFiltered });
+		const retryQtyFilled = _io.orderFilledQty(orderResult);
+
+		if (retryQtyFilled > 0) {
+
+			if (typeof onFill === 'function') { await onFill(retryQtyFilled, orderResult, priceFiltered); }
+
+			totalFilled += retryQtyFilled;
+			qtyRemaining = Number(requestedQty) - totalFilled;
+
+			_log(logLabel + ' retry ' + retryCount + ' filled ' + retryQtyFilled + ' for deal ID ' + dealId + ' — total ' + totalFilled + ' / remaining ' + Math.max(qtyRemaining, 0));
+
+			if ((Math.max(qtyRemaining, 0) / Number(requestedQty)) * 100 <= threshold) { break; }
+		}
+		else {
+
+			_log(logLabel + ' retry ' + retryCount + ' filled nothing for deal ID ' + dealId + ': ' + (orderResult.message || 'no fill'));
+
+			if (typeof onEmptyFill === 'function') { await onEmptyFill(orderResult); }
+		}
+	}
+
+	return { totalFilled, qtyRemaining: Math.max(qtyRemaining, 0), retryCount };
+}
+
 // Tolerance (percent) by which an exchange-reported order cost may sit below
 // price * quantity before it is treated as fee-inclusive rather than display
 // rounding. Real taker fees are typically 0.1-1%, while rounding differences
@@ -56,14 +161,54 @@ const partialSellRetryDelayMs = 3000;
 // discarding good data.
 const costFeeTolerancePercent = 0.25;
 
+// Throttle window for repeated "Connect exchange error" alerts, keyed by exchange. A persistent
+// outage (or several bots hitting the same down exchange) would otherwise fire an identical alert on
+// every reconnect attempt. This only rate-limits the NOTIFICATION — every failure is still logged, and
+// nothing about the connect/return behavior changes.
+const connectErrorNotifyWindowMs = 5 * 60 * 1000;
+const connectErrorNotified = {};
+
+// Throttle window for the repeated BALANCE ERROR *log* line, keyed by exchange + error name. A persistent
+// exchange outage makes the balance fetch fail on every poll AND every deal-start funds check (several times
+// a minute), so the same error would otherwise flood the log. Rate-limits ONLY the log line — getBalance's
+// {success:false, error} return is unchanged, so the funds check and the bot-preview alert behave exactly as
+// before.
+const balanceErrorLogWindowMs = 60 * 1000;
+const balanceErrorLogged = {};
+
+// Reduce a ccxt/network error to a concise, single-line, bounded message, with the underlying cause code
+// (ECONNREFUSED / ETIMEDOUT / ENETUNREACH …) appended when present. A ccxt error can carry the entire fetched
+// response body (a failed /currencies or /accounts call is many KB of JSON), which floods the log and any UI
+// alert — this keeps them readable. Shared by the connect path and the balance path so both summarize identically.
+function summarizeExchangeError(err) {
+
+	let text = (err && err.message) ? String(err.message) : String(err);
+	text = text.split('\n')[0];
+	if (text.length > 300) { text = text.slice(0, 300) + '…'; }
+
+	// undici nests the real socket code one or more levels down (ccxt error → TypeError "fetch failed" → the
+	// socket error), so walk the .cause chain and take the first code/errno found.
+	let causeCode = null;
+	for (let cur = err, depth = 0; cur && depth < 6; cur = cur.cause, depth++) {
+
+		const c = cur.code || cur.errno;
+		if (c) { causeCode = c; break; }
+	}
+
+	if (causeCode) { text += ' [' + String(causeCode).split('\n')[0].slice(0, 80) + ']'; }
+
+	return text;
+}
+
 
 // Quote-currency symbol for a pair, e.g. 'BTC/USD' -> '$'. Falls back to an
 // empty string when the pair is unusable so callers can concatenate safely.
-// Centralised here because several log lines and messages previously hardcoded
+// Centralized here because several log lines and messages previously hardcoded
 // '$', which is wrong for any non-USD quote (EUR, GBP, BTC-quoted pairs, etc).
 function quoteSymbol(pair) {
 
-	const quote = (typeof pair === 'string' ? pair : '').split('/')[1] || '';
+	const q = Common.quoteCurrency(pair);
+	const quote = (q && q !== 'UNKNOWN') ? q : '';
 
 	try {
 
@@ -105,7 +250,7 @@ function formatDealStatusLine({ pair, qty, lastPrice, dcaPrice, sellPrice, targe
 
 
 // Quantity actually executed on an order response, or 0 when the exchange
-// reported nothing usable. Centralises the `data_order.quantity` read that the
+// reported nothing usable. Centralizes the `data_order.quantity` read that the
 // sell retry loops and the fill tracker both depend on.
 function orderFilledQty(orderResponse) {
 
@@ -309,13 +454,15 @@ async function start(dataObj, startId) {
 					// Reset dealResume flag
 					configObj['dealResumeId'] = dealResumeId;
 
-					const msg = 'Unable to resume ' + configObj.botName + ' / Pair: ' + pair + ' / Error: ' + symbolData.error + ' Trying again in ' + retryDelay + ' seconds';
+					const msg = 'Unable to resume ' + configObj.botName + ' / Pair: ' + pair + ' / Error: ' + symbolData.error + ' Trying again in ' + (retryDelay / 1000).toFixed(1) + ' seconds';
 
 					if (shareData.appData.verboseLog) { Common.logger( colors.bgYellow.bold(msg) ); }
 
 					setTimeout(() => {
 
-						start({ 'create': startBot, 'config': configObj });
+						// Detached retry — guard the rejection so a transient failure logs instead of
+						// surfacing as a process-level unhandled rejection; the resume retries next tick.
+						Promise.resolve(start({ 'create': startBot, 'config': configObj })).catch((e) => { Common.logger('Deal resume retry failed: ' + (e && e.message ? e.message : e)); });
 
 					}, retryDelay);
 				}
@@ -694,10 +841,21 @@ async function start(dataObj, startId) {
 					isNewDeal = true;
 					setImmediate(async () => {
 
-						await runFollowLoop(config, exchange, dealId);
+						// This callback is detached (not awaited by start()), so any rejection from the follow
+						// loop or the post-deal logic would otherwise surface only as a process-level unhandled
+						// rejection. Contain it here: log it and move on — a DB hiccup in the post-deal chain
+						// must never escape into the process, and the live follow loop is unaffected.
+						try {
 
-						// Follow loop finished — run post-deal logic
-						await onDealComplete({ dealId, botIdMain, pair, dealCount, config });
+							await runFollowLoop(config, exchange, dealId);
+
+							// Follow loop finished — run post-deal logic
+							await onDealComplete({ dealId, botIdMain, pair, dealCount, config });
+						}
+						catch (e) {
+
+							Common.logger('Post-deal handling error for deal ' + dealId + ': ' + ((e && (e.stack || e.message)) || e));
+						}
 					});
 				}
 				else {
@@ -738,10 +896,32 @@ async function runFollowLoop(config, exchange, dealId) {
 	let followSuccess = false;
 	let followFinished = false;
 	let followConfig = config;
+	let consecutiveErrors = 0;
 
 	while (!followFinished) {
 
-		const followRes = await dcaFollow(followConfig, exchange, dealId);
+		let followRes;
+
+		try {
+
+			followRes = await dcaFollow(followConfig, exchange, dealId);
+			consecutiveErrors = 0;
+		}
+		catch (e) {
+
+			// Defense-in-depth: dcaFollow guards its own tick body, but a throw in its short preamble
+			// (before that guard) would otherwise escape here and abandon THIS deal's follow loop, leaving
+			// the deal open but unmonitored until a restart. Catch it so the deal keeps ticking — log, back
+			// off, and retry. The delay widens (capped) if the error somehow persists, preventing log/CPU
+			// spam, while never abandoning the deal.
+			consecutiveErrors++;
+
+			try { Common.logger('Deal ID ' + dealId + ' follow tick error (retrying): ' + ((e && e.message) ? e.message : e)); } catch (le) {}
+
+			await Common.delay(Math.min(1000 * consecutiveErrors, 30000));
+
+			continue;
+		}
 
 		const followConfigRes = followRes['config'];
 
@@ -866,7 +1046,7 @@ async function onDealComplete({ dealId, botIdMain, pair, dealCount, config }) {
 		}
 	}
 
-	// Centralised permission check — blacklist, globalPairLimit, pairMax
+	// Centralized permission check — blacklist, globalPairLimit, pairMax
 	// dealsActive is passed as [] because dcaFollow handles pairDealsLast separately above
 	// and the pair's current deal is already closed (status:1) before this point
 	// Guard: only call canStartDeal when bot is active and config is available
@@ -879,8 +1059,13 @@ async function onDealComplete({ dealId, botIdMain, pair, dealCount, config }) {
 		})
 		: { allowed: false, reason: '' };
 
+	// Manual / API bots ("api" start condition) do not auto-reopen a new deal
+	// when one completes — entries come only from the next external signal. asap
+	// and provider signal bots (e.g. 3CQS "signal|...") are unaffected.
+	const blockReopen = (botActive && botConfigDb) ? shareData.SignalBot.isApiStart(botConfigDb['startConditions']) : false;
+
 	// Start another bot deal if all conditions are met
-	if (canStart && !pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast) {
+	if (canStart && !pairDealsLast && !dealStop && botFoundDb && botActive && !dealLast && !blockReopen) {
 
 		const configObj = JSON.parse(JSON.stringify(config));
 
@@ -920,12 +1105,18 @@ async function onDealComplete({ dealId, botIdMain, pair, dealCount, config }) {
 
 
 // Handles a deal's base order (isStart:0) for one dcaFollow tick. Extracted from
-// dcaFollow verbatim (#60) — behaviour is identical to the original inline block.
+// dcaFollow verbatim (#60) — behavior is identical to the original inline block.
 // Returns the loop signal { success, finished } that dcaFollow returns directly.
 // Pause flags are passed in (read fresh from the deal each tick by the caller);
 // the handler's own pause-flag mutations are local — they only feed this tick's
 // tracker updates and returns, and are never read after the handler returns.
-const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, price, isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, dcaError, cancelOnly }) => {
+const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, price, dcaError, dealState }) => {
+
+	// Per-tick control state, unpacked from the shared dealState snapshot into local
+	// bindings. Kept local (rather than read through dealState) so the invalid_order
+	// path's mutations of isDealPauseReason / isDealPauseBuy stay within this handler,
+	// exactly as when these arrived as discrete by-value parameters.
+	let { isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, cancelOnly } = dealState;
 
 	// Local tracker-update helper. The three base-order tracker refreshes below are
 	// identical except for the error value, and all read the current pause flags —
@@ -948,7 +1139,7 @@ const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, p
 		});
 	};
 
-	// Defence in depth — circuit breaker should already have been caught
+	// Defense in depth — circuit breaker should already have been caught
 	// by canStartDeal before reaching here, but guard at the exchange call
 	// level too in case start() is ever called from a path that bypasses
 	// the serial queue (e.g. resume on startup).
@@ -1002,7 +1193,7 @@ const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, p
 
 			const priceFiltered = await filterPrice(exchange, pair, price);
 
-			const buy = await buyOrder(exchange, dealId, pair, baseOrder.qty, priceFiltered);
+			const buy = await buyOrder({ exchange, dealId, pair, qty: baseOrder.qty, price: priceFiltered });
 
 			if (!buy.success || (buy.success && !buy.success_verify)) {
 
@@ -1116,7 +1307,7 @@ const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, p
 						// is idempotent, so the redundant call is safe.
 						await deleteDealTracker(dealId);
 					}
-				});
+				}).catch((e) => { try { Common.logger('verifyInvalidOrder (base order) background error for deal ' + dealId + ': ' + ((e && e.message) ? e.message : e)); } catch (le) {} });
 
 				// finished:false so the follow loop stays alive. The deal is now paused,
 				// so the pause guard at the top of this function no-ops every subsequent
@@ -1128,8 +1319,25 @@ const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, p
 			}
 			else {
 
-				// Order never placed (genuine exchange rejection, e.g. BadRequest limit-only,
-				// or cancelOnly). No asset on the exchange — disable bot and remove deal.
+				// Order never placed. This covers BOTH a genuine exchange rejection (e.g. BadRequest /
+				// limit-only) AND a transient hold condition (cancelOnly: getSymbol errored, or the price came
+				// back zero / implausible, so the buy above was skipped). In every case no order was sent and
+				// there is no asset on the exchange, so the deal is torn down: disable the bot and remove the
+				// phantom deal (which otherwise occupies a Max Deals slot with no position behind it).
+				//
+				// KNOWN LIMITATION / FUTURE WORK — trading-critical, change only with research + testing:
+				// A purely transient blip (a brief network / price-feed glitch) is currently torn down the same
+				// as a permanent failure, deleting an otherwise-valid new deal — though the bot simply
+				// re-opens it on its next signal / asap cycle, so nothing is lost. A smarter design would
+				// briefly hold-and-retry a TRANSIENT failure and only tear down a PERSISTENT one. The blocker:
+				// SymBot does not track exchange-specific error messages / codes, and telling "pair halted or
+				// limit-only" apart from "momentary glitch" reliably ACROSS EXCHANGES is hard (CCXT normalizes
+				// error TYPES like ExchangeError but not this transient-vs-permanent distinction). Two failure
+				// modes must be avoided by any future attempt: (1) holding a deal that can never place its base
+				// order leaves a phantom occupying a Max Deals slot until manually cleared; (2) any "keep going"
+				// change on this path must never re-enter order placement in a way that sends repeated orders.
+				// So this stays an immediate, proven teardown until a well-researched, exchange-agnostic,
+				// bounded-retry-with-escalation design is built and thoroughly tested.
 				const statusObj = await processOrderError({ 'bot_id': config.botId, 'deal_id': dealId, 'bot_name': config.botName });
 
 				if (statusObj['success']) {
@@ -1158,7 +1366,13 @@ const handleBaseOrder = async ({ config, exchange, dealId, deal, orders, pair, p
 };
 
 
-const handleSell = async ({ config, exchange, dealId, deal, orders, order, currentOrder, filledOrders, pair, price, priceSellOrder, profit, profitBase, profitQuote, profitPerc, isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly }) => {
+const handleSell = async ({ config, exchange, dealId, deal, orders, order, currentOrder, filledOrders, pair, price, priceSellOrder, profit, profitBase, profitQuote, profitPerc, dealState, isDealStopLoss }) => {
+
+	// Per-tick control state, unpacked from the shared dealState snapshot into local
+	// bindings so this handler's own mutations (isDealVerifying / isDealPauseReason /
+	// isDealPauseSell when pausing for sell-order verification) stay local — identical
+	// to when these arrived as discrete by-value parameters.
+	let { isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly } = dealState;
 
 	// success/finished are the loop signal this handler returns. In dcaFollow these were
 	// function-scope with defaults success=true, finished=false; kept identical here so the
@@ -1296,6 +1510,20 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 			fillTracker['proceeds'] += value;
 		};
 
+		// Shared onFill for BOTH sell partial-fill retry loops (the main take-profit path and the
+		// exchange-cancelled settlement path): track each retry's order id and record its fill. Defined once
+		// here so the two retryPartialFill call sites in this function stay identical by construction.
+		// Records whatever actually filled this attempt regardless of the final order status — a retry can
+		// partially fill then be canceled by the exchange (e.g. Coinbase price protection) yet still report a
+		// real fill in data_order.quantity; missing it would leave the remainder too high so later retries
+		// over-ask and hit InsufficientFunds. Adjusts only the in-memory tally — the pre-calculated
+		// qtySumSellOrder is never mutated.
+		const recordSellRetryFill = (filled, orderResult, priceUsed) => {
+
+			if (orderResult?.['data']?.['id']) { sellOrderIds.push(orderResult['data']['id']); }
+			recordFill(filled, orderResult['data_order'], priceUsed);
+		};
+
 		const sellDataObj = await processSellData(pair, price, dealId, exchange, config, currentOrder, filledOrders);
 
 		const feeData = sellDataObj['fee_data'];
@@ -1327,7 +1555,7 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 		// on data_order.quantity), but reporting has a higher bar: a wrong number here
 		// yields a confidently wrong profit figure, which is worse than the
 		// pre-calculated estimate. Actuals are therefore corroborating, not
-		// authoritative — any check failing falls back to exactly today's behaviour.
+		// authoritative — any check failing falls back to exactly today's behavior.
 		//
 		// Checks:
 		//   1. At least one fill with positive quantity was recorded.
@@ -1556,8 +1784,12 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				'fills': fillTracker['fills']
 				 };
 
-			await Deals.updateOne({ dealId }, {
+			// Close only an OPEN deal (status:0). Gating the filter makes the close idempotent: if a
+			// concurrent/stale path already closed this deal, this write finds no match and is a no-op,
+			// so a late writer can never overwrite the good close/sellData with stale figures.
+			await Deals.updateOne({ dealId, 'status': 0 }, {
 				'sellData': sellData,
+				'stopLoss': isDealStopLoss,
 				'panicSell': isDealPanicSell,
 				'canceled': isDealCancel,
 				'status': 1
@@ -1577,7 +1809,7 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 
 		if (!config.sandBox && !isDealCancel && !cancelOnly) {
 
-			const sell = await sellOrder(exchange, dealId, pair, qtySumSellOrder, priceFiltered);
+			const sell = await sellOrder({ exchange, dealId, pair, qty: qtySumSellOrder, price: priceFiltered });
 
 			// Sell not successful / Sell successful but verification failed
 			if (!sell.success || (sell.success && !sell.success_verify)) {
@@ -1601,15 +1833,13 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				}
 				else if (sellOrderStatusInvalid) {
 
-					// Check if exchange cancelled after a partial fill (e.g. Coinbase price protection)
+					// Check if exchange canceled after a partial fill (e.g. Coinbase price protection)
 					const cancelPartialFilled = orderFilledQty(sell);
-					const cancelShortfall = cancelPartialFilled > 0
-						? ((Number(qtySumSellOrder) - cancelPartialFilled) / Number(qtySumSellOrder)) * 100
-						: 0;
+					const cancelShortfall = partialFillShortfallPercent(cancelPartialFilled, qtySumSellOrder);
 
 					if (cancelPartialFilled > 0 && cancelShortfall > partialSellFillThresholdPercent) {
 
-						// Exchange cancelled after partial fill — record fill and
+						// Exchange canceled after partial fill — record fill and
 						// wait for settlement before retrying the remainder
 						sellOrderIds.push(sell['data']['id']);
 
@@ -1622,7 +1852,7 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 						));
 
 						Common.sendNotification({
-							'message': `Partial sell fill for deal ID ${dealId}. Exchange cancelled after ${(100 - cancelShortfall).toFixed(0)}% filled. Waiting for settlement then retrying remainder.`,
+							'message': `Partial sell fill for deal ID ${dealId}. Exchange canceled after ${(100 - cancelShortfall).toFixed(0)}% filled. Waiting for settlement then retrying remainder.`,
 							'type': 'deal_error',
 							'telegram_id': shareData.appData.telegram_id
 						});
@@ -1631,63 +1861,19 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 						const settlementDelayMs = 30000;
 						await Common.delay(settlementDelayMs);
 
-						let cancelRetryCount = 0;
-						let cancelTotalFilled = cancelPartialFilled;
-						let cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
-
-						while (cancelRetryCount < maxPartialSellRetries && cancelQtyRemaining > 0) {
-
-							if (isDealCancel || isDealPanicSell) break;
-
-							await Common.delay(partialSellRetryDelayMs);
-							cancelRetryCount++;
-
-							const cancelSymData = await getSymbol(exchange, pair);
-							const cancelPrice = (cancelSymData.data?.bid ?? price);
-							const cancelPriceFiltered = await filterPrice(exchange, pair, cancelPrice);
-							const cancelQtyFiltered = await filterAmount(exchange, pair, cancelQtyRemaining);
-
-							if (!cancelQtyFiltered || Number(cancelQtyFiltered) <= 0) break;
-
-							Common.logger(colors.bgYellow.bold(
-								'Settlement retry ' + cancelRetryCount + '/' + maxPartialSellRetries +
-								' for deal ID ' + dealId + ' / Selling: ' + cancelQtyFiltered
-							));
-
-							const cancelSellRetry = await sellOrder(exchange, dealId, pair, cancelQtyFiltered, cancelPriceFiltered);
-
-							// Credit whatever actually filled this attempt, regardless of the
-							// final order status. A retry can partially fill then be cancelled by
-							// the exchange (e.g. Coinbase price protection) — that returns
-							// success_verify:false but still reports a real fill in
-							// data_order.quantity. Crediting only clean (success && success_verify)
-							// fills would drop that quantity, leaving cancelQtyRemaining too high so
-							// every later retry over-asks and hits InsufficientFunds. NSF attempts
-							// report an empty data_order so this credits 0 for them. Adjusts only the
-							// in-memory tally — the deal's pre-calculated qtySumSellOrder is never
-							// mutated and remains the read-only ceiling.
-							const cancelRetryFilled = orderFilledQty(cancelSellRetry);
-
-							if (cancelRetryFilled > 0) {
-
-								if (cancelSellRetry?.['data']?.['id']) {
-
-									sellOrderIds.push(cancelSellRetry['data']['id']);
-								}
-
-								recordFill(cancelRetryFilled, cancelSellRetry['data_order'], cancelPriceFiltered);
-
-								cancelTotalFilled += cancelRetryFilled;
-								cancelQtyRemaining = Number(qtySumSellOrder) - cancelTotalFilled;
-
-								if ((cancelQtyRemaining / Number(qtySumSellOrder)) * 100 <= partialSellFillThresholdPercent) break;
-							}
-							else if (cancelSellRetry.nsf) {
-
-								// Still settling — extend wait
-								await Common.delay(settlementDelayMs);
-							}
-						}
+						// Retry the remainder through the SHARED partial-fill loop (same helper the buy and
+						// main-sell paths use). Bookkeeping is identical to before — record each fill and track
+						// its order id — and an NSF (still-settling) attempt extends the settlement wait via the
+						// onEmptyFill hook, exactly as the previous inline loop did.
+						await retryPartialFill({
+							side: 'sell', exchange, pair, dealId,
+							requestedQty: Number(qtySumSellOrder), initialFilledQty: cancelPartialFilled, fallbackPrice: price,
+							placeOrder: ({ qty, price: retryPrice }) => sellOrder({ exchange, dealId, pair, qty, price: retryPrice }),
+							onFill: recordSellRetryFill,
+							onEmptyFill: async (orderResult) => { if (orderResult && orderResult.nsf) { await Common.delay(settlementDelayMs); } },
+							isAborted: () => (isDealCancel || isDealPanicSell),
+							logLabel: 'Settlement retry'
+						});
 
 						// Mark sell successful so deal closes with the partial fill
 						sellSuccess = true;
@@ -1707,7 +1893,16 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 					msgErr = `Invalid order for deal ID ${dealId}. Pausing sell orders for ${retryMins} minutes.`;
 
 					isDealVerifying = true;
+					isDealPauseReason = 'order_verify_sell';
 
+					// KNOWN LIMITATION (restart during verification): the in-flight sell order ID is held only in
+					// memory here — it is not persisted to the deal (sellData is written only on a clean close).
+					// resumeDeal reads dealObj.sellData.orderId[0], which is therefore empty during this window,
+					// so a restart falls back to clearing the pause and resuming take-profit monitoring. If the
+					// sell had actually filled, the next in-target tick attempts a second sell (which fails safe
+					// against oversell via InsufficientFunds, but leaves the deal orphaned in a sell_error retry
+					// until manually reconciled). A correct fix persists the sell order ID and reconstructs the
+					// handleSuccessfulSell finalize on resume — deferred as a dedicated effort.
 					const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: sell['data']['id'], onSuccessCallback: handleSuccessfulSell, pauseBeforeCallback: true });
 
 					// Reset verifying flag if needed
@@ -1716,18 +1911,27 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 						if (verifyResult.retriesExhausted || verifyResult.notPaused) {
 							clearSellErrorVerifying(dealId);
 						}
-					});
+					}).catch((e) => { try { Common.logger('verifyInvalidOrder (sell) background error for deal ' + dealId + ': ' + ((e && e.message) ? e.message : e)); } catch (le) {} });
 				}
 				else {
 
 					msgType = 'deal_error';
 					msgErr = `An error occurred during sell order for deal ID ${dealId}. Pausing any further sell orders for deal.`;
+
+					// A generic sell error (not NSF, not invalid-order, not status-invalid) has no order to
+					// verify. Use a distinct, auto-recoverable reason — NOT 'order_verify_sell' — so that:
+					//   (a) a panic-sell / stop-loss is not wrongly deferred (nothing is in flight to oversell), and
+					//   (b) the tick-level sell-error reset can lift this pause once the error has had time to
+					//       clear, instead of stranding the deal paused until a manual resume or restart.
+					isDealPauseReason = 'sell_error';
 				}
 
 				if (msgErr) {
 
 					await sendDealMessage(msgType, msgErr);
-					isDealPauseReason = 'order_verify_sell';
+					// The reason is set by the specific error branch above ('order_verify_sell' for an invalid
+					// order being verified, 'sell_error' for a generic error). Default defensively if unset.
+					if (!isDealPauseReason) { isDealPauseReason = 'order_verify_sell'; }
 					await pauseDeal(config.botId, dealId, null, null, true, isDealPauseReason);
 					isDealPauseSell = true;
 				}
@@ -1748,16 +1952,14 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				// filled quantity. A zero or null quantity after a successful
 				// verifyBuySellOrder means the exchange didn't report the fill amount —
 				// not that nothing was filled. Retrying in that case would sell again
-				// on a position that has already been fully closed.
-				const shortfallPercent = initialQtyFilled > 0
-					? (qtyRemaining / Number(qtySumSellOrder)) * 100
-					: 0;
+				// on a position that has already been fully closed. Shortfall via the shared helper
+				// (returns 0 for a zero/undefined fill), the same gate the buy side uses.
+				const shortfallPercent = partialFillShortfallPercent(initialQtyFilled, qtySumSellOrder);
 
 				if (shortfallPercent > partialSellFillThresholdPercent) {
 
-					// Partial fill detected — attempt to sell the remainder
-					let retryCount = 0;
-
+					// Partial fill detected — sell the remainder through the SHARED partial-fill loop
+					// (the same helper the buy side uses).
 					Common.logger(colors.bgYellow.bold(
 						'Partial sell fill detected for deal ID ' + dealId +
 						' / Requested: ' + qtySumSellOrder +
@@ -1772,91 +1974,18 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 						'telegram_id': shareData.appData.telegram_id
 					});
 
-					while (retryCount < maxPartialSellRetries && qtyRemaining > 0) {
+					const retry = await retryPartialFill({
+						side: 'sell', exchange, pair, dealId,
+						requestedQty: Number(qtySumSellOrder), initialFilledQty: totalQtyFilled, fallbackPrice: price,
+						placeOrder: ({ qty, price: retryPrice }) => sellOrder({ exchange, dealId, pair, qty, price: retryPrice }),
+						onFill: recordSellRetryFill,
+						isAborted: () => (isDealCancel || isDealPanicSell),
+						logLabel: 'Partial sell'
+					});
 
-						// Stop retrying if a cancel or panic sell was requested
-						if (isDealCancel || isDealPanicSell) {
-
-							break;
-						}
-
-						await Common.delay(partialSellRetryDelayMs);
-
-						retryCount++;
-
-						// Get fresh price for this retry attempt
-						const symbolDataRetry = await getSymbol(exchange, pair);
-						const symbolRetry = symbolDataRetry.data;
-						const priceRetry = symbolRetry?.bid ?? price;
-						const priceRetryFiltered = await filterPrice(exchange, pair, priceRetry);
-
-						// Check the remaining qty meets exchange minimum after precision filter
-						const qtyRemainingFiltered = await filterAmount(exchange, pair, qtyRemaining);
-
-						if (!qtyRemainingFiltered || Number(qtyRemainingFiltered) <= 0) {
-
-							Common.logger(colors.bgYellow.bold(
-								'Partial sell retry halted for deal ID ' + dealId +
-								' — remaining quantity ' + qtyRemaining.toFixed(8) +
-								' is below exchange minimum. Accepting partial fill.'
-							));
-
-							break;
-						}
-
-						Common.logger(colors.bgYellow.bold(
-							'Partial sell retry ' + retryCount + '/' + maxPartialSellRetries +
-							' for deal ID ' + dealId +
-							' / Selling remaining: ' + qtyRemainingFiltered
-						));
-
-						const sellRetry = await sellOrder(exchange, dealId, pair, qtyRemainingFiltered, priceRetryFiltered);
-
-						// Credit whatever actually filled this attempt, regardless of the final
-						// order status. A retry can partially fill then be cancelled by the
-						// exchange (e.g. Coinbase price protection) — that returns
-						// success_verify:false but still reports a real fill in data_order.quantity.
-						// Crediting only clean fills would drop that quantity, leaving qtyRemaining
-						// too high so later retries over-ask and hit InsufficientFunds. A truly
-						// failed attempt reports an empty data_order and credits 0. Adjusts only the
-						// in-memory tally — pre-calculated qtySumSellOrder is never mutated.
-						const retryQtyFilled = orderFilledQty(sellRetry);
-
-						if (retryQtyFilled > 0) {
-
-							if (sellRetry?.['data']?.['id']) {
-
-								sellOrderIds.push(sellRetry['data']['id']);
-							}
-
-							recordFill(retryQtyFilled, sellRetry['data_order'], priceRetryFiltered);
-
-							totalQtyFilled += retryQtyFilled;
-							qtyRemaining = Number(qtySumSellOrder) - totalQtyFilled;
-
-							Common.logger(colors.bgYellow.bold(
-								'Partial sell retry ' + retryCount + ' filled for deal ID ' + dealId +
-								' / Filled this attempt: ' + retryQtyFilled.toFixed(8) +
-								' / Total filled: ' + totalQtyFilled.toFixed(8) +
-								' / Remaining: ' + qtyRemaining.toFixed(8)
-							));
-
-							const remainingShortfallPercent = (Math.max(qtyRemaining, 0) / Number(qtySumSellOrder)) * 100;
-
-							if (remainingShortfallPercent <= partialSellFillThresholdPercent) {
-
-								// Within acceptable threshold — done
-								break;
-							}
-						}
-						else {
-
-							Common.logger(colors.bgYellow.bold(
-								'Partial sell retry ' + retryCount + ' filled nothing for deal ID ' + dealId +
-								': ' + (sellRetry.message || 'unknown error')
-							));
-						}
-					}
+					totalQtyFilled = retry.totalFilled;
+					qtyRemaining   = retry.qtyRemaining;
+					const retryCount = retry.retryCount;
 
 					if (retryCount >= maxPartialSellRetries) {
 
@@ -1877,17 +2006,75 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 			}
 		}
 
-		if (sellSuccess) {
+		if (cancelOnly) {
+
+			// Untrusted price (a getSymbol error, or an implausible price rejected by the
+			// plausibility guard). NEVER record a close at a price we can't trust, and in
+			// live mode NEVER mark a deal sold when no order was actually placed — the
+			// real sellOrder above is skipped while cancelOnly is set (see the guard on
+			// that call). This branch is only reached via panic_sell / cancel, since the
+			// automatic take-profit sell is itself gated on !cancelOnly in dcaFollow.
+			//
+			// Hold the deal: the panic_sell / cancel request stays pending in the deal
+			// tracker (deal_panic_sell / deal_cancel are not cleared until the deal
+			// closes), so it completes on a later tick once a trustworthy price returns —
+			// at the real market price, not this garbage one. The delay paces the retry so
+			// this does not tight-loop fetchTicker (the sell branch returns to the follow
+			// loop immediately, bypassing dcaFollow's own end-of-tick delay).
+			Common.logger(colors.red.bold('Deal ID ' + dealId + ' close/sell HELD: price feed unreliable (cancelOnly). Will complete when a valid price returns.'));
+
+			// A panic_sell / cancel is pending but cannot execute while the price is
+			// untrusted. That is an emergency user action, so after a few consecutive held
+			// ticks (and periodically after) push a notification so a deal that stays stuck
+			// — e.g. a revoked API key or a prolonged auth outage — is not silently held
+			// with log output only. Deliberately NOT gated on circuit_breaker.enabled: this
+			// is a safety alert about a pending user action, not a circuit-breaker action.
+			if (!shareData.appData.cb_close_held_tracker) { shareData.appData.cb_close_held_tracker = {}; }
+			const cht = shareData.appData.cb_close_held_tracker;
+			cht[dealId] = (cht[dealId] || 0) + 1;
+
+			const cbCfgHold = shareData.appData.circuit_breaker || {};
+			const heldAlertThreshold = (cbCfgHold && cbCfgHold.close_held_alert_count) || 15;
+
+			if (cht[dealId] >= heldAlertThreshold) {
+
+				Common.sendNotification({
+					'message': `⚠️ Close/Panic Held\n\nPair: ${pair}\nDeal ID: ${dealId}\n\nA ${isDealPanicSell ? 'panic sell' : 'cancel/close'} is pending but cannot execute because the exchange price feed is unreliable. The deal is being HELD (not closed) and will complete automatically once a valid price returns. If this persists, check the exchange API key / connection.`,
+					'type': 'warning',
+					'telegram_id': shareData.appData.telegram_id
+				});
+
+				// Reset so it re-alerts periodically rather than every tick
+				cht[dealId] = 0;
+			}
+
+			await Common.delay(2000);
+		}
+		else if (sellSuccess) {
 
 			await handleSuccessfulSell();
 		}
 		else {
 
-			// Sell failed
-			dealTracker[dealId]['update']['deal_sell_error']['nsf'] = sellNSF;
-			dealTracker[dealId]['update']['deal_sell_error']['verifying'] = isDealVerifying;
-			dealTracker[dealId]['update']['deal_sell_error']['count']++;
-			dealTracker[dealId]['update']['deal_sell_error']['date'] = new Date();
+			// Sell failed. Defensively ensure the tracker path exists before recording the error: a
+			// concurrent completion path can remove the tracker entry, in which case these sub-field writes
+			// would throw a TypeError (contained by the outer catch, but the sell-error count/backoff for
+			// this tick would be lost). Re-create deal_sell_error with its canonical shape if missing, and
+			// skip cleanly if the deal's tracker entry is entirely gone.
+			const sellErrTrk = dealTracker[dealId] && dealTracker[dealId]['update'];
+
+			if (sellErrTrk) {
+
+				if (sellErrTrk['deal_sell_error'] == undefined || sellErrTrk['deal_sell_error'] == null) {
+
+					sellErrTrk['deal_sell_error'] = { 'history': {}, 'nsf': false, 'verifying': false, 'count': 0, 'count_dupes': 0, 'date': new Date() };
+				}
+
+				sellErrTrk['deal_sell_error']['nsf'] = sellNSF;
+				sellErrTrk['deal_sell_error']['verifying'] = isDealVerifying;
+				sellErrTrk['deal_sell_error']['count']++;
+				sellErrTrk['deal_sell_error']['date'] = new Date();
+			}
 
 			await Common.delay(1000);
 		}
@@ -1903,7 +2090,13 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 };
 
 
-const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order, currentOrder, pair, price, priceBuyOrder, profit, i, isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly }) => {
+const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order, currentOrder, pair, price, priceBuyOrder, profit, i, dealState }) => {
+
+	// Per-tick control state, unpacked from the shared dealState snapshot into local
+	// bindings so this handler's own mutations (isDealVerifying / isDealPauseReason /
+	// isDealPauseBuy when pausing for buy-order verification) stay local — identical to
+	// when these arrived as discrete by-value parameters.
+	let { isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly } = dealState;
 
 	// Working state, local to this handler (was per-iteration / preamble state in dcaFollow).
 	let buyError;
@@ -1913,6 +2106,11 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 	let buyOrderInvalid = false;
 	let buyOrderStatusInvalid = false;
 	let buyNSF = false;
+	// Set true once an exchange-cancelled PARTIAL fill has been RETRIED and its actual fill CREDITED
+	// into the ladder (see the buyOrderStatusInvalid branch). When set, the deal continues normally
+	// (no pause) and handleSuccessfulBuy is skipped — the ladder was already updated by the credit,
+	// which recorded the REAL filled quantity rather than the requested one.
+	let partialFillCredited = false;
 	// isBuy is propagated back to dcaFollow (read after the loop for the 'max safety orders
 	// used' log). Returned alongside the loop signal.
 	let isBuy = false;
@@ -1974,7 +2172,7 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 		// Record safety order trigger for circuit breaker evaluation
 		recordSafetyOrderTrigger(dealId, pair, price);
 
-		const buy = await buyOrder(exchange, dealId, pair, order.qty, priceFiltered);
+		const buy = await buyOrder({ exchange, dealId, pair, qty: order.qty, price: priceFiltered });
 
 		const handleSuccessfulBuyPostVerify = async () => {
 
@@ -2023,6 +2221,15 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 
 				isDealVerifying = true;
 
+				// KNOWN LIMITATION (restart during verification): unlike the base-order verify path — which
+				// persists the unverified order ID onto the deal before pausing so the startup resume path can
+				// recover it — the in-flight safety-order ID is held only in memory here. If SymBot restarts
+				// inside this verification window, resumeDeal cannot find the ID and falls back to clearing the
+				// pause and resuming; the fill is not re-verified, so if the order had actually filled, this rung
+				// can be bought again (untracked coin). A correct fix must persist the ID AND reconstruct the
+				// ladder-recalc credit on resume exactly as handleSuccessfulBuy does (updateOrderDeal +
+				// recalculateOrders from the real fill price) — deferred as a dedicated effort. Rare in practice:
+				// it needs an unverifiable order AND a restart within the ~retry window.
 				const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: buy['data']['id'], onSuccessCallback: handleSuccessfulBuyPostVerify, pauseBeforeCallback: false });
 
 				// Reset verifying flag if needed
@@ -2031,51 +2238,142 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 					if (verifyResult.retriesExhausted || verifyResult.notPaused) {
 						clearSellErrorVerifying(dealId);
 					}
-				});
+				}).catch((e) => { try { Common.logger('verifyInvalidOrder (safety buy) background error for deal ' + dealId + ': ' + ((e && e.message) ? e.message : e)); } catch (le) {} });
 			}
 			else if (buyOrderStatusInvalid) {
 
-				// Exchange returned a terminal-but-not-clean status (e.g. Coinbase
-				// CANCELLED via "price protection point was breached"). Unlike an
-				// unverifiable order (buyOrderInvalid, which we retry), a status-invalid
-				// order is final — there is nothing to keep polling for. BUT the exchange
-				// may have PARTIALLY FILLED before cancelling: buyOrder surfaces that fill
-				// in data_order.quantity. We currently do NOT credit that partial into the
-				// deal ladder (that requires recomputing average/qty/target — tracked as a
-				// separate item, see backlog #66/#58). To avoid silently stranding coin,
-				// alert with the exact fill so it can be reconciled manually, then pause.
+				// Exchange returned a terminal-but-not-clean status (e.g. Coinbase CANCELED via "price
+				// protection point was breached", or any IOC market order that filled part of the book and
+				// canceled the rest). Unlike an unverifiable order (buyOrderInvalid, which we retry), a
+				// status-invalid order is final. BUT the exchange may have PARTIALLY FILLED before canceling
+				// (buyOrder surfaces that fill in data_order.quantity). When it did, we now:
+				//   1. RETRY the unfilled remainder to try to complete the fill (mirrors the sell-side partial
+				//      retry), then
+				//   2. CREDIT whatever actually filled into the deal ladder — recomputing average / quantity /
+				//      take-profit through the shared recalculateOrders — so the coin is booked and the deal
+				//      continues instead of stranding it and pausing.
+				// If the exchange does not report a usable fill price, or the recompute fails, we fall back to
+				// the original SAFE behavior: alert with the exact fill and pause buys for manual reconcile.
 				const buyPartialFilled = orderFilledQty(buy);
 
 				msgType = 'deal_error';
 
 				if (buyPartialFilled > 0) {
 
-					const buyPartialPrice = buy['data_order']?.['price'];
-					const buyPartialAmount = buy['data_order']?.['amount'];
+					const requestedQty = Number(order.qty);
+					const buyShortfall = partialFillShortfallPercent(buyPartialFilled, requestedQty);
 
-					msgErr = 'Exchange-cancelled PARTIAL buy fill for deal ID ' + dealId +
-						'. Filled ' + buyPartialFilled + ' ' + pair.split('/')[0] +
-						(buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : '') +
-						(buyPartialAmount != undefined ? ' ($' + buyPartialAmount + ')' : '') +
-						' before the exchange cancelled the remainder. This fill is NOT yet ' +
-						'tracked in the deal — reconcile manually. Pausing further buy orders.';
+					if (buyShortfall <= partialSellFillThresholdPercent) {
 
-					Common.logger(colors.bgRed.bold(
-						'Exchange-cancelled partial BUY fill for deal ID ' + dealId +
-						' / Filled: ' + buyPartialFilled +
-						(buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : '') +
-						' — NOT credited to deal, manual reconciliation required'
-					));
+						// EFFECTIVELY COMPLETE despite the terminal-but-not-clean status. Some exchanges report a
+						// fully executed IOC market order with a "partially filled" / canceled status — e.g. Coinbase,
+						// where a quote-denominated market buy executes 100% but the requested and executed base
+						// amounts differ by a rounding fraction. The fill matched the requested quantity within
+						// threshold, so treat it as a NORMAL successful buy: fall through to the clean-fill path
+						// (handleSuccessfulBuy below) at the ladder quantity — no retry, no manual/system credit rung,
+						// and no "partial" alert. Mirrors the sell side, which accepts a within-threshold fill as
+						// complete. Clearing buyOrderStatusInvalid ensures the pause branch is not taken.
+						buySuccess = true;
+						buyOrderStatusInvalid = false;
+						buyOrderId = buy['data']?.['id'];
+						buyOrderPrice = Number(buy['data_order']?.['average'] ?? buy['data_order']?.['price'] ?? price);
 
-					Common.sendNotification({
-						'message': `Partial BUY fill for deal ID ${dealId}. Exchange filled ${buyPartialFilled} ${pair.split('/')[0]}${buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : ''} then cancelled the rest. This fill is NOT tracked in the deal — reconcile manually.`,
-						'type': 'deal_error',
-						'telegram_id': shareData.appData.telegram_id
-					});
+						Common.logger(colors.green.bold(
+							'BUY for deal ID ' + dealId + ' executed ' + buyPartialFilled + ' of ' + requestedQty +
+							' (' + (100 - buyShortfall).toFixed(2) + '%) — within threshold; booking as a completed fill despite the exchange status'
+						));
+					}
+					else {
+
+						// Accumulate the NET filled quantity + executed VALUE across the initial partial and any
+						// retries, using the shared cross-exchange value precedence (resolveBuyFillValue).
+						const initVal = resolveBuyFillValue(buy['data_order'], buyPartialFilled);
+						let totalFilledQty   = buyPartialFilled;
+						let totalFilledValue = initVal.value;
+						let qtyRemaining     = requestedQty - totalFilledQty;
+
+						Common.logger(colors.bgYellow.bold(
+							'Partial BUY fill for deal ID ' + dealId +
+							' / Requested: ' + requestedQty +
+							' / Filled: ' + totalFilledQty +
+							' / Remaining: ' + qtyRemaining + ' — retrying the remainder before crediting'
+						));
+
+						// #2 — retry the unfilled remainder to complete the fill, through the SHARED partial-fill
+						// loop (the same helper the sell side uses). Each attempt buys the outstanding quantity at
+						// the current ask; whatever fills is accumulated (value via resolveBuyFillValue) and it
+						// stops when within threshold, below the exchange minimum, at the retry cap, or on
+						// cancel/panic. Behavior is identical to the previous inline loop — the loop just lives in
+						// one place now.
+						const retry = await retryPartialFill({
+							side: 'buy', exchange, pair, dealId,
+							requestedQty, initialFilledQty: buyPartialFilled, fallbackPrice: price,
+							placeOrder: ({ qty, price: retryPrice }) => buyOrder({ exchange, dealId, pair, qty, price: retryPrice }),
+							onFill: (filled, orderResult) => { totalFilledValue += resolveBuyFillValue(orderResult['data_order'], filled).value; },
+							isAborted: () => (isDealCancel || isDealPanicSell),
+							logLabel: 'Partial buy'
+						});
+
+						totalFilledQty = retry.totalFilled;
+
+						// #1 — credit the ACTUAL total filled quantity into the ladder (recomputes averages + every
+						// take-profit target through the shared recalculateOrders). Effective price = value / qty
+						// (volume-weighted across all fills), falling back to the reported average/price.
+						const creditFillPrice = (totalFilledValue > 0 && totalFilledQty > 0)
+							? (totalFilledValue / totalFilledQty)
+							: Number(buy['data_order']?.['average'] ?? buy['data_order']?.['price'] ?? 0);
+
+						const credit = await creditPartialBuyFill({ exchange, pair, config, dealId, orderIndex: i, orders, filledQtyNet: totalFilledQty, fillPrice: creditFillPrice, fillValue: totalFilledValue, orderId: buy['data']?.['id'] });
+
+						if (credit.success) {
+
+							// The fill is now booked into the deal — continue normally: no pause, no manual reconcile.
+							// handleSuccessfulBuy is skipped (partialFillCredited) because the ladder was already
+							// updated here with the REAL filled quantity rather than the requested one.
+							buySuccess = true;
+							partialFillCredited = true;
+
+							Common.logger(colors.green.bold(
+								'Credited exchange-cancelled partial BUY fill for deal ID ' + dealId +
+								' / Total filled: ' + totalFilledQty + ' @ ~$' + creditFillPrice +
+								' — ladder + take-profit recomputed'
+							));
+
+							await Common.sendNotification({
+								'message': 'Partial buy fill for deal ID ' + dealId + ' (' + totalFilledQty + ' ' + pair.split('/')[0] + ') was booked into the deal automatically and the take-profit recalculated. No action needed.',
+								'type': 'info',
+								'telegram_id': shareData.appData.telegram_id
+							});
+						}
+						else {
+
+							// Could not auto-credit (the exchange omitted the fill price, or the recompute failed) —
+							// keep the existing SAFE behavior: alert with the exact fill and pause further buys for
+							// manual reconciliation. Coin is never left silently stranded.
+							const buyPartialPrice = buy['data_order']?.['price'];
+
+							msgErr = 'Exchange-cancelled PARTIAL buy fill for deal ID ' + dealId +
+								'. Filled ' + totalFilledQty + ' ' + pair.split('/')[0] +
+								(buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : '') +
+								' but it could NOT be auto-credited (' + credit.msg + ') — reconcile manually. Pausing further buy orders.';
+
+							Common.logger(colors.bgRed.bold(
+								'Exchange-cancelled partial BUY fill for deal ID ' + dealId +
+								' / Filled: ' + totalFilledQty +
+								' — auto-credit failed (' + credit.msg + '), manual reconciliation required'
+							));
+
+							Common.sendNotification({
+								'message': `Partial BUY fill for deal ID ${dealId}. Exchange filled ${totalFilledQty} ${pair.split('/')[0]}${buyPartialPrice != undefined ? ' @ $' + buyPartialPrice : ''} then canceled the rest, and it could not be auto-credited — reconcile manually.`,
+								'type': 'deal_error',
+								'telegram_id': shareData.appData.telegram_id
+							});
+						}
+					}
 				}
 				else {
 
-					msgErr = 'Buy order for deal ID ' + dealId + ' was cancelled by the exchange with no fill. Pausing any further buy orders for deal.';
+					msgErr = 'Buy order for deal ID ' + dealId + ' was canceled by the exchange with no fill. Pausing any further buy orders for deal.';
 				}
 			}
 			else {
@@ -2089,7 +2387,15 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 
 				await sendDealMessage(msgType, msgErr);
 
-				isDealPauseReason = 'order_verify_buy';
+				// Only buyOrderInvalid is a genuine in-flight, likely-filled-but-unverified order (it armed
+				// verifyInvalidOrder above, which auto-clears the pause on success). It keeps the
+				// 'order_verify_buy' reason — the one the sell/stop-loss guard keys on to avoid selling
+				// uncredited coin. Insufficient-funds, exchange-cancelled and generic buy failures have NO
+				// order in flight and nothing to auto-clear them, so they use a distinct 'buy_error' reason:
+				// the deal's BUYS stay paused, but take-profit / stop-loss / panic / cancel can still exit it
+				// (there is no pending coin to strand). This mirrors the base-order path, which likewise
+				// reserves 'order_verify_buy' for an unverified in-flight order only.
+				isDealPauseReason = buyOrderInvalid ? 'order_verify_buy' : 'buy_error';
 				const pauseData = await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
 				isDealPauseBuy = true;
 			}
@@ -2101,7 +2407,10 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 		}
 	}
 
-	if (buySuccess) {
+	// Skip when a partial fill was already CREDITED above: creditPartialBuyFill already updated the ladder
+	// with the REAL filled quantity (marking the rung filled+manual) and recomputed the take-profit, so
+	// running handleSuccessfulBuy would re-mark the rung at the REQUESTED quantity and undo the credit.
+	if (buySuccess && !partialFillCredited) {
 
 		await handleSuccessfulBuy({
 			'dealId': dealId,
@@ -2230,9 +2539,32 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				Common.sendNotification({ 'message': msg, 'type': 'warning', 'telegram_id': shareData.appData.telegram_id });
 			}
 
-			if (!isDealVerifying && (isMaxError || diffSec > maxSellErrorResetSec)) {
+			const timeReset = diffSec > maxSellErrorResetSec;
+
+			if (!isDealVerifying && (isMaxError || timeReset)) {
 
 				delete dealTracker[dealId]['update']['deal_sell_error'];
+
+				// On the time-based reset (a generic sell error has had time to clear) also lift the sell
+				// pause that the error set, so take-profit / stop-loss can fire again and the deal is not
+				// stranded waiting for a manual resume. Scoped to the 'sell_error' reason only (the generic,
+				// non-verifying error) and NOT done on the max-error give-up path, which deliberately keeps
+				// the deal paused for attention (a panic sell still works there). Best-effort and read-guarded.
+				if (timeReset && !isMaxError) {
+
+					try {
+
+						const dealSellErr = await Deals.findOne({ dealId, status: 0 });
+
+						if (dealSellErr && Common.convertBoolean(dealSellErr.pausedSell, false) && dealSellErr.pauseReason === 'sell_error') {
+
+							await pauseDeal(configDataObj.botId, dealId, null, null, false, '');
+
+							await sendDealMessage('info', 'Deal ID ' + dealId + ' sell pause (transient sell error) auto-cleared; resuming sell monitoring.');
+						}
+					}
+					catch (e) {}
+				}
 			}
 		}
 	}
@@ -2313,6 +2645,73 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 				}
 			}
 
+			// Plausibility guard (IN ADDITION to the zero check above). During an
+			// exchange auth/connectivity disruption fetchTicker can RETURN a nonzero
+			// but wildly wrong price (seen 2026-08-12: WAL $0.0238 → $65.11). That
+			// price would cross the take-profit target and close the deal at an
+			// impossible profit. Reject any nonzero price that deviates beyond the
+			// configured band from the deal's own DCA average (its known-good anchor)
+			// and hold the deal exactly like an invalid price — never compute profit
+			// against it, buy, or sell on it. Covers the resume/recovery path too:
+			// resumed deals follow through this same tick loop (runFollowLoop →
+			// dcaFollow), so a deal cannot finalize on the first post-recovery fetch.
+			if (price > 0) {
+
+				const filledForRef = (deal.orders || []).filter(item => item.filled == 1);
+				const refOrder = filledForRef[filledForRef.length - 1];
+				const referencePrice = refOrder ? refOrder.average : null;
+
+				const cbCfgPrice = shareData.appData.circuit_breaker || {};
+
+				const sanity = PriceGuard.evaluatePriceSanity({
+					'price': price,
+					'reference': referencePrice,
+					'maxHighRatio': cbCfgPrice.price_deviation_high_ratio,
+					'maxLowRatio': cbCfgPrice.price_deviation_low_ratio
+				});
+
+				if (!sanity.plausible) {
+
+					// Treat exactly like an invalid price: only allow cancel, surface
+					// the error on the deal, and fall through to the hold path below.
+					cancelOnly = true;
+					dcaError = 'Implausible Price: ' + sanity.message + ' / Pair: ' + pair + ' / Deal ID: ' + dealId;
+
+					Common.logger(colors.red.bold(dcaError));
+
+					// Track consecutive implausible-price events per deal and alert like
+					// the zero-price case, so a persistently bad feed is surfaced rather
+					// than a deal silently sitting on hold forever.
+					if (!shareData.appData.cb_price_implausible_tracker) { shareData.appData.cb_price_implausible_tracker = {}; }
+					const pit = shareData.appData.cb_price_implausible_tracker;
+					pit[dealId] = (pit[dealId] || 0) + 1;
+
+					const implausibleAlertThreshold = (cbCfgPrice && cbCfgPrice.price_implausible_alert_count) || 4;
+
+					if (pit[dealId] >= implausibleAlertThreshold) {
+
+						if (cbCfgPrice && cbCfgPrice.enabled) {
+
+							Common.sendNotification({
+								'message': `⚠️ Implausible Price\n\nPair: ${pair}\nDeal ID: ${dealId}\n\n${sanity.message}\n\nThe deal is being HELD (not closed) until the price feed is sane again.`,
+								'type': 'warning',
+								'telegram_id': shareData.appData.telegram_id
+							});
+						}
+
+						// Reset counter after alert so it doesn't accumulate
+						pit[dealId] = 0;
+					}
+				}
+				else {
+
+					// Plausible price — reset implausible counter for this deal
+					if (shareData.appData.cb_price_implausible_tracker) {
+						shareData.appData.cb_price_implausible_tracker[dealId] = 0;
+					}
+				}
+			}
+
 			let targetPrice = 0;
 
 			let orders = deal.orders;
@@ -2329,12 +2728,30 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 			// (order_verify_buy) banner even though the deal is correctly paused.
 			isDealPauseReason = deal.pauseReason || '';
 
+			// Bundle the deal's per-tick control state (pause / cancel / panic-sell /
+			// verifying / cancelOnly) into a single snapshot shared by all three order
+			// handlers, so each receives it through one `dealState` parameter instead of
+			// eight discrete flags. Built here, after every flag above has settled for this
+			// tick. Each handler destructures these into its OWN local bindings, so a
+			// handler flipping a flag (e.g. isDealVerifying while pausing for order
+			// verification) stays local to that handler exactly as before — dealState is a
+			// read-only snapshot and is never mutated in place.
+			const dealState = {
+				'isDealPause': isDealPause,
+				'isDealPauseBuy': isDealPauseBuy,
+				'isDealPauseSell': isDealPauseSell,
+				'isDealPauseReason': isDealPauseReason,
+				'isDealCancel': isDealCancel,
+				'isDealPanicSell': isDealPanicSell,
+				'isDealVerifying': isDealVerifying,
+				'cancelOnly': cancelOnly
+			};
+
 			if (deal.isStart == 0) {
 
 				const baseResult = await handleBaseOrder({
 					config, exchange, dealId, deal, orders, pair, price,
-					isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason,
-					dcaError, cancelOnly
+					dcaError, dealState
 				});
 
 				return ( baseResult );
@@ -2370,6 +2787,142 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					maxSafetyOrdersUsed = true;
 				}
 
+				// Stop-loss (#104a). A deal-level threshold, so evaluated ONCE here — before
+				// the per-order safety/sell loop — using the DCA average already in
+				// currentOrder. When it fires the deal is closed at market through the SAME
+				// path panic_sell uses (handleSell), recorded with a distinct stopLoss reason.
+				// Gated so it can NEVER fire on an implausible price (cancelOnly, from the
+				// plausibility guard) and never overrides an explicit user close or a
+				// paused/verifying sell. Precedence stop-loss > safety-buy is enforced by the
+				// !isDealStopLoss term on the safety-order condition below, so a stopping deal
+				// never buys another safety order on the same tick. Default-off: with
+				// dcaStopLossEnabled false, isDealStopLoss stays false and every loop condition
+				// is unchanged. Both the hard loss-cut and the move-to-breakeven ratchet run here;
+				// the ratchet persists onto the deal so it survives restarts (Stage 4).
+				let isDealStopLoss = false;
+				let suppressTakeProfit = false;
+
+				// Read stop-loss settings from the freshly-read deal.config (not the frozen
+				// follow config) so a live per-deal edit takes effect on the next tick with no
+				// stop/resume. deal is re-read from the DB every tick (Deals.findOne above).
+				const dealCfg = deal.config || {};
+
+				if (dealCfg.dcaStopLossEnabled || dealCfg.dcaTrailingStopEnabled) {
+
+					// Deepest safety-order price — only needed for reference='lastSafetyOrder'.
+					let lastSafetyOrderPrice = null;
+
+					if (String(dealCfg.dcaStopLossReference).toLowerCase() === 'lastsafetyorder') {
+
+						for (let s = 0; s < orders.length; s++) {
+
+							const op = Number(orders[s].price);
+
+							if (Number.isFinite(op) && op > 0 && (lastSafetyOrderPrice === null || op < lastSafetyOrderPrice)) {
+
+								lastSafetyOrderPrice = op;
+							}
+						}
+					}
+
+					// Trailing stop (#104b): maintain the per-deal high-water-mark once trailing has
+					// activated (profit >= activation); the pure guard then trails the stop a configured
+					// distance below that peak. Read from the live deal.config like the stop-loss above.
+					const trailEnabled = StopLoss.toBool(dealCfg.dcaTrailingStopEnabled);
+					const trailDist = StopLoss.toNum(dealCfg.dcaTrailingStopDistance);
+					const trailActivate = StopLoss.toNum(dealCfg.dcaTrailingActivateProfit);
+
+					const trailActiveNow = trailEnabled && trailDist !== null && trailDist > 0
+						&& trailActivate !== null && profitPerc >= trailActivate;
+
+					let trailHigh = StopLoss.toNum(deal.trailHighPrice);
+
+					if (trailActiveNow && price > 0) {
+
+						trailHigh = (trailHigh === null || trailHigh <= 0) ? price : Math.max(trailHigh, price);
+					}
+
+					const slDecision = StopLoss.evaluate({
+						'enabled': dealCfg.dcaStopLossEnabled,
+						'price': price,
+						'average': currentOrder.average,
+						'stopLossPercent': dealCfg.dcaStopLossPercent,
+						'reference': dealCfg.dcaStopLossReference,
+						'lastSafetyOrderPrice': lastSafetyOrderPrice,
+						'feeRate': config.exchangeFee,
+						'moveBreakeven': dealCfg.dcaStopLossMoveBreakeven,
+						'breakevenTrigger': dealCfg.dcaStopLossBreakevenTrigger,
+						'profitPercentage': profitPerc,
+						'breakevenArmed': deal.stopLossBreakevenArmed,
+						'activeStopLossPrice': deal.activeStopLossPrice,
+						'trailingEnabled': dealCfg.dcaTrailingStopEnabled,
+						'trailingDistance': dealCfg.dcaTrailingStopDistance,
+						'trailingActivateProfit': dealCfg.dcaTrailingActivateProfit,
+						'trailHighPrice': trailHigh
+					});
+
+					// Ratchet persistence: write once when break-even arms, the trailing high-water
+					// advances, or the effective LOCKED stop rises. The deal is re-read from the DB each
+					// tick, so these restore automatically on later ticks and across a restart. The base
+					// (loss) stop is NOT persisted — only the up-only lock levels (break-even / trailing).
+					const slPersist = {};
+
+					if (slDecision['breakevenArmed'] && !deal.stopLossBreakevenArmed) {
+
+						slPersist['stopLossBreakevenArmed'] = true;
+					}
+
+					if (trailHigh !== null && trailHigh > 0 && trailHigh !== StopLoss.toNum(deal.trailHighPrice)) {
+
+						slPersist['trailHighPrice'] = trailHigh;
+					}
+
+					const slLockEngaged = slDecision['breakevenArmed'] || slDecision['trailingActive'];
+					const slPersistedLevel = StopLoss.toNum(deal.activeStopLossPrice) || 0;
+
+					if (slLockEngaged && slDecision['level'] != undefined && slDecision['level'] > slPersistedLevel) {
+
+						slPersist['activeStopLossPrice'] = slDecision['level'];
+					}
+
+					if (Object.keys(slPersist).length > 0) {
+
+						await updateDeal(deal.botId, dealId, slPersist);
+
+						if (slPersist['stopLossBreakevenArmed']) {
+
+							Common.logger(colors.yellow.bold('Deal ID ' + dealId + ' stop-loss moved to break-even at ' + slDecision['level'] + ' / Pair: ' + pair));
+						}
+						else if (slPersist['activeStopLossPrice'] != undefined) {
+
+							Common.logger(colors.cyan.bold('Deal ID ' + dealId + ' trailing stop raised to ' + slDecision['level'] + ' (peak ' + trailHigh + ') / Pair: ' + pair));
+						}
+					}
+
+					if (slDecision['triggered']
+						&& !cancelOnly
+						&& !isDealPanicSell && !isDealCancel
+						&& !isDealPauseSell && !isDealVerifying
+						&& isDealPauseReason !== 'order_verify_buy') {
+
+						// order_verify_buy = a safety-order buy is placed and in background verification
+						// (likely filled but not yet credited). Do not arm the stop-loss until it resolves,
+						// or we would sell only the credited qty and strand the pending buy's coin. Mirrors
+						// how order_verify_sell blocks this gate via isDealPauseSell.
+						isDealStopLoss = true;
+
+						Common.logger(colors.red.bold('Deal ID ' + dealId + ' STOP-LOSS triggered: ' + slDecision['message'] + ' / Pair: ' + pair));
+					}
+
+					// Mode B: while trailing is active, suppress the fixed take-profit so the deal rides
+					// the run-up (protected by the trailing stop). Per-deal toggle dcaTrailingReplacesTakeProfit
+					// (default on). The trailing stop is the exit; the fixed TP is only paused, only while active.
+					if (slDecision['trailingActive'] && StopLoss.toBool(dealCfg.dcaTrailingReplacesTakeProfit)) {
+
+						suppressTakeProfit = true;
+					}
+				}
+
 				for (let i = 0; i < orders.length; i++) {
 
 					let buyOrderId = '';
@@ -2383,21 +2936,14 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 					// Check if max safety orders used, otherwise sell order condition will not be checked
 					if (order.filled == 0 || maxSafetyOrdersUsed) {
 
-						if (config.sandBox) {
-
-							//priceSlippageBuyPercent = 0;
-							//priceSlippageSellPercent = 0;
-						}
-
 						const priceBuyOrder = parseFloat(Number(order.price) - (Number(order.price) * priceSlippageBuyPercent));
 						const priceSellOrder = parseFloat(Number(currentOrder.target) + (Number(currentOrder.target) * priceSlippageSellPercent));
 
-						if ((price <= priceBuyOrder && order.filled == 0) && !cancelOnly && !isDealPause && !isDealPauseBuy && !isDealCancel && !isDealPanicSell) {
+						if ((price <= priceBuyOrder && order.filled == 0) && !cancelOnly && !isDealStopLoss && !isDealPause && !isDealPauseBuy && !isDealCancel && !isDealPanicSell) {
 
 							const safetyResult = await handleSafetyOrder({
 								config, exchange, dealId, deal, orders, order, currentOrder, pair, price,
-								priceBuyOrder, profit, i, isDealPause, isDealPauseBuy, isDealPauseSell,
-								isDealPauseReason, isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly
+								priceBuyOrder, profit, i, dealState
 							});
 
 							// Propagate isBuy (read after the loop for the 'max safety orders used' log).
@@ -2410,13 +2956,26 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 								return ( safetyResult['result'] );
 							}
 						}
-						else if ((price >= priceSellOrder && !isDealVerifying && !isDealPause && !isDealPauseSell) || isDealCancel || isDealPanicSell) {
+						// A panic-sell / cancel / stop-loss must NOT fire while a prior sell order is still
+						// unresolved, or it would place a SECOND live sell for coin that is already committed
+						// (real-account oversell → subsequent insufficient-funds). The price-based take-profit
+						// term is already blocked by !isDealPauseSell, but the OR'd panic/cancel/stop terms
+						// bypass that guard — so gate the whole branch on there being no sell order in flight.
+						// 'order_verify_sell' = a sell was placed and is being verified; 'sell_finalize_error' =
+						// a sell verified as filled but the close failed to finalize (coin already gone). Both
+						// clear once the verification resolves (or the user manually resumes), after which a
+						// panic proceeds normally and places exactly one order.
+						// 'order_verify_buy' = a safety-order BUY is placed and in background verification
+						// (likely filled but not yet credited). Selling now — take-profit, stop-loss, panic or
+						// cancel — would sell only the credited qty and strand the pending buy's coin, and the
+						// post-close reconcile (status:0 filter) would never pick it up. Block the whole branch
+						// until the buy resolves, exactly as for a sell in flight.
+						else if (isDealPauseReason !== 'order_verify_sell' && isDealPauseReason !== 'sell_finalize_error' && isDealPauseReason !== 'order_verify_buy' && ((price >= priceSellOrder && !cancelOnly && !suppressTakeProfit && !isDealVerifying && !isDealPause && !isDealPauseSell) || isDealCancel || isDealPanicSell || isDealStopLoss)) {
 
 							const sellResult = await handleSell({
 								config, exchange, dealId, deal, orders, order, currentOrder, filledOrders,
 								pair, price, priceSellOrder, profit, profitBase, profitQuote, profitPerc,
-								isDealPause, isDealPauseBuy, isDealPauseSell, isDealPauseReason,
-								isDealCancel, isDealPanicSell, isDealVerifying, cancelOnly
+								dealState, isDealStopLoss
 							});
 
 							return ( sellResult );
@@ -2433,7 +2992,10 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 										'pause_buy': isDealPauseBuy,
 										'pause_sell': isDealPauseSell,
 										'pause_reason': isDealPauseReason,
-										'error': dcaError
+										'error': dcaError,
+										'stop_loss_breakeven_armed': deal.stopLossBreakevenArmed,
+										'active_stop_loss_price': deal.activeStopLossPrice,
+										'trail_high_price': deal.trailHighPrice
 									});
 
 							//let nextOrder = currentOrder.price;
@@ -2489,7 +3051,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 		else {
 
 			// Deal no longer exists in the database (e.g. deleted after verification
-			// retries were exhausted, or cancelled/closed elsewhere). There is nothing
+			// retries were exhausted, or canceled/closed elsewhere). There is nothing
 			// left to follow, so signal the loop to stop rather than spin on a missing
 			// deal. finished stays authoritative for runFollowLoop's exit condition.
 			finished = true;
@@ -2501,7 +3063,7 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 
 		success = false;
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 
 	return ( loopSignal(success, finished) );
@@ -2574,14 +3136,22 @@ const getSymbol = async (exchange, pair) => {
 
 			if (typeof symbolError != 'string') {
 
-				let msg = '';
+				// Build a concise, single-line error string for logging and display. A ccxt network error can
+				// carry the entire fetched response body in .message (a failed /currencies call is ~10KB of
+				// JSON), which would otherwise flood the log and every resume-retry line. Keep the error name,
+				// a bounded message, and the underlying network cause code (ECONNREFUSED / ETIMEDOUT /
+				// ENETUNREACH …) so the failure is self-diagnosing. Control flow above keys off `e instanceof`,
+				// never this string, so reformatting it is display-only and safe.
+				const errName = symbolError.name ? String(symbolError.name) : 'Error';
 
-				if (symbolError.message != undefined && symbolError.message != null) {
+				let detail = (symbolError.message != undefined && symbolError.message != null) ? String(symbolError.message) : '';
+				detail = detail.split('\n')[0];
+				if (detail.length > 300) { detail = detail.slice(0, 300) + '…'; }
 
-					msg = ' ' + symbolError.message;
-				}
+				const causeCode = symbolError.cause && (symbolError.cause.code || symbolError.cause.errno || symbolError.cause.message);
+				const causeStr = causeCode ? ' [' + String(causeCode).split('\n')[0].slice(0, 80) + ']' : '';
 
-				symbolError = JSON.stringify(symbolError) + msg;
+				symbolError = errName + (detail ? ': ' + detail : '') + causeStr;
 			}
 
 			symbolError = 'Get symbol ' + pair + ' error: ' + symbolError;
@@ -2609,6 +3179,20 @@ const getSymbol = async (exchange, pair) => {
 			}
 			else if (e instanceof ccxt.ExchangeNotAvailable) {
 
+				finished = true;
+			}
+			else if (e instanceof ccxt.AuthenticationError) {
+
+				// v6.0 builds exchange clients with ccxt.pro (WebSocket) AND API
+				// credentials (see connectExchange), so even a "public" ticker read
+				// rides an authenticated socket. A key / clock / nonce disruption at the
+				// exchange therefore surfaces here as an AuthenticationError on a ticker
+				// call. AuthenticationError extends ExchangeError, so without this branch
+				// it would fall into the retry branch below and be retried up to maxTries
+				// per tick — futile (a broken auth session will not fix itself within a
+				// few hundred ms) and wasteful during an auth storm. Finish immediately
+				// with the error set; the caller sees symbolData.error and holds the deal
+				// (cancelOnly). Never act on a price from a broken auth session.
 				finished = true;
 			}
 			else if (e instanceof ccxt.ExchangeError && count < maxTries) {
@@ -2665,8 +3249,10 @@ const filterMinMovement = async (amount, minMoveAmount) => {
 
 	if (amountFinal < 1 && amountFinal > 0) {
 
-		let amountString = amountFinal.toString();
-        let decimalPrecision = amountString.split('.')[1].length;
+		// Robust decimal-place count — amountFinal below ~1e-6 stringifies in exponential form
+		// ("2e-7"), where the old `.split('.')[1].length` threw and stalled order sizing on
+		// high-precision coins. countDecimals handles both forms and matches the old value otherwise.
+        let decimalPrecision = Common.countDecimals(amountFinal);
 
         let multipliedAmount = amountFinal * Math.pow(10, decimalPrecision);
 
@@ -2694,7 +3280,7 @@ const filterAmount = async (exchange, pair, amount) => {
 	catch (e) {
 
 		// Prevent log spam when minimum precision error occur
-		if (!e instanceof ccxt.InvalidOrder) {
+		if (!(e instanceof ccxt.InvalidOrder)) {
 
 			let errMsg = 'FILTER AMOUNT ERROR: ' + e.name + ' ' + e.message;
 
@@ -2720,7 +3306,7 @@ const filterPrice = async (exchange, pair, price) => {
 	catch (e) {
 
 		// Prevent log spam when minimum precision error occur
-		if (!e instanceof ccxt.InvalidOrder) {
+		if (!(e instanceof ccxt.InvalidOrder)) {
 
 			let errMsg = 'FILTER PRICE ERROR: ' + e.name + ' ' + e.message;
 
@@ -2738,12 +3324,12 @@ const filterPrice = async (exchange, pair, price) => {
 
 
 
-// Centralised start-permission check.
+// Centralized start-permission check.
 // Runs only the checks specified in the `checks` object and returns
 // { allowed: bool, reason: string } so every callsite has one place
 // to consult for limit logic.
 //
-// Normalisation (pairMax / pairDealsMax → 0 when blank/null/undefined)
+// Normalization (pairMax / pairDealsMax → 0 when blank/null/undefined)
 // is always applied regardless of which checks are requested.
 //
 // checks:
@@ -2851,7 +3437,7 @@ const checkActiveDeal = async (botId, pair) => {
 	}
 	catch (e) {
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 };
 
@@ -2957,7 +3543,7 @@ const getDeals = async (query, options, projection, aggregatePipeline = null) =>
 	}
 	catch (e) {
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 };
 
@@ -2978,7 +3564,7 @@ const getBots = async (query) => {
 	}
 	catch (e) {
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 };
 
@@ -3026,8 +3612,19 @@ const getBalance = async (exchange, symbol) => {
 		let allBalances = {};
 		let starting_after = null;
 		let starting_after_last = null;
+		let pageCount = 0;
 
 		while (true) {
+
+			// Hard cap on pagination pages. The loop normally breaks when the exchange stops advancing
+			// next_starting_after, but a cursor that ALTERNATES between two values would never satisfy that
+			// equality check and loop forever (500ms apart). 200 pages × 100 = far more balances than any
+			// real account, so this only ever trips on a misbehaving exchange response.
+			if (++pageCount > 200) {
+
+				Common.logger('getBalance: pagination page cap (200) reached — stopping to avoid a non-terminating loop.');
+				break;
+			}
 
 			let options = {};
 
@@ -3097,9 +3694,21 @@ const getBalance = async (exchange, symbol) => {
 
 		success = false;
 
-		errMsg = 'BALANCE ERROR: ' + e.name + ' ' + e.message;
+		// Concise, single-line error (a ccxt error can carry a many-KB JSON body). This string is BOTH logged
+		// and returned — it surfaces in the bot-preview alert — so keeping it short helps everywhere.
+		errMsg = 'BALANCE ERROR: ' + ((e && e.name) ? e.name + ' ' : '') + summarizeExchangeError(e);
 
-		Common.logger(errMsg);
+		// Throttle the LOG only: during an outage this fires several times a minute with the identical error.
+		// Log the first per exchange+error within the window and suppress the repeats; the returned value is
+		// unchanged, so callers behave exactly as before.
+		const logKey = ((exchange && exchange.id) || 'exchange') + ':' + ((e && e.name) ? e.name : 'error');
+		const nowMs = Date.now();
+
+		if (nowMs - (balanceErrorLogged[logKey] || 0) > balanceErrorLogWindowMs) {
+
+			balanceErrorLogged[logKey] = nowMs;
+			Common.logger(errMsg + ' — repeats within ' + Math.round(balanceErrorLogWindowMs / 1000) + 's suppressed');
+		}
 	}
 
 	return { 'success': success, 'balance': balance, 'error': errMsg };
@@ -3348,13 +3957,6 @@ const verifyExchangeOrder = async (exchange, orderId, pair, dealId) => {
 
 	Common.logger(msg);
 
-	//const botConfigFile = shareData.appData.bot_config;
-	//const botConfig = await Common.getConfig(botConfigFile);
-
-	//let configBot = botConfig.data;
-	//let config = await initConfigData(configBot);
-	//let exchange = await connectExchange(config);
-
 	while (!finished) {
 
 		orderCount++;
@@ -3602,7 +4204,7 @@ const verifyBuySellOrder = async (exchange, orderId, pair, dealId) => {
 // UI "verifying" flag on the deal's sell-error tracker so the row stops showing the
 // in-progress state. Both paths behaved identically here; this is the single source.
 // (The base-order path deliberately does NOT use this — on exhaustion it tears the
-// deal down entirely, which is different behaviour and stays in its own handler.)
+// deal down entirely, which is different behavior and stays in its own handler.)
 function clearSellErrorVerifying(dealId) {
 
 	try {
@@ -3616,14 +4218,13 @@ function clearSellErrorVerifying(dealId) {
 }
 
 
-const verifyInvalidOrder = ({ count = 0, mins = 2, exchange, pair, botId, dealId, orderId, onSuccessCallback = null, pauseBeforeCallback = false }) => {
+const verifyInvalidOrder = async ({ count = 0, mins = 2, exchange, pair, botId, dealId, orderId, onSuccessCallback = null, pauseBeforeCallback = false }) => {
 
 	const maxTries = 100;
 
 	const retryMins = mins ?? 2;
 	count++;
 
-	return new Promise(async (resolve) => {
 
 		if (count > maxTries) {
 
@@ -3632,7 +4233,7 @@ const verifyInvalidOrder = ({ count = 0, mins = 2, exchange, pair, botId, dealId
 				`Max tries (${maxTries}) reached for verifying order ID ${orderId} for deal ID ${dealId}. Will not try again.`
 			);
 
-			return resolve({
+			return ({
 				success: false,
 				retriesExhausted: true
 			});
@@ -3693,7 +4294,7 @@ const verifyInvalidOrder = ({ count = 0, mins = 2, exchange, pair, botId, dealId
 						pauseBeforeCallback
 					});
 
-					return resolve(retryResult);
+					return (retryResult);
 				}
 				else {
 
@@ -3702,7 +4303,7 @@ const verifyInvalidOrder = ({ count = 0, mins = 2, exchange, pair, botId, dealId
 					await sendDealMessage('info', msg);
 
 					// Deal is no longer paused, exit
-					return resolve({
+					return ({
 						success: false,
 						notPaused: true
 					});
@@ -3726,7 +4327,24 @@ const verifyInvalidOrder = ({ count = 0, mins = 2, exchange, pair, botId, dealId
 
 			if (typeof onSuccessCallback === 'function') {
 
-				await onSuccessCallback(verifiedData);
+				try {
+
+					await onSuccessCallback(verifiedData);
+				}
+				catch (cbErr) {
+
+					// The order verified as FILLED, but finalizing the deal (recording the close/profit) threw.
+					// Leaving it unpaused + open would let the follow loop retry the sell on coin that is already
+					// gone (NSF) and strand the deal. Re-pause with a distinct reason and alert so it stops safely
+					// and is visible for attention, instead of silently stranding (this is the whole point of the
+					// async-function refactor: a throw here can no longer swallow the resolve and hang the deal).
+					Common.logger('verifyInvalidOrder: post-verify finalize failed for deal ' + dealId + ': ' + ((cbErr && (cbErr.stack || cbErr.message)) || cbErr), true);
+
+					try { await pauseDeal(botId, dealId, true, true, true, 'sell_finalize_error'); } catch (e) {}
+					try { await sendDealMessage('deal_error', 'Deal ID ' + dealId + ' order verified as filled but finalizing the close failed — the deal has been paused for attention (not re-sold). Error: ' + ((cbErr && cbErr.message) || cbErr)); } catch (e) {}
+
+					return ({ success: false, callbackFailed: true, error: (cbErr && cbErr.message) || String(cbErr) });
+				}
 			}
 
 			if (!pauseBeforeCallback) {
@@ -3734,19 +4352,18 @@ const verifyInvalidOrder = ({ count = 0, mins = 2, exchange, pair, botId, dealId
 				await pauseDeal(botId, dealId, false, null, null, '');
 			}
 
-			return resolve({
+			return ({
 				success: true
 			});
 		}
 
-		return resolve({
+		return ({
 			success: false
 		});
-	});
 };
 
 
-const buyOrder = async (exchange, dealId, pair, qty, price) => {
+const buyOrder = async ({ exchange, dealId, pair, qty, price, type = 'market' }) => {
 
 	const maxTries = 5;
 
@@ -3773,7 +4390,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 
 			let orderParamsObj = {
 				'symbol': pair,
-				'type': 'market',
+				'type': type,
 				'side': 'buy',
 				'quantity': qty,
 				'price': price
@@ -3860,7 +4477,7 @@ const buyOrder = async (exchange, dealId, pair, qty, price) => {
 };
 
 
-const sellOrder = async (exchange, dealId, pair, qty, price) => {
+const sellOrder = async ({ exchange, dealId, pair, qty, price, type = 'market' }) => {
 
 	const maxTries = 5;
 
@@ -3887,7 +4504,7 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 
 			let orderParamsObj = {
 				'symbol': pair,
-				'type': 'market',
+				'type': type,
 				'side': 'sell',
 				'quantity': qty,
 				'price': price
@@ -3905,7 +4522,6 @@ const sellOrder = async (exchange, dealId, pair, qty, price) => {
 
 			// Pass params in the same structure as referenced in template
 			order = await exchange.createOrder(...orderParamsArr);
-			//order = await exchange.createOrder(pair, 'market', 'sell', qty, price);
 
 			finished = true;
 		}
@@ -4032,10 +4648,6 @@ const replacePlaceholders = (params, data) => {
 };
 
 
-const getDeviation = async (a, b) => {
-
-	return (Math.abs( (a - b) / ( (a + b) / 2 ) ) * 100);
-}
 
 
 const getDeviationDca = async (dcaOrderStepPercent, dcaOrderStepPercentMultiplier, dcaMaxOrder) => {
@@ -4067,7 +4679,11 @@ const getSlippage = async(normalize) => {
 		divisor = 100;
 	}
 
-	if (shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
+	// Guard shareData.appData.bots itself, not just its 'exchange' member: getSlippage runs early in the
+	// per-tick follow (before that tick's try/catch), so a bare deref of an undefined bots would throw out
+	// of dcaFollow and abandon the deal's follow loop (open but unmonitored until a restart). A missing
+	// bots simply means no configured slippage — fall through to the 0/0 default.
+	if (shareData.appData.bots != undefined && shareData.appData.bots != null && shareData.appData.bots['exchange'] != undefined && shareData.appData.bots['exchange'] != null && typeof shareData.appData.bots['exchange'] == 'object') {
 
 		const exchangeObj = shareData.appData.bots['exchange'];
 
@@ -4108,12 +4724,18 @@ async function calculateMaxFunds(config) {
 	const safetyOrderStepPerc = Number(dcaOrderStepPercent);
 	const safetyOrderStepScale = Number(dcaOrderStepPercentMultiplier);
 	const baseOrderVolume = Number(firstOrderAmount);
-	const feeMultiplier = 1 + (Number(exchangeFee) * 2) / 100;
+	// ONE fee, not two. "Max funds" is the capital you must DEPLOY to fill the ladder — that is the BUY
+	// side, which only pays the buy fee. The sell fee comes out of proceeds when the deal later closes; it
+	// does not increase the cash you need on hand to open the orders. Using a round-trip (2x) fee here
+	// over-stated the estimate by ~fee% and made it disagree with the dashboard's actual "Max deal
+	// exposure" figure (which carries no fee). This value is DISPLAY-ONLY — it never sizes an order nor
+	// gates a deal start (canStartDeal / order sizing never read it), so trading is unaffected.
+	const feeMultiplier = 1 + Number(exchangeFee) / 100;
 
 	const totalPairs = Array.isArray(pair) && pair.length > 0 ? pair.length : 1;
 
 	const effectivePairMax = Math.max(1, Number(pairMax) || 1);
-	const effectivePairDealsMax = Math.max(1, Number(pairDealsMax));
+	const effectivePairDealsMax = Math.max(1, Number(pairDealsMax) || 1);   // || 1: Math.max(1, NaN) is NaN, which would poison the whole max-funds estimate when pairDealsMax is absent/blank (matches effectivePairMax above)
 
 	const maxDeviation =
 		safetyOrderStepScale === 1 ?
@@ -4196,12 +4818,44 @@ const calculateProfit = async (exchange, pair, price, orderAverage, orderSum, ta
 
 const calculateTargetPrice = async ({ exchange, pair, price, takeProfit, exchangeFee }) => {
 
-	let targetPrice = Percentage.addPerc(
+	const exactTarget = Percentage.addPerc(
 		price,
 		(Number(takeProfit) + Number(exchangeFee))
 	);
 
-	targetPrice = await filterPrice(exchange, pair, targetPrice);
+	let targetPrice = await filterPrice(exchange, pair, exactTarget);
+
+	// Round the take-profit target UP to the exchange tick when precision rounded it BELOW the exact
+	// target. On a coarse-tick / low-priced pair (e.g. a coin around $0.68) one tick is a meaningful
+	// fraction of a percent, so priceToPrecision can land the target under average×(1+TP+fee) and the
+	// deal would sell short of the configured take-profit unless slippage covered the gap. Stepping up
+	// one tick makes the target always >= the exact target, so the deal reaches at least the configured
+	// TP without relying on slippage. Contained to the sell target (buys, averages and order sizing are
+	// untouched); high-precision pairs move by at most one tiny tick; fully fail-safe — any problem
+	// determining the tick leaves today's filtered target unchanged.
+	try {
+
+		if (targetPrice !== false && Number(targetPrice) < Number(exactTarget)) {
+
+			const pricePrecision = exchange.market(pair)?.precision?.price;
+
+			// precisionMode 4 = TICK_SIZE (precision IS the tick); otherwise decimal places → 1 / 10^n.
+			const tick = (exchange['precisionMode'] == 4)
+				? Number(pricePrecision)
+				: (Number.isFinite(Number(pricePrecision)) ? 1 / Math.pow(10, Number(pricePrecision)) : null);
+
+			if (tick && tick > 0) {
+
+				const stepped = await filterPrice(exchange, pair, Number(targetPrice) + tick);
+
+				if (stepped !== false && Number(stepped) >= Number(exactTarget)) {
+
+					targetPrice = stepped;
+				}
+			}
+		}
+	}
+	catch (e) { /* fail-safe: keep the original filtered target */ }
 
 	return targetPrice;
 }
@@ -4415,7 +5069,9 @@ const calculateAdjustments = async ({ exchange, pair, price, amount, orderSize, 
 		// Filtering may reduce amounts and remove decimals for some pairs
 		amountNew = await filterPrice(exchange, pair, amountNew);
 
-		amountNew = Math.round(amountNew * 100) / 100;
+		// Round the cost basis to the quote currency's precision (2 dp for USD/stable/fiat as
+		// before; finer for a crypto-quoted pair). See Common.roundCost.
+		amountNew = Common.roundCost(amountNew, pair);
 
 		resObj = {
 					'order_qty': orderSizeNew,
@@ -4555,7 +5211,12 @@ async function getPairPrecision(exchange, exchangeName, pair, isPairData) {
 		// If not TICK_SIZE then convert amount
 		if (exchange['precisionMode'] != 4) {
 
-			if (minMoveAmount >= 0) {
+			// Require a REAL finite precision. `null >= 0` coerces to true (and Math.pow(10, null) === 1),
+			// so without the type/finite check a market whose precision.amount is null would collapse to a
+			// whole-unit minimum movement (1) and then SKIP the recompute fallback below (which only fires
+			// on undefined/null) — grossly oversizing a sub-1 order. Treat null/NaN exactly like undefined:
+			// leave minMoveAmount unset so the getPairData recompute path runs.
+			if (typeof minMoveAmount === 'number' && Number.isFinite(minMoveAmount) && minMoveAmount >= 0) {
 
 				minMoveAmount = 1 / Math.pow(10, minMoveAmount);
 			}
@@ -4650,7 +5311,7 @@ async function getPairData(pair) {
 
 async function loadExchangeMarkets(exchangeObj) {
 
-	const maxTries = 5;
+	const maxTries = 6;
 
 	let isErr;
 	let success;
@@ -4695,8 +5356,11 @@ async function loadExchangeMarkets(exchangeObj) {
 
 				if (count < maxTries) {
 
-					// Delay and retry
-					await Common.delay(1000 + (Math.random() * 100));
+					// Exponential backoff with jitter (1s, 2s, 4s, 8s… capped at 8s) so a cold-start blip or a
+					// brief Coinbase rate-limit on /v2/currencies is absorbed silently instead of surfacing as a
+					// connect error after a too-short flat window. A transient failure recovers in 1-3s; a real
+					// outage still gives up after ~30s so startup is never blocked indefinitely.
+					await Common.delay(Math.min(1000 * Math.pow(2, count), 8000) + Math.floor(Math.random() * 250));
 				}
 				else {
 
@@ -4769,13 +5433,36 @@ async function connectExchange(configObj) {
 			options = config.exchangeOptions;
 		}
 
+		// Decrypt the stored exchange credentials before they touch the exchange. readSecret is a
+		// no-op for legacy plaintext values (so existing installs keep working unchanged) and
+		// decrypts the encrypted-at-rest format. All downstream use — the connection cache hash AND
+		// the ccxt client — uses these decrypted locals, so this is the single point where the raw
+		// stored value is turned back into a usable credential.
+		const apiKey        = await Common.readSecret(config.apiKey        || '');
+		const apiSecret     = await Common.readSecret(config.apiSecret     || '');
+		const apiPassphrase = await Common.readSecret(config.apiPassphrase || '');
+		const apiPassword   = await Common.readSecret(config.apiPassword   || '');
+
+		// Hard safety guard: if a credential is STILL in the encrypted-at-rest format after
+		// readSecret, its decryption failed (e.g. the login password was changed since the key was
+		// saved, leaving it encrypted under the old key). REFUSE to connect rather than send an
+		// unusable/encrypted value to the exchange — sending a bad key would halt trading anyway, so
+		// fail loudly with a clear message and let the user re-enter the key. Real exchange keys
+		// never match this pattern, so a legitimate plaintext key can't trip it.
+		const stillEncrypted = Common.isEncrypted;   // shared single-source-of-truth predicate
+
+		if (stillEncrypted(apiKey) || stillEncrypted(apiSecret) || stillEncrypted(apiPassphrase) || stillEncrypted(apiPassword)) {
+
+			throw new Error('exchange credentials could not be decrypted — re-enter the API key/secret for this exchange (was the login password changed?)');
+		}
+
 		const hash = crypto.createHash('sha256')
 			.update(
 				exchangeName +
-				(config.apiKey || '') +
-				(config.apiSecret || '') +
-				(config.apiPassphrase || '') +
-				(config.apiPassword || '')
+				apiKey +
+				apiSecret +
+				apiPassphrase +
+				apiPassword
 			)
 			.digest('hex');
 
@@ -4792,10 +5479,10 @@ async function connectExchange(configObj) {
 			exchange = new ccxt.pro[exchangeName]({
 				'timeout': (exchangeTimeoutSec * 1000),
 				'enableRateLimit': true,
-				'apiKey': config.apiKey,
-				'secret': config.apiSecret,
-				'passphrase': config.apiPassphrase,
-				'password': config.apiPassword,
+				'apiKey': apiKey,
+				'secret': apiSecret,
+				'passphrase': apiPassphrase,
+				'password': apiPassword,
 				'options': options
 			});
 
@@ -4827,14 +5514,32 @@ async function connectExchange(configObj) {
 	if (isErr) {
 
 		success = false;
-		let msg = 'Connect exchange error: ' + isErr;
+
+		// Keep the alert concise and self-contained: a ccxt connect/network error can carry the entire fetched
+		// response body (a failed /currencies call is ~10KB of JSON), which floods the log and the notification.
+		// The shared summarizer reduces it to a bounded single line and appends the underlying network cause
+		// code (ECONNREFUSED / ETIMEDOUT / ENETUNREACH / EAI_AGAIN / UND_ERR_CONNECT_TIMEOUT …) so a bare
+		// "fetch failed" is self-diagnosing rather than blank.
+		let msg = 'Connect exchange error: ' + summarizeExchangeError(isErr);
 
 		Common.logger(msg);
-		Common.sendNotification({
-			'message': msg,
-			'type': 'error',
-			'telegram_id': shareData.appData.telegram_id
-		});
+
+		// Rate-limit the ALERT (not the log): skip pushing an identical connect-error notification for the
+		// same exchange within the throttle window, so a persistent outage or several bots reconnecting at
+		// once don't produce a stream of duplicate alerts. The timestamp is set before the async send so
+		// near-simultaneous callers collapse to one.
+		const nowMsConnErr = Date.now();
+
+		if (nowMsConnErr - (connectErrorNotified[exchangeHash] || 0) > connectErrorNotifyWindowMs) {
+
+			connectErrorNotified[exchangeHash] = nowMsConnErr;
+
+			Common.sendNotification({
+				'message': msg,
+				'type': 'error',
+				'telegram_id': shareData.appData.telegram_id
+			});
+		}
 
 		delete shareData.appData.exchanges[exchangeHash];
 	}
@@ -4845,17 +5550,9 @@ async function connectExchange(configObj) {
 
 async function getExchangeAlias(exchangeName) {
 
-	// CCXT name changes
-
-	if (exchangeName != undefined && exchangeName != null && exchangeName != '') {
-
-		if (exchangeName.toLowerCase() == 'coinbasepro') {
-
-			exchangeName = 'coinbaseexchange';
-		}
-	}
-
-	return exchangeName;
+	// CCXT name changes — delegate to the single shared alias map (Common) so the trading side and the
+	// public market-data service can never resolve the same configured name differently.
+	return Common.exchangeAlias(exchangeName);
 }
 
 
@@ -4942,7 +5639,7 @@ async function updateBot(botId, data) {
 
 		success = false;
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 
 
@@ -4971,7 +5668,7 @@ async function updateDeal(botId, dealId, data) {
 
 		success = false;
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 
 
@@ -4999,7 +5696,7 @@ async function deleteDeal(dealId) {
 
 		success = false;
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 
 	if (dealData == undefined || dealData == null || dealData['deletedCount'] < 1) {
@@ -5017,11 +5714,19 @@ const updateOrderDeal = async (dealId, orderIndex, orderId, orders) => {
 	orders[orderIndex].orderId = orderId;
 	orders[orderIndex].dateFilled = new Date();
 
-	await Deals.updateOne({
-		dealId: dealId
-	}, {
-		orders: orders
-	});
+	// Field-scoped update: persist ONLY this order's fill fields via a positional $set, instead of
+	// rewriting the ENTIRE `orders` array. The whole-array write let a late background verify callback
+	// (working from a stale snapshot of `orders`) clobber concurrent changes to OTHER orders in the
+	// array. Touching just these three sub-fields is race-safe and produces an identical result for the
+	// normal single-writer tick (the caller re-reads via recalculateOrders immediately after).
+	await Deals.updateOne(
+		{ 'dealId': dealId },
+		{ '$set': {
+			[`orders.${orderIndex}.filled`]:     orders[orderIndex].filled,
+			[`orders.${orderIndex}.orderId`]:    orders[orderIndex].orderId,
+			[`orders.${orderIndex}.dateFilled`]: orders[orderIndex].dateFilled
+		} }
+	);
 
 	const orderUpdated = orders[orderIndex];
 
@@ -5104,14 +5809,20 @@ async function convertDataToSandBox() {
 
 	try {
 
-		botData = await Bots.updateMany({}, { '$set': { 'config.sandBox': true } });
-		dealData = await Deals.updateMany({}, { '$set': { 'config.sandBox': true } });
+		// Preserve timestamps: this is a system-level flag flip (marking restored data as
+		// sandbox), not a genuine per-document edit. Without { timestamps: false } Mongoose's
+		// timestamps plugin would re-stamp updatedAt=now on EVERY bot and deal, which — because
+		// this runs as the convert-to-sandbox step of a backup restore — silently rewrites the
+		// whole fleet's updatedAt to the restore moment. Anything that reads updatedAt as a
+		// "last active / last closed" signal would then be wrong until the data ages out.
+		botData = await Bots.updateMany({}, { '$set': { 'config.sandBox': true } }, { 'timestamps': false });
+		dealData = await Deals.updateMany({}, { '$set': { 'config.sandBox': true } }, { 'timestamps': false });
 	}
 	catch (e) {
 
 		success = false;
 
-		Common.logger(JSON.stringify(e));
+		Common.logger((e && (e.stack || e.message)) || JSON.stringify(e));
 	}
 
 	if (botData == undefined || botData == null || botData['matchedCount'] < 1) {
@@ -5376,6 +6087,61 @@ async function deleteResumeDealTracker(dealId) {
 }
 
 
+// Build a minimal, NON-LIVE deal info snapshot from a deal's PERSISTED record, for a deal that has just
+// been resumed into the tracker but whose live info has not been filled yet (the first live price tick
+// waits on the exchange connection, which can be slow — or briefly failing — on a cold restart). This lets
+// the active-deals view (instance AND Hub — they consume the same getActiveDeals payload) show the deal
+// immediately with everything that is known WITHOUT a live price (pair, deal count, safety orders used,
+// average entry, take-profit target), rather than hiding the row for ~30s. Fields that genuinely need a
+// live price — current price and every profit figure — are left null and the snapshot is flagged
+// `awaiting_live` so the view renders "updating…" for them instead of a stale or fabricated number.
+//
+// Pure and read-only: it derives from the persisted deal alone (no exchange call, no trading state), mirrors
+// getDealInfo's own filled-orders/current-order logic and field names, and is never used on the trading path.
+function buildResumeInfo(deal) {
+
+	const config = (deal && deal.config) || {};
+	const orders = Array.isArray(deal && deal.orders) ? deal.orders : [];
+
+	const filled = orders.filter(o => o && o.filled == 1);
+	const currentOrder = filled.length ? filled[filled.length - 1] : null;
+
+	// deal_count must be a real number or the view treats the row as a "deal data issue" and hides it;
+	// fall back to the filled safety-order count if the persisted config somehow lacks it.
+	const dealCount = (config.dealCount != null) ? config.dealCount : Math.max(0, filled.length - 1);
+
+	return {
+		'updated': (deal && deal.updated) || new Date(),
+		'active': true,
+		// Reflect a persisted pause reason so a paused deal shows its banner immediately; the first live
+		// tick refines the exact pause flags. Not a live value, so it is safe to show now.
+		'pause': !!(deal && deal.pauseReason),
+		'pause_buy': false,
+		'pause_sell': false,
+		'pause_reason': (deal && deal.pauseReason) || '',
+		'error': '',
+		'bot_id': config.botId,
+		'bot_name': config.botName,
+		'safety_orders_used': Math.max(0, filled.length - 1),
+		'safety_orders_max': Math.max(0, orders.length - 1),
+		// Known from the persisted orders — no live price needed.
+		'price_average': currentOrder ? currentOrder.average : null,
+		'price_target': currentOrder ? currentOrder.target : null,
+		// LIVE-only — unknown until the first tick. Left null; the view shows "updating…" via awaiting_live.
+		'price_last': null,
+		'profit': null,
+		'profit_base': null,
+		'profit_percentage': null,
+		'profit_quote_projected': null,
+		'estimates': {},
+		'deal_count': dealCount,
+		'deal_max': config.dealMax,
+		'max_funds': null,
+		'awaiting_live': true
+	};
+}
+
+
 async function getActiveDeals(active) {
 
 	let dealsArr = [];
@@ -5417,6 +6183,15 @@ async function getActiveDeals(active) {
 		let botId = deal['deal']['botId'];
 		let config = deal['deal']['config'];
 		let info = JSON.parse(JSON.stringify(deal['info']));
+
+		// A just-resumed deal sits in the tracker with empty info until the first live price tick fills it
+		// (that tick waits on the exchange connection, slow/failing on a cold restart). Seed a non-live
+		// snapshot from the persisted deal so the row displays right away instead of being hidden for ~30s.
+		// Display-only: getActiveDeals feeds the view; it never touches the trading loop.
+		if (!info || Object.keys(info).length === 0) {
+
+			info = buildResumeInfo(deal['deal']);
+		}
 
 		let dealRoot = deal['deal'];
 
@@ -5619,6 +6394,9 @@ async function getBalanceTracker() {
 
 		const exchanges = shareData.appData.exchanges;
 
+		let attempted = false;   // at least one credentialed exchange was queried this cycle
+		let anySuccess = false;  // at least one returned a balance
+
 		for (let hash in exchanges) {
 
 			const exchangeObj = exchanges[hash];
@@ -5631,9 +6409,13 @@ async function getBalanceTracker() {
 			// or are sandbox instances without real credentials.
 			if (!exchange.apiKey) continue;
 
+			attempted = true;
+
 			const balance = await getBalance(exchange);
 
 			if (balance.success) {
+
+				anySuccess = true;
 
 				let uniqueName = exchangeName;
 				let counter = 1;
@@ -5648,13 +6430,29 @@ async function getBalanceTracker() {
 			}
 		}
 
-		// Only stamp updated when we actually fetched from the exchange
-		const resObj = {
-			'updated': new Date(),
-			'balances': balances
-		};
+		if (anySuccess || !attempted) {
 
-		balanceTracker = JSON.parse(JSON.stringify(resObj));
+			// A successful refresh (or nothing to fetch — all public/sandbox). Store the fresh snapshot and
+			// stamp the time.
+			const resObj = {
+				'updated': new Date(),
+				'balances': balances,
+				'stale': false
+			};
+
+			balanceTracker = JSON.parse(JSON.stringify(resObj));
+		}
+		else {
+
+			// Every credentialed exchange failed this cycle (a transient exchange/network outage — the same
+			// class of failure that makes /currencies "fetch failed" on a cold restart). Do NOT overwrite the
+			// last-known balances with an empty set and stamp them fresh — that is exactly what made the
+			// portfolio read "$0.00" during an outage. Keep the last good snapshot, flag it stale, and record
+			// the attempt so the UI can show the balance as "updating…" against its real last-updated time.
+			// This cache is DISPLAY/REPORT-only (the trading funds check reads the exchange directly via
+			// getBalance, never this cache), so preserving stale data here can never affect a trade.
+			balanceTracker = Object.assign({}, balanceTracker, { 'stale': true, 'last_attempt': new Date().toISOString() });
+		}
 	}
 	else {
 
@@ -5790,6 +6588,80 @@ async function getDealInfo(data) {
 		safetyOrdersUsed = 0;
 	}
 
+	// Stop-loss display fields (#104a): reuse the pure guard to surface the effective
+	// stop level + break-even-armed state for the active-deal row. Read-only. The armed
+	// state is supplied by the follow loop's idle tick (deal top-level fields); callers
+	// that omit it simply show the base stop level.
+	let stopLossEnabled = false;
+	let stopLossReference = 'average';
+	let stopLossPrice = 0;
+	let stopLossArmed = false;
+	let stopLossTrailing = false;
+
+	if ((config.dcaStopLossEnabled || config.dcaTrailingStopEnabled) && currentOrder != undefined && currentOrder != null) {
+
+		let lastSafetyOrderPrice = null;
+
+		if (String(config.dcaStopLossReference).toLowerCase() === 'lastsafetyorder') {
+
+			for (let s = 0; s < orders.length; s++) {
+
+				const op = Number(orders[s].price);
+
+				if (Number.isFinite(op) && op > 0 && (lastSafetyOrderPrice === null || op < lastSafetyOrderPrice)) {
+
+					lastSafetyOrderPrice = op;
+				}
+			}
+		}
+
+		const slInfo = StopLoss.evaluate({
+			'enabled': config.dcaStopLossEnabled,
+			'price': price,
+			'average': currentOrder.average,
+			'stopLossPercent': config.dcaStopLossPercent,
+			'reference': config.dcaStopLossReference,
+			'lastSafetyOrderPrice': lastSafetyOrderPrice,
+			'feeRate': config.exchangeFee,
+			'moveBreakeven': config.dcaStopLossMoveBreakeven,
+			'breakevenTrigger': config.dcaStopLossBreakevenTrigger,
+			'profitPercentage': profitPerc,
+			'breakevenArmed': data['stop_loss_breakeven_armed'],
+			'activeStopLossPrice': data['active_stop_loss_price'],
+			'trailingEnabled': config.dcaTrailingStopEnabled,
+			'trailingDistance': config.dcaTrailingStopDistance,
+			'trailingActivateProfit': config.dcaTrailingActivateProfit,
+			'trailHighPrice': data['trail_high_price']
+		});
+
+		stopLossEnabled = true;
+		stopLossReference = (String(config.dcaStopLossReference).toLowerCase() === 'lastsafetyorder') ? 'lastSafetyOrder' : 'average';
+
+		// Round the computed stop level to the pair's price precision (like price_target)
+		// so the UI never shows float artifacts (e.g. 75.53272000000001). filterPrice is
+		// the exchange-accurate rounding; fall back to trimming float noise if it can't run.
+		if (slInfo['level'] != undefined && slInfo['level'] != null) {
+
+			let slLevel = slInfo['level'];
+
+			try {
+
+				const slFiltered = await filterPrice(exchange, config.pair, slLevel);
+
+				slLevel = (slFiltered != undefined && slFiltered != null && slFiltered !== '') ? Number(slFiltered) : Number(slLevel.toFixed(8));
+			}
+			catch (e) {
+
+				slLevel = Number(slLevel.toFixed(8));
+			}
+
+			stopLossPrice = Number.isFinite(slLevel) ? slLevel : 0;
+		}
+
+		stopLossArmed = slInfo['breakevenArmed'] === true;
+		stopLossTrailing = slInfo['trailingActive'] === true;
+	}
+
 	const dealInfo = {
 						'updated': updated,
 						'active': active,
@@ -5814,6 +6686,11 @@ async function getDealInfo(data) {
 						'deal_max': config.dealMax,
 						'max_deviation': maxDeviation,
 						'max_funds': maxFunds,
+						'stop_loss_enabled': stopLossEnabled,
+						'stop_loss_reference': stopLossReference,
+						'stop_loss_price': stopLossPrice,
+						'stop_loss_armed': stopLossArmed,
+						'stop_loss_trailing': stopLossTrailing,
 					 };
 
 	return ({ 'success': true, 'info': dealInfo, 'config': config, 'orders': orders });
@@ -5893,44 +6770,6 @@ async function removeConfigData(config) {
 }
 
 
-async function ordersToHtml(data) {
-
-	let rows = data.split(/[\r\n]+/);
-
-	let table = '<table id="ordersTable" cellspacing=0 cellpadding=0>';
-
-	for (let i = 0; i < rows.length; i++) {
-
-		let cols = rows[i].split(/[\s\t]+/);
-
-		let tag = 'td';
-		let row = '<tr>';
-			
-		if (i == 0) {
-
-			tag = 'th';
-		}
-
-		for (let x = 0; x < cols.length; x++) {
-
-			let col = cols[x];
-			row += '<' + tag + '>' + col.trim() + '</' + tag + '>';
-		}
-
-		row += '</tr>';
-
-		if (i != 1) {
-
-			table += row;
-		}
-	}
-	
-	table += '</table>';
-	
-	return table;
-}
-
-
 async function ordersToStructuredData(structured) {
 
 	if (!Array.isArray(structured) || structured.length === 0) {
@@ -5957,60 +6796,6 @@ async function ordersToStructuredData(structured) {
 }
 
 
-async function ordersToData(data) {
-
-	let rows = data.split(/[\r\n]+/);
-
-	let count = 0;
-
-	let headers = [];
-	let steps = [];
-
-	for (let i = 0; i < rows.length; i++) {
-
-		let stepsTemp = [];
-
-		let cols = rows[i].split(/[\s\t]+/);
-
-		if (i == 0) {
-
-			headers = cols.map(item => {
-
-				return item.trim();
-			});
-		}
-
-		if (i < 2) {
-
-			continue;
-		}
-
-		for (let x = 0; x < cols.length; x++) {
-
-			let col = cols[x].trim();
-
-			stepsTemp.push(col);
-		}
-
-		stepsTemp = stepsTemp.filter((a) => a);
-
-		if (stepsTemp.length > 0) {
-
-			steps[count] = stepsTemp;
-
-			count++;
-		}
-	}
-
-	// Remove empty
-	headers = headers.filter((a) => a);
-
-	const orders = { 'headers': headers, 'steps': steps };
-
-	return orders;
-}
-
-
 async function ordersCreateTable(data) {
 
 	let config = data['config'];
@@ -6034,8 +6819,8 @@ async function ordersCreateTable(data) {
 	}
 
 	const pair = typeof config.pair === 'string' ? config.pair : (config.pair || [])[0] || '';
-	const quoteCurrency = pair.split('/')[1] || '';
-	const sym = Common.getCurrencySymbol(quoteCurrency);
+	const quoteCur = Common.quoteCurrency(pair);
+	const sym = Common.getCurrencySymbol((quoteCur && quoteCur !== 'UNKNOWN') ? quoteCur : '');
 	const amountHeader = 'Amount' + (sym ? '(' + sym + ')' : '');
 	const sumHeader = 'Sum' + (sym ? '(' + sym + ')' : '');
 
@@ -6415,7 +7200,7 @@ async function createDeal(pair, pairMax, dealCount, dealMax, config, orders) {
 //
 // delaySec: optional cooldown/stagger delay before the attempt runs.
 // Returns { success, data, startId } where:
-//   success  — true if successfully enqueued, false if queue not initialised
+//   success  — true if successfully enqueued, false if queue not initialized
 //   data     — error message if success is false, otherwise null
 //   startId  — ID callers (e.g. apiStartDealProcess) can poll to confirm commit
 async function requestDealStart(config, delaySec = 0, source = '') {
@@ -6426,7 +7211,7 @@ async function requestDealStart(config, delaySec = 0, source = '') {
 
 	if (!dealStartQueue) {
 
-		data = 'requestDealStart called before queue initialised';
+		data = 'requestDealStart called before queue initialized';
 		Common.logger(data);
 	}
 	else {
@@ -6434,20 +7219,29 @@ async function requestDealStart(config, delaySec = 0, source = '') {
 		success = true;
 		startId = Common.uuidv4();
 
-		await createStartDealTracker(startId, config.botId);
+		// Snapshot the per-request values NOW, at enqueue time. The queued task runs LATER (after the
+		// stagger delay), and some callers reuse or mutate a single config object across a loop (bot
+		// enable/update, startAsap). Reading these fields inside the task could otherwise see the last
+		// pair the caller wrote instead of this request's. Capturing them here makes the deal-start
+		// path correct by construction, independent of how any caller manages its config object.
+		const pairSnapshot      = config.pair;
+		const botIdSnapshot     = config.botId;
+		const dealCountSnapshot = config.dealCount;
+
+		await createStartDealTracker(startId, botIdSnapshot);
 
 		// Fast pre-enqueue check — count pending starts already queued for this botId.
 		// If pending starts alone already meet or exceed pairMax there is no point
 		// enqueueing another task that is guaranteed to be blocked when it runs.
 		// This uses only in-memory state so it never touches the database.
 		// The authoritative canStartDeal check inside the queue task still runs —
-		// this is purely an optimisation to avoid wasteful queue drain.
+		// this is purely an optimization to avoid wasteful queue drain.
 		const pairMaxFast = Number(config.pairMax) || 0;
 
 		if (pairMaxFast > 0) {
 
 			const pendingForBot = Object.values(startDealTracker)
-				.filter(entry => entry && entry.botId === config.botId)
+				.filter(entry => entry && entry.botId === botIdSnapshot)
 				.length;
 
 			// pendingForBot includes the current startId (added above),
@@ -6476,9 +7270,10 @@ async function requestDealStart(config, delaySec = 0, source = '') {
 				// Wait for any resuming deals before proceeding
 				await processResumeDealTracker();
 
-				const pair      = config.pair;
-				const botId     = config.botId;
-				const dealCount = config.dealCount;
+				// Use the values snapshotted at enqueue time — never re-read the shared config object here.
+				const pair      = pairSnapshot;
+				const botId     = botIdSnapshot;
+				const dealCount = dealCountSnapshot;
 
 				if (!botId || !pair) {
 
@@ -6565,14 +7360,14 @@ async function startAsap(pairIgnore) {
 		const botId   = bot.botId;
 		const botName = bot.botName;
 
-		let config = bot['config'];
-		const pairs = config.pair;
+		const botConfig = bot['config'];
+		const pairs = botConfig.pair;
 
 		// Get total active pairs on this bot once per bot (incremented locally as starts are queued)
 		const botDealsActive = await getDeals({ 'botId': botId, 'status': 0 });
 		let pairCount = botDealsActive.length;
 
-		const pairMax = Number(config.pairMax) || 0;
+		const pairMax = Number(botConfig.pairMax) || 0;
 
 		for (let x = 0; x < pairs.length; x++) {
 
@@ -6585,6 +7380,10 @@ async function startAsap(pairIgnore) {
 
 			const dealsActive = await getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
+			// Clone the config per iteration so applyConfigData's in-place enrichment can't leak across
+			// pairs. requestDealStart additionally snapshots its pair at enqueue time, so the deal-start
+			// path is race-proof regardless.
+			let config = JSON.parse(JSON.stringify(botConfig));
 			config['pair'] = pair;
 			config = await applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
@@ -6712,6 +7511,14 @@ async function resumeDeal(dealObj) {
 		// persists a pending order ID. Arming verifyInvalidOrder with orderId=null logged a
 		// misleading "verify order ID null / Attempt #1" and immediately resumed anyway.
 		// Instead, clear the stale pause reason and resume cleanly — there is nothing to poll.
+		//
+		// KNOWN LIMITATION: today ONLY the base order persists its unverified ID (as orders[0].orderId),
+		// so only a base-order verification is actually recoverable here. A SAFETY-order or SELL that was
+		// mid-verification at shutdown reaches this branch with no recoverable ID (the safety ID is never
+		// written to orders[i].orderId, and sellData is written only on a clean close), so they always
+		// clear-and-resume rather than re-verify. See the KNOWN LIMITATION notes at the two verify branches
+		// (safety buy / sell) — persisting those IDs and reconstructing their credit/finalize on resume is
+		// deferred as a dedicated effort.
 		if (!pendingOrderId) {
 
 			Common.logger( colors.bgYellow.bold(`Deal ID ${dealId} was paused (${resumePauseReason}) at shutdown but has no pending order ID to verify (e.g. an exchange-cancelled order). Clearing pause and resuming.`) );
@@ -6747,17 +7554,59 @@ async function resumeDeal(dealObj) {
 					};
 				}
 
-				verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId, dealId, orderId: pendingOrderId, onSuccessCallback: verifyCallback, pauseBeforeCallback: !isSell });
+				verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId, dealId, orderId: pendingOrderId, onSuccessCallback: verifyCallback, pauseBeforeCallback: !isSell })
+					.catch((e) => { try { Common.logger('verifyInvalidOrder (resume) background error for deal ' + dealId + ': ' + ((e && e.message) ? e.message : e)); } catch (le) {} });
 			}
 		}
+	}
+	else if (resumePauseReason === 'sell_error') {
+
+		// A generic sell error paused this deal's sells (there is no order to verify). The in-memory
+		// retry/reset tracker that would normally lift that pause does not survive a restart, so clear
+		// the stale sell pause and resume cleanly — otherwise the deal would come back paused for sell
+		// with nothing to lift it. (Mirrors the no-pending-order clean-resume path above.)
+		Common.logger( colors.bgYellow.bold('Deal ID ' + dealId + ' was paused (sell_error) at shutdown; clearing pause and resuming.') );
+
+		await pauseDeal(botId, dealId, false, false, false, '');
+	}
+	else if (resumePauseReason === 'buy_error') {
+
+		// A non-in-flight buy failure (insufficient funds / exchange-cancelled / generic) paused this
+		// deal's buys. There is no order to verify, and the in-memory state that would let it lift the
+		// pause does not survive a restart, so clear the stale buy pause and resume cleanly — the same
+		// outcome these failures had before they were split off from 'order_verify_buy' (which, with no
+		// pending order ID, is cleared and resumed by the branch above).
+		Common.logger( colors.bgYellow.bold('Deal ID ' + dealId + ' was paused (buy_error) at shutdown; clearing pause and resuming.') );
+
+		await pauseDeal(botId, dealId, false, false, false, '');
 	}
 
 	// Resuming an existing deal — bypass requestDealStart/queue intentionally.
 	// The deal already exists in the database (dealResumeId is set) so
 	// canStartDeal checks do not apply. start() handles resume logic directly.
-	start({ 'create': true, 'config': config });
+	// Detached (fire-and-forget) — guard the rejection so a transient error during resume/completion
+	// chaining logs instead of becoming a process-level unhandled rejection; the live loop is unaffected.
+	Promise.resolve(start({ 'create': true, 'config': config })).catch((e) => { Common.logger('resumeDeal start() failed: ' + (e && e.message ? e.message : e)); });
 
 	await Common.delay(1000);
+}
+
+
+// Denominator for the circuit-breaker deal-ratio trigger: the number of active deals to divide the count
+// of deals that fired a safety order by. Prefer the LIVE tracked count (authoritative inside the trading
+// process, always populated); fall back to the last browser-refreshed cache, then 1. Pure — exported for
+// testing. The whole point is that the live count works with no dashboard open (the cache would be 1).
+function cbActiveDealDenominator(liveActive, cachedActive) {
+	return liveActive > 0 ? liveActive : (cachedActive || 1);
+}
+
+
+// The $match stage selecting REALIZED closed deals for the portfolio-loss window. sellData.date is written
+// only on a closed deal; canceled deals are excluded because a cancel keeps the coins and sells nothing —
+// its sellData.profitQuote is an unrealized, marked-to-market figure that must not count as a realized
+// loss/gain. Pure — exported for testing.
+function portfolioLossMatchStage(windowStart) {
+	return { 'sellData.date': { '$gte': windowStart }, 'canceled': { '$ne': true } };
 }
 
 
@@ -6769,7 +7618,7 @@ function recordSafetyOrderTrigger(dealId, pair, price) {
 	const now = Date.now();
 	const windowMs = (cb.deal_ratio_window_secs || 30) * 1000;
 
-	// Initialise rolling window arrays
+	// Initialize rolling window arrays
 	if (!shareData.appData.cb_trigger_window) shareData.appData.cb_trigger_window = [];
 	if (!shareData.appData.cb_price_tracker)  shareData.appData.cb_price_tracker  = {};
 
@@ -6792,7 +7641,14 @@ function recordSafetyOrderTrigger(dealId, pair, price) {
 
 	// ── Deal ratio trigger ───────────────────────────────────────────────
 	const uniqueDeals = new Set(shareData.appData.cb_trigger_window.map(t => t.dealId)).size;
-	const totalActive = shareData.appData.cb_active_deal_count || 1;
+	// Use the LIVE count of active deals the trading loop is tracking as the denominator. This runs inside
+	// the trading process where dealTracker is authoritative and always populated (the deal that just fired
+	// this safety order is in it), so the ratio is correct even on a headless / API-only deployment. The
+	// cached cb_active_deal_count is only refreshed when a browser polls the active-deals endpoint, so it
+	// was undefined → 1 with no dashboard open, which made a normal broad dip trip the breaker every window.
+	// cbActiveDealDenominator falls back to the cached count, then 1, only if the live tracker is somehow
+	// empty. Pure read — never throws.
+	const totalActive = cbActiveDealDenominator(Object.keys(dealTracker).length, shareData.appData.cb_active_deal_count);
 	const ratio = uniqueDeals / totalActive;
 	const ratioThreshold = cb.deal_ratio_threshold || 0.5;
 
@@ -6805,6 +7661,15 @@ function recordSafetyOrderTrigger(dealId, pair, price) {
 	}
 
 	// ── Price drop trigger ───────────────────────────────────────────────
+	// Each sample is the price at which a safety order fired for this pair, and a safety order fires
+	// precisely when the market reaches that level — so the samples ARE the market price at each trigger
+	// moment, not abstract ladder targets. Comparing the oldest to the newest sample still inside the
+	// drop window therefore measures how far the market actually fell over that span. Because samples are
+	// only taken when a safety order triggers, it detects a FAST multi-trigger cascade on one pair (the
+	// market falling far enough, fast enough, to fire several safety orders within the window) — exactly
+	// the crash the breaker exists to catch. A slow decline spaces the triggers out, so old samples prune
+	// away and it does not fire. It is an approximate, trigger-sampled signal by design, not a continuous
+	// ticker feed.
 	const pairPrices = tracker[pair];
 	if (pairPrices && pairPrices.length >= 2 && cb.price_drop_enabled !== false) {
 
@@ -6860,6 +7725,8 @@ function activateCircuitBreaker(reason) {
 	Common.sendNotification({
 		'message': `${prefix}\n\n${reason}${pairsLine}${repeatLine}\n\nNew buys paused for ${pauseSecs}s. Sells and panic sells are unaffected.`,
 		'type': 'warning',
+		'event': 'circuit_breaker',
+		'severity': 'critical',
 		'telegram_id': shareData.appData.telegram_id
 	});
 
@@ -6879,11 +7746,78 @@ function activateCircuitBreaker(reason) {
 			Common.sendNotification({
 				'message': '✅ Circuit Breaker Cleared\n\nNormal deal processing has resumed.',
 				'type': 'warning',
+				'event': 'circuit_breaker',
+				'severity': 'critical',
 				'telegram_id': shareData.appData.telegram_id
 			});
 		}
 
 	}, pauseSecs * 1000);
+}
+
+
+// Portfolio-loss circuit-breaker trigger. Runs periodically (opt-in, default off): sums realized money
+// profit over the rolling window from CLOSED deals and, if the loss reaches the configured limit, trips
+// the same circuit breaker the market-anomaly triggers use — so canStartDeal blocks NEW base orders
+// until it clears. It NEVER force-closes an open deal. The check re-evaluates each interval, so once the
+// breaker auto-clears it re-trips while the loss condition still holds (repeat alerts are rate-limited by
+// repeat_alert_window_secs). Reads realized loss from the database, so a restart cannot reset the halt.
+// Never throws — a query failure just skips this cycle.
+async function checkPortfolioLoss() {
+
+	try {
+
+		const cb = shareData.appData.circuit_breaker;
+		if (!cb || !cb.enabled || !cb.portfolio_loss_enabled) { return; }
+		if (shareData.appData.circuit_breaker_active) { return; }   // already tripped (any trigger)
+
+		const limit = Number(cb.loss_limit) || 0;
+		if (limit <= 0) { return; }
+
+		const windowHours = Number(cb.loss_window_hours) || 24;
+		const windowStart = new Date(Date.now() - (windowHours * 3600 * 1000));
+
+		// Realized money profit per pair over the window (sellData.date exists only on a closed deal, so
+		// this matches completed deals). Group by pair, then fold into per-quote-currency net totals.
+		// Exclude CANCELED deals: a cancel keeps the coins and sells nothing, yet handleSuccessfulSell still
+		// writes a sellData.profitQuote marked-to-market for the record — that is an UNREALIZED figure, so
+		// counting it here would let a cancel inject a fictitious loss (tripping the halt on money that was
+		// never lost) or a fictitious gain (masking a real loss). Only genuinely-sold deals are realized.
+		const agg = await getDeals(null, null, null, [
+			{ '$match': portfolioLossMatchStage(windowStart) },
+			// Coerce to double defensively (matching getBotPerformance): a stray string-typed profit would
+			// otherwise be silently ignored by $sum, understating the realized loss and letting this safety
+			// halt under-trip. $toDouble on a number is a no-op; $ifNull guards a missing field.
+			{ '$group': { '_id': '$pair', 'profitSum': { '$sum': { '$toDouble': { '$ifNull': [ '$sellData.profitQuote', 0 ] } } } } }
+		]);
+
+		const byCur = {};
+		for (const row of (Array.isArray(agg) ? agg : [])) {
+			const ps = Number(row && row.profitSum);
+			if (isNaN(ps)) { continue; }
+			const pair = String((row && row._id) || '');
+			// Bucket by the SAME canonical quote-currency helper the dashboard/journal use, so a mixed-case
+			// or underscore-form pair can never split one currency's loss across two buckets and understate
+			// the worst single-currency net (which would let the breaker under-halt). An unparseable pair
+			// still counts under its own 'UNKNOWN' bucket — a loss is never silently dropped from the halt.
+			const cur = shareData.Common.quoteCurrency(pair);
+			byCur[cur] = (byCur[cur] || 0) + ps;
+		}
+
+		// Use the WORST single-currency net (most negative) as the realized loss, so a large loss in one
+		// quote currency is never masked by profit in another — the conservative choice for a safety halt.
+		let worstNet = 0;
+		for (const c of Object.keys(byCur)) { if (byCur[c] < worstNet) { worstNet = byCur[c]; } }
+
+		const decision = portfolioGuard.evaluatePortfolioLoss(worstNet, { 'enabled': true, 'lossLimit': limit, 'windowHours': windowHours });
+
+		if (decision.halt) {
+
+			Common.logger(colors.bgRed.bold('PORTFOLIO LOSS CIRCUIT BREAKER — ' + decision.reason));
+			activateCircuitBreaker(decision.reason);
+		}
+	}
+	catch (e) { Common.logger('Portfolio-loss check skipped: ' + (e && e.message ? e.message : e)); }
 }
 
 
@@ -7017,16 +7951,121 @@ async function panicSellDeal(dealId) {
 }
 
 
-async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchangeFee, targetProfitPercent, maxFunds = Infinity }) {
+/**
+ * Graceful close for the Signal Bot. A profit-GATED wrapper around the
+ * existing panic_sell close path.
+ *
+ * It NEVER implements its own close routine. It reads the live deal metrics the
+ * engine already maintains per tick (dealTracker[dealId]['info']), asks the pure
+ * guard whether the take-profit target is met, and ONLY THEN delegates to
+ * panicSellDeal — the same proven market-close used by the emergency button.
+ * When the target is not met (or cannot be confirmed) the deal is left open.
+ *
+ * There is deliberately no flag that can force a close here; unconditional
+ * closing is what panic_sell is for.
+ *
+ * Returns { success, closed, data, metrics }:
+ *   - closed:false, success:true  → target not met, deal intentionally left open
+ *   - closed:true,  success:true  → target met, close delegated to panicSellDeal
+ *   - success:false               → the underlying close path reported an error
+ */
+async function gracefulCloseDeal(dealId) {
+
+	let info = {};
+	let takeProfitPercent = null;
+
+	// Live metrics + configured take-profit, straight from the deal tracker the
+	// engine updates each price tick. Guarded so a missing/partial tracker simply
+	// yields "not determinable" (fail-safe) rather than throwing.
+	try {
+
+		if (dealTracker[dealId] != undefined && dealTracker[dealId] != null && dealTracker[dealId]['info'] != undefined && dealTracker[dealId]['info'] != null) {
+
+			info = dealTracker[dealId]['info'];
+		}
+	}
+	catch (e) {}
+
+	try {
+
+		takeProfitPercent = dealTracker[dealId]['deal']['config']['dcaTakeProfitPercent'];
+	}
+	catch (e) {}
+
+	// dealTracker.info.price_last is refreshed each tick from fetchTicker, so during
+	// an exchange auth storm it can hold a nonzero-but-garbage value (the same bad
+	// input the tick-loop guard rejects). A garbage-high price_last would clear the
+	// take-profit target and let this graceful close finalize the deal. Apply the
+	// same plausibility guard here (reference = the deal's DCA average, also in info)
+	// and treat an implausible price as "not determinable" — fail-safe, leave open —
+	// exactly like evaluateGracefulClose does when there is no live price.
+	const cbCfgPrice = shareData.appData.circuit_breaker || {};
+
+	const priceSanity = PriceGuard.evaluatePriceSanity({
+		'price': info['price_last'],
+		'reference': info['price_average'],
+		'maxHighRatio': cbCfgPrice.price_deviation_high_ratio,
+		'maxLowRatio': cbCfgPrice.price_deviation_low_ratio
+	});
+
+	if (!priceSanity.plausible) {
+
+		return {
+			'success': true,
+			'closed': false,
+			'data': 'Live price appears implausible (' + priceSanity.message + '); deal left open',
+			'metrics': priceSanity
+		};
+	}
+
+	const decision = shareData.SignalBot.evaluateGracefulClose({
+		'price_last': info['price_last'],
+		'price_target': info['price_target'],
+		'profit_percentage': info['profit_percentage'],
+		'take_profit_percent': takeProfitPercent
+	});
+
+	if (!decision['ready']) {
+
+		// Target not met / not determinable — do NOT close.
+		return {
+			'success': true,
+			'closed': false,
+			'data': decision['message'],
+			'metrics': decision
+		};
+	}
+
+	// Target met — reuse the EXISTING close path. This is panicSellDeal gated by
+	// the profit check above; it is not a second close implementation.
+	const closeData = await panicSellDeal(dealId);
+
+	return {
+		'success': closeData['success'],
+		'closed': closeData['success'] ? true : false,
+		'data': closeData['success'] ? 'Profit target met; deal closed at market' : closeData['data'],
+		'metrics': decision
+	};
+}
+
+
+async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchangeFee, targetProfitPercent, maxFunds = Infinity, feeMultiplier = 1 }) {
 
 	const target = parseFloat(targetPrice);
 	const qtySumFloat = parseFloat(qtySum);
 	const sumFloat = parseFloat(sum);
 	const currentPrice = parseFloat(price);
 
-	const totalFeeRate = (parseFloat(exchangeFee) / 100) * 2;
+	// Fee applied to the funds-needed gross-up, as a multiple of the configured exchange fee. Defaults to 1
+	// (single, buy-side fee) so the estimate matches the live take-profit target, price × (1 + (takeProfit +
+	// fee)/100); a caller that wants the round-trip cost can pass feeMultiplier: 2. Clamp the resulting rate so
+	// a misconfigured fee (or a large multiplier) can never drive the (1 - feeRate) denominator to zero or
+	// negative.
+	const feeMult = (Number(feeMultiplier) > 0) ? Number(feeMultiplier) : 1;
+	const feeRateRaw = (parseFloat(exchangeFee) / 100) * feeMult;
+	const feeRate = (isFinite(feeRateRaw) && feeRateRaw > 0) ? Math.min(feeRateRaw, 0.99) : 0;
 	const profitMultiplier = 1 + (parseFloat(targetProfitPercent) / 100);
-	const requiredValue = (sumFloat * profitMultiplier) / (1 - totalFeeRate);
+	const requiredValue = (sumFloat * profitMultiplier) / (1 - feeRate);
 	const additionalValueNeeded = requiredValue - (currentPrice * qtySumFloat);
 
 	let amountWithFees = 0;
@@ -7041,7 +8080,7 @@ async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchange
 
 		const additionalQty = additionalValueNeeded / (target - currentPrice);
 		amountWithFees = additionalQty * currentPrice;
-		amountWithFees = amountWithFees / (1 - totalFeeRate);
+		amountWithFees = amountWithFees / (1 - feeRate);
 	
 		if (amountWithFees > maxFunds) {
 
@@ -7091,12 +8130,14 @@ async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchange
 			const filledOrders = addFundsOrders.filter(item => item.filled == 1);
 			const currentOrder = filledOrders.pop();
 
-			avgPrice_funds = parseFloat(currentOrder.average);
+			// Guard the empty-ladder edge: if a (dry-run) add produced no filled order, pop() is undefined —
+			// leave avgPrice_funds at its default rather than throwing on currentOrder.average.
+			if (currentOrder) { avgPrice_funds = parseFloat(currentOrder.average); }
 		}
 	}
 
-	if (avgPrice_net < (sumFloat / qtySumFloat)) {
-	
+	if (qtySumFloat > 0 && avgPrice_net < (sumFloat / qtySumFloat)) {
+
 		const prevAvg = sumFloat / qtySumFloat;
 		avgChangePercent = ((prevAvg - avgPrice_net) / prevAvg) * 100;
 	}
@@ -7120,6 +8161,120 @@ async function estimateFunds({ dealId, sum, qtySum, targetPrice, price, exchange
 		average_price_change_percent: Number(avgChangePercent.toFixed(2)),
 		target_price_change_percent: Number(targetChangePercent.toFixed(2))
 	};
+}
+
+
+// Whether an add-funds should place a REAL exchange order: only for a LIVE deal (not sandbox/paper) that is
+// NOT a dry-run estimate. A dry-run must never touch the exchange, even on a live deal. Extracted as a pure
+// helper so this money-safety invariant is explicit and unit-testable; identical to the prior inline gate.
+function shouldPlaceRealOrder(config, dryRun) {
+
+	return !config.sandBox && !dryRun;
+}
+
+
+// Resolve the executed VALUE (quote-currency cost) and effective PRICE of a buy fill from a data_order,
+// using the SAME cross-exchange precedence the sell side uses (see recordFill): CCXT `average` (a pure
+// volume-weighted fill price, so it can never silently fold in fees — safest) → `amount`/cost →
+// `price` × qty. An exchange that reports none of these usable returns value 0, and the caller then
+// DECLINES to auto-credit (falling back to the safe pause + reconcile alert) rather than guess — which
+// is exactly how the buy path already behaves for exchanges that omit fill data.
+function resolveBuyFillValue(dataOrder, qtyFilled) {
+
+	const q = Number(qtyFilled) || 0;
+	if (!(q > 0) || !dataOrder) { return { 'value': 0, 'price': 0 }; }
+
+	const avg = Number(dataOrder['average']);
+	if (isFinite(avg) && avg > 0) { return { 'value': avg * q, 'price': avg }; }
+
+	const cost = Number(dataOrder['amount']);
+	if (isFinite(cost) && cost > 0) { return { 'value': cost, 'price': cost / q }; }
+
+	const px = Number(dataOrder['price']);
+	if (isFinite(px) && px > 0) { return { 'value': px * q, 'price': px }; }
+
+	return { 'value': 0, 'price': 0 };
+}
+
+
+// Credit an actual (partial) BUY fill onto an existing ladder rung, so coin the exchange executed is
+// booked into the deal instead of being stranded and the deal paused. It reuses the same construction
+// addFundsDeal uses for a manual order: run the NET filled quantity through calculateAdjustments to get
+// the SAME gross quantity + fee metadata every other rung carries (so the sell's net = gross − fee
+// reconciles back to what is actually held), mark the rung filled+manual (so recalculateOrders keeps the
+// real fill fixed instead of re-deriving it from min-movement), then recompute the whole ladder and
+// every take-profit target through the shared recalculateOrders. No exchange order is placed here — the
+// fill already happened. Fully guarded: any problem returns { success:false } and the caller keeps the
+// existing safe behavior (pause + reconcile alert), so this can never make a fill worse.
+async function creditPartialBuyFill({ exchange, pair, config, dealId, orderIndex, orders, filledQtyNet, fillPrice, fillValue, orderId }) {
+
+	try {
+
+		if (!(Number(filledQtyNet) > 0) || !(Number(fillPrice) > 0)) { return { 'success': false, 'msg': 'no usable fill quantity/price' }; }
+
+		const rung = orders[orderIndex];
+		if (!rung) { return { 'success': false, 'msg': 'rung not found' }; }
+
+		// Running totals continue from the nearest PRIOR filled rung (null for the base order).
+		let prev = null;
+		for (let j = orderIndex - 1; j >= 0; j--) {
+
+			if (orders[j] && (orders[j].filled === 1 || orders[j].filled === true)) { prev = orders[j]; break; }
+		}
+
+		const price  = await filterPrice(exchange, pair, fillPrice);
+		let   amount = await filterPrice(exchange, pair, (Number(fillValue) > 0 ? fillValue : (Number(filledQtyNet) * Number(fillPrice))));
+		let   qty    = await filterAmount(exchange, pair, filledQtyNet);
+
+		const minMoveAmount = orders[0]?.orderMetadata?.minimum_movement_amount ?? rung?.orderMetadata?.minimum_movement_amount;
+
+		// Same gross-up + fee metadata the ladder builds for every rung (calculateAdjustments adds the
+		// round-trip fee quantity so the sell's net-of-fee figure lands on the quantity actually held).
+		const adjustments = await calculateAdjustments({ exchange, pair, price, amount, orderSize: qty, exchangeFee: config.exchangeFee, minMoveAmount });
+		if (adjustments && adjustments.order_qty) { qty = adjustments.order_qty; amount = adjustments.order_amount; }
+
+		let qtySum = await filterAmount(exchange, pair, parseFloat(qty) + parseFloat(prev?.qtySum || 0));
+		let sum    = await filterPrice(exchange, pair, parseFloat(amount) + parseFloat(prev?.sum || 0));
+		sum = Common.roundCost(sum, pair);
+
+		const average = await filterPrice(exchange, pair, (parseFloat(sum) / parseFloat(qtySum)));
+		const target  = await calculateTargetPrice({ exchange, pair, price: average, takeProfit: config.dcaTakeProfitPercent, exchangeFee: config.exchangeFee });
+
+		if (!(Number(target) > 0)) { return { 'success': false, 'msg': 'unable to compute a valid target price' }; }
+
+		orders[orderIndex] = {
+			...rung,
+			price,
+			average,
+			target,
+			qty,
+			amount,
+			qtySum,
+			sum,
+			filled: 1,
+			manual: true,
+			// Persisted flag that records this manual rung as a SYSTEM action, exactly the way pauseReason
+			// records a system pause: a system-applied change carries a reason string, a user action has none
+			// (a user Add-Funds rung sets no manualReason). Lets the UI show "system" vs "user done" without
+			// guessing. Purely descriptive — never read by any trading/recalculation logic; recalculateOrders
+			// mutates rungs in place, so it survives the recompute below.
+			manualReason: 'partial_fill_credit',
+			orderId: orderId || rung.orderId || '',
+			dateFilled: new Date(),
+			orderMetadata: (adjustments && adjustments.order_qty) ? adjustments : rung.orderMetadata
+		};
+
+		// Recompute the ladder (downstream averages + EVERY take-profit target) and persist — the same
+		// shared recompute handleSuccessfulBuy and add-funds use. The manual flag keeps THIS rung's real
+		// fill fixed while every other rung's average/target is recomputed from the corrected running sum.
+		const recalc = await recalculateOrders({ exchange, dealId, orders, orderNo: orders[orderIndex].orderNo, orderIndex: undefined, orderId: undefined, price: undefined, dryRun: false });
+
+		return { 'success': !!(recalc && recalc.success), 'msg': (recalc && recalc.msg) || 'recalc failed' };
+	}
+	catch (e) {
+
+		return { 'success': false, 'msg': (e && e.message) ? e.message : String(e) };
+	}
 }
 
 
@@ -7158,6 +8313,20 @@ async function addFundsDeal(dealId, volume, dryRun) {
 
 				const symbolData = await getSymbol(exchange, config.pair);
 				const symbol = symbolData.data;
+
+				// Honor the getSymbol success/error contract: it returns success:false (data undefined) on any
+				// network / exchange / auth / bad-symbol failure precisely so a caller never sizes or places an
+				// order on a missing or bad price. The automated follow loop holds the deal on this; addFundsDeal
+				// has no outer try/catch, so without this guard the `symbol.ask` deref below would throw straight
+				// out to the API caller. Bail the same way the other failure paths here do (set msg, return early
+				// — no order is placed).
+				if (!symbolData.success || symbol == undefined || symbol == null || symbol.ask == undefined || symbol.ask == null) {
+
+					msg = 'Unable to add funds to deal ID ' + dealId + ': could not fetch a current price for ' + config.pair + (symbolData.error ? ' (' + symbolData.error + ')' : '') + '. Please try again.';
+
+					return;
+				}
+
 				const askPrice = symbol.ask;
 
 				let price = await filterPrice(exchange, config.pair, askPrice);
@@ -7185,8 +8354,8 @@ async function addFundsDeal(dealId, volume, dryRun) {
 				let orderSum = parseFloat(amount) + parseFloat(previousOrder?.sum || 0);
 				orderSum = await filterPrice(exchange, config.pair, orderSum);
 
-				// Round final amount
-				orderSum = Math.round(orderSum * 100) / 100;
+				// Round the cost basis to the quote currency's precision (see Common.roundCost).
+				orderSum = Common.roundCost(orderSum, config.pair);
 
 				const avgPrice = await filterPrice(exchange, config.pair, (orderSum / qtySum));
 
@@ -7217,9 +8386,14 @@ async function addFundsDeal(dealId, volume, dryRun) {
 						dateFilled: new Date()
 					};
 
-					if (!config.sandBox) {
+					// Place a REAL exchange buy only for a live, non-dry-run add. dryRun is an estimate/preview
+					// and must NEVER touch the exchange — previously the buy was gated on sandBox alone, so a
+					// dry-run add on a LIVE deal would have placed an unintended market order. (Not reachable
+					// today — the only dry-run caller estimates without a real deal id — but this closes the
+					// footgun so any future dry-run add on a live deal stays side-effect-free.)
+					if (shouldPlaceRealOrder(config, dryRun)) {
 
-						const buy = await buyOrder(exchange, dealId, config.pair, qty, price);
+						const buy = await buyOrder({ exchange, dealId, pair: config.pair, qty, price });
 
 						if (!buy.success) {
 
@@ -7229,6 +8403,12 @@ async function addFundsDeal(dealId, volume, dryRun) {
 						}
 
 						newOrder.orderId = buy.data.id;
+					}
+					else if (dryRun) {
+
+						// Synthesize a placeholder id so the estimated order object is complete; it is never
+						// persisted (the updateDeal below is skipped when dryRun).
+						newOrder.orderId = 'dryrun';
 					}
 
 					let insertionIndex;
@@ -7348,6 +8528,13 @@ async function recalculateOrders(params) {
 	let ordersReturn = [];
 	let orderIndex = -1;
 	let msg = 'Success';
+
+	// Defensive outer guard: the recompute below calls exchange / filter / target helpers that can throw.
+	// Any throw becomes this function's normal { success:false } result — the same contract it already
+	// returns for not-found / out-of-bounds — so a recompute failure never rejects into the caller. The deal
+	// keeps its pre-recompute ladder values (correct for ladder-price fills) and is corrected on the next
+	// recalculation trigger.
+	try {
 
 	deal = await Deals.findOne({
 		dealId: params.dealId,
@@ -7499,8 +8686,8 @@ async function recalculateOrders(params) {
 						currentOrder.qtySum = await filterAmount(params.exchange, config.pair, currentOrder.qtySum);
 						currentOrder.sum = await filterPrice(params.exchange, config.pair, currentOrder.sum);
 
-						// Round final amount
-						currentOrder.sum = Math.round(currentOrder.sum * 100) / 100;
+						// Round the cost basis to the quote currency's precision (see Common.roundCost).
+						currentOrder.sum = Common.roundCost(currentOrder.sum, config.pair);
 
 						runningQtySum = parseFloat(currentOrder.qtySum);
 						runningSum = parseFloat(currentOrder.sum);
@@ -7551,6 +8738,13 @@ async function recalculateOrders(params) {
 				}
 			}
 		}
+	}
+	}
+	catch (error) {
+
+		success = false;
+		msg = 'Error recalculating orders for deal ' + params.dealId + ': ' + ((error && error.message) ? error.message : error);
+		Common.logger(msg);
 	}
 
 	return { 'success': success, 'data': msg, 'orders': ordersReturn };
@@ -7608,7 +8802,7 @@ async function startDelay(dataObj) {
 
 async function initApp() {
 
-	// Initialise the serial deal-start queue — single path for all new deals
+	// Initialize the serial deal-start queue — single path for all new deals
 	dealStartQueue = await shareData.Queue.create();
 
 
@@ -7624,37 +8818,57 @@ async function initApp() {
 
 	setInterval(() => {
 
-		loadExchangeMarkets();
+		// .catch for the same reason as the trackers below — a timer callback has no awaiter, so a
+		// rejection would otherwise be an unhandled process-level rejection. Log and keep the timer.
+		Promise.resolve(loadExchangeMarkets()).catch((e) => Common.logger('loadExchangeMarkets error: ' + ((e && (e.stack || e.message)) || e)));
 
 	}, (loadMarketHours * 60 * 60 * 1000));
 
 
 	setInterval(() => {
 
-		checkTrackers();
+		// .catch: these run on a timer with no awaiter, so a rejection would otherwise be an unhandled
+		// process-level rejection. Log and continue — the timer keeps firing on its next tick.
+		checkTrackers().catch((e) => Common.logger('checkTrackers error: ' + ((e && (e.stack || e.message)) || e)));
 
 	}, (60000 * 1));
 
 
 	setInterval(() => {
 
-		checkResumeDealTracker();
+		checkResumeDealTracker().catch((e) => Common.logger('checkResumeDealTracker error: ' + ((e && (e.stack || e.message)) || e)));
 
 	}, (60000 * 1));
 
 
 	setInterval(() => {
 
-		getBalanceTracker();
+		Promise.resolve(getBalanceTracker()).catch((e) => Common.logger('getBalanceTracker error: ' + ((e && (e.stack || e.message)) || e)));
 
 	}, (60000 * 1));
 
 
 	setInterval(() => {
 
-		checkStartDealTracker();
+		checkStartDealTracker().catch((e) => Common.logger('checkStartDealTracker error: ' + ((e && (e.stack || e.message)) || e)));
 
 	}, 1500);
+
+
+	// Portfolio-loss circuit breaker — re-evaluate realized losses every minute (no-op unless enabled).
+	setInterval(() => {
+
+		Promise.resolve(checkPortfolioLoss()).catch((e) => Common.logger('checkPortfolioLoss error: ' + ((e && (e.stack || e.message)) || e)));
+
+	}, (60000 * 1));
+
+	// Encrypt any plaintext exchange credentials at rest before deals resume (idempotent; never
+	// blocks startup). connectExchange decrypts them again at connect time.
+	await Common.migrateBotCredentials();
+
+	// NOTE: the per-instance data-layout migration (legacy logs/backups → data/instances/<server_id>/)
+	// runs in symbot.js the moment server_id is resolved — NOT here. App init runs before the database
+	// connects and server_id is known, so running it here would find no server_id and no-op.
 
 	await resumeBots();
 
@@ -7662,7 +8876,9 @@ async function initApp() {
 	// shows correct data on first load rather than waiting 60s
 	getBalanceTracker();
 
-	Common.startSignals();
+	// Best-effort: contain a possible throw from its early config/secret reads so it can never
+	// surface as an unhandled rejection during trading-engine startup.
+	Promise.resolve(Common.startSignals()).catch(() => {});
 
 	delete shareData.appData.starting_dca;
 }
@@ -7685,8 +8901,13 @@ module.exports = {
 	updateDeal,
 	refreshUpdateDeal,
 	addFundsDeal,
+	creditPartialBuyFill,
+	resolveBuyFillValue,
+	partialFillShortfallPercent,
+	retryPartialFill,
 	recalculateOrders,
 	panicSellDeal,
+	gracefulCloseDeal,
 	connectExchange,
 	removeConfigData,
 	initBot,
@@ -7700,6 +8921,10 @@ module.exports = {
 	getStartDealTracker,
 	getResumeDealTracker,
 	getActiveDeals,
+	buildResumeInfo,          // exported for testing: the non-live resumed-deal snapshot for the active-deals view
+	summarizeExchangeError,   // exported for testing: the shared concise ccxt/network error summarizer
+	cbActiveDealDenominator,  // exported for testing: circuit-breaker deal-ratio denominator (live vs cached active count)
+	portfolioLossMatchStage,  // exported for testing: the realized-deal $match for the portfolio-loss window
 	getSymbol,
 	getSymbolsAll,
 	getBalanceTracker,
@@ -7714,9 +8939,14 @@ module.exports = {
 	getBalance,
 	getPairData,
 	calculateMaxFunds,
+	calculateTargetPrice,
+	getDeviationDca,
+	shouldPlaceRealOrder,
 	removeDbKeys,
 	convertDataToSandBox,
 	getExchangeAlias,
+	verifyInvalidOrder,
+	updateOrderDeal,
 
 	init: function(obj) {
 

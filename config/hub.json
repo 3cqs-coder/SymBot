@@ -1,7 +1,29 @@
 {
-    "port": 3100,
-    "max_log_days": 10,
-    "memory_poll_interval_ms": 30000,
-    "password": "",
-    "instances": []
+	"port": 3100,
+	"max_log_days": 10,
+	"memory_poll_interval_ms": 30000,
+	"password": "",
+	"mailer": {
+					"enabled": false,
+					"host": "",
+					"port": 587,
+					"secure": false,
+					"user": "",
+					"from": "",
+					"password": ""
+				},
+	"ip_filter": {
+					"server": { "enabled": false, "allowlist": [], "blocklist": [] },
+					"login":  { "enabled": false, "allowlist": [], "blocklist": [] }
+				},
+	"security": {
+    	"login_throttle": {
+        "max_failures": 5,
+        "window_ms": 900000,
+        "block_ms": 900000,
+        "max_tracked_ips": 5000
+    	},
+    	"trust_proxy": true
+	},
+	"instances": []
 }

@@ -4,7 +4,7 @@
 		<div id="<%- data['container_id'] %>" style="width: 99%; padding-top: 20px; margin: 0 auto;">
 
 			<!-- TradingView Widget BEGIN -->
-			<div class="tradingview-widget-copyright" style="margin-top: -20px; text-align: center; width: 100%; background-color: #000000;">Provided by TradingView</div>
+			<div class="tradingview-widget-copyright" style="margin-top: -20px; text-align: center; width: 100%; background-color: #000000; color: #b2b2b2;">Provided by TradingView</div>
 			<div class="tradingview-widget-container" id="<%- data['container_id'] %>_widget">
 
 				<% if (data['jquery']) { %>
@@ -84,14 +84,19 @@
 						const tradingViewData = {
 													'jquery': <%- data['jquery'] %>,
 													'script': <%- data['script'] %>,
-													'id': '<%- data['container_id'] %>' + Math.floor(1000 + Math.random() * 90000),
-													'width': '<%- data['width'] %>',
-													'height': '<%- data['height'] %>',
-													'theme': '<%- data['theme'] %>',
+													// Defence in depth: these reflected config values are already constrained to safe
+													// character classes server-side, but emit them as properly-escaped JS string literals
+													// (JSON.stringify + <-escape, the same pattern used elsewhere) so the template stays safe
+													// on its own even if that upstream sanitization ever changes. Output is identical for the
+													// sanitized alphanumeric values, so the widget is unaffected.
+													'id': <%- JSON.stringify(String(data['container_id'])).replace(/</g, '\\u003c') %> + Math.floor(1000 + Math.random() * 90000),
+													'width': <%- JSON.stringify(String(data['width'])).replace(/</g, '\\u003c') %>,
+													'height': <%- JSON.stringify(String(data['height'])).replace(/</g, '\\u003c') %>,
+													'theme': <%- JSON.stringify(String(data['theme'])).replace(/</g, '\\u003c') %>,
 													'interval': intervalSelected,
 													'bar_style': barStyleSelected,
-													'pair': '<%- data['pair'] %>',
-													'exchange': '<%- data['exchange'] %>'
+													'pair': <%- JSON.stringify(String(data['pair'])).replace(/</g, '\\u003c') %>,
+													'exchange': <%- JSON.stringify(String(data['exchange'])).replace(/</g, '\\u003c') %>
 												}
 
 						$('#' + tradingViewData['id']).remove();

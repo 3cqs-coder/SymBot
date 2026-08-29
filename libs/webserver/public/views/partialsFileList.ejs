@@ -1,0 +1,57 @@
+<%
+	// Shared download TABLE used by the Logs and Backups pages so the row markup lives in one place. Reuses
+	// the shared read-only `.data-table` style (the same look as the instances legend and Access Control), so
+	// the filename, its instance and its size line up in real COLUMNS instead of a run-on "file — instance"
+	// string. Locals:
+	//   listFiles    : array of { name, size_human, instance_name?, server_id? }
+	//   downloadBase : URL prefix for the download link, e.g. './logs/download/'
+	//   emptyText    : (optional) message shown when the list is empty
+	//   restoreBase  : (optional) when set, each row gets a Restore action -> hubRestore(name)
+	var _files = (typeof listFiles !== 'undefined' && listFiles) ? listFiles : [];
+	var _emptyText = (typeof emptyText !== 'undefined' && emptyText) ? emptyText : 'Nothing here yet.';
+	var _hasRestore = (typeof restoreBase !== 'undefined' && restoreBase);
+	// Show the Instance column only when rows actually carry an instance label (the Hub's aggregated list); a
+	// single instance owns one folder, so its rows have no label and the column is omitted entirely.
+	var _hasInstance = _files.some(function (f) { return f.instance_name && String(f.instance_name).trim(); });
+%>
+<% if (_files.length === 0) { %>
+
+	<div class="data-empty"><%= _emptyText %></div>
+
+<% } else { %>
+
+	<div class="data-tablewrap">
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>File</th>
+					<% if (_hasInstance) { %><th>Instance</th><% } %>
+					<th style="text-align: right;">Size</th>
+					<% if (_hasRestore) { %><th style="text-align: right;">Action</th><% } %>
+				</tr>
+			</thead>
+			<tbody>
+				<% _files.forEach(function (f) {
+
+					var fileName = String(f.name).split(/[\\\/]/).pop();
+					// On the Hub, a row carries its instance's server_id so the download link resolves to the exact
+					// instance folder (same-named files across instances stay distinct); a single instance omits it.
+					var _sid = (f.server_id && String(f.server_id)) ? ('?sid=' + encodeURIComponent(String(f.server_id))) : '';
+					var _label = (f.instance_name && String(f.instance_name).trim()) ? String(f.instance_name).trim() : '';
+					// Defence in depth: URL-encode the filename in the href and JS-quote it for the onclick, even
+					// though a filename is always a validated basename. Display text is HTML-escaped by the output tag.
+					var _hrefName = encodeURIComponent(fileName);
+					var _jsName = JSON.stringify(fileName);
+				%>
+				<tr>
+					<td><a href="<%- downloadBase %><%- _hrefName %><%- _sid %>"><%= fileName %></a></td>
+					<% if (_hasInstance) { %><td style="opacity: 0.85;"><%= _label || '—' %></td><% } %>
+					<td style="text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;"><%= f.size_human %></td>
+					<% if (_hasRestore) { %><td style="text-align: right; white-space: nowrap;"><a href="#" onclick="hubRestore(<%= _jsName %>); return false;">Restore</a></td><% } %>
+				</tr>
+				<% }); %>
+			</tbody>
+		</table>
+	</div>
+
+<% } %>

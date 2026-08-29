@@ -56,11 +56,19 @@
 
 	$(document).ready(function() {
 
+		// Render the Enabled checkbox as the blue toggle switch used elsewhere in SymBot.
+		// The underlying checkbox (id/name mailer_enabled) stays in the form and is kept in
+		// sync by the plugin, so serialize() still submits the correct state.
+		$('#mailer_enabled').simpleSwitch();
+		$('#mailer_secure').simpleSwitch();
+
 		$('#configChangePass').on('click', function(e) {
 
 			$('#configNewPass').toggle();
 			$('#configConfirmPass').toggle();
 		});
+
+<%- include('../partialsMailerScript'); %>
 
 		$('#submitButton').on('click', function(e) {
 
@@ -82,10 +90,15 @@
 			<b id="headerText" class="contentHeader">Configuration</b>
 		</div>
 
+		<div class="contentSub">Manage the Hub's settings.</div>
+
 		<form autocomplete="off" action="./config" method="POST" id="formConfig">
 
+			<div class="card">
+			<div class="section-title"><span class="icon icon-lock"></span> Access &amp; Credentials</div>
+
 			<div style="padding-bottom: 5px;">
-				<label for="password">Current Password
+				<label class="fieldLabel" for="password">Current Password
 					<span class="toolTip">?<span class="toolTipText">
 						This is the password used to login to the <%- appData.name %> web interface.
 					</span></span>
@@ -94,25 +107,96 @@
 			</div>
 
 			<div style="padding-bottom: 5px; display: none;" id="configNewPass">
-				<label for="passwordnew">New Password</label>
+				<label class="fieldLabel" for="passwordnew">New Password</label>
 				<input type="password" name="passwordnew" id="passwordnew" class="form-field" style="width: 250px;">
 			</div>
 
 			<div style="padding-bottom: 5px; display: none;" id="configConfirmPass">
-				<label for="passwordnew2">New Password Again</label>
+				<label class="fieldLabel" for="passwordnew2">New Password Again</label>
 				<input type="password" name="passwordnew2" id="passwordnew2" class="form-field" style="width: 250px;">
 			</div>
+			</div>
 
-			<div style="text-align: center; padding-top: 25px;">
+			<div class="card">
+				<%- include('../partialsMailerSettings', { mailer: mailer, hubOverride: false }) %>
+			</div>
+
+			<div style="text-align: center; padding: 25px 0 35px;">
 				<button type="submit" id="submitButton" class="btn" style="cursor: pointer;">
 					Update
 				</button>
 			</div>
 
 		</form>
+
+		<div class="card">
+			<div class="section-title">AI Learning &mdash; aggregate &amp; verify</div>
+			<div style="padding-bottom: 8px; opacity: 0.85;">
+				Merge contributed corpus packs (patterns-only, no values) into the Hub's shared corpus, and measure the routing-accuracy change on a held-out test set <b>before</b> adopting. Patterns are frequency-weighted across contributors; disagreements are surfaced as conflicts; one-off patterns are dropped. Adopted patterns broadcast to every connected instance.
+			</div>
+			<input type="file" id="hubAggFiles" accept="application/json,.json" multiple style="display:none;">
+			<button type="button" id="btnHubAggregate" class="btn" style="cursor:pointer;">Aggregate &amp; verify&hellip;</button>
+			<button type="button" id="btnHubEvaluate" class="btn" style="cursor:pointer;">Check current accuracy</button>
+			<div id="hub_agg_report" style="margin-top:10px; font-size:0.95rem; line-height:1.5; display:none;"></div>
+		</div>
 	</div>
 
 </main>
+
+<script>
+	$(document).ready(function() {
+		// Untrusted text (question strings from imported packs) is escaped before the DOM.
+		var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]; }); };
+		var pct = function(x){ return (Math.round((x || 0) * 1000) / 10).toFixed(1) + '%'; };
+		var aggPacks = [];
+
+		function render(r){
+			var $b = $('#hub_agg_report').show();
+			if (!r || r.success === false) { $b.html('<span style="color:var(--color-warning)">' + esc((r && r.error) || 'Aggregation failed.') + '</span>'); return; }
+			var rep = r.report || {}, cmp = r.comparison || null, out = [];
+			out.push('<b>' + (rep.contributors || 0) + '</b> contributor(s), <b>' + (r.new_count || 0) + '</b> new pattern(s)'
+				+ (rep.dropped_low_support ? ', <b>' + rep.dropped_low_support + '</b> dropped (below ' + rep.min_contributors + ' contributors)' : '')
+				+ (rep.conflicts && rep.conflicts.length ? ', <b>' + rep.conflicts.length + '</b> conflict(s)' : '') + '.');
+			if (cmp) {
+				var d = cmp.global.delta, col = d > 0 ? 'var(--color-success)' : (d < 0 ? 'var(--color-warning)' : '');
+				out.push('Held-out accuracy: ' + pct(cmp.global.before) + ' &rarr; <b>' + pct(cmp.global.after) + '</b> <span style="color:' + col + '">(' + (d >= 0 ? '+' : '') + pct(d) + ', ' + (cmp.eval_total || 0) + ' questions)</span>'
+					+ (cmp.regressions && cmp.regressions.length ? ' <span style="color:var(--color-warning)">&#9888; ' + cmp.regressions.length + ' tool regressed</span>' : ''));
+				if (cmp.newly_correct && cmp.newly_correct.length) { out.push('<span style="color:var(--color-success)">&#10003; Newly correct:</span> ' + cmp.newly_correct.slice(0, 6).map(function(f){ return esc(f.question); }).join('; ')); }
+			}
+			if (r.fleet && r.fleet.reported > 0) { out.push('<span style="opacity:0.7">Validated against tools reported by ' + r.fleet.reported + ' of ' + r.fleet.instances + ' connected instance(s).</span>'); }
+			if (r.committed) { out.push('<span style="color:var(--color-success)"><b>Adopted ' + (r.imported || 0) + ' pattern(s) &mdash; broadcast to instances.</b></span>'); }
+			else if (r.new_count > 0) { out.push('<span style="' + ((cmp && cmp.recommend === 'adopt') ? 'color:var(--color-success)' : 'color:var(--color-warning)') + '">' + ((cmp && cmp.recommend === 'adopt') ? 'Safe to adopt' : 'Review before adopting') + '</span> <button type="button" id="btnHubAdopt" class="btn" style="cursor:pointer; margin-left:8px;">Adopt ' + r.new_count + '</button>'); }
+			else { out.push('Nothing new to add.'); }
+			$b.html(out.join('<br>'));
+		}
+
+		function post(commit){
+			$('#hub_agg_report').show().html('Aggregating &amp; measuring accuracy&hellip;');
+			$.ajax({ url: './api/hub/learning/aggregate', method: 'POST', contentType: 'application/json', data: JSON.stringify({ packs: aggPacks, commit: !!commit }) })
+				.done(render)
+				.fail(function(x){ $('#hub_agg_report').show().html('<span style="color:var(--color-warning)">Failed: ' + esc((x.responseJSON && x.responseJSON.error) || x.statusText || 'error') + '</span>'); });
+		}
+
+		$('#hub_agg_report').on('click', '#btnHubAdopt', function(){ post(true); });
+		$('#btnHubAggregate').on('click', function(){ $('#hubAggFiles').click(); });
+		$('#hubAggFiles').on('change', function(){
+			var files = Array.prototype.slice.call(this.files || []); this.value = '';
+			if (!files.length) { return; }
+			var acc = [], pending = files.length;
+			files.forEach(function(f){ var rd = new FileReader(); rd.onload = function(e){ try { acc.push(JSON.parse(e.target.result)); } catch (err) {} if (--pending === 0) { if (!acc.length) { $('#hub_agg_report').show().html('<span style="color:var(--color-warning)">No valid JSON files.</span>'); return; } aggPacks = acc; post(false); } }; rd.readAsText(f); });
+		});
+		$('#btnHubEvaluate').on('click', function(){
+			var $b = $('#hub_agg_report').show().html('Measuring current accuracy&hellip;');
+			$.getJSON('./api/hub/learning/evaluate').done(function(r){
+				if (!r || r.success === false) { $b.html('<span style="color:var(--color-warning)">Could not evaluate.</span>'); return; }
+				var out = [ 'On a built-in set of ' + (r.total || 0) + ' practice questions, what your instances effectively use (the shipped starter set plus pooled learning) points to the right tool <b>' + (r.correct || 0) + '</b> times (<b>' + pct(r.accuracy) + '</b>). Higher is better.' ];
+				if (r.misses && r.misses.length) { out.push('<span style="opacity:0.85">Not yet matched (good candidates for contributed patterns): ' + r.misses.slice(0, 10).map(function(m){ return esc(m.question); }).join('; ') + (r.misses.length > 10 ? ' &hellip;' : '') + '</span>'); }
+				if (r.fleet && r.fleet.reported > 0) { out.push('<span style="opacity:0.7">Measured against the tools reported by ' + r.fleet.reported + ' of ' + r.fleet.instances + ' connected instance(s).</span>'); }
+				$b.html(out.join('<br>'));
+			}).fail(function(){ $b.html('<span style="color:var(--color-warning)">Could not evaluate.</span>'); });
+		});
+	});
+</script>
 
 
 <%- include('../partialsFooterView'); %>

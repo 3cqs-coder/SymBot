@@ -4,20 +4,39 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
-	<title><%- appData.name %> AI Chat</title>
+	<title><%= appData.name_display || appData.name %> AI Chat</title>
 
 	<%
 		// Render base href server-side so the HTML parser sees it before resolving
 		// any relative asset paths — JS-injected base tags fire too late.
-		const basePath = (query && query.bp) ? decodeURIComponent(query.bp) : '/';
+		let basePath = '/';
+
+		try {
+
+			if (query && query.bp) { basePath = decodeURIComponent(query.bp); }
+		}
+		catch (e) {
+
+			// A malformed percent-sequence in `bp` would otherwise throw and 500 the page.
+			basePath = '/';
+		}
+
+		// basePath is reflected into the <base href> attribute. Accept only a same-origin relative
+		// path — a single leading slash (not protocol-relative "//") and no scheme or attribute-
+		// breaking characters — so a crafted `bp` cannot inject markup or repoint <base> at an
+		// attacker origin. Anything else falls back to '/'.
+		if (!/^\/(?!\/)[^"'<>\s\\]*$/.test(basePath)) { basePath = '/'; }
 	%>
-	<base href="<%- basePath %>">
+	<base href="<%= basePath %>">
 
 	<link rel="stylesheet" href="css/style.css" />
+	<link rel="stylesheet" href="css/vendor/jquery-confirm/jquery-confirm.min.css" />
 	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 </head>
 
 <body class="popout-body">
+
+<%- include('./partialsChatRatingScript') %>
 
 <div id="popoutHeader">
 	<span id="chatMascotHeader" class="chat-mascot-header" title="Assistant"></span>
@@ -44,6 +63,8 @@
 
 
 <script src="js/vendor/jquery/jquery.min.js"></script>
+<script src="js/vendor/jquery-confirm/jquery-confirm.min.js"></script>
+<script src="js/symbot-ui.js?v=<%- appData.version %>"></script>
 <script src="js/vendor/marked/marked.min.js"></script>
 <script src="js/vendor/dompurify/purify.min.js"></script>
 <script src="js/symbot-mascot.js"></script>
@@ -54,8 +75,14 @@
 
 		const params    = new URLSearchParams(window.location.search);
 		const room      = params.get('room')  || '';
-		const basePath  = params.get('bp')    || '/';
-		const wsPath    = params.get('wsp')   || 'ws';
+		// `bp` and `wsp` are used below as URL prefixes for $.getScript, socket.io and the chat API/fetch
+		// calls. An absolute or protocol-relative value would load scripts/data from an attacker origin, so
+		// constrain both to same-origin relative forms: `bp` to a single-leading-slash path (never "//"),
+		// and `wsp` to a plain token (no slashes, so `basePath + wsPath` can never become protocol-relative).
+		const bpRaw     = params.get('bp')    || '/';
+		const basePath  = /^\/(?!\/)[^"'<>\s\\]*$/.test(bpRaw) ? bpRaw : '/';
+		const wsRaw     = params.get('wsp')   || 'ws';
+		const wsPath    = /^[A-Za-z0-9_\-]+$/.test(wsRaw) ? wsRaw : 'ws';
 		const chatTitle = params.get('title') || 'AI Chat';
 		const initConvId = params.get('conv_id') || '';
 		window.AIChatConv_room         = room;
@@ -63,8 +90,11 @@
 		window.AIChatConv_activeId     = initConvId || null;
 		window.AIChatConv_sessionStart = 0;
 		window.AIChatConv_firstMessage = (chatTitle && chatTitle !== 'AI Chat') ? chatTitle : null;
-		window.AIChatConv_type         = (chatTitle && chatTitle !== 'AI Chat') ? 'analysis' : 'chat';
 		window.AIChatConv_dealId       = params.get('deal_id') || '';
+		// Identify an analysis conversation reliably by its deal id (passed when the
+		// chat is popped out from a deal analysis); the title is only a fallback. A
+		// saved conversation's stored type still overrides this once it loads.
+		window.AIChatConv_type         = (window.AIChatConv_dealId || (chatTitle && chatTitle !== 'AI Chat')) ? 'analysis' : 'chat';
 
 		// Pending file attachments
 		let pendingAttachments = [];
@@ -130,6 +160,11 @@
 
 		let $currentMessageElement = null;
 		let messageBuffer = '';
+		let $lastAssistantMessage = null;
+
+		// Minimal 👍/👎 on a finished answer — the control lives in the shared
+		// partialsChatRatingScript partial so the pop-out and modal stay identical.
+		function attachLearningRating(id) { if (window.SymBotChatRating) { window.SymBotChatRating.attach($lastAssistantMessage, id); } }
 		let canSendMessage = false;
 		let socket;
 
@@ -157,38 +192,43 @@
 			$chatBox.scrollTop($chatBox.prop('scrollHeight'));
 		}
 
+		// End of a streamed answer — fired by the out-of-band 'chat_end' socket event, never by message
+		// text, so an answer (or a document it quotes) that contains the literal words can no longer end
+		// or blank the chat.
+		function endChat() {
+
+			if (typeof $spinner !== 'undefined' && $spinner) { $spinner.hide(); }
+
+			const finished = messageBuffer;
+
+			if ($currentMessageElement) {
+				$lastAssistantMessage = $currentMessageElement;
+				messageBuffer = '';
+				$currentMessageElement = null;
+			}
+
+			if (mascot) mascot.onComplete(finished);
+
+			canSendMessage = true;
+			toggleInputState(false);
+			$input[0].focus();
+
+			if (typeof window.AIChatConv_autoSave === 'function') window.AIChatConv_autoSave();
+
+			scrollToBottom();
+		}
+
 		function displayMessage(content) {
 
-			if (content === 'END_OF_CHAT') {
+			if (!$currentMessageElement) {
 
-				const finished = messageBuffer;
-
-				if ($currentMessageElement) {
-
-					messageBuffer = '';
-					$currentMessageElement = null;
-				}
-
-				if (mascot) mascot.onComplete(finished);
-
-				canSendMessage = true;
-				toggleInputState(false);
-				$input[0].focus();
-
-				if (typeof window.AIChatConv_autoSave === 'function') window.AIChatConv_autoSave();
+				$currentMessageElement = $('<div>', { class: 'message bot-message' });
+				$chatBox.append($currentMessageElement);
+				if (mascot) mascot.onStreamChunk();
 			}
-			else {
 
-				if (!$currentMessageElement) {
-
-					$currentMessageElement = $('<div>', { class: 'message bot-message' });
-					$chatBox.append($currentMessageElement);
-					if (mascot) mascot.onStreamChunk();
-				}
-
-				messageBuffer += content;
-				$currentMessageElement.html(DOMPurify.sanitize(marked.parse(messageBuffer, { breaks: true })));
-			}
+			messageBuffer += content;
+			$currentMessageElement.html(DOMPurify.sanitize(marked.parse(messageBuffer, { breaks: true })));
 
 			scrollToBottom();
 		}
@@ -239,6 +279,11 @@
 					attachments: attachments || []
 				}
 			};
+			// Tag via the shared helper so the popout routes models identically to the modal.
+			if (window.AIChatConv_tagMessage) window.AIChatConv_tagMessage(payload.message, false);
+
+			// The user's timezone (IANA), so date-based tools resolve "today" in their zone, not the server's.
+			try { if (!payload.message.timezone) { payload.message.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } } catch (e) {}
 
 			$.ajax({
 				type: 'POST',
@@ -319,6 +364,16 @@
 
 						displayMessage(data.message);
 					}
+					else if (data.type === 'chat_end') {
+
+						// Out-of-band end-of-answer signal (see endChat / the server's sendChatEnd) — content can
+						// never trigger this, so any streamed text is safe.
+						endChat();
+					}
+					else if (data.type === 'learning') {
+
+						attachLearningRating(data.message && data.message.id);
+					}
 					else if (data.type === 'aborted') {
 
 						// Show timeout notice as a distinct system message
@@ -331,7 +386,7 @@
 							'border-left': '3px solid #f0a500',
 						}).text('⚠ ' + (data.message || 'Response stopped due to timeout.'));
 
-						$('#chatMessages').append($notice);
+						$('#aiChatBox').append($notice);
 					}
 				});
 

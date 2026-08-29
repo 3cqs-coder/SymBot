@@ -1,0 +1,930 @@
+<%- include('./partialsHeaderView'); %>
+
+<style>
+	.sched-run { border: 1px solid var(--table-border-color, #ccc); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: var(--fs-content); }
+	.sched-run pre { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; margin: 5px 0 0; font-size: 1em; font-family: inherit; }
+	/* Pointing-hand cursor on all clickable controls in this view. */
+	.btnDefault, .modal-close, #aiSchedulesList a, .modal-foot a, .modal-foot button, .modal-body a { cursor: pointer; }
+</style>
+
+<main>
+
+<div id="contentBox" class="wide">
+
+	<div class="contentHeaderBox">
+		<b class="contentHeader">Schedules</b>
+	</div>
+
+	<div class="card">
+
+		<div class="section-title"><span class="icon icon-calendar"></span> Scheduled Tasks</div>
+
+		<div class="section-desc">
+			Run tasks automatically on a schedule and get the result as a notification. Some tasks <b>use AI</b> &mdash; like a prompt you write; these need an AI provider configured and are marked <span style="font-size:0.72rem; white-space:nowrap; vertical-align:middle; margin:0 2px; padding:1px 6px; border-radius:8px; background:#7a5cff; color:#fff;">AI</span>. Others, like the error watchdog, are <b>plain checks that work without any AI</b>. Every task is <b>read-only</b>: it can look up your deals, orders, logs and balances, but never places or changes a trade. Times are entered and shown in <b>your local time</b> &mdash; stored in UTC by default so anyone in any timezone sees the correct time; tick <i>Keep fixed to my local time</i> on a schedule to pin it to your timezone across daylight-saving. Each run's full output is kept in its <b>History</b>; notifications are truncated.
+		</div>
+
+		<div style="margin: 4px 0 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+			<button type="button" id="schedNewBtn" class="btnDefault">+ Add schedule</button>
+			<button type="button" id="schedLibBtn" class="btnDefault">+ Add from library</button>
+			<input type="text" id="schedSearch" class="form-field" placeholder="Search name or prompt…" style="width: 220px;">
+			<a href="./api/schedule-runs/export" id="schedDownloadAll" style="margin-left: auto; font-size:var(--fs-content);">Download all history</a>
+		</div>
+
+		<div id="aiSchedulesList"><small style="opacity:0.6;">Loading…</small></div>
+
+	</div>
+
+	<div class="card">
+
+		<div class="section-title"><span class="icon icon-save"></span> System Backup</div>
+		<div class="section-desc">
+			Your system backup runs through this same scheduler. Its schedule, retention and destination are edited in Configuration &rarr; System Backups.
+		</div>
+		<div id="backupSection"><small style="opacity:0.6;">Loading…</small></div>
+
+	</div>
+</div>
+
+</main>
+
+
+<!-- Add / Edit modal -->
+<div id="schedFormModal" class="modal-overlay">
+	<div class="modal-box modal-flex">
+		<div class="modal-head">
+			<b id="schedFormTitle">Add schedule</b>
+			<a href="#" class="modal-close" data-close="form">&times;</a>
+		</div>
+		<div class="modal-body">
+			<table id="botsCreate" cellpadding=0 cellspacing=0 style="width: 100%;">
+			<tr>
+				<td><label for="ai_sched_label">Name:</label></td>
+				<td><input type="text" id="ai_sched_label" class="form-field" style="width: 230px;" placeholder="e.g. Morning deal summary"></td>
+			</tr>
+			<tr>
+				<td><label for="ai_sched_kind">When:</label></td>
+				<td><select id="ai_sched_kind" class="form-field" style="width: 150px;"><option value="cron">At a set time</option><option value="interval">Every…</option><option value="once">Once</option></select></td>
+			</tr>
+			<tr id="ai_sched_days_row">
+				<td style="vertical-align: top;">
+					<label>Select Days:
+						<span class="toolTip">?<span class="toolTipText">Days to run. Leave all unchecked to run every day. Times are your local time.</span></span>
+					</label>
+				</td>
+				<td>
+					<div id="ai_sched_days" style="display: block; width: 50px;">
+						<label style="display: flex; align-items: center;"><input type="checkbox" class="form-field" value="0"> Sunday</label>
+						<label style="display: flex; align-items: center;"><input type="checkbox" class="form-field" value="1"> Monday</label>
+						<label style="display: flex; align-items: center;"><input type="checkbox" class="form-field" value="2"> Tuesday</label>
+						<label style="display: flex; align-items: center;"><input type="checkbox" class="form-field" value="3"> Wednesday</label>
+						<label style="display: flex; align-items: center;"><input type="checkbox" class="form-field" value="4"> Thursday</label>
+						<label style="display: flex; align-items: center;"><input type="checkbox" class="form-field" value="5"> Friday</label>
+						<label style="display: flex; align-items: center;"><input type="checkbox" class="form-field" value="6"> Saturday</label>
+					</div>
+					<small style="opacity: 0.6;">(none = every day)</small>
+				</td>
+			</tr>
+			<tr id="ai_sched_time_row">
+				<td><label for="ai_sched_time">Time:</label></td>
+				<td><input type="text" id="ai_sched_time" class="form-field" style="width: 60px;" placeholder="HH:MM" value="08:00"><span id="ai_sched_tz_label" style="margin-left: 8px; opacity: 0.75; font-size:var(--fs-body);"></span></td>
+			</tr>
+			<tr id="ai_sched_dst_row">
+				<td><label for="ai_sched_dst">Fixed local time:
+					<span class="toolTip">?<span class="toolTipText">Off (default): the time is stored in UTC, so it shows correctly for anyone in any timezone but shifts by an hour across daylight-saving changes. On: the schedule is pinned to <b>your</b> local time and stays fixed year-round (e.g. 9:30 AM stays 9:30 AM through DST), shown with your timezone label.</span></span>
+				</label></td>
+				<td><label style="cursor: pointer;"><input type="checkbox" id="ai_sched_dst" style="width: auto; margin-right: 5px; vertical-align: middle;"> Keep fixed to my local time across DST</label></td>
+			</tr>
+			<tr id="ai_sched_interval_row" style="display: none;">
+				<td><label for="ai_sched_interval_n">Every:
+					<span class="toolTip">?<span class="toolTipText">Run on a fixed, repeating interval — ideal for near-real-time monitors like the Resource sentinel. It is timezone-independent (an interval is the same everywhere), so no daylight-saving handling is needed. Minutes 1&ndash;59, or hours 1&ndash;23.</span></span>
+				</label></td>
+				<td>
+					<input type="number" id="ai_sched_interval_n" class="form-field" min="1" max="59" style="width: 70px;" value="15" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;">
+					&nbsp;<select id="ai_sched_interval_unit" class="form-field" style="width: 120px;"><option value="minutes">minutes</option><option value="hours">hours</option></select>
+				</td>
+			</tr>
+			<tr id="ai_sched_adv_row">
+				<td><label for="ai_sched_advanced">Advanced:</label></td>
+				<td>
+					<label style="cursor: pointer;"><input type="checkbox" id="ai_sched_advanced" style="width: auto; margin-right: 5px; vertical-align: middle;"> Raw cron (UTC)</label>
+					<div id="ai_sched_cron_wrap" style="display: none; margin-top: 4px;">
+						<input type="text" id="ai_sched_cron" class="form-field" style="width: 180px;" placeholder="0 8 * * *"> <small style="opacity: 0.6;">5-field, UTC</small>
+					</div>
+				</td>
+			</tr>
+			<tr id="ai_sched_once_row" style="display: none;">
+				<td><label for="ai_sched_at">Run At:</label></td>
+				<td><input type="datetime-local" id="ai_sched_at" class="form-field" style="width: 210px;"> <small style="opacity: 0.6;">local time</small></td>
+			</tr>
+			<tr>
+				<td><label for="ai_sched_catchup">If missed:
+					<span class="toolTip">?<span class="toolTipText">What to do with runs that were due while SymBot was stopped. <b>Skip</b> — ignore them and wait for the next scheduled time (default). <b>Run once</b> — run a single make-up as soon as SymBot starts. <b>Run all missed</b> — run one make-up per missed occurrence (capped). Make-up runs happen in the background and appear in History like any other run.</span></span>
+				</label></td>
+				<td><select id="ai_sched_catchup" class="form-field" style="width: 150px;"><option value="skip">Skip</option><option value="once">Run once</option><option value="all">Run all missed</option></select></td>
+			</tr>
+			<tr>
+				<td><label for="ai_sched_concurrency">If already running:
+					<span class="toolTip">?<span class="toolTipText">What to do if a previous run of this schedule is still going when the next one is due. <b>Forbid</b> (default) — skip the new run (recorded in History as <i>skipped</i>). <b>Allow</b> — let it run alongside the other. There is no &ldquo;replace&rdquo; option: a run in progress can't be force-stopped mid-flight.</span></span>
+				</label></td>
+				<td><select id="ai_sched_concurrency" class="form-field" style="width: 150px;"><option value="forbid">Forbid (skip)</option><option value="allow">Allow</option></select></td>
+			</tr>
+			<tr>
+				<td><label for="ai_sched_retries">Retries on failure:
+					<span class="toolTip">?<span class="toolTipText">If a run fails (an error &mdash; not a timeout), how many extra times to try again before giving up (0&ndash;5, default 0). Between attempts it waits using the chosen backoff. A timeout is never retried.</span></span>
+				</label></td>
+				<td>
+					<input type="number" id="ai_sched_retries" class="form-field" min="0" max="5" style="width: 70px;" value="0" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;">
+					&nbsp;<select id="ai_sched_retry_backoff" class="form-field" style="width: 150px;"><option value="fixed">Fixed delay</option><option value="exponential">Exponential backoff</option></select>
+				</td>
+			</tr>
+			<tr id="ai_sched_prompt_row">
+				<td style="vertical-align: top;"><label for="ai_sched_prompt">Prompt:</label></td>
+				<td><textarea id="ai_sched_prompt" class="form-field" style="width: 340px; height: 110px;" placeholder="What should the AI do when this runs? e.g. Summarize my open deals and unrealized P/L; flag any deal older than 7 days."></textarea></td>
+			</tr>
+			<tr id="ai_sched_recipe_row" style="display:none;">
+				<td style="vertical-align: top;"><label>Task:</label></td>
+				<td><div style="opacity:0.85; font-size:var(--fs-content); font-style:italic;" id="ai_sched_recipe_desc"></div><small style="opacity:0.6; font-size:var(--fs-body);">A pre-defined recipe — its logic is fixed. Adjust when it runs and where it notifies below; enable it when you're ready.</small></td>
+			</tr>
+			<tr id="ai_sched_ai_enhance_row" style="display:none;">
+				<td><label for="ai_sched_ai_enhance">Enhance with AI:
+					<span class="toolTip">?<span class="toolTipText">This task runs fine without AI. Tick this to also add a short AI-written summary over the results — needs an AI provider configured; if none is available the task still runs and just skips the summary.</span></span>
+				</label></td>
+				<td><label style="cursor: pointer;"><input type="checkbox" id="ai_sched_ai_enhance" style="width: auto; margin-right: 5px; vertical-align: middle;"> Add a short AI summary to the result</label></td>
+			</tr>
+			<tr>
+				<td style="vertical-align: top;"><label>Notify:</label></td>
+				<td>
+					<div id="ai_sched_notify_list"></div>
+					<button type="button" id="ai_sched_notify_add" class="btnDefault" style="margin-top:4px; padding:2px 10px; font-size:var(--fs-content);">+ Add destination</button>
+					<div><small style="opacity:0.6;">Deliver each run's result to one or more destinations, each firing on the run outcomes you choose. Email needs SMTP set in Configuration; Telegram needs a bot token &amp; user ID (leave the chat ID blank to use your default account); Webhook POSTs the message as JSON.</small></div>
+				</td>
+			</tr>
+			</table>
+		</div>
+		<div class="modal-foot">
+			<button type="button" id="aiSchedAdd" class="btnDefault">Save</button>
+			<button type="button" class="btnDefault" data-close="form">Cancel</button>
+			<span id="aiSchedMsg" style="opacity: 0.75;"></span>
+		</div>
+	</div>
+</div>
+
+
+<!-- Recipe library picker -->
+<div id="recipeLibModal" class="modal-overlay">
+	<div class="modal-box modal-flex">
+		<div class="modal-head">
+			<b>Add from recipe library</b>
+			<a href="#" class="modal-close" data-close="lib">&times;</a>
+		</div>
+		<div class="modal-body">
+			<div style="opacity:0.75; font-size:var(--fs-content); margin-bottom:8px;">Pre-defined, read-only tasks. Adding one creates a <b>disabled</b> schedule you can then time, point at your notifications, and enable — nothing runs until you turn it on.</div>
+			<div id="recipeLibList"><small style="opacity:0.6;">Loading…</small></div>
+		</div>
+		<div class="modal-foot">
+			<button type="button" class="btnDefault" data-close="lib">Close</button>
+			<span id="recipeLibMsg" style="opacity: 0.75;"></span>
+		</div>
+	</div>
+</div>
+
+
+<!-- Run history modal -->
+<div id="schedHistOverlay" class="modal-overlay">
+	<div class="modal-box modal-flex">
+		<div class="modal-head">
+			<b>Run history &mdash; <span id="schedHistTitle"></span></b>
+			<a href="#" class="modal-close" data-close="hist">&times;</a>
+		</div>
+		<div style="padding: 8px 16px; border-bottom: 1px solid var(--table-border-color, #ccc); display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+			<input type="text" id="schedHistSearch" class="form-field" placeholder="Search output or date…" style="width: 210px;">
+			<select id="schedHistStatus" class="form-field" style="width: 130px;"><option value="">All statuses</option><option value="ok">ok</option><option value="error">error</option><option value="timed_out">timed_out</option><option value="skipped">skipped</option></select>
+			<span id="schedHistCount" style="opacity: 0.6; font-size:var(--fs-body);"></span>
+		</div>
+		<div id="schedHistBody" class="modal-body"></div>
+		<div class="modal-foot" style="justify-content: space-between;">
+			<span><button type="button" id="schedHistRun" class="btnDefault">Run now</button> &nbsp; <a href="#" id="schedHistDownload">Download</a></span>
+			<a href="#" id="schedHistClear" style="color: var(--color-danger, #e05252);">Clear all history</a>
+		</div>
+	</div>
+</div>
+
+
+<script>
+(function(){
+	var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+	function pad(n){ return String(n).padStart(2,'0'); }
+	function api(method, path, body){ return fetch('./api/schedules'+path, { method: method, headers: {'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined }).then(function(r){ return r.json(); }); }
+	function esc(s) { return SymBot.UI.esc(s); }
+	// Styled confirmation dialog (uses the app's jquery-confirm; falls back to the native
+	// confirm only if that library is unavailable). opts: { message, confirmText, danger, onConfirm }.
+	function askConfirm(opts){
+		var onYes = opts.onConfirm || function(){};
+		if(window.jQuery && jQuery.confirm){
+			var label = opts.confirmText || 'OK';
+			// Wrap the label in a <div> with a semantic color var so the app's jconfirm
+			// button styling (style.css) forces a readable, saturated color in BOTH themes
+			// — a bare span/color is washed out in dark mode.
+			if(opts.danger){ label = '<div style="color: var(--color-danger);">' + label + '</div>'; }
+			jQuery.confirm({
+				title: opts.title || false,
+				content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' + opts.message + '</div>',
+				boxWidth: '440px',
+				useBootstrap: false,
+				buttons: {
+					confirm: { text: label, btnClass: 'btn-default', keys: ['enter'], action: function(){ onYes(); } },
+					cancel:  { text: 'Cancel', btnClass: 'btn-default', keys: ['esc'], action: function(){} }
+				}
+			});
+		}
+		else { if(window.confirm(String(opts.message).replace(/<[^>]+>/g, ''))){ onYes(); } }
+	}
+
+	function timeLocalToUtc(lh, lm){ var d = new Date(); d.setHours(lh, lm, 0, 0); return { h: d.getUTCHours(), m: d.getUTCMinutes() }; }
+	function timeUtcToLocal(uh, um){ var d = new Date(); d.setUTCHours(uh, um, 0, 0); return { h: d.getHours(), m: d.getMinutes() }; }
+	function localDowToUtc(dow, lh, lm){ var d = new Date(); d.setHours(lh, lm, 0, 0); var g = 0; while(d.getDay() !== dow && g++ < 8){ d.setDate(d.getDate()+1); } return d.getUTCDay(); }
+	function utcDowToLocal(udow, uh, um){ var d = new Date(); d.setUTCHours(uh, um, 0, 0); var g = 0; while(d.getUTCDay() !== udow && g++ < 8){ d.setUTCDate(d.getUTCDate()+1); } return d.getDay(); }
+
+	// The browser's IANA timezone, via the shared header helper (getTimeZone), falling back
+	// to a direct Intl read.
+	function localTz(){ try { if(typeof getTimeZone === 'function'){ var t = getTimeZone().timezone; if(t){ return t; } } } catch(e){} try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch(e){ return 'UTC'; } }
+	// A friendly short label for a timezone (e.g. "EST", "GMT+1") for the current date.
+	function tzAbbrev(tz) { return SymBot.UI.tzAbbrev(tz); }
+	// Build a cron from the picked local time/days. When "DST-aware" is on, the cron is
+	// stored in LOCAL wall time (the schedule's timezone is saved alongside, so the backend
+	// keeps it fixed to that local time across daylight-saving). Otherwise it is stored in
+	// UTC (backend-agnostic; the display converts back to each viewer's local time).
+	function buildCronFromPicker(){
+		var t = (document.getElementById('ai_sched_time').value || '').trim();
+		if(!/^\d{1,2}:\d{2}$/.test(t)){ return null; }
+		var parts = t.split(':').map(Number), lh = parts[0], lm = parts[1];
+		var dst = document.getElementById('ai_sched_dst').checked;
+		var days = [];
+		document.querySelectorAll('#ai_sched_days input[type="checkbox"]:checked').forEach(function(c){ days.push(Number(c.value)); });
+		if(dst){
+			var dowL = days.length ? days.sort(function(a,b){ return a-b; }).join(',') : '*';
+			return lm + ' ' + lh + ' * * ' + dowL;
+		}
+		var utc = timeLocalToUtc(lh, lm);
+		var dow;
+		if(!days.length){ dow = '*'; }
+		else { var set = {}; days.forEach(function(dw){ set[localDowToUtc(dw, lh, lm)] = true; }); dow = Object.keys(set).map(Number).sort(function(a,b){ return a-b; }).join(','); }
+		return utc.m + ' ' + utc.h + ' * * ' + dow;
+	}
+	// Build a fixed-INTERVAL cron ("every N minutes/hours") from the interval picker. An interval is the
+	// same in every timezone, so these are stored plain (no DST anchoring). Returns null if N is invalid.
+	function buildIntervalCron(){
+		var n = parseInt(document.getElementById('ai_sched_interval_n').value, 10);
+		var unit = document.getElementById('ai_sched_interval_unit').value;
+		if(!(n >= 1)){ return null; }
+		if(unit === 'hours'){ return '0 */' + Math.min(n, 23) + ' * * *'; }
+		return '*/' + Math.min(n, 59) + ' * * * *';
+	}
+	// Recognize an interval cron → { n, unit } or null. Mirrors buildIntervalCron's two shapes exactly.
+	function parseIntervalCron(cron){
+		var p = String(cron||'').trim().split(/\s+/);
+		if(p.length !== 5 || p[2] !== '*' || p[3] !== '*' || p[4] !== '*'){ return null; }
+		var mMin = /^\*\/(\d+)$/.exec(p[0]);
+		if(mMin && p[1] === '*'){ return { n: Number(mMin[1]), unit: 'minutes' }; }
+		var mHr = /^\*\/(\d+)$/.exec(p[1]);
+		if(mHr && p[0] === '0'){ return { n: Number(mHr[1]), unit: 'hours' }; }
+		return null;
+	}
+	// Describe a cron for display. A schedule WITH a timezone is DST-aware: its cron is local
+	// wall time, shown as-is with the zone labeled. Without a timezone it is a UTC cron,
+	// converted to the viewer's own local time so anyone in any timezone sees their correct time.
+	function describeCron(cron, tz){
+		var iv = parseIntervalCron(cron);
+		if(iv){ return 'every ' + iv.n + ' ' + (iv.n === 1 ? iv.unit.replace(/s$/, '') : iv.unit); }
+		var p = String(cron||'').trim().split(/\s+/);
+		if(p.length !== 5 || p[2] !== '*' || p[3] !== '*' || !/^\d+$/.test(p[0]) || !/^\d+$/.test(p[1])){ return 'cron ' + esc(cron) + (tz ? ' (' + esc(tz) + ')' : ' UTC'); }
+		if(tz){
+			var hh = Number(p[1]), mm = Number(p[0]);
+			var dayStr;
+			if(p[4] === '*'){ dayStr = 'every day'; }
+			else { var set = {}; p[4].split(',').forEach(function(x){ if(/^\d+$/.test(x)){ set[Number(x) % 7] = true; } }); dayStr = Object.keys(set).map(Number).sort(function(a,b){ return a-b; }).map(function(d){ return DAYS[d]; }).join(', '); }
+			return dayStr + ' at ' + pad(hh) + ':' + pad(mm) + ' ' + tzAbbrev(tz);
+		}
+		var uh = Number(p[1]), um = Number(p[0]);
+		var lt = timeUtcToLocal(uh, um);
+		var dayStr2;
+		if(p[4] === '*'){ dayStr2 = 'every day'; }
+		else { var set2 = {}; p[4].split(',').forEach(function(x){ if(/^\d+$/.test(x)){ set2[utcDowToLocal(Number(x) % 7, uh, um)] = true; } }); dayStr2 = Object.keys(set2).map(Number).sort(function(a,b){ return a-b; }).map(function(d){ return DAYS[d]; }).join(', '); }
+		// UTC schedule shown in the viewer's OWN local time — label it with the viewer's
+		// timezone so "9:30" is never mistaken for a different zone.
+		return dayStr2 + ' at ' + pad(lt.h) + ':' + pad(lt.m) + ' ' + tzAbbrev(localTz());
+	}
+	function describeOnce(iso){ if(!iso){ return 'once'; } var d = new Date(iso); return 'once on ' + d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' ' + tzAbbrev(localTz()); }
+	// Canonical SymBot date/time format (dateConvertLocal, shared via partialsHeaderView) so
+	// last-run and history timestamps read the same as deal history and every other view.
+	function fmtLocal(iso){ if(!iso){ return ''; } try { return dateConvertLocal(iso); } catch(e){ return String(iso); } }
+
+	var lastList = [];
+	// recipe_id → catalog entry (update_available, shipped_version, installed_version) so a recipe
+	// card can flag when a newer shipped version exists and offer a diff before applying it.
+	var recipeMeta = {};
+	var editingId = null;
+	var searchTerm = '';
+
+	function renderFiltered(){
+		var el = document.getElementById('aiSchedulesList'); if(!el) return;
+		var q = String(searchTerm||'').trim().toLowerCase();
+		var view = q ? lastList.filter(function(s){ return String(s.label||'').toLowerCase().indexOf(q) >= 0 || String(s.prompt||'').toLowerCase().indexOf(q) >= 0; }) : lastList;
+		if(!lastList.length){ el.innerHTML = '<div style="opacity:0.6; padding:6px 2px;">No scheduled analyses yet. Click <b>+ Add schedule</b> to create one.</div>'; return; }
+		if(!view.length){ el.innerHTML = '<div style="opacity:0.6; padding:6px 2px;">No schedules match &ldquo;'+esc(searchTerm)+'&rdquo;.</div>'; return; }
+		renderCards(el, view);
+	}
+
+	// One source of truth for the AI / AI-optional / no-AI badge, used by both the schedule cards and the
+	// recipe-library list (they had drifted — different tooltip wording and spacing). Returns the span.
+	function renderAiBadge(usesAI, aiOptional){
+		var base = 'font-size:0.72rem; white-space:nowrap; margin-left:6px; padding:1px 6px; border-radius:8px;';
+		if(usesAI){ return '<span title="Uses AI — needs an AI provider configured" style="'+base+' background:#7a5cff; color:#fff;">AI</span>'; }
+		if(aiOptional){ return '<span title="Runs without AI; can optionally add an AI summary" style="'+base+' border:1px solid #7a5cff; color:#7a5cff;">AI optional</span>'; }
+		return '<span title="No AI needed — a plain check that runs without an AI provider" style="'+base+' border:1px solid var(--table-border-color, rgba(128,128,128,0.5)); opacity:0.7;">no AI</span>';
+	}
+
+	function cardHtml(s){
+			var when = s.kind==='cron' ? describeCron(s.cron, s.timezone) : describeOnce(s.run_at);
+			if(s.catchup && s.catchup !== 'skip'){ when += ' · if missed: ' + (s.catchup==='once' ? 'run once' : 'run all'); }
+			var last = s.last_run ? ('Last run ' + esc(fmtLocal(s.last_run)) + ' &middot; ' + esc(s.last_status || '')) : 'Never run';
+			var statusHtml = s.enabled
+				? '<span style="font-size:0.85rem; white-space:nowrap; color:var(--color-success, #2e9e4f);">● enabled</span>'
+				: '<span style="font-size:0.85rem; white-space:nowrap; color:var(--color-danger, #d05050);">● disabled</span>';
+			// A pre-defined recipe (imported from a shipped definition) has no user prompt — show its
+			// recipe description instead, and tag it so it's distinguishable from a hand-written analysis.
+			var isRecipe = !!(s.settings && s.settings.recipe_id);
+			var descr = s.prompt || (s.settings && s.settings.recipe_description) || '';
+			var badge = isRecipe ? '<span style="font-size:0.72rem; white-space:nowrap; margin-left:6px; padding:1px 6px; border-radius:8px; background:var(--nav-item-active-bar, #14b8b8); color:#fff; opacity:0.9;">recipe</span>' : '';
+			// Flag whether the task uses AI: the recipe/settings declare it; a hand-written prompt
+			// schedule (ai_analysis / untyped) uses AI by default. So users can tell at a glance which
+			// tasks need an AI provider and which are plain checks that run without one.
+			var usesAI = (s.settings && typeof s.settings.requires_ai === 'boolean') ? s.settings.requires_ai : (!s.type || s.type === 'ai_analysis');
+			var aiOptional = !!(s.settings && s.settings.ai_optional);
+			badge += renderAiBadge(usesAI, aiOptional);
+			// If this recipe ships a newer version than the user's installed row, flag it and offer a diff.
+			var meta = isRecipe ? recipeMeta[s.settings.recipe_id] : null;
+			var updHtml = (meta && meta.update_available)
+				? '<div style="margin-top:5px; font-size:var(--fs-content);">'
+					+ '<span style="padding:1px 6px; border-radius:8px; background:#e8a13a; color:#1a1a1a; font-weight:600;">Update available</span> '
+					+ '<span style="opacity:0.8;">v'+esc(String(meta.installed_version||'?'))+' &rarr; v'+esc(String(meta.shipped_version||'?'))+'</span> &middot; '
+					+ '<a href="#" data-act="update-diff" data-recipe="'+esc(s.settings.recipe_id)+'" data-id="'+esc(s.schedule_id)+'">View changes</a>'
+					+ '</div>'
+				: '';
+			return '<div style="border:1px solid var(--table-border-color, rgba(128,128,128,0.3)); border-left:3px solid ' + (s.enabled ? 'var(--color-success, #2e9e4f)' : 'var(--color-danger, #d05050)') + '; border-radius:6px; padding:8px 10px; margin-bottom:6px; background:var(--table-background-color, rgba(128,128,128,0.06));">'
+				+ '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;"><b>'+esc(s.label||'(unnamed)')+badge+'</b>'+statusHtml+'</div>'
+				+ '<div style="opacity:0.85; font-size:var(--fs-content); margin-top:2px;">'+esc(when)+'</div>'
+				+ '<div style="opacity:0.8; font-size:var(--fs-content); margin-top:3px; font-style:italic;">'+esc(descr)+'</div>'
+				+ updHtml
+				+ '<div style="opacity:0.6; font-size:var(--fs-content); margin-top:3px;">'+last+' &middot; '+esc(String(s.run_count||0))+' run(s)</div>'
+				+ '<div style="margin-top:6px; font-size:var(--fs-content);">'
+				+   '<a href="#" data-act="run" data-id="'+esc(s.schedule_id)+'">Run now</a> &nbsp;&middot;&nbsp; '
+				+   '<a href="#" data-act="history" data-id="'+esc(s.schedule_id)+'">History</a> &nbsp;&middot;&nbsp; '
+				+   '<a href="#" data-act="edit" data-id="'+esc(s.schedule_id)+'">Edit</a> &nbsp;&middot;&nbsp; '
+				+   '<a href="#" data-act="toggle" data-id="'+esc(s.schedule_id)+'">'+(s.enabled?'Disable':'Enable')+'</a> &nbsp;&middot;&nbsp; '
+				// A recipe row can be re-synced to its shipped defaults on demand (opt-in — never automatic),
+				// which is useful after a shipped-recipe upgrade; hand-made schedules have no defaults to reset to.
+				+   (isRecipe ? '<a href="#" data-act="reset" data-id="'+esc(s.schedule_id)+'" data-recipe="'+esc(s.settings.recipe_id)+'">Reset to defaults</a> &nbsp;&middot;&nbsp; ' : '')
+				+   '<a href="#" data-act="del" data-id="'+esc(s.schedule_id)+'">Delete</a>'
+				+ '</div></div>';
+	}
+
+	function schedGroupHeader(txt){
+		return '<div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em; opacity:0.5; margin:12px 2px 5px;">'+txt+'</div>';
+	}
+
+	// Compactly render a settings value for the diff view: JSON for objects/arrays, a dash for
+	// empty/missing, truncated so a long value can't blow out the dialog.
+	function diffVal(v){
+		if(v === null || v === undefined || v === ''){ return '<span style="opacity:0.5;">(none)</span>'; }
+		var s = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+		if(s.length > 120){ s = s.slice(0, 117) + '…'; }
+		return '<code style="font-size:0.82rem;">'+esc(s)+'</code>';
+	}
+
+	// Build the HTML body for the "what would update change?" dialog from an update-diff response.
+	function renderRecipeDiff(d, label){
+		var head = 'Update &ldquo;' + esc(label) + '&rdquo; from <b>v' + esc(String(d.from_version||'?')) + '</b> to <b>v' + esc(String(d.to_version||'?')) + '</b>?';
+		var changes = (d && d.changes) || [];
+		if(!changes.length){
+			return head + '<div style="margin-top:8px; opacity:0.8;">No parameter differences to apply — only the version marker advances. Your notification destinations and enabled state are kept.</div>';
+		}
+		var rows = changes.map(function(c){
+			var scopeTag = c.scope === 'schedule'
+				? '<span style="font-size:0.68rem; padding:0 5px; border-radius:6px; border:1px solid var(--table-border-color, rgba(128,128,128,0.5)); opacity:0.7;">schedule</span> '
+				: '';
+			return '<tr>'
+				+ '<td style="padding:3px 8px 3px 0; vertical-align:top; white-space:nowrap;">'+scopeTag+'<b>'+esc(c.field)+'</b></td>'
+				+ '<td style="padding:3px 6px; vertical-align:top;">'+diffVal(c.from)+'</td>'
+				+ '<td style="padding:3px 6px; vertical-align:top; opacity:0.6;">&rarr;</td>'
+				+ '<td style="padding:3px 0 3px 6px; vertical-align:top;">'+diffVal(c.to)+'</td>'
+				+ '</tr>';
+		}).join('');
+		return head
+			+ '<div style="margin-top:8px; font-size:var(--fs-content);">The following would change (your notification destinations and enabled state are kept):</div>'
+			+ '<div style="max-height:300px; overflow:auto; margin-top:6px;"><table style="border-collapse:collapse; font-size:var(--fs-content);"><thead><tr style="opacity:0.6; text-align:left;"><th style="padding-right:8px;">Field</th><th>Current</th><th></th><th>New</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+	}
+	// Group the list so it stays legible as tasks grow: pre-defined RECIPES (imported, managed) vs the
+	// user's own hand-created schedules. Group headers only appear when BOTH groups have items, so a
+	// simple setup still shows a plain list. (The database-backup singleton has its own card below.)
+	function renderCards(el, list){
+		var recipes = list.filter(function(s){ return s.settings && s.settings.recipe_id; });
+		var custom  = list.filter(function(s){ return !(s.settings && s.settings.recipe_id); });
+		if(recipes.length && custom.length){
+			el.innerHTML = schedGroupHeader('Recipes') + recipes.map(cardHtml).join('')
+				+ schedGroupHeader('Your schedules') + custom.map(cardHtml).join('');
+		} else {
+			el.innerHTML = list.map(cardHtml).join('');
+		}
+	}
+	function refresh(){ return Promise.all([
+		api('GET',''),
+		// The recipe catalog tells us each recipe's shipped vs installed version (update_available).
+		// A failure here must never block the schedule list, so it degrades to no update flags.
+		fetch('./api/recipes').then(function(r){ return r.json(); }).catch(function(){ return null; })
+	]).then(function(res){
+		var r = res[0], cat = res[1];
+		recipeMeta = {};
+		if(cat && cat.success && cat.recipes){ cat.recipes.forEach(function(x){ if(x && x.id){ recipeMeta[x.id] = x; } }); }
+		var all = (r && r.schedules) ? r.schedules : [];
+		// Show every user schedule here EXCEPT the database backup (which has its own section below),
+		// so any task type — ai_analysis, a recipe handler, or a future one — appears without needing
+		// this list to know about it.
+		lastList = all.filter(function(s){ return s.type !== 'backup'; });
+		renderFiltered();
+		renderBackup(all.filter(function(s){ return s.type === 'backup'; })[0]);
+	}).catch(function(){}); }
+
+	// Read-only summary of the database-backup schedule. It is a scheduler job like the AI
+	// tasks, but its settings (schedule, retention, SFTP) are edited in the config panel, so
+	// this section just shows status and links there. Reuses describeCron/fmtLocal/esc.
+	function renderBackup(row){
+		var el = document.getElementById('backupSection'); if(!el) return;
+		if(!row){ el.innerHTML = '<div style="opacity:0.6;">No database-backup schedule found for this instance.</div>'; return; }
+		var when = row.kind === 'cron' ? describeCron(row.cron, row.timezone) : (row.run_at ? describeOnce(row.run_at) : '—');
+		var last = row.last_run ? ('Last run ' + esc(fmtLocal(row.last_run)) + ' &middot; ' + esc(row.last_status || '')) : 'Never run';
+		var statusHtml = row.enabled
+			? '<span style="font-size:0.85rem; color:var(--color-success, #2e9e4f);">● enabled</span>'
+			: '<span style="font-size:0.85rem; color:var(--color-danger, #d05050);">● disabled</span>';
+		el.innerHTML = '<div style="border:1px solid var(--table-border-color, rgba(128,128,128,0.3)); border-left:3px solid ' + (row.enabled ? 'var(--color-success, #2e9e4f)' : 'var(--color-danger, #d05050)') + '; border-radius:6px; padding:8px 10px; background:var(--table-background-color, rgba(128,128,128,0.06));">'
+			+ '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;"><b>System backup</b>' + statusHtml + '</div>'
+			+ '<div style="opacity:0.85; font-size:var(--fs-content); margin-top:2px;">' + esc(when) + '</div>'
+			+ '<div style="opacity:0.6; font-size:var(--fs-content); margin-top:3px;">' + last + ' &middot; ' + esc(String(row.run_count || 0)) + ' run(s)</div>'
+			+ '<div style="margin-top:6px; font-size:var(--fs-content);">'
+			+   '<a href="#" data-act="runbackup" data-id="'+esc(row.schedule_id)+'">Run now</a> &nbsp;&middot;&nbsp; '
+			+   '<a href="#" data-act="history" data-id="'+esc(row.schedule_id)+'">History</a> &nbsp;&middot;&nbsp; '
+			+   '<a href="./config">Edit in Configuration &rarr; System Backups</a></div>'
+			+ '</div>';
+	}
+
+	function parseCronToPicker(cron, tz){
+		var iv = parseIntervalCron(cron);
+		if(iv){ return { interval: iv }; }
+		var p = String(cron||'').trim().split(/\s+/);
+		if(p.length !== 5 || p[2] !== '*' || p[3] !== '*' || !/^\d+$/.test(p[0]) || !/^\d+$/.test(p[1])){ return null; }
+		if(tz){
+			// DST-aware: the cron is already local wall time — read it directly.
+			var hh = Number(p[1]), mm = Number(p[0]);
+			var daysTz = [];
+			if(p[4] !== '*'){ var setTz = {}; p[4].split(',').forEach(function(x){ if(/^\d+$/.test(x)){ setTz[Number(x) % 7] = true; } }); daysTz = Object.keys(setTz).map(Number); }
+			return { time: pad(hh)+':'+pad(mm), days: daysTz };
+		}
+		var uh = Number(p[1]), um = Number(p[0]);
+		var lt = timeUtcToLocal(uh, um);
+		var days = [];
+		if(p[4] !== '*'){ var set = {}; p[4].split(',').forEach(function(x){ if(/^\d+$/.test(x)){ set[utcDowToLocal(Number(x) % 7, uh, um)] = true; } }); days = Object.keys(set).map(Number); }
+		return { time: pad(lt.h)+':'+pad(lt.m), days: days };
+	}
+	function setTime(v){ if(window.jQuery){ jQuery('#ai_sched_time').val(v); } else { document.getElementById('ai_sched_time').value = v; } }
+
+	function applyVisibility(){
+		var when = document.getElementById('ai_sched_kind').value;   // 'cron' (at a set time) | 'interval' | 'once'
+		var isTime = (when === 'cron');
+		var isInterval = (when === 'interval');
+		var adv = document.getElementById('ai_sched_advanced').checked;
+		document.getElementById('ai_sched_once_row').style.display = (when === 'once') ? '' : 'none';
+		document.getElementById('ai_sched_interval_row').style.display = isInterval ? '' : 'none';
+		// The time-of-day picker (days / time / DST) and its raw-cron escape hatch belong only to the
+		// "at a set time" mode. Interval and Once have their own single row.
+		document.getElementById('ai_sched_adv_row').style.display = isTime ? '' : 'none';
+		document.getElementById('ai_sched_days_row').style.display = (isTime && !adv) ? '' : 'none';
+		document.getElementById('ai_sched_time_row').style.display = (isTime && !adv) ? '' : 'none';
+		document.getElementById('ai_sched_dst_row').style.display = (isTime && !adv) ? '' : 'none';
+		document.getElementById('ai_sched_cron_wrap').style.display = (isTime && adv) ? '' : 'none';
+	}
+
+	// Pre-defined recipe: hide the free-text prompt (its logic is fixed shipped code) and show the
+	// recipe's description read-only. The user still edits cadence + notifications + enable.
+	function showRecipeMode(isRecipe, desc, aiOptional, aiEnhance){
+		var pr = document.getElementById('ai_sched_prompt_row'); if(pr){ pr.style.display = isRecipe ? 'none' : ''; }
+		var rr = document.getElementById('ai_sched_recipe_row'); if(rr){ rr.style.display = isRecipe ? '' : 'none'; }
+		if(isRecipe){ var d = document.getElementById('ai_sched_recipe_desc'); if(d){ d.textContent = desc || ''; } }
+		// The "enhance with AI" toggle only applies to a recipe that declares itself ai_optional.
+		var er = document.getElementById('ai_sched_ai_enhance_row'); if(er){ er.style.display = (isRecipe && aiOptional) ? '' : 'none'; }
+		var ec = document.getElementById('ai_sched_ai_enhance'); if(ec){ ec.checked = !!aiEnhance; }
+	}
+
+	// ── Notification destinations editor ──
+	// Each schedule can deliver to several typed destinations, each firing on chosen run
+	// outcomes. Serialized into settings.notifications, which the server's ScheduleNotifier
+	// prefers over the legacy notify_browser / notify_telegram booleans.
+	var NOTIFY_CHANNELS = [
+		{ v: 'browser',  t: 'Browser' },
+		{ v: 'telegram', t: 'Telegram' },
+		{ v: 'email',    t: 'Email' },
+		{ v: 'webhook',  t: 'Webhook' }
+	];
+	var NOTIFY_CONDS = [
+		{ v: 'always',          t: 'Always' },
+		{ v: 'success',         t: 'On success' },
+		{ v: 'failure',         t: 'On failure' },
+		{ v: 'success,failure', t: 'Success or failure' },
+		{ v: 'missed',          t: 'On missed' }
+	];
+
+	function notifyTargetToStr(type, target){
+		target = target || {};
+		if(type === 'telegram'){ return target.chatId || target.id || ''; }
+		if(type === 'email'){ return Array.isArray(target.to) ? target.to.join(', ') : (target.to || ''); }
+		if(type === 'webhook'){ return target.url || ''; }
+		return '';
+	}
+
+	function notifyTargetPlaceholder(type){
+		if(type === 'telegram'){ return 'Chat ID (blank = default account)'; }
+		if(type === 'email'){ return 'Recipients, comma-separated'; }
+		if(type === 'webhook'){ return 'https://example.com/hook'; }
+		return '';
+	}
+
+	function renderNotifyRowTargetField(row){
+		var type = row.querySelector('.notify-type').value;
+		var input = row.querySelector('.notify-target');
+		if(type === 'browser'){ input.style.display = 'none'; input.value = ''; }
+		else { input.style.display = ''; input.placeholder = notifyTargetPlaceholder(type); }
+	}
+
+	function addNotifyRow(dest){
+		dest = dest || { type: 'browser', target: {}, on: ['always'] };
+		var list = document.getElementById('ai_sched_notify_list');
+		var row = document.createElement('div');
+		row.className = 'notify-row';
+		row.style.cssText = 'display:flex; gap:5px; align-items:center; margin-bottom:4px; flex-wrap:wrap;';
+
+		var chanSel = '<select class="form-field notify-type" style="width:95px;">' +
+			NOTIFY_CHANNELS.map(function(c){ return '<option value="'+c.v+'"'+(c.v===dest.type?' selected':'')+'>'+c.t+'</option>'; }).join('') +
+			'</select>';
+
+		var onVal = Array.isArray(dest.on) && dest.on.length ? dest.on.join(',') : 'always';
+		if(!NOTIFY_CONDS.some(function(c){ return c.v === onVal; })){ onVal = 'always'; }
+		var condSel = '<select class="form-field notify-on" style="width:150px;">' +
+			NOTIFY_CONDS.map(function(c){ return '<option value="'+c.v+'"'+(c.v===onVal?' selected':'')+'>'+c.t+'</option>'; }).join('') +
+			'</select>';
+
+		var targetInput = '<input type="text" class="form-field notify-target" style="width:195px;" value="'+esc(notifyTargetToStr(dest.type, dest.target))+'">';
+		var removeBtn = '<span class="notify-remove" title="Remove" style="cursor:pointer; padding:0 6px; opacity:0.7; font-size:1.1rem;">&times;</span>';
+
+		row.innerHTML = chanSel + targetInput + condSel + removeBtn;
+		list.appendChild(row);
+
+		row.querySelector('.notify-type').addEventListener('change', function(){ renderNotifyRowTargetField(row); });
+		row.querySelector('.notify-remove').addEventListener('click', function(){ row.remove(); });
+
+		renderNotifyRowTargetField(row);
+	}
+
+	function setNotifications(list){
+		var wrap = document.getElementById('ai_sched_notify_list');
+		wrap.innerHTML = '';
+		(Array.isArray(list) && list.length ? list : [{ type:'browser', target:{}, on:['always'] }]).forEach(addNotifyRow);
+	}
+
+	function collectNotifications(){
+		var out = [];
+		document.querySelectorAll('#ai_sched_notify_list .notify-row').forEach(function(row){
+			var type = row.querySelector('.notify-type').value;
+			var raw = String(row.querySelector('.notify-target').value || '').trim();
+			var on = String(row.querySelector('.notify-on').value || 'always').split(',').filter(Boolean);
+			var target = {};
+			if(type === 'telegram'){ if(raw){ target.chatId = raw; } }
+			else if(type === 'email'){ target.to = raw.split(/[,;\s]+/).filter(Boolean); }
+			else if(type === 'webhook'){ target.url = raw; }
+			out.push({ type: type, target: target, on: on.length ? on : ['always'] });
+		});
+		return out;
+	}
+
+	// settings.notifications when present; otherwise synthesize from the legacy booleans so
+	// an older schedule opens in the editor with the same destinations it delivered to.
+	function notificationsFromSchedule(s){
+		if(s && s.settings && Array.isArray(s.settings.notifications)){ return s.settings.notifications; }
+		var out = [];
+		if(!(s && s.settings && s.settings.notify_browser === false)){ out.push({ type:'browser', target:{}, on:['always'] }); }
+		if(!(s && s.settings && s.settings.notify_telegram === false)){ out.push({ type:'telegram', target:{}, on:['always'] }); }
+		return out;
+	}
+
+	function blankForm(){
+		document.getElementById('ai_sched_label').value = '';
+		document.getElementById('ai_sched_prompt').value = '';
+		showRecipeMode(false);   // a hand-created schedule shows the prompt; recipes are imported, not added here
+		document.getElementById('ai_sched_kind').value = 'cron';
+		document.getElementById('ai_sched_interval_n').value = '15';
+		document.getElementById('ai_sched_interval_unit').value = 'minutes';
+		document.querySelectorAll('#ai_sched_days input[type="checkbox"]').forEach(function(c){ c.checked = false; });
+		setTime('08:00');
+		document.getElementById('ai_sched_advanced').checked = false;
+		document.getElementById('ai_sched_cron').value = '';
+		document.getElementById('ai_sched_at').value = '';
+		setNotifications(null);
+		document.getElementById('ai_sched_dst').checked = false;
+		document.getElementById('ai_sched_catchup').value = 'skip';
+		document.getElementById('ai_sched_concurrency').value = 'forbid';
+		document.getElementById('ai_sched_retries').value = '0';
+		document.getElementById('ai_sched_retry_backoff').value = 'fixed';
+		document.getElementById('aiSchedMsg').textContent = '';
+		applyVisibility();
+	}
+
+	// Label the Time field with the viewer's local timezone (e.g. "EST") — the schedule time is
+	// always entered and shown in local time, and the edit modal must show the zone just like the
+	// backup schedule's Time field does. localTz is constant for the session, so set it on open.
+	function setSchedTzLabel(){ var el = document.getElementById('ai_sched_tz_label'); if(el){ el.textContent = tzAbbrev(localTz()); } }
+	function openForm(isEdit){
+		document.getElementById('schedFormTitle').textContent = isEdit ? 'Edit schedule' : 'Add schedule';
+		setSchedTzLabel();
+		document.getElementById('schedFormModal').classList.add('open');
+	}
+	function closeForm(){ document.getElementById('schedFormModal').classList.remove('open'); editingId = null; }
+
+	function startEdit(id){
+		var s = lastList.filter(function(x){ return x.schedule_id === id; })[0];
+		if(!s){ return; }
+		editingId = id;
+		blankForm();
+		document.getElementById('ai_sched_label').value = s.label || '';
+		document.getElementById('ai_sched_prompt').value = s.prompt || '';
+		// A pre-defined recipe hides the free prompt (its logic is fixed) and shows its description;
+		// the user still edits cadence + notifications + enable below.
+		showRecipeMode(!!(s.settings && s.settings.recipe_id), s.settings && s.settings.recipe_description, s.settings && s.settings.ai_optional, s.settings && s.settings.ai_enhance);
+		document.getElementById('ai_sched_kind').value = s.kind;
+		setNotifications(notificationsFromSchedule(s));
+		document.getElementById('ai_sched_dst').checked = !!s.timezone;
+		document.getElementById('ai_sched_catchup').value = s.catchup || 'skip';
+		document.getElementById('ai_sched_concurrency').value = s.concurrency || 'forbid';
+		document.getElementById('ai_sched_retries').value = String(s.retries || 0);
+		document.getElementById('ai_sched_retry_backoff').value = s.retry_backoff || 'fixed';
+		if(s.kind === 'cron'){
+			var parsed = parseCronToPicker(s.cron, s.timezone);
+			if(parsed && parsed.interval){
+				// An interval schedule (kind 'cron' with a */N cron) → open in the "Every…" mode.
+				document.getElementById('ai_sched_kind').value = 'interval';
+				document.getElementById('ai_sched_interval_n').value = String(parsed.interval.n);
+				document.getElementById('ai_sched_interval_unit').value = parsed.interval.unit;
+			}
+			else if(parsed){ document.getElementById('ai_sched_advanced').checked = false; setTime(parsed.time); document.querySelectorAll('#ai_sched_days input[type="checkbox"]').forEach(function(c){ c.checked = parsed.days.indexOf(Number(c.value)) !== -1; }); }
+			else { document.getElementById('ai_sched_advanced').checked = true; document.getElementById('ai_sched_cron').value = s.cron || ''; }
+		} else if(s.run_at){ var d = new Date(s.run_at); document.getElementById('ai_sched_at').value = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
+		applyVisibility();
+		openForm(true);
+	}
+
+	// ── History modal ──
+	var histId = null;
+	var histRuns = [];
+
+	function renderHistFiltered(){
+		var q = String(document.getElementById('schedHistSearch').value || '').trim().toLowerCase();
+		var st = document.getElementById('schedHistStatus').value;
+		var view = histRuns.filter(function(r){
+			if(st && (r.status||'') !== st){ return false; }
+			if(q){ var hay = (String(r.output||'') + ' ' + fmtLocal(r.ran_at) + ' ' + (r.manual?'manual':'scheduled')).toLowerCase(); if(hay.indexOf(q) < 0){ return false; } }
+			return true;
+		});
+		var cnt = document.getElementById('schedHistCount');
+		cnt.textContent = (q || st) ? (view.length + ' of ' + histRuns.length) : (histRuns.length + ' run(s)');
+		var body = document.getElementById('schedHistBody');
+		if(!histRuns.length){ body.innerHTML = '<div style="opacity:0.6;">No runs recorded yet.</div>'; return; }
+		if(!view.length){ body.innerHTML = '<div style="opacity:0.6;">No runs match the filter.</div>'; return; }
+		body.innerHTML = view.map(function(r){
+			return '<div class="sched-run">'
+				+ '<div style="display:flex; justify-content:space-between; gap:8px; font-size:var(--fs-content); opacity:0.85;">'
+				+   '<span>'+esc(fmtLocal(r.ran_at))+' &middot; '+(r.manual?'manual':'scheduled')+' &middot; '+esc(r.status||'')+(r.duration_ms?(' &middot; '+Math.round(r.duration_ms/100)/10+'s'):'')+'</span>'
+				+   '<a href="#" data-runact="delrun" data-id="'+esc(histId)+'" data-run="'+esc(r.run_id)+'">delete</a>'
+				+ '</div><pre>'+esc(r.output||'(no output)')+'</pre></div>';
+		}).join('');
+	}
+	function loadHistory(){
+		document.getElementById('schedHistBody').innerHTML = '<div style="opacity:0.6;">Loading…</div>';
+		return api('GET','/'+histId+'/runs').then(function(r){ histRuns = (r && r.runs) || []; renderHistFiltered(); }).catch(function(){ document.getElementById('schedHistBody').innerHTML = '<div>Failed to load.</div>'; });
+	}
+	function openHistory(id){
+		histId = id;
+		var s = lastList.filter(function(x){ return x.schedule_id === id; })[0];
+		document.getElementById('schedHistTitle').textContent = (s && s.label) || 'schedule';
+		document.getElementById('schedHistClear').setAttribute('data-id', id);
+		document.getElementById('schedHistDownload').setAttribute('href', './api/schedules/' + id + '/runs/export');
+		document.getElementById('schedHistSearch').value = '';
+		document.getElementById('schedHistStatus').value = '';
+		document.getElementById('schedHistOverlay').classList.add('open');
+		loadHistory();
+	}
+	function closeHistory(){ document.getElementById('schedHistOverlay').classList.remove('open'); histId = null; }
+
+	// ── Recipe library picker ──
+	// Browse the shipped catalog and add one as a fresh disabled schedule. Adding clears any
+	// tombstone (so a previously-removed recipe can be re-added) and refreshes the list.
+	function closeLib(){ document.getElementById('recipeLibModal').classList.remove('open'); }
+	function openRecipeLib(){
+		var list = document.getElementById('recipeLibList');
+		list.innerHTML = '<small style="opacity:0.6;">Loading…</small>';
+		document.getElementById('recipeLibMsg').textContent = '';
+		document.getElementById('recipeLibModal').classList.add('open');
+		fetch('./api/recipes').then(function(r){ return r.json(); }).then(function(r){
+			var recipes = (r && r.recipes) || [];
+			if(!recipes.length){ list.innerHTML = '<div style="opacity:0.6;">No recipes available.</div>'; return; }
+			list.innerHTML = recipes.map(function(rc){
+				var tag = (rc.categories||[]).slice(0,3).map(function(c){ return esc(c); }).join(' · ');
+				var aiBadge = renderAiBadge(rc.requires_ai, rc.ai_optional);
+				var action = rc.added
+					? '<span style="color:var(--color-success,#2e9e4f); font-size:var(--fs-content); white-space:nowrap;">✓ added</span>'
+					: '<button type="button" class="btnDefault" data-recipe-add="'+esc(rc.id)+'" style="padding:2px 12px; font-size:var(--fs-content);">Add</button>';
+				return '<div style="border:1px solid var(--table-border-color, rgba(128,128,128,0.3)); border-radius:6px; padding:8px 10px; margin-bottom:6px; background:var(--table-background-color, rgba(128,128,128,0.06));">'
+					+ '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;"><b>'+esc(rc.name)+aiBadge+'</b>'+action+'</div>'
+					+ (tag ? '<div style="opacity:0.6; font-size:var(--fs-micro); margin-top:2px;">'+tag+'</div>' : '')
+					+ '<div style="opacity:0.8; font-size:var(--fs-content); margin-top:3px; font-style:italic;">'+esc(rc.description)+'</div>'
+					+ '</div>';
+			}).join('');
+		}).catch(function(){ list.innerHTML = '<div>Failed to load the library.</div>'; });
+	}
+	function addRecipe(id){
+		document.getElementById('recipeLibMsg').textContent = 'Adding…';
+		fetch('./api/recipes/'+encodeURIComponent(id)+'/add', { method:'POST' }).then(function(r){ return r.json(); }).then(function(r){
+			if(r && r.success){ document.getElementById('recipeLibMsg').textContent = 'Added — it’s disabled until you enable it.'; openRecipeLib(); refresh(); }
+			else { document.getElementById('recipeLibMsg').textContent = 'Error: ' + ((r && r.error) || 'failed'); }
+		}).catch(function(){ document.getElementById('recipeLibMsg').textContent = 'Error.'; });
+	}
+	document.getElementById('schedLibBtn').addEventListener('click', openRecipeLib);
+	document.getElementById('recipeLibList').addEventListener('click', function(e){
+		var t = e.target.closest('[data-recipe-add]'); if(!t){ return; } e.preventDefault(); addRecipe(t.getAttribute('data-recipe-add'));
+	});
+
+	document.getElementById('schedHistSearch').addEventListener('input', renderHistFiltered);
+	document.getElementById('schedHistStatus').addEventListener('change', renderHistFiltered);
+	document.getElementById('schedHistRun').addEventListener('click', function(){
+		if(!histId || this.getAttribute('data-running')==='1'){ return; }
+		var btn = this;
+		var title = document.getElementById('schedHistTitle').textContent || 'this schedule';
+		askConfirm({ message: 'Run &ldquo;' + esc(title) + '&rdquo; now? This runs the task immediately, in addition to its schedule.', confirmText: 'Run now', onConfirm: function(){
+			btn.setAttribute('data-running','1'); btn.textContent = 'Running…'; btn.disabled = true;
+			api('POST','/'+histId+'/run').then(function(r){
+				btn.removeAttribute('data-running'); btn.textContent = 'Run now'; btn.disabled = false;
+				if(r && r.success){ loadHistory(); refresh(); }
+				else { alert(r && r.busy ? 'A run is already in progress for this schedule.' : ('Run failed: ' + ((r && r.error) || 'unknown'))); }
+			}).catch(function(){ btn.removeAttribute('data-running'); btn.textContent = 'Run now'; btn.disabled = false; });
+		}});
+	});
+
+	// Close handlers. The X / Cancel controls route to the specific close fn (they also reset the
+	// editing/history id). Backdrop-click and Escape are handled by the shared /js/modal.js; it
+	// fires a `modal:closed` event on the overlay, so we reset the ids from that rather than
+	// re-implementing the backdrop / Escape wiring here.
+	document.querySelectorAll('[data-close]').forEach(function(el){ el.addEventListener('click', function(e){ e.preventDefault(); var w = el.getAttribute('data-close'); if(w==='form'){ closeForm(); } else if(w==='lib'){ closeLib(); } else { closeHistory(); } }); });
+	document.getElementById('schedFormModal').addEventListener('modal:closed', function(){ editingId = null; });
+	document.getElementById('schedHistOverlay').addEventListener('modal:closed', function(){ histId = null; });
+
+	document.getElementById('schedHistClear').addEventListener('click', function(e){
+		e.preventDefault();
+		var id = this.getAttribute('data-id');
+		var title = document.getElementById('schedHistTitle').textContent || 'this schedule';
+		askConfirm({ message: 'Clear <b>all</b> run history for &ldquo;' + esc(title) + '&rdquo;? This cannot be undone.', confirmText: 'Clear history', danger: true, onConfirm: function(){ api('DELETE','/'+id+'/runs').then(function(){ loadHistory(); refresh(); }); } });
+	});
+	document.getElementById('schedHistBody').addEventListener('click', function(e){
+		var a = e.target.closest ? e.target.closest('a') : null; if(!a || a.getAttribute('data-runact')!=='delrun') return; e.preventDefault();
+		var run = a.getAttribute('data-run');
+		askConfirm({ message: 'Delete this run from the history? This cannot be undone.', confirmText: 'Delete run', danger: true, onConfirm: function(){ api('DELETE','/'+histId+'/runs/'+run).then(function(){ loadHistory(); }); } });
+	});
+
+	document.getElementById('schedNewBtn').addEventListener('click', function(){ editingId = null; blankForm(); openForm(false); });
+	document.getElementById('schedSearch').addEventListener('input', function(){ searchTerm = this.value; renderFiltered(); });
+
+	// Shared "Run now" flow for a schedule link — used by the main list AND the System-backup section, so the
+	// confirm/busy/POST/refresh behavior stays identical and lives in one place. Marks the link busy, POSTs to
+	// the shared run endpoint, then refreshes on success or restores the link and explains on failure.
+	function runScheduleNow(link, id, message, busyMsg){
+		if(link.getAttribute('data-running')==='1'){ return; }
+		askConfirm({ message: message, confirmText: 'Run now', onConfirm: function(){
+			link.setAttribute('data-running','1'); link.textContent='Running…'; link.style.pointerEvents='none'; link.style.opacity='0.6';
+			function restore(){ link.removeAttribute('data-running'); link.textContent='Run now'; link.style.pointerEvents=''; link.style.opacity=''; }
+			api('POST','/'+id+'/run').then(function(r){ if(r && r.success){ refresh(); } else { restore(); alert(r && r.busy ? busyMsg : ('Run failed: ' + ((r && r.error) || 'unknown'))); } }).catch(function(){ restore(); });
+		}});
+	}
+
+	document.getElementById('aiSchedulesList').addEventListener('click', function(e){
+		var a = e.target.closest ? e.target.closest('a') : null; if(!a) return; e.preventDefault();
+		var id = a.getAttribute('data-id'), act = a.getAttribute('data-act');
+		if(act==='del'){ var s = lastList.filter(function(x){ return x.schedule_id === id; })[0]; askConfirm({ message: 'Delete the schedule &ldquo;' + esc((s && s.label) || 'unnamed') + '&rdquo; and its run history? This cannot be undone.', confirmText: 'Delete schedule', danger: true, onConfirm: function(){ api('DELETE','/'+id).then(refresh); } }); return; }
+		else if(act==='toggle'){ api('POST','/'+id, { enabled: a.textContent==='Enable' }).then(refresh); }
+		else if(act==='edit'){ startEdit(id); }
+		else if(act==='reset'){
+			var recipeId = a.getAttribute('data-recipe');
+			var rs = lastList.filter(function(x){ return x.schedule_id === id; })[0];
+			askConfirm({ message: 'Reset &ldquo;' + esc((rs && rs.label) || 'this recipe') + '&rdquo; to its shipped defaults? This restores the recipe&rsquo;s schedule and settings; your notification destinations and enabled state are kept.', confirmText: 'Reset to defaults', onConfirm: function(){
+				fetch('./api/recipes/'+encodeURIComponent(recipeId)+'/reset', { method:'POST' }).then(function(r){ return r.json(); }).then(function(r){ if(r && r.success){ refresh(); } else { alert('Reset failed: ' + ((r && r.error) || 'unknown')); } }).catch(function(){ alert('Reset failed.'); });
+			}});
+			return;
+		}
+		else if(act==='update-diff'){
+			var recipeId2 = a.getAttribute('data-recipe');
+			var rs2 = lastList.filter(function(x){ return x.schedule_id === id; })[0];
+			a.textContent = 'Loading…'; a.style.pointerEvents = 'none';
+			fetch('./api/recipes/'+encodeURIComponent(recipeId2)+'/update-diff').then(function(r){ return r.json(); }).then(function(d){
+				a.textContent = 'View changes'; a.style.pointerEvents = '';
+				if(!d || !d.success){ alert('Could not load the changes: ' + ((d && d.error) || 'unknown')); return; }
+				askConfirm({
+					message: renderRecipeDiff(d, (rs2 && rs2.label) || d.name || 'this recipe'),
+					confirmText: 'Update now',
+					onConfirm: function(){
+						fetch('./api/recipes/'+encodeURIComponent(recipeId2)+'/reset', { method:'POST' }).then(function(r){ return r.json(); }).then(function(r){ if(r && r.success){ refresh(); } else { alert('Update failed: ' + ((r && r.error) || 'unknown')); } }).catch(function(){ alert('Update failed.'); });
+					}
+				});
+			}).catch(function(){ a.textContent = 'View changes'; a.style.pointerEvents = ''; alert('Could not load the changes.'); });
+			return;
+		}
+		else if(act==='history'){ openHistory(id); }
+		else if(act==='run'){
+			var sr = lastList.filter(function(x){ return x.schedule_id === id; })[0];
+			var rtitle = (sr && sr.label) || 'this schedule';
+			runScheduleNow(a, id, 'Run &ldquo;' + esc(rtitle) + '&rdquo; now? This runs the task immediately, in addition to its schedule.', 'A run is already in progress for this schedule.');
+		}
+	});
+
+	// The System-backup row lives in its own section (not the editable list). Wire its actions here,
+	// reusing the same run/history flow. "Run now" fires the FULL backup — the stored file, retention, and
+	// the off-site upload if configured — through the shared schedule run endpoint, so it behaves identically
+	// for a standalone instance and each Hub worker (each fires its own server_id-scoped backup schedule).
+	var backupSectionEl = document.getElementById('backupSection');
+	if (backupSectionEl) {
+		backupSectionEl.addEventListener('click', function(e){
+			var a = e.target.closest ? e.target.closest('a') : null; if(!a) return;
+			var act = a.getAttribute('data-act'), id = a.getAttribute('data-id');
+			if(act==='history'){ e.preventDefault(); openHistory(id); return; }
+			if(act!=='runbackup'){ return; }
+			e.preventDefault();
+			runScheduleNow(a, id, 'Run the System backup now? This performs the full backup &mdash; the stored file, retention, and the off-site upload if configured &mdash; the same as a scheduled run. Processing pauses briefly while the backup is taken, then resumes automatically.', 'A backup run is already in progress.');
+		});
+	}
+
+	document.getElementById('ai_sched_kind').addEventListener('change', applyVisibility);
+	document.getElementById('ai_sched_advanced').addEventListener('change', applyVisibility);
+	document.getElementById('ai_sched_notify_add').addEventListener('click', function(){ addNotifyRow(); });
+
+	document.getElementById('aiSchedAdd').addEventListener('click', function(){
+		var when = document.getElementById('ai_sched_kind').value;   // 'cron' (at a set time) | 'interval' | 'once'
+		var msg = document.getElementById('aiSchedMsg');
+		var body = { kind: (when === 'once') ? 'once' : 'cron', label: document.getElementById('ai_sched_label').value, prompt: document.getElementById('ai_sched_prompt').value,
+			catchup: document.getElementById('ai_sched_catchup').value,
+			concurrency: document.getElementById('ai_sched_concurrency').value,
+			retries: parseInt(document.getElementById('ai_sched_retries').value, 10) || 0,
+			retry_backoff: document.getElementById('ai_sched_retry_backoff').value,
+			settings: { notifications: collectNotifications() } };
+		// The AI-enhance toggle only appears for an ai_optional recipe; send it so it round-trips. The
+		// server MERGES settings, so recipe_id / parameters are preserved alongside this.
+		if(document.getElementById('ai_sched_ai_enhance_row').style.display !== 'none'){
+			body.settings.ai_enhance = document.getElementById('ai_sched_ai_enhance').checked;
+		}
+		if(when === 'once'){ var v = document.getElementById('ai_sched_at').value; body.run_at = v ? new Date(v).toISOString() : ''; }
+		else if(when === 'interval'){
+			var ic = buildIntervalCron(); if(!ic){ msg.textContent = 'Enter a valid interval (a whole number of at least 1).'; return; }
+			body.cron = ic; body.timezone = '';   // an interval is the same in every timezone — no zone anchoring
+		}
+		else {   // 'cron' — at a set time of day
+			if(document.getElementById('ai_sched_advanced').checked){
+				// Raw cron is entered in UTC (as labeled); no timezone anchoring.
+				body.cron = document.getElementById('ai_sched_cron').value.trim();
+				body.timezone = '';
+			}
+			else {
+				var c = buildCronFromPicker(); if(!c){ msg.textContent = 'Enter a valid time (HH:MM).'; return; } body.cron = c;
+				// DST-aware saves the browser's timezone (local cron); otherwise UTC (no zone).
+				body.timezone = document.getElementById('ai_sched_dst').checked ? localTz() : '';
+			}
+		}
+		var wasEditing = !!editingId;
+		msg.textContent = '…';
+		api('POST', editingId ? ('/'+editingId) : '', body).then(function(r){
+			if(r && r.success){ closeForm(); refresh(); }
+			else { msg.textContent = 'Error: ' + ((r && r.error) || 'failed'); }
+		}).catch(function(){ msg.textContent='Error.'; });
+	});
+
+	if(window.jQuery && jQuery.fn.timepicker){
+		jQuery('#ai_sched_time').timepicker({ timeFormat: 'HH:mm', stepHour: 1, stepMinute: 5, controlType: 'select', oneLine: true, dropdown: true, scrollbar: true });
+	}
+
+	applyVisibility();
+	refresh();
+})();
+</script>
+
+<%- include('./partialsFooterView'); %>

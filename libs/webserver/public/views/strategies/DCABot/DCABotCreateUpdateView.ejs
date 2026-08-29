@@ -47,6 +47,13 @@
 		$('#ordersBox').hide();
 
 		BotForm.disableAll(false);
+
+		// disableAll(false) just re-enabled every field, including the Start
+		// Condition dropdown — re-apply the Signal Bot lock if mode is on.
+		if (window.SignalBot && typeof window.SignalBot.applyMode === 'function') {
+
+			window.SignalBot.applyMode();
+		}
 	}
 
 
@@ -111,7 +118,7 @@
 							title: false,
 							boxWidth: '50%',
 							useBootstrap: false,
-							content: '<div style="font-size: 1.2rem; text-align: left;">' + botText + '?</div>',
+							content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' + botText + '?</div>',
 							buttons: {
 
 										ok: {
@@ -235,6 +242,18 @@
 
 							if (data.step.toLowerCase() != 'getorders') {
 
+								// Signal Bot: send the user to the saved bot's page so its
+								// copy-paste alerts (which need the bot id) are shown, rather
+								// than just resetting the form with the alerts still empty.
+								const newBotId = data.data && data.data.botId;
+
+								if ($('#signalBotMode').is(':checked') && newBotId) {
+
+									const botsBase = window.location.pathname.replace(/\/bots(\/.*)?$/, '/bots');
+									window.location.href = botsBase + '/' + encodeURIComponent(newBotId) + '?signal=1';
+									return;
+								}
+
 								resetForm(form);
 								alertBox(isUpdate ? 'Bot Updated' : 'Bot Created');
 							}
@@ -319,7 +338,9 @@
 			</span>
 		</div>
 
-		<div id="errorMsg" style="display: none;"><%- errorMsg %></div>
+		<div id="errorMsg" style="display: none;"><%= errorMsg %></div>
+
+		<%- include('./partialsSignalBotAlerts') %>
 
 		<div class="botsDealsBox">
 

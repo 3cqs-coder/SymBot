@@ -36,6 +36,9 @@
 	}
 
 
+	// Escape operator-entered text (the instance display name) before it goes into innerHTML.
+	function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]; }); }
+
 	function renderDashboard(instances, totals) {
 
 		const sym = '$';
@@ -79,7 +82,7 @@
 					portfolio.balance_updated
 						? '<div class="hub-dash-card-row" style="margin-top:4px;">' +
 							'<span class="hub-dash-label">Balance</span>' +
-							'<span style="font-size:0.85rem; opacity:0.5;">' + timeAgo(portfolio.balance_updated) + '</span>' +
+							'<span style="font-size:var(--fs-body); opacity:0.5;">' + timeAgo(portfolio.balance_updated) + '</span>' +
 						  '</div>'
 						: '';
 
@@ -107,7 +110,7 @@
 
 			container.append(
 				'<div class="hub-dash-card' + (isOnline ? '' : ' is-offline') + '">' +
-					'<div class="hub-dash-card-title">' + statusDot + inst.name + sandboxBadge + '</div>' +
+					'<div class="hub-dash-card-title">' + statusDot + escHtml(inst.name_display || inst.name) + sandboxBadge + '</div>' +
 					'<div class="hub-dash-card-row">' +
 						'<span class="hub-dash-label">Active Deals</span>' +
 						'<span style="font-weight:600;">' + inst.deals + '</span>' +
@@ -171,46 +174,58 @@
 		<!-- Nav -->
 		<div style="display: inline-block; text-align: left; width: 80%;">
 
-			<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 0 0 6px 0;">Hub</div>
+			<div class="card">
 
-			<div class="mainMenuItem">
-				<a href="./deals"><span class="menu-icon">&#9654;</span> Active Deals</a>
+				<div class="section-title"><span class="icon icon-list"></span> Hub</div>
+
+				<div class="mainMenuItem">
+					<a href="./deals"><span class="menu-icon">&#9654;</span> Active Deals</a>
+				</div>
+
+				<div class="mainMenuItem">
+					<a href="./bots"><span class="menu-icon">&#9632;</span> Bots</a>
+				</div>
+
+				<div class="mainMenuItem" style="border-bottom: 0;">
+					<a href="./manage"><span class="menu-icon">&#9776;</span> Manage Instances</a>
+				</div>
+
 			</div>
 
-			<div class="mainMenuItem">
-				<a href="./bots"><span class="menu-icon">&#9632;</span> Bots</a>
+			<div class="card">
+
+				<div class="section-title"><span class="icon icon-settings"></span> Tools &amp; Settings</div>
+
+				<div class="mainMenuItem">
+					<a href="https://www.symrank.com" target=_blank><span class="menu-icon">&#8599;</span> Crypto Screener</a>
+				</div>
+
+				<div class="mainMenuItem">
+					<a href="./news"><span class="menu-icon">&#9632;</span> News</a>
+				</div>
+
+				<div class="mainMenuItem">
+					<a href="./config"><span class="menu-icon">&#9881;</span> Configuration</a>
+				</div>
+
+				<div class="mainMenuItem">
+					<a href="./backups"><span class="menu-icon">&#9741;</span> Backups</a>
+				</div>
+
+				<div class="mainMenuItem" style="border-bottom: 0;">
+					<a href="./logs"><span class="menu-icon">&#9783;</span> Logs</a>
+				</div>
+
 			</div>
 
-			<div class="mainMenuItem">
-				<a href="./manage"><span class="menu-icon">&#9776;</span> Manage Instances</a>
-			</div>
+			<div class="card">
 
-			<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 16px 0 6px 0;">Tools &amp; Settings</div>
+				<div class="section-title"><span class="icon icon-key"></span> Account</div>
 
-			<div class="mainMenuItem">
-				<a href="https://www.symrank.com" target=_blank><span class="menu-icon">&#8599;</span> Crypto Screener</a>
-			</div>
+				<div class="mainMenuItem" style="border-bottom: 0;">
+					<a href="./logout"><span class="menu-icon">&#8594;</span> Log Out</a>
+				</div>
 
-			<div class="mainMenuItem">
-				<a href="./news"><span class="menu-icon">&#9632;</span> News</a>
-			</div>
-
-			<div class="mainMenuItem">
-				<a href="./config"><span class="menu-icon">&#9881;</span> Configuration</a>
-			</div>
-
-			<div class="mainMenuItem">
-				<a href="./backups"><span class="menu-icon">&#9741;</span> Backups</a>
-			</div>
-
-			<div class="mainMenuItem">
-				<a href="./logs"><span class="menu-icon">&#9783;</span> Logs</a>
-			</div>
-
-			<div style="font-size: 0.9rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.45; padding: 16px 0 6px 0;">Account</div>
-
-			<div class="mainMenuItem" style="border-bottom: 0;">
-				<a href="./logout"><span class="menu-icon">&#8594;</span> Log Out</a>
 			</div>
 
 		</div>

@@ -1,0 +1,38 @@
+<%
+	// Hub-only legend: which instance each file (and each raw "<server_id>/" off-site SFTP folder) belongs
+	// to. Shown above the aggregated Logs / Backups list. Reuses the per-file server_id + instance_name the
+	// listing already resolved from each folder's .index.json. Locals (both always passed by showFiles):
+	//   isHub        : true only under the Hub
+	//   instancesMap : [{ server_id, name, count }] sorted by name (null / empty on a single instance)
+	//
+	// Reuses the shared read-only `.data-table` style (the same look Access Control and the Audit Log use) so
+	// it is consistent, theme-correct, and scrolls on narrow screens. Deliberately NOT a `.mainMenuItem` —
+	// that class is a fixed 50px-tall, hover-highlighted menu ROW, so a multi-row table overflowed it and
+	// overlapped the file list below (and hovering highlighted the whole block).
+%>
+<% if ((typeof isHub !== 'undefined' && isHub) && (typeof instancesMap !== 'undefined' && instancesMap && instancesMap.length)) { %>
+	<div style="margin: 0 0 18px 0;">
+		<div style="font-weight: 600; margin-bottom: 4px;">Instances in this list</div>
+		<div style="font-size: var(--fs-body); opacity: 0.7; max-width: 680px;">Each downloaded file is prefixed with its instance name, and off-site (SFTP) backups live in a per-instance <code>&lt;server_id&gt;</code> folder — this legend maps those IDs to their instances.</div>
+		<div class="data-tablewrap">
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th>Instance</th>
+						<th>Server ID</th>
+						<th style="text-align: right;">Files</th>
+					</tr>
+				</thead>
+				<tbody>
+					<% instancesMap.forEach(function (m) { %>
+					<tr>
+						<td><%= (m.name && String(m.name).trim()) ? m.name : '(unnamed instance)' %></td>
+						<td style="font-family: var(--font-mono);"><%= m.server_id ? m.server_id : '—' %></td>
+						<td style="text-align: right; font-variant-numeric: tabular-nums;"><%= m.count %></td>
+					</tr>
+					<% }); %>
+				</tbody>
+			</table>
+		</div>
+	</div>
+<% } %>

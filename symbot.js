@@ -10,20 +10,48 @@
 */
 
 
+// ── Early startup guards (shared with symbot-hub.js so they can't drift) ─────────────────────────
+// Enforce package.json's minimum Node.js version, then prefer IPv4 for outbound DNS (resilient to flaky VPS
+// IPv6). Both MUST run before any network-using require below so mongoose/ccxt/undici inherit the DNS order
+// and an unsupported runtime is caught first. Full rationale lives in libs/app/Bootstrap.js.
+const Bootstrap = require(__dirname + '/libs/app/Bootstrap.js');
+Bootstrap.enforceNodeVersion(__dirname, 'SymBot');
+Bootstrap.preferDnsOrder();
+
+
 const DB = require(__dirname + '/libs/mongodb');
 const ServerDB  = require(__dirname + '/libs/mongodb/ServerSchema');
 const AIChatDB  = require(__dirname + '/libs/mongodb/AIChatSchema');
 const DCABot = require(__dirname + '/libs/strategies/DCABot/DCABot.js');
 const DCABotManager = require(__dirname + '/libs/strategies/DCABot/DCABotManager.js');
+const SignalBot = require(__dirname + '/libs/strategies/DCABot/signalBot.js');
 const TradingSignals = require(__dirname + '/libs/signals/TradingSignals.js');
 const Signals3CQS = require(__dirname + '/libs/signals/3CQS/3cqs-signals-client.js');
 const Common = require(__dirname + '/libs/app/Common.js');
 const Queue = require(__dirname + '/libs/app/Queue.js');
 const System = require(__dirname + '/libs/app/System.js');
+const MarketData = require(__dirname + '/libs/app/MarketData.js');
 const Telegram = require(__dirname + '/libs/telegram');
 const WebServer = require(__dirname + '/libs/webserver');
 const AIClient = require(__dirname + '/libs/ai/AIClient.js');
+const AIScheduleHandler = require(__dirname + '/libs/scheduledtasks/AIScheduleHandler.js');
+const ErrorWatchdogHandler = require(__dirname + '/libs/scheduledtasks/ErrorWatchdogHandler.js');
+const DrawdownSentinelHandler = require(__dirname + '/libs/scheduledtasks/DrawdownSentinelHandler.js');
+const ResourceSentinelHandler = require(__dirname + '/libs/scheduledtasks/ResourceSentinelHandler.js');
+const ScheduleRecipes = require(__dirname + '/libs/app/ScheduleRecipes.js');
 const AIContext = require(__dirname + '/libs/ai/AIContext.js');
+const Scheduler = require(__dirname + '/libs/app/Scheduler.js');
+const ScheduleNotifier = require(__dirname + '/libs/app/ScheduleNotifier.js');
+const Mailer = require(__dirname + '/libs/app/Mailer.js');
+const Authz = require(__dirname + '/libs/app/Authz.js');
+const ApiKeys = require(__dirname + '/libs/app/ApiKeys.js');
+const Users = require(__dirname + '/libs/app/Users.js');
+const Audit = require(__dirname + '/libs/app/Audit.js');
+const AuthMiddleware = require(__dirname + '/libs/app/AuthMiddleware.js');
+const RoutePermissions = require(__dirname + '/libs/app/RoutePermissions.js');
+const Watchdog = require(__dirname + '/libs/app/Watchdog.js');
+const Diagnostics = require(__dirname + '/libs/app/Diagnostics.js');
+const SignalActivity = require(__dirname + '/libs/app/SignalActivity.js');
 const packageJson = require(__dirname + '/package.json');
 const Dependencies = require('check-dependencies').sync({ verbose: false });
 
@@ -36,26 +64,25 @@ let gotSigInt = false;
 let shutdownTimeout = 2000;
 
 
-process.on('SIGINT', shutDown);
-process.on('SIGTERM', shutDown);
+// Read a `--name value` or `--name=value` command-line argument, or null if absent. SymBot is
+// parameterized via command-line arguments (never environment variables).
+function getCliArg(name) {
 
+	const argv = process.argv;
 
-// Specifically for PM2 (Windows)
-process.on('message', function(msg) {
+	for (let i = 2; i < argv.length; i++) {
 
-	if (msg == 'shutdown') {
-
-		shutDown();
+		if (argv[i] === '--' + name && argv[i + 1] != undefined) { return argv[i + 1]; }
+		if (argv[i].indexOf('--' + name + '=') === 0) { return argv[i].slice(('--' + name + '=').length); }
 	}
-});
+
+	return null;
+}
 
 
-process.on('uncaughtException', function(err) {
-
-	let logData = 'Uncaught Exception: ' + JSON.stringify(err.message) + ' Stack: ' + JSON.stringify(err.stack);
-
-	Common.logger(logData, true);
-});
+// Graceful shutdown + the trading-inviolable uncaughtException/unhandledRejection handlers (log and keep
+// running), shared with symbot-hub.js via Bootstrap so the two can't drift. See libs/app/Bootstrap.js.
+Bootstrap.installProcessGuards(shutDown, function (m) { Common.logger(m, true); });
 
 
 
@@ -74,6 +101,10 @@ async function init() {
 	let resetServerId = false;
 	let resetSessions = false;
 	let resetAiChats  = false;
+	let resetUsers    = false;
+	let resetApiKeys  = false;
+	let resetPassword = false;
+	let resetIpFilter = false;
 	let isRollback = false;
 	let rollbackSnapshot = null;
 	let consoleLog = false;
@@ -82,6 +113,22 @@ async function init() {
 	let appConfigFile = 'app.json';
 	let botConfigFile = 'bot.json';
 	let serverConfigFile = 'server.json';
+
+	// Standalone config-file overrides. When SymBot is launched directly (not spawned by the Hub,
+	// which passes these via workerData below), these command-line flags select alternate config
+	// files under /config — allowing more than one standalone instance to run from the same
+	// install, each with its own app/bot/server config and database. For example:
+	//   node symbot.js --app-config app2.json --bot-config bot2.json --server-config server2.json
+	if (!workerData || typeof workerData !== 'object') {
+
+		const appConfigArg    = getCliArg('app-config');
+		const botConfigArg    = getCliArg('bot-config');
+		const serverConfigArg = getCliArg('server-config');
+
+		if (appConfigArg)    { appConfigFile = appConfigArg; }
+		if (botConfigArg)    { botConfigFile = botConfigArg; }
+		if (serverConfigArg) { serverConfigFile = serverConfigArg; }
+	}
 
 	if (process.argv[2] && process.argv[2].toLowerCase() == 'consolelog') {
 
@@ -115,6 +162,26 @@ async function init() {
 		if (process.argv[3] && process.argv[3].toLowerCase() == 'aichats') {
 
 			resetAiChats = true;
+		}
+
+		if (process.argv[3] && process.argv[3].toLowerCase() == 'users') {
+
+			resetUsers = true;
+		}
+
+		if (process.argv[3] && process.argv[3].toLowerCase() == 'apikeys') {
+
+			resetApiKeys = true;
+		}
+
+		if (process.argv[3] && process.argv[3].toLowerCase() == 'password') {
+
+			resetPassword = true;
+		}
+
+		if (process.argv[3] && process.argv[3].toLowerCase() == 'ipfilter') {
+
+			resetIpFilter = true;
 		}
 	}
 
@@ -151,7 +218,11 @@ async function init() {
 
 	Common.logger('Starting ' + packageJson.description + ' v' + packageJson.version, true);
 
-	const { update_available } = await Common.validateAppVersion();
+	// Default the update flag and DON'T block boot on the remote version check — it is a network call
+	// to the update source, and nothing on the startup or trading path should wait on the network. The
+	// real check runs in the background once the server is up (see refreshUpdateFlag below) and simply
+	// flips this flag when it resolves.
+	const update_available = false;
 	await checkDependencies();
 
 	let appConfig = await Common.getConfig(appConfigFile);
@@ -162,16 +233,68 @@ async function init() {
 	const botConfig = await Common.getConfig(botConfigFile);
 	const serverConfig = await Common.getConfig(serverConfigFile);
 
+	// Refuse to start on a BROKEN (malformed / unreadable) configuration file. getConfig returns
+	// { success:false, data:<Error> } on failure. A JSON parse error (SyntaxError) — or any read
+	// error other than a plain "file missing" (ENOENT) — means the file is corrupt and must be
+	// fixed by hand, so we stop here with a precise message rather than crashing deeper in init()
+	// (e.g. dereferencing app config below) or, far worse, starting the trading engine with a
+	// half-loaded configuration. A merely MISSING bot or server config is left to the existing
+	// config-mode / default handling further down, so a genuine fresh install is unaffected; a MISSING
+	// app.json is handled by the explicit guard just after this loop (it is required — it ships with
+	// SymBot and carries the mongo/web/API settings the engine needs).
+	const requiredConfigs = [
+		{ label: 'App',    file: appConfigFile,    result: appConfig },
+		{ label: 'Bot',    file: botConfigFile,    result: botConfig },
+		{ label: 'Server', file: serverConfigFile, result: serverConfig }
+	];
+
+	for (const cfg of requiredConfigs) {
+
+		const err = (cfg.result && cfg.result.success === false) ? cfg.result.data : null;
+		const malformed = err && (err instanceof SyntaxError || (err.code && err.code !== 'ENOENT'));
+
+		if (malformed) {
+
+			Common.logger('FATAL: ' + cfg.label + ' configuration file "' + cfg.file + '" is broken and cannot be parsed (' + (err.message || err) + '). Fix or restore it from a backup, then restart. Refusing to start to avoid running with an incomplete configuration.', true);
+
+			// success:false (NOT nostart) so start() routes to shutDown() and the process exits with a
+			// non-zero code — the same clean failure signal as a bad DB URL or a port already in use,
+			// so a process manager / Docker surfaces the broken config instead of a silently hung app.
+			return ({ 'success': false, 'app_config': null, 'bot_config': botConfig });
+		}
+	}
+
 	if (botConfig.success) {
 
 		botConfigData = botConfig.data;
+	}
+
+	// A MISSING or structurally-incomplete app.json (ENOENT, or no `api` section) is not recoverable
+	// here: the code just below dereferences appConfig.data.api to seed the API key and password, and
+	// the shipped default app.json carries the mongo/web/API settings the engine needs. Rather than
+	// crash with an opaque TypeError deep in init, stop with a precise, actionable message and fail
+	// closed (success:false → shutDown, non-zero exit). Malformed files were already caught above.
+	// Name the specific missing piece so the operator gets an actionable message instead of an opaque
+	// TypeError deep in init. Each section checked here is dereferenced unconditionally below (api → key/
+	// password seeding; web_server.port → the web_server_port in appData), so a config lacking one cannot
+	// start regardless — this only turns the eventual failure into a precise, fail-closed message.
+	const cfgData = appConfig && appConfig['data'];
+	const missingCfg = (!appConfig || appConfig.success === false || !cfgData) ? 'the configuration could not be read'
+		: !cfgData['api'] ? 'the "api" section is missing'
+		: (!cfgData['web_server'] || cfgData['web_server']['port'] == null) ? 'the "web_server" section (web_server.port) is missing'
+		: null;
+	if (missingCfg) {
+
+		Common.logger('FATAL: App configuration file "' + appConfigFile + '" is missing or incomplete — ' + missingCfg + '. Restore the default app.json that ships with SymBot and restart. Refusing to start without a valid app configuration.', true);
+
+		return ({ 'success': false, 'app_config': null, 'bot_config': botConfig });
 	}
 
 	if (appConfig['data']['api']['key'] == undefined || appConfig['data']['api']['key'] == null || appConfig['data']['api']['key'] == '' || appConfig['data']['api']['key'].indexOf(':') == -1) {
 
 		apiKeySet = false;
 
-		apiKeyClear = Common.uuidv4();
+		apiKeyClear = Common.genDefaultApiKey();
 
 		apiKey = await Common.genApiKey(apiKeyClear);
 
@@ -281,13 +404,25 @@ async function init() {
 		}
 	}
 
-	let telegramEnabled = appConfig['data']['telegram']['enabled'];
+	let telegramEnabled = appConfig?.data?.telegram?.enabled;
+
+	// A friendly, user-facing label the operator set in the Hub. It may contain spaces and normal
+	// characters and is used for DISPLAY ONLY — the dashed `instanceName` stays the stable identifier
+	// for config filenames, log/backup filenames, /instance/<name> routing and worker_data.name.
+	// Falls back to the identifier when no display name was set (existing instances, or a standalone).
+	const instanceLabel = (workerData && workerData['name_display'] && String(workerData['name_display']).trim() !== '')
+		? String(workerData['name_display'])
+		: instanceName;
 
 	let shareData = {
 						'appData': {
 										'name': packageJson.description + (instanceName ? '-' + instanceName : ''),
+										// Display variant of `name`: same product prefix, but the friendly label. The views
+										// render this; `name` remains the identifier (backup prefix, user-agent, Server header).
+										'name_display': packageJson.description + (instanceLabel ? '-' + instanceLabel : ''),
 										'name_main': packageJson.description,
 										'instance_name': instanceName,
+										'instance_label': instanceLabel,
 										'version': packageJson.version,
 										'update_available': update_available,
 										'app_config': appConfigFile,
@@ -303,17 +438,35 @@ async function init() {
 										'web_socket_path': 'ws',
 										'exchanges': {},
 										'api_key': apiKey,
-										'api_enabled': appConfig['data']['api']['enabled'],
-										'webhook_enabled': appConfig['data']['webhook']['enabled'],
+										// Defensive reads: an app.json predating these fields must not crash startup on upgrade.
+										// Default api_enabled true (preserves the prior single-key path); webhook_enabled false (safe/off).
+										'api_enabled': appConfig?.data?.api?.enabled ?? true,
+										'webhook_enabled': appConfig?.data?.webhook?.enabled ?? false,
 										'password': appConfig['data']['password'],
 										'bots': appConfig['data']['bots'],
-										'telegram_id': appConfig['data']['telegram']['notify_user_id'],
+										'telegram_id': appConfig?.data?.telegram?.notify_user_id,
 										'telegram_enabled': telegramEnabled,
 										'telegram_enabled_config': telegramEnabled,
 										'signals_3cqs_enabled': appConfig?.data?.signals?.['3CQS']?.enabled,
 										'cron_backup': appConfig['data']['cron_backup'],
 										'ai': appConfig['data']['ai'] || {},
 										'circuit_breaker': appConfig['data']['circuit_breaker'] || {},
+										'ip_filter': appConfig['data']['ip_filter'] || {},
+										// security.trust_proxy (client-IP source) and security.login_throttle
+										// are read from here — they were previously omitted so those options
+										// never took effect.
+										'security': appConfig['data']['security'] || {},
+										// Outbound SMTP for this instance. Without this, appData.mailer is undefined and
+										// Mailer.configure() always sees {}, so a standalone instance's OWN SMTP never resolves
+										// to 'own' mode (it would only ever relay via a Hub). `|| {}` keeps an old config safe.
+										'mailer': appConfig['data']['mailer'] || {},
+										// Granular notification preferences (event × channel × min-severity + quiet hours).
+										// Null/absent means "deliver everywhere as before" — the router preserves legacy behavior.
+										'notifications': appConfig['data']['notifications'] || null,
+										// Optional per-source retention overrides for the Signal Activity log. Absent means
+										// use the built-in defaults (see SignalActivity.retentionFor) — fully functional
+										// without it; this just lets an operator tune each source's row budget.
+										'signal_activity': appConfig['data']['signal_activity'] || {},
 										'verboseLog': appConfig.data.verbose_log,
 										'sig_int': false,
 										'reset': isReset,
@@ -327,17 +480,57 @@ async function init() {
 						'Signals3CQS': Signals3CQS,
 						'DCABot': DCABot,
 						'DCABotManager': DCABotManager,
+						'SignalBot': SignalBot,
 						'Common': Common,
 						'Queue': Queue,
 						'System': System,
+						'MarketData': MarketData,
 						'Telegram': Telegram,
 						'WebServer': WebServer,
 						'AIClient':  AIClient,
+						'Scheduler': Scheduler,
+						'ScheduleNotifier': ScheduleNotifier,
+						'ScheduleRecipes': ScheduleRecipes,
+						'Mailer': Mailer,
+						'Authz': Authz,
+						'ApiKeys': ApiKeys,
+						'Users': Users,
+						'Audit': Audit,
+						'AuthMiddleware': AuthMiddleware,
+						'RoutePermissions': RoutePermissions,
+						'Watchdog': Watchdog,
+						'Diagnostics': Diagnostics,
+						'SignalActivity': SignalActivity,
 						'AIContext': AIContext,
 						'AIChatDB':  AIChatDB,
 					};
 
 	Common.freezeProperty(shareData['appData'], [ 'path_root', 'app_filename' ]);
+
+	// Flag whether the owner password is still the shipped default ("admin"). This drives a
+	// non-blocking "change your default password" nudge in the UI only — it never gates login,
+	// startup, or trading. It is recomputed on a password change (Common config save) so the
+	// nudge clears the instant the operator sets their own password. Best-effort: any failure
+	// leaves the flag false, so a glitch can never invent a warning.
+	try {
+
+		const ownerPass = shareData['appData']['password'];
+
+		if (typeof ownerPass === 'string' && ownerPass.indexOf(':') !== -1) {
+
+			const passParts = ownerPass.split(':');
+
+			shareData['appData']['default_password'] = await Common.verifyPasswordHash({ 'salt': passParts[0], 'hash': passParts[1], 'data': 'admin' });
+		}
+		else {
+
+			shareData['appData']['default_password'] = false;
+		}
+	}
+	catch (e) {
+
+		shareData['appData']['default_password'] = false;
+	}
 
 	// Apply config overrides from hub
 	if (Object.keys(workerDataObj).length > 0 && typeof workerDataObj['overrides'] === 'object') {
@@ -400,6 +593,7 @@ async function init() {
 	WebServer.init(shareData);
 	AIClient.init(shareData);
 	AIContext.init(shareData);
+	MarketData.init(shareData);
 
 	let success = true;
 
@@ -480,6 +674,37 @@ async function init() {
 				else {
 
 					shareData.appData.server_id = res.server_id;
+
+					// Self-heal the per-instance data FOLDER the moment server_id is known and BEFORE
+					// any further log/backup write: if the id changed (reset/restore/override), rename
+					// the old folder to the new id so logs and backups carry across intact. (The folder
+					// tree is shared across a Hub, so this step keys on this instance's own marker.)
+					Common.healDataLayout();
+
+					// Follow the identity into the DATABASE. A SymBot database holds exactly one live server_id, so any
+					// scoped row under a foreign id is this instance's own, stranded by a previous id — sweep them all
+					// to the current id. One path for standalone and Hub; runs every boot (a no-op when clean), so it
+					// also retries a change a prior boot did not finish. Best-effort, off the trading path; never throws.
+					try { await System.rehomeScopedIdentity(shareData.appData.server_id); }
+					catch (e) { try { Common.logger('Identity re-home failed: ' + ((e && e.message) ? e.message : e)); } catch (le) {} }
+
+					// One-time move of this instance's legacy flat logs and backups into its
+					// per-server_id data folder, plus relocation of any early-boot bootstrap logs. This
+					// MUST run here — the moment server_id is resolved — not later in app init, which
+					// runs before the database connects and server_id is known (the migration guards on
+					// server_id and would otherwise no-op). Idempotent; own files only; never throws.
+					await Common.migrateDataLayout();
+
+					// Populate the backup manifest from the backups folder at boot, so listing and retention
+					// key on a current index from the first request — not only after the next scheduled backup.
+					// Best-effort: the directory stays the source of truth, so a failure just self-heals later.
+					try { System.reconcileBackupsIndex(); } catch (e) {}
+
+					// Finish (or safely discard) a password re-key that a crash interrupted, BEFORE the
+					// trading engine connects to the exchange. Only completes when it can prove the exchange
+					// credentials are already under the new key; anything ambiguous is left for the
+					// decryptability watchdog, so it can never make trading worse. Almost always a no-op.
+					await Common.recoverRekeyJournal();
 				}
 			}
 		}
@@ -500,6 +725,30 @@ async function init() {
 			const resetData = await System.resetAiChatsConsole();
 
 			console.log('AI chats reset: ' + resetData['success']);
+
+			process.exit(1);
+		}
+		else if (resetUsers) {
+
+			await System.resetAuthConsole('users', appConfigFile);
+
+			process.exit(1);
+		}
+		else if (resetApiKeys) {
+
+			await System.resetAuthConsole('apikeys', appConfigFile);
+
+			process.exit(1);
+		}
+		else if (resetPassword) {
+
+			await System.resetAuthConsole('password', appConfigFile);
+
+			process.exit(1);
+		}
+		else if (resetIpFilter) {
+
+			await System.resetIpFilterConsole(appConfigFile);
 
 			process.exit(1);
 		}
@@ -525,12 +774,22 @@ async function init() {
 
 		if (!apiKeySet) {
 
-			Common.logger('WARNING: ' + appDataConfig.name + ' API key was not set and has been auto generated as: ' + apiKeyClear + '. This will not be displayed again. It is strongly recommended to generate a new one using the web interface configuration.', true);
+			// Show the one-time auto-generated key on the interactive console. It carries a
+			// `symb_auto_` prefix so the log redactor WOULD mask it — which is exactly why it can't
+			// go through Common.logger() here: that would mask it in the console too, and the
+			// operator needs to read it once to save it. So print it directly to the console and let
+			// Common.logger() record only a value-free note (belt and suspenders: even if the key
+			// reaches a log by some other path, the redactor now catches it).
+			console.log(new Date().toISOString() + ' WARNING: ' + appDataConfig.name + ' API key was not set and has been auto generated as: ' + apiKeyClear + '. This will not be displayed again — save it now, or generate a scoped key in the web interface (Access Control → API Keys).');
+
+			Common.logger('WARNING: ' + appDataConfig.name + ' API key was not set and has been auto generated (shown once on the console at startup, kept out of the log). Generate a scoped key in the web interface (Access Control → API Keys).', false);
 		}
 
 		const processInfo = await Common.getProcessInfo();
 
-		Telegram.start(appConfig['data']['telegram']['token_id'], appDataConfig['telegram_enabled']);
+		// The Telegram token is encrypted at rest; decrypt it before use (readSecret passes a legacy
+		// plaintext token through unchanged, so older installs keep working until their next config save).
+		Telegram.start(await Common.readSecret(appConfig?.data?.telegram?.token_id), appDataConfig['telegram_enabled']);
 		WebServer.start(appDataConfig['web_server_port']);
 
 		// Start AI client — supports Ollama and OpenAI providers
@@ -541,24 +800,90 @@ async function init() {
 
 		if (aiProvider === 'openai' || openaiEnabled) {
 
-			AIClient.start('openai', aiConfig['openai'] || {});
+			const oc = aiConfig['openai'] || {};
+			AIClient.start('openai', Object.assign({}, oc, { 'api_key': await Common.readSecret(oc['api_key']) }));
 		}
 		else if (aiProvider === 'ollama' || ollamaEnabled) {
 
-			AIClient.start('ollama', aiConfig['ollama'] || {});
+			const oc = aiConfig['ollama'] || {};
+			AIClient.start('ollama', Object.assign({}, oc, { 'api_key': await Common.readSecret(oc['api_key']) }));
 		}
+
+		// Central scheduler: register job-type handlers, arm saved schedules, then run the
+		// one-time database-backup migration (app.json → schedules collection). Starting
+		// the scheduler first gives it its context (server_id) before the migration writes.
+		try {
+
+			ScheduleNotifier.init(shareData);
+			Mailer.init(shareData);
+			await Mailer.configure();
+
+			// Authorization subsystem: capability engine, scoped API keys, users/roles,
+			// audit trail, and the request-enforcement seam. Wiring only — no behavior
+			// change until routes adopt the guards; a legacy session stays the implicit owner.
+			Authz.init(shareData);
+			ApiKeys.init(shareData);
+			Users.init(shareData);
+			Audit.init(shareData);
+			AuthMiddleware.init(shareData);
+			RoutePermissions.init(shareData);
+			SignalActivity.init(shareData);
+
+			// Seed the initial owner from the instance's existing password (a fresh install
+			// sets that password in config mode first), so the account model always has an
+			// owner. Idempotent, and the current password-only login keeps working.
+			if (shareData.appData.password && !shareData.appData.config_mode) {
+
+				try { await Users.seedOwner({ username: 'owner', passwordHash: shareData.appData.password }); }
+				catch (e) { Common.logger('Owner seed skipped: ' + e.message); }
+
+				// Provision the protected internal signals key so the built-in 3CQS client
+				// authenticates natively through the scoped API-key system. Its secret is held
+				// in memory only. If provisioning is ever unavailable the client falls back to
+				// the legacy webhook token, so signals never break.
+				try {
+
+					const prov = await ApiKeys.provisionInternal({ 'capabilities': [ 'deal.create' ] });
+
+					if (prov && prov.success) { shareData.appData.internal_signals_key = prov.clearKey; }
+				}
+				catch (e) { Common.logger('Internal signals key provisioning skipped: ' + e.message); }
+			}
+			AIScheduleHandler.register(Scheduler, shareData);
+			ErrorWatchdogHandler.register(Scheduler, shareData);
+			DrawdownSentinelHandler.register(Scheduler, shareData);
+			ResourceSentinelHandler.register(Scheduler, shareData);
+			System.registerBackupHandler(Scheduler);
+			await Scheduler.start(shareData);
+			await System.migrateBackupToScheduler();
+
+			// Import any shipped, pre-defined recipe tasks (e.g. the watchdog error scanner) that this
+			// instance has neither imported nor removed yet — as disabled, user-owned schedule rows.
+			try { ScheduleRecipes.init(shareData); const seeded = await ScheduleRecipes.seed(); if (seeded && seeded.seeded) { Common.logger('ScheduleRecipes: imported ' + seeded.seeded + ' pre-defined task(s) as disabled schedules'); } }
+			catch (e) { Common.logger('ScheduleRecipes: seeding skipped: ' + e.message); }
+
+			// Now that the audit trail is wired, run the central self-policing watchdog so its
+			// boot-time integrity findings can be recorded to the audit log (not just the console).
+			try { WebServer.runWatchdog('instance'); }
+			catch (e) { Common.logger('Watchdog run skipped: ' + e.message); }
+		}
+		catch (e) { Common.logger('Scheduler failed to start: ' + e.message); }
 
 		const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
-		setInterval(async () => {
-
-			const { update_available } = await Common.validateAppVersion();
-
-			if(update_available && !shareData.appData.update_available) {
-
-				shareData.appData.update_available = true;
+		// Refresh the update-available flag from the remote version source. Runs ONCE now — in the
+		// background, so it never delayed startup or trading — and every 12 hours after. validateAppVersion
+		// bounds its own network call with a timeout and is best-effort: any failure is a quiet no-op.
+		const refreshUpdateFlag = async () => {
+			try {
+				const { update_available } = await Common.validateAppVersion();
+				if (update_available && !shareData.appData.update_available) { shareData.appData.update_available = true; }
 			}
-		}, TWELVE_HOURS)
+			catch (e) {}
+		};
+
+		refreshUpdateFlag();
+		setInterval(refreshUpdateFlag, TWELVE_HOURS);
 
 		setTimeout(() => {
 
@@ -682,6 +1007,42 @@ async function start(args) {
 
 	let initData;
 
+	// Standalone maintenance command: verify or regenerate the AI learning seed corpus, then exit
+	// WITHOUT booting the trading engine. Editing the shipped corpus (libs/ai/data/seed-learning.json)
+	// invalidates its integrity checksum; `corpus regen` recomputes the checksum/count/tools_version so
+	// the file passes verification again, and `corpus check` reports integrity plus which registered
+	// tools still have no learning pattern. Touches nothing but that one file.
+	if (process.argv[2] && process.argv[2].toLowerCase() === 'corpus') {
+
+		const CorpusTool = require('./libs/ai/CorpusTool.js');
+		const sub = (process.argv[3] || 'check').toLowerCase();
+
+		if (sub === 'regen' || sub === 'regenerate') {
+
+			const r = CorpusTool.regen();
+			console.log('Corpus regenerate (' + CorpusTool.SEED_PATH + '):');
+			console.log('  records:  ' + r.records_in + (r.dropped ? ' (' + r.dropped + ' invalid dropped → ' + r.records_out + ')' : ''));
+			console.log('  checksum: ' + (r.changed ? (String(r.before).slice(0, 16) + '… → ' + String(r.after).slice(0, 16) + '…  (updated)') : (String(r.after).slice(0, 16) + '…  (unchanged)')));
+
+			const v = CorpusTool.check();
+			console.log('  verify:   ' + (v.ok ? 'OK' : 'FAILED — ' + v.error));
+			if (v.uncovered && v.uncovered.length) { console.log('  tools without patterns: ' + v.uncovered.join(', ')); }
+			process.exit(v.ok ? 0 : 1);
+		}
+		else {
+
+			const v = CorpusTool.check();
+			console.log('Corpus check (' + CorpusTool.SEED_PATH + '):');
+			if (v.error && !v.ok) { console.log('  error: ' + v.error); }
+			console.log('  integrity:     ' + (v.ok ? 'OK' : 'FAILED'));
+			console.log('  records:       ' + v.records + (v.rejected ? ' (' + v.rejected + ' rejected)' : ''));
+			console.log('  checksum:      ' + (v.manifest_checksum === v.expected_checksum ? 'match' : 'MISMATCH — run: node symbot.js corpus regen'));
+			console.log('  tools_version: file=' + v.tools_version_file + ' now=' + v.tools_version_now + (v.tools_version_file === v.tools_version_now ? ' (match)' : ' (drifted — run: node symbot.js corpus regen)'));
+			console.log('  tool coverage: ' + ((v.uncovered && v.uncovered.length) ? (v.uncovered.length + ' without patterns: ' + v.uncovered.join(', ')) : 'all tools have patterns'));
+			process.exit(v.ok ? 0 : 1);
+		}
+	}
+
 	await Common.makeDir('backups');
 	await Common.makeDir('uploads');
 	await Common.makeDir('downloads');
@@ -785,5 +1146,8 @@ module.exports = {
     },
 	get DCABotManager() {
         return DCABotManager;
+    },
+	get AIClient() {
+        return AIClient;
     }
 }

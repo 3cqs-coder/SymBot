@@ -2,136 +2,36 @@
 
 <script>
 
-	let timeOutId;
 	let activeInstances = [];
 	let confirmWaiting = false;
 
-	const refreshIntervals = [
-		{ label: '15s',    ms: 15000 },
-		{ label: '30s',    ms: 30000 },
-		{ label: '60s',    ms: 60000 },
-		{ label: 'Paused', ms: 0 }
-	];
-	const defaultRefreshMs = 30000;
+	// Shared auto-refresh timer (SymBot.UI owns the timeout internally). The thin local
+	// setReloadTimeout / initRefreshSelector wrappers below keep every existing callsite unchanged.
+	const _autoRefresh = SymBot.UI.autoRefresh({
+		storageKey: 'hubBotsRefreshMs',
+		intervals: [ { label: '15s', ms: 15000 }, { label: '30s', ms: 30000 }, { label: '60s', ms: 60000 }, { label: 'Paused', ms: 0 } ],
+		defaultMs: 30000,
+		selector: '#hubRefreshInterval',
+		onReload: function() { getActiveBots(); }
+	});
 
 
-	// ── Refresh management ────────────────────────────────────────────────────
-
-	function getRefreshMs() {
-
-		try {
-
-			const stored = parseInt(localStorage.getItem('hubBotsRefreshMs'), 10);
-
-			if (!isNaN(stored) && refreshIntervals.some(r => r.ms === stored)) {
-
-				return stored;
-			}
-		}
-		catch(e) {}
-
-		return defaultRefreshMs;
-	}
-
-
-	function saveRefreshMs(ms) {
-
-		try {
-
-			localStorage.setItem('hubBotsRefreshMs', ms);
-		}
-		catch(e) {}
-	}
-
-
-	// isDialogOpen is provided by SymBot.UI (symbot-ui.js)
-
-
-	function setReloadTimeout() {
-
-		if (timeOutId) {
-
-			clearTimeout(timeOutId);
-		}
-
-		const ms = getRefreshMs();
-
-		if (ms > 0) {
-
-			timeOutId = setTimeout(() => {
-
-				if (SymBot.UI.isDialogOpen()) {
-
-					setReloadTimeout();
-				}
-				else {
-
-					getActiveBots();
-				}
-			}, ms);
-		}
-	}
-
-
-	function initRefreshSelector() {
-
-		const $sel = $('#hubRefreshInterval');
-
-		$sel.empty();
-
-		refreshIntervals.forEach(r => {
-
-			$sel.append('<option value="' + r.ms + '">' + r.label + '</option>');
-		});
-
-		$sel.val(getRefreshMs());
-
-		$sel.on('change', function() {
-
-			const ms = parseInt($(this).val(), 10);
-
-			saveRefreshMs(ms);
-
-			if (timeOutId) clearTimeout(timeOutId);
-
-			if (ms > 0) setReloadTimeout();
-		});
-	}
+	// ── Refresh management (delegates to SymBot.UI.autoRefresh; see _autoRefresh above) ──
+	function setReloadTimeout() { _autoRefresh.schedule(); }
+	function initRefreshSelector() { _autoRefresh.initSelector(); }
 
 
 	// ── Bot actions ───────────────────────────────────────────────────────────
 
+	// Delegates to SymBot.UI.postAction (spinner + POST + 401→login + alertBox). On success reloads the
+	// bot list; on failure just resumes the auto-refresh timer.
 	function botAction(instanceId, action, botId, data, successMsg) {
-
-		$('#spinner-overlay').fadeIn(100);
-
-		$.ajax({
-			type: 'POST',
+		SymBot.UI.postAction({
 			url: './api/hub/bots/action',
-			contentType: 'application/json',
-			data: JSON.stringify({ instanceId, action, botId, data: data || {} }),
-			dataType: 'json',
-			success: function(res) {
-
-				$('#spinner-overlay').fadeOut(100);
-
-				if (!res.success) {
-
-					alertBox('Error: ' + (res.data || res.message || 'Unknown error'), function() { setReloadTimeout(); });
-				}
-				else {
-
-					alertBox(successMsg || 'Done', function() { getActiveBots(); });
-				}
-			},
-			error: function(err) {
-
-				$('#spinner-overlay').fadeOut(100);
-
-				if (err.status === 401) { window.location.href = './login'; return; }
-
-				alertBox('Error: ' + JSON.stringify(err), function() { setReloadTimeout(); });
-			}
+			payload: { instanceId, action, botId, data: data || {} },
+			successMsg: successMsg,
+			onSuccess: function() { getActiveBots(); },
+			onFailure: function() { setReloadTimeout(); }
 		});
 	}
 
@@ -146,13 +46,13 @@
 
 		confirmWaiting = true;
 
-		if (timeOutId) clearTimeout(timeOutId);
+		_autoRefresh.stop();
 
 		$.confirm({
 			title: false,
 			boxWidth: '50%',
 			useBootstrap: false,
-			content: '<div style="font-size: 1.2rem; text-align: left;">' + btnText + ' ' + botName + '?</div>',
+			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' + btnText + ' ' + SymBot.UI.esc(botName) + '?</div>',
 			buttons: {
 				ok: {
 					btnClass: 'btn-default',
@@ -183,7 +83,7 @@
 									$row.attr('data-active', enable);
 									$('#toggle' + botId).prop('checked', enable).switchToggle(enable);
 
-									alertBox(botName + ' ' + (enable ? 'enabled' : 'disabled'), function() { setReloadTimeout(); });
+									alertBox(SymBot.UI.esc(botName) + ' ' + (enable ? 'enabled' : 'disabled'), function() { setReloadTimeout(); });
 								}
 							},
 							error: function(err) {
@@ -218,10 +118,10 @@
 			title: false,
 			boxWidth: '50%',
 			useBootstrap: false,
-			content: '<div style="font-size: 1.2rem; text-align: left;">' +
-				'<b style="color: #d80f08;">Delete ' + botName + '?</b><br><br>' +
-				'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
-				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or cancelled first.' +
+			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' +
+				'<b style="color: #d80f08;">Delete ' + SymBot.UI.esc(botName) + '?</b><br><br>' +
+				'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
+				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or canceled first.' +
 				'</div><br>' +
 				'Type the bot name to confirm:<br>' +
 				'<form action="" style="display: inline;"><input type="text" id="deleteBotConfirmName" class="form-field" style="width: 100%; margin-top: 6px; box-sizing: border-box;" required /></form>' +
@@ -240,7 +140,7 @@
 							return false;
 						}
 
-						botAction(instanceId, 'delete', botId, {}, 'Bot "' + botName + '" and all deal history deleted.');
+						botAction(instanceId, 'delete', botId, {}, 'Bot "' + SymBot.UI.esc(botName) + '" and all deal history deleted.');
 					}
 				},
 				cancel: {
@@ -319,7 +219,7 @@
 			if (!activeInstances.includes(instanceName)) {
 
 				activeInstances.push(instanceName);
-				$('#hub-instance-filter').append('<option value="' + instanceId + '">' + instanceName + '</option>');
+				$('#hub-instance-filter').append('<option value="' + SymBot.UI.esc(instanceId) + '">' + SymBot.UI.esc(instanceName) + '</option>');
 			}
 
 			if (selectedInst !== 'all' && instanceId !== selectedInst) continue;
@@ -355,11 +255,11 @@
 			const exchange    = (bot.exchange || '').toUpperCase();
 
 			contentArr.push(
-				'<tr data-botid="' + botId + '" data-botname="' + botName + '" data-instanceid="' + instanceId + '" data-instancename="' + instanceName + '" data-active="' + active + '">' +
-				'<td>' + instanceName + '</td>' +
-				'<td>' + botName + '</td>' +
-				'<td>' + exchange + '</td>' +
-				'<td style="max-width: 160px;">' + pairDisplay + '</td>' +
+				'<tr data-botid="' + botId + '" data-botname="' + SymBot.UI.esc(botName) + '" data-instanceid="' + instanceId + '" data-instancename="' + SymBot.UI.esc(instanceName) + '" data-active="' + active + '">' +
+				'<td>' + SymBot.UI.esc(instanceName) + '</td>' +
+				'<td>' + SymBot.UI.esc(botName) + '</td>' +
+				'<td>' + SymBot.UI.esc(exchange) + '</td>' +
+				'<td style="max-width: 160px;">' + SymBot.UI.esc(pairDisplay) + '</td>' +
 				'<td>' + (bot.firstOrderAmount || '') + '</td>' +
 				'<td>' + (bot.dcaOrderAmount   || '') + '</td>' +
 				'<td>' + (bot.dcaMaxOrder      || '') + '</td>' +
@@ -549,7 +449,7 @@ $(document).ready(function() {
 							<option value="all"></option>
 						</select>
 					</div>
-					<button id="hubCreateBot" class="btn-default" style="font-size: 0.95rem; padding: 3px 10px; cursor: pointer;">+ Create Bot</button>
+					<button id="hubCreateBot" class="btn-default" style="font-size: var(--fs-body); padding: 3px 10px; cursor: pointer;">+ Create Bot</button>
 				</div>
 			</div>
 

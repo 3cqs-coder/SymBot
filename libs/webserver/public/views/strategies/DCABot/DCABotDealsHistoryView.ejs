@@ -69,23 +69,7 @@
 	}
 
 
-	function getBots() {
-
-		$.ajax({
-					type: 'GET',
-					url: './api/bots',
-					success: function({ data }) {
-
-						botList(data);
-					},
-					error: function(data) {
-
-						// Some error in ajax call
-
-						alertBox('Error: ' + JSON.stringify(data));
-					}
-		});
-	}
+	function getBots() { SymBot.UI.fetchBots(botList); }
 
 
 	function botList(bots) {
@@ -108,7 +92,7 @@
 			let botId = bot.id;
 			let botName = bot.name;
 
-			selector.push(`<option value="${botId}">${botName}</option>`);
+			selector.push(`<option value="${SymBot.UI.esc(botId)}">${SymBot.UI.esc(botName)}</option>`);
 		}
 
 		selector.push('</select>');
@@ -147,9 +131,9 @@
 
 			contentArr.push('<tr data-dealid="' + dealId + '">');
 			contentArr.push('<td id="date' + i + '" data-date="' + dateEnd + '">' + dateConvertLocal(dateEnd) + '</td>');
-			contentArr.push('<td>' + deal['bot_name'] + '</td>');
+			contentArr.push('<td>' + SymBot.UI.esc(deal['bot_name']) + '</td>');
 			contentArr.push('<td>' + deal['deal_id'] + '</td>');
-			contentArr.push('<td>' + deal['pair'] + '</td>');
+			contentArr.push('<td>' + SymBot.UI.esc(deal['pair']) + '</td>');
 			contentArr.push('<td>' + duration + '</td>');
 			contentArr.push('<td class="' + profitPercClass + '">' + dealSym + profit + '</td>');
 			contentArr.push('<td class="' + profitPercClass + '">' + profitBase + '</td>');
@@ -210,7 +194,7 @@
 			title: false,
 			boxWidth: '50%',
 			useBootstrap: false,
-			content: '<div style="font-size: 1.2rem; text-align: left;">Download deals history CSV?</div>',
+			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Download deals history CSV?</div>',
 			buttons: {
 
 						ok: {
@@ -236,11 +220,7 @@
 
 const getCurrencySymbol = <%- getCurrencySymbol %>;
 
-function getDealSym(pair, profitCurrency) {
-	const parts = (pair || '').split('/');
-	const code = profitCurrency === 'base' ? parts[0] : parts[1];
-	return getCurrencySymbol(code) || '$';
-}
+function getDealSym(pair, profitCurrency) { return SymBot.UI.dealSymbol(pair, profitCurrency, getCurrencySymbol); }
 
 
 	$(document).ready(function () {

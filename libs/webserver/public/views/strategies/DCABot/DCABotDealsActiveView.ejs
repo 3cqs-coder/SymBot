@@ -2,15 +2,21 @@
 
 <script>
 
-	let timeOutId;
 	let dealTracker = {};
 	let dealTrackerErrors = {};
 	let activeBots = [];
 	let csvDataArr = [];
 	let modalId = 'activeDealsView';
 
-	const tooltipDelayMs = 250;
-	const tooltipDisplayDelayMs = 1000;
+	// Shared auto-refresh timer (SymBot.UI owns the timeout). Fixed 5s interval, but DEFERS a refresh
+	// only while the user is typing in a per-deal fill-price field so it isn't yanked out mid-entry
+	// (a bespoke pause condition — not the default dialog-open one). The setReloadTimeout wrapper below
+	// keeps every existing callsite unchanged.
+	const _autoRefresh = SymBot.UI.autoRefresh({
+		defaultMs: 5000,
+		onReload: function() { getActiveDeals(); },
+		shouldDefer: function() { return $('.af-price-override:focus').length > 0; }
+	});
 
 	const actionButtons = {
 							'add': {
@@ -104,13 +110,20 @@
 		const quoteCcy    = currencies[0] || 'USD';
 		const sym         = (typeof getCurrencySymbol === 'function') ? getCurrencySymbol(quoteCcy) : '$';
 
-		// Portfolio total
-		$('#portfolioTotal').text(sym + (portfolio.portfolio_total || 0).toFixed(2) + ' ' + quoteCcy);
+		// Is a real balance figure available (fresh OR last-known), and is the latest fetch failing? When the
+		// exchange balance is temporarily unavailable (e.g. a Coinbase outage) we must NOT show a misleading
+		// "$0.00" / "N/A" — that looks like the portfolio crashed to zero. Show "updating…" instead, and when
+		// we do have a last-known figure but the latest fetch failed, keep the numbers and mark them stale.
+		const balanceAvailable = portfolio.is_sandbox || portfolio.balance_available !== false;
+		const balanceStale     = !portfolio.is_sandbox && !!portfolio.balance_stale;
 
-		// Max Funds
+		// Portfolio total
+		$('#portfolioTotal').text(balanceAvailable ? (sym + (portfolio.portfolio_total || 0).toFixed(2) + ' ' + quoteCcy) : 'updating…');
+
+		// Max Funds (always known from the deal configs, independent of the exchange balance)
 		$('#portfolioMaxFunds').text(sym + (portfolio.total_max_funds || 0).toFixed(2));
 
-		// Risk % with colour coding
+		// Risk % with color coding
 		const risk = portfolio.risk_percent;
 		let riskClass = 'portfolio-risk-low';
 
@@ -122,19 +135,24 @@
 
 		$('#portfolioRisk')
 			.attr('class', riskClass)
-			.text(risk !== null && risk !== undefined ? risk + '%' : 'N/A');
+			.text(!balanceAvailable ? 'updating…' : (risk !== null && risk !== undefined ? risk + '%' : 'N/A'));
 
 		// Balance age indicator — hidden in sandbox mode, shows freshness in live mode
 		if (portfolio.is_sandbox) {
 
 			$('#portfolioBalanceAge').text('Sandbox');
 		}
+		else if (!balanceAvailable) {
+
+			$('#portfolioBalanceAge').text('Balance: updating…');
+		}
 		else if (portfolio.balance_updated) {
 
 			const ageSecs = Math.round((Date.now() - new Date(portfolio.balance_updated).getTime()) / 1000);
 			const ageMins = Math.floor(ageSecs / 60);
 			const ageText = ageMins > 0 ? ageMins + 'm ago' : ageSecs + 's ago';
-			$('#portfolioBalanceAge').text('Balance: ' + ageText);
+			// A stale flag means the latest refresh failed, so the figure above is last-known — say so.
+			$('#portfolioBalanceAge').text('Balance: ' + ageText + (balanceStale ? ' (updating…)' : ''));
 		}
 		else {
 
@@ -156,29 +174,8 @@
 	});
 
 
-	function setReloadTimeout() {
-
-		if (timeOutId) {
-
-			clearTimeout(timeOutId);
-		}
-
-		timeOutId = setTimeout(() => {
-
-			// Keep refreshing normally so estimates stay realtime (important in a
-			// volatile market). Only defer a refresh when the user is actively
-			// typing in a per-deal fill-price field, so it isn't yanked out from
-			// under them mid-entry. Resumes immediately once they leave the field.
-			if ($('.af-price-override:focus').length > 0) {
-
-				setReloadTimeout();
-				return;
-			}
-
-			getActiveDeals();
-
-		}, 5000);
-	}
+	// Delegates to SymBot.UI.autoRefresh (see _autoRefresh above); keeps the existing callsites.
+	function setReloadTimeout() { _autoRefresh.schedule(); }
 
 
 	function dealEdit(dealId) {
@@ -189,12 +186,30 @@
 		const dcaMaxOrder = deal['config']['dcaMaxOrder'];
 		const dcaTakeProfitPercent = deal['config']['dcaTakeProfitPercent'];
 		const profitCurrency = deal['config']['profitCurrency'];
+		const dcaStopLossEnabled = deal['config']['dcaStopLossEnabled'];
+		const dcaStopLossPercent = deal['config']['dcaStopLossPercent'];
+		const dcaStopLossReference = deal['config']['dcaStopLossReference'];
+		const dcaStopLossMoveBreakeven = deal['config']['dcaStopLossMoveBreakeven'];
+		const dcaStopLossBreakevenTrigger = deal['config']['dcaStopLossBreakevenTrigger'];
+		const dcaTrailingStopEnabled = deal['config']['dcaTrailingStopEnabled'];
+		const dcaTrailingStopDistance = deal['config']['dcaTrailingStopDistance'];
+		const dcaTrailingActivateProfit = deal['config']['dcaTrailingActivateProfit'];
+		const dcaTrailingReplacesTakeProfit = deal['config']['dcaTrailingReplacesTakeProfit'];
 		const dealLast = deal['config']['dealLast'];
 
 		$('#dealEditId').val(dealId);
 		$('#dcaMaxOrder').val(dcaMaxOrder);
 		$('#dealLast').val(dealLast);
 		$('#dcaTakeProfitPercent').val(dcaTakeProfitPercent);
+		$('#dcaStopLossEnabled').val(String(dcaStopLossEnabled) === 'true' ? 'true' : 'false');
+		$('#dcaStopLossPercent').val((dcaStopLossPercent != undefined && dcaStopLossPercent != null) ? dcaStopLossPercent : '');
+		$('#dcaStopLossReference').val(String(dcaStopLossReference) === 'lastSafetyOrder' ? 'lastSafetyOrder' : 'average');
+		$('#dcaStopLossMoveBreakeven').val(String(dcaStopLossMoveBreakeven) === 'true' ? 'true' : 'false');
+		$('#dcaStopLossBreakevenTrigger').val((dcaStopLossBreakevenTrigger != undefined && dcaStopLossBreakevenTrigger != null) ? dcaStopLossBreakevenTrigger : '');
+		$('#dcaTrailingStopEnabled').val(String(dcaTrailingStopEnabled) === 'true' ? 'true' : 'false');
+		$('#dcaTrailingStopDistance').val((dcaTrailingStopDistance != undefined && dcaTrailingStopDistance != null) ? dcaTrailingStopDistance : '');
+		$('#dcaTrailingActivateProfit').val((dcaTrailingActivateProfit != undefined && dcaTrailingActivateProfit != null) ? dcaTrailingActivateProfit : '');
+		$('#dcaTrailingReplacesTakeProfit').val(String(dcaTrailingReplacesTakeProfit) === 'false' ? 'false' : 'true');
 
 		$('#dealLast').prop('checked', false);
 		$('#dealLast').switchToggle(false);
@@ -214,7 +229,9 @@
 			$('#dealLast').switchToggle(true);
 		}
 
-		openModal(modalId, '#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit');
+		// Cap the dialog width so the form doesn't sprawl on a wide monitor (the shared modal
+		// defaults to 90%); stay within the viewport on small/mobile screens.
+		openModal(modalId, '#boxDealEdit', 'Deal ID ' + dealId, '', '#modalDealEdit', Math.min(560, $(window).width() - 30));
   	}
 
 
@@ -227,7 +244,7 @@
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">Close deal ' + dealId + ' at current market price?<br><br>' +
+					content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Close deal ' + dealId + ' at current market price?<br><br>' +
 						'Type <b>' + randNum + '</b> in the box to confirm close deal: ' +
 						'<form action="" style="display: inline;"><input type="text" id="confirmNum" class="form-field" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;" required /></form></div>',
 					buttons: {
@@ -270,14 +287,14 @@
 
 	function stopBotConfirm(botName, selector, data) {
 
-		clearTimeout(timeOutId);
+		_autoRefresh.stop();
 
 		$.confirm({
 
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">Disable ' + botName + '? Current deals will continue running until they complete.</div>',
+					content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Disable ' + SymBot.UI.esc(botName) + '? Current deals will continue running until they complete.</div>',
 					buttons: {
 
 								ok: {
@@ -306,7 +323,7 @@
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">Download active deals CSV?</div>',
+					content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Download active deals CSV?</div>',
 					buttons: {
 
 								ok: {
@@ -592,19 +609,19 @@
 		let pairSplit = pair.split('/');
 		let quote = pairSplit[1];
 
-		const isSystemPaused = pauseReason === 'order_verify_buy' || pauseReason === 'order_verify_sell';
-		const systemPauseType = pauseReason === 'order_verify_buy' ? 'buy order' : 'sell order';
+		const pauseInfo = SymBot.UI.systemPauseInfo(pauseReason);
+		const isSystemPaused = pauseInfo.isSystem;
 		const systemWarning = isSystemPaused
-			? '<div style="font-size: 1.0rem; padding: 8px; margin-bottom: 10px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
-			  '<b>⚠ System paused:</b> This deal was automatically paused due to a ' + systemPauseType + ' verification failure. ' +
-			  'Resuming manually may cause issues if the underlying problem has not resolved.</div>'
+			? '<div style="font-size: var(--fs-body); padding: 8px; margin-bottom: 10px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+			  '<b>⚠ System paused:</b> This deal was automatically paused by the system due to ' + pauseInfo.description + '. ' +
+			  'Review the situation before resuming manually.</div>'
 			: '';
 
 		$.confirm({
 			title: false,
 			boxWidth: "50%",
 			useBootstrap: false,
-	 		content: `<div style="font-size: 1.2rem; text-align: left;">Pause / Resume deal ${dealId}?<br><br>
+	 		content: `<div style="font-size: var(--fs-dialog-title); text-align: left;">Pause / Resume deal ${dealId}?<br><br>
 			<form action="" style="display: inline;">
 			${systemWarning}
 			This will pause or resume any further buying and / or selling for this deal
@@ -724,7 +741,7 @@
 	 		title: false,
 			boxWidth: "50%",
 	  		useBootstrap: false,
-	  		content: `<div style="font-size: 1.2rem; text-align: left;">Cancel deal ${dealId}?<br><br>
+	  		content: `<div style="font-size: var(--fs-dialog-title); text-align: left;">Cancel deal ${dealId}?<br><br>
 			<form action="" style="display: inline;">
 			This will cancel and remove the active deal from any further trading without selling any assets already bought from previous orders
 			<br><br>
@@ -812,7 +829,7 @@
   			title: false,
   			boxWidth: "50%",
   			useBootstrap: false,
-  			content: `<div style="font-size: 1.2rem; text-align: left;">Add funds to deal ${dealId}?<br><br>
+  			content: `<div style="font-size: var(--fs-dialog-title); text-align: left;">Add funds to deal ${dealId}?<br><br>
       	Enter the amount of ${quote} funds to add:
       	<form action="" style="display: inline;">
         <input type="text" id="confirmNum" class="form-field" onkeypress="if (event.which < 48 || event.which > 57) if (event.which != 8) return false;" required />
@@ -933,7 +950,7 @@
 
 				activeBots.push(deals[i].botName);
 
-				$('#active-bot-filter').append('<option value="' + deals[i].botName + '">' + deals[i].botName + '</option>');
+				$('#active-bot-filter').append('<option value="' + SymBot.UI.esc(deals[i].botName) + '">' + SymBot.UI.esc(deals[i].botName) + '</option>');
 			}
 
 			if(selectedBot != 'all' && deals[i].botName != selectedBot) {
@@ -954,7 +971,7 @@
 					panic: { button: panicButtonDeal }
 			} = actionButtons;
 
-			let dealVolume = deals[i].orders.filter(order => order.filled).reduce((acc, order) => acc + Number(order.amount), 0);
+			let dealVolume = SymBot.UI.dealVolume(deals[i].orders);
 
 			inDeals += dealVolume;
 
@@ -971,10 +988,14 @@
 			const pauseBuy = deal['info']['pause_buy'];
 			const pauseSell = deal['info']['pause_sell'];
 			const pauseReason = deal['info']['pause_reason'] || '';
-			const isSystemPaused = pauseReason === 'order_verify_buy' || pauseReason === 'order_verify_sell';
+			const isSystemPaused = SymBot.UI.systemPauseInfo(pauseReason).isSystem;
 			const dealError = deal['info']['error'];
 			const lastUpdated = deal['info']['updated'];
 			const botActive = deal['info']['bot_active'];
+			// A just-resumed deal whose live figures haven't arrived yet (first price tick pending after a
+			// restart). Live-only cells render "updating…" and the row shows a neutral pending health dot,
+			// so the deal is visible immediately without showing a stale or fabricated live number.
+			const awaiting = !!deal['info']['awaiting_live'];
 			const profit = deal['info']['profit'];
 			const profitBase = deal['info']['profit_base'];
 			const profitQuoteProjected = Number(deal['info']['profit_quote_projected']);
@@ -1020,7 +1041,7 @@
 
 			if (!botActive) {
 
-				stopButtonDeal = '<span class="pill-btn pill-disabled" title="Stop bot (bot inactive)"><span class="icon icon-stop" style="width:13px;height:13px;pointer-events:none;"></span></span>';
+				stopButtonDeal = SymBot.UI.disabledStopButton();
 			}
 
 			if (pause || pauseBuy || pauseSell) {
@@ -1038,7 +1059,7 @@
 				}
 			}
 
-			if (profitPerc <= 0) {
+			if (!awaiting && profitPerc <= 0) {
 
 				profitPercClass = 'profit-negative';
 			}
@@ -1050,7 +1071,8 @@
 				soUsed: deal['info']['safety_orders_used'],
 				soMax: config['dcaMaxOrder'],
 				hasError: !!dealError,
-				isPaused: !!(pause || pauseBuy || pauseSell)
+				isPaused: !!(pause || pauseBuy || pauseSell),
+				awaiting: awaiting
 			});
 
 			if (deal['info']['deal_max'] == 0) {
@@ -1096,11 +1118,7 @@
 
 			dealCount = deal['info']['deal_count'] + ' / ' + deal['info']['deal_max'];
 
-			let diffSec = (new Date(date).getTime() - new Date(lastUpdated).getTime()) / 1000;
-
-			if (diffSec > (60 * maxMins)) {
-
-				diffSec = (diffSec / 60).toFixed(2);
+			if (SymBot.UI.isDealStale(date, lastUpdated, maxMins)) {
 
 				dealsErrorArr.push(dealId);
 			}
@@ -1115,21 +1133,18 @@
 				totalProjectedProfit += profitQuoteProjected;
 			}
 
-			dealTracker[dealId] = {};
+			dealTracker[dealId] = SymBot.UI.buildDealTrackerEntry(deal);
 
-			dealTracker[dealId]['date'] = deal['date'];
-			dealTracker[dealId]['info'] = deal['info'];
-			dealTracker[dealId]['config'] = config;
-			dealTracker[dealId]['orders'] = deal['orders'];
-
-			const filledOrders = deal['orders'].filter(item => item.filled);
-			const manualOrders = filledOrders.filter(item => item.manual);
+			// "(+N)" counts only USER Add-Funds rungs — genuine additions beyond the configured max. An auto
+			// partial-fill-credit re-uses an existing safety-order slot (it is already counted in "safety
+			// orders used"), so it must NOT inflate this. Shared helper keeps the instance and Hub lists in sync.
+			const addedFunds = SymBot.UI.addedFundsCount(deal['orders']);
 
 			let safetyOrdersTotalDisplay = config['dcaMaxOrder'];
 
-			if (manualOrders.length > 0) {
+			if (addedFunds > 0) {
 
-				safetyOrdersTotalDisplay += ' (+' + manualOrders.length + ')';
+				safetyOrdersTotalDisplay += ' (+' + addedFunds + ')';
 			}
 
 			const estimates = JSON.stringify(deal.info.estimates || {})
@@ -1140,7 +1155,7 @@
 			// Raw values the Add Funds Estimator needs per deal (invested sum + base
 			// qty from filled orders, current price, fee %, target %). Kept as data
 			// attributes so the client bar reads them directly.
-			const afSum = deal['orders'].filter(o => o.filled).reduce((a, o) => a + Number(o.amount), 0);
+			const afSum = SymBot.UI.dealVolume(deal['orders']);
 			const afQty = deal['orders'].filter(o => o.filled).reduce((a, o) => a + Number(o.qty || o.qtyFilled || 0), 0);
 			const afPrice = Number(deal['info']['price_last']);
 			const afFee = Number(config['exchangeFee']);
@@ -1150,25 +1165,30 @@
 			const afAvg = Number(deal['info']['price_average']);
 			const afProfit = Number(deal['info']['profit_percentage']);
 
-			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + deal['pair'] + '"  data-estimates="' + estimates + '" data-af-sum="' + afSum + '" data-af-qty="' + afQty + '" data-af-price="' + afPrice + '" data-af-fee="' + afFee + '" data-af-target="' + afTarget + '" data-af-avg="' + afAvg + '" data-af-profit="' + afProfit + '" data-af-sym="' + dealSym + '">');
+			// Stop-loss annotation for the Target cell (#104a): the effective stop level, with a lock
+			// once it moves to break-even. Shared helper (SymBot.UI.stopLossCell) so the instance and
+			// Hub views stay identical. No new column, so tablesorter column indices are unaffected.
+			const stopLossDisplay = SymBot.UI.stopLossCell(deal['info'], dealSym, convertNotation);
+
+			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + SymBot.UI.esc(deal['pair']) + '"  data-estimates="' + estimates + '" data-af-sum="' + afSum + '" data-af-qty="' + afQty + '" data-af-price="' + afPrice + '" data-af-fee="' + afFee + '" data-af-target="' + afTarget + '" data-af-avg="' + afAvg + '" data-af-profit="' + afProfit + '" data-af-sym="' + dealSym + '">');
 			contentArr.push(healthCell);
-			contentArr.push('<td>' + deal['info']['bot_name'] + '</td>');
-			contentArr.push('<td id="dealid-cell">' + dealId + '</td>');
-			contentArr.push('<td>' + deal['pair'] + '</td>');
+			contentArr.push('<td class="cell-botname">' + SymBot.UI.esc(deal['info']['bot_name']) + '</td>');
+			contentArr.push('<td class="dealid-cell">' + dealId + '</td>');
+			contentArr.push('<td>' + SymBot.UI.esc(deal['pair']) + '</td>');
 			contentArr.push('<td>' + duration + '</td>');
-			contentArr.push('<td>' + dealSym + convertNotation(deal['info']['price_last']) + '</td>');
-			contentArr.push('<td>' + dealSym + convertNotation(deal['info']['price_target']) + '</td>');
+			contentArr.push('<td>' + SymBot.UI.pendingCell(awaiting, dealSym + convertNotation(deal['info']['price_last'])) + '</td>');
+			contentArr.push('<td>' + dealSym + convertNotation(deal['info']['price_target']) + stopLossDisplay + '</td>');
 			contentArr.push('<td>' + dealSym + dealVolume.toFixed(2) + '</td>')
-			contentArr.push('<td class="' + profitPercClass + '">' + dealSym + profit + '</td>');
-			contentArr.push('<td class="' + profitPercClass + '">' + profitBase + '</td>');
-			contentArr.push('<td class="' + profitPercClass + '">' + profitPerc + '%</td>');
-			contentArr.push('<td>' + dealSym + profitQuoteProjected + '</td>');
+			contentArr.push('<td class="' + profitPercClass + '">' + SymBot.UI.pendingCell(awaiting, dealSym + profit) + '</td>');
+			contentArr.push('<td class="' + profitPercClass + '">' + SymBot.UI.pendingCell(awaiting, profitBase) + '</td>');
+			contentArr.push('<td class="' + profitPercClass + '">' + SymBot.UI.pendingCell(awaiting, profitPerc + '%') + '</td>');
+			contentArr.push('<td>' + SymBot.UI.pendingCell(awaiting, dealSym + profitQuoteProjected) + '</td>');
 			contentArr.push('<td>' + config['dcaTakeProfitPercent'] + '%</td>');
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
-			contentArr.push('<td>' + dealSym + maxFunds + '</td>')
+			contentArr.push('<td>' + SymBot.UI.pendingCell(awaiting, dealSym + maxFunds) + '</td>')
 			contentArr.push('<td>' + dealCount + '</td>');
 			const pillContent = aiButtonDeal + editButtonDeal + panicButtonDeal + addFundsButtonDeal + pauseButtonDeal + cancelButtonDeal + (stopButtonDeal || '');
-			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-pausereason="' + pauseReason + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + deal['info']['bot_name'] + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
+			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-pausereason="' + pauseReason + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + SymBot.UI.esc(deal['info']['bot_name']) + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
 			contentArr.push('</tr>');
 		}
 
@@ -1234,37 +1254,24 @@
 
 	const getCurrencySymbol = <%- getCurrencySymbol %>;
 
-function getDealSym(pair, profitCurrency) {
-	const parts = (pair || '').split('/');
-	const code = profitCurrency === 'base' ? parts[0] : parts[1];
-	return getCurrencySymbol(code) || '$';
-}
+function getDealSym(pair, profitCurrency) { return SymBot.UI.dealSymbol(pair, profitCurrency, getCurrencySymbol); }
 
 
 
 
 $(document).ready(function() {
- 
-		let tooltipDisplayTime = {};
 
-		function getTooltipText(id) {
-
-			// Match the id EXACTLY against an action key. Previously this used
-			// id.startsWith(key), so any id beginning with a key collided — e.g. the
-			// Add Funds Estimator elements (addFundsEstToggle, addFundsEstBar,
-			// addFundsAmount) all start with "add" and wrongly showed the row action's
-			// "Add funds to deal" tooltip. Those elements carry their own native title
-			// attributes, so exact matching leaves them intact.
-			if (Object.prototype.hasOwnProperty.call(actionButtons, id)) {
-
-				return actionButtons[id]['tooltip'];
-			}
-
-			return null;
-		}
+		// Shared hover-tooltip machinery (SymBot.UI). Match the id EXACTLY against an action key
+		// (NOT startsWith): several ids begin with an action key — e.g. the Add Funds Estimator
+		// elements (addFundsEstToggle/addFundsEstBar/addFundsAmount) all start with "add" — and a
+		// prefix match wrongly showed the row action's tooltip. Those elements carry their own native
+		// title attributes, so exact matching leaves them intact.
+		SymBot.UI.initTooltips({ resolve: function(id) {
+			return Object.prototype.hasOwnProperty.call(actionButtons, id) ? actionButtons[id]['tooltip'] : null;
+		}});
 
 
-		$(document).on('mouseenter', '#dealid-cell', function(e) {
+		$(document).on('mouseenter', '.dealid-cell', function(e) {
 
 			try {
 				
@@ -1350,46 +1357,9 @@ $(document).ready(function() {
 		});
 
 
-		$(document).on('mouseleave', '#dealid-cell', function() {
+		$(document).on('mouseleave', '.dealid-cell', function() {
 			
 			$('.dynamic-tooltip').remove();
-		});
-
-
-		$(document).on('mouseenter', '[id]', function() {
-
-			let $this = $(this);
-			let tooltipText = getTooltipText($this.attr('id'));
-
-			if (tooltipText) {
-
-				let now = Date.now();
-				let lastDisplay = tooltipDisplayTime[$this.attr('id')];
-
-				if (!lastDisplay || now - lastDisplay >= tooltipDisplayDelayMs) {
-
-					$this.data('tooltipTimeout', setTimeout(function() {
-
-						let tooltip = $('<div class="toolTipButtons"></div>').appendTo('body');
-						
-						tooltip.text(tooltipText).css({
-														'top': $this.offset().top - tooltip.outerHeight() - 10,
-														'left': $this.offset().left + ($this.outerWidth() / 2) - (tooltip.outerWidth() / 2)
-													  }).fadeIn(200);
-
-						tooltipDisplayTime[$this.attr('id')] = now;
-
-					}, tooltipDelayMs));
-				}
-			}
-		});
-
-
-		$(document).on('mouseleave click', '[id]', function() {
-
-			clearTimeout($(this).data('tooltipTimeout'));
-
-			$('.toolTipButtons').fadeOut(200);
 		});
 
 
@@ -1410,12 +1380,30 @@ $(document).ready(function() {
 			const dcaMaxOrder = $('#dcaMaxOrder').val();
 			const dcaTakeProfitPercent = $('#dcaTakeProfitPercent').val();
 			const profitCurrency = $('#profitCurrency').val();
+			const dcaStopLossEnabled = $('#dcaStopLossEnabled').val();
+			const dcaStopLossPercent = $('#dcaStopLossPercent').val();
+			const dcaStopLossReference = $('#dcaStopLossReference').val();
+			const dcaStopLossMoveBreakeven = $('#dcaStopLossMoveBreakeven').val();
+			const dcaStopLossBreakevenTrigger = $('#dcaStopLossBreakevenTrigger').val();
+			const dcaTrailingStopEnabled = $('#dcaTrailingStopEnabled').val();
+			const dcaTrailingStopDistance = $('#dcaTrailingStopDistance').val();
+			const dcaTrailingActivateProfit = $('#dcaTrailingActivateProfit').val();
+			const dcaTrailingReplacesTakeProfit = $('#dcaTrailingReplacesTakeProfit').val();
 
 			let dataObj = {
 							'dealLast': dealLast,
 							'dcaMaxOrder': dcaMaxOrder,
 							'dcaTakeProfitPercent': dcaTakeProfitPercent,
-							'profitCurrency': profitCurrency
+							'profitCurrency': profitCurrency,
+							'dcaStopLossEnabled': dcaStopLossEnabled,
+							'dcaStopLossPercent': dcaStopLossPercent,
+							'dcaStopLossReference': dcaStopLossReference,
+							'dcaStopLossMoveBreakeven': dcaStopLossMoveBreakeven,
+							'dcaStopLossBreakevenTrigger': dcaStopLossBreakevenTrigger,
+							'dcaTrailingStopEnabled': dcaTrailingStopEnabled,
+							'dcaTrailingStopDistance': dcaTrailingStopDistance,
+							'dcaTrailingActivateProfit': dcaTrailingActivateProfit,
+							'dcaTrailingReplacesTakeProfit': dcaTrailingReplacesTakeProfit
 						  };
 
 			modalTracker[modalId].dialog('close');
@@ -1424,7 +1412,9 @@ $(document).ready(function() {
 		});
 
 
-		$(document).on('keypress', '#botsCreate input', function(e) {
+		// Numbers + a single decimal point only. Covers the deal-edit fields and the Add Funds
+		// Estimator amount box (the '.' guard below blocks a second decimal point).
+		$(document).on('keypress', '#formDealEdit input, #addFundsAmount', function(e) {
 
 			const id = $(this).attr('id');
 			const val = $('#' + id).val();
@@ -1449,6 +1439,68 @@ $(document).ready(function() {
 			}
 
 			if (String.fromCharCode(charCode).match(regEx)) { return false; }
+		});
+
+
+		// Deal-edit modal "?" tooltips. The modal is a narrow, vertically-scrolling dialog, so a
+		// bubble rendered inside it gets clipped (right edge, or the bottom on the last rows) and is
+		// cramped if shrunk to fit. Render it as a FIXED-position bubble on hover so it escapes the
+		// dialog's clipping entirely — kept at a readable width and flipped left/up to stay on screen.
+		// (Hidden bubbles are display:none via CSS, so they never expand the dialog into a phantom
+		// horizontal scrollbar.)
+		$(document).on('mouseenter', '.dealEditModal .toolTip', function() {
+
+			const tip = this.querySelector('.toolTipText');
+			if (!tip) return;
+
+			const r = this.getBoundingClientRect();
+			const gap = 10, pad = 8, width = 340;
+
+			// Show off-screen first so we can measure the wrapped height at the target width.
+			tip.style.position = 'fixed';
+			tip.style.margin = '0';
+			tip.style.width = width + 'px';
+			tip.style.maxWidth = 'calc(100vw - 16px)';
+			tip.style.whiteSpace = 'pre-line';   // preserve authored line breaks in the hint text
+			tip.style.left = '-9999px';
+			tip.style.top = '0px';
+			tip.style.display = 'block';
+			tip.style.visibility = 'hidden';
+
+			const tw = tip.offsetWidth, th = tip.offsetHeight;
+			const vw = window.innerWidth, vh = window.innerHeight;
+
+			let left = r.right + gap;
+			const flipped = (left + tw > vw - pad);
+			if (flipped) { left = r.left - gap - tw; }                 // no room right → flip left
+			if (left < pad) { left = pad; }
+
+			let top = r.top - 6;
+			if (top + th > vh - pad) { top = vh - pad - th; }          // nudge up to stay on screen
+			if (top < pad) { top = pad; }
+
+			tip.style.left = left + 'px';
+			tip.style.top = top + 'px';
+
+			// Point the arrow at the "?": align it to the icon's vertical center, on the edge nearest
+			// the icon. If the bubble had to be nudged so far the icon is outside its span, hide the
+			// arrow rather than let it point at nothing.
+			const arrowTop = Math.round((r.top + r.height / 2) - top - 8);
+			if (arrowTop < 2 || arrowTop > th - 18) {
+				tip.setAttribute('data-arrow', 'none');
+			}
+			else {
+				tip.style.setProperty('--tip-arrow-top', arrowTop + 'px');
+				tip.setAttribute('data-arrow', flipped ? 'left' : 'right');
+			}
+
+			tip.style.visibility = 'visible';
+		});
+
+		$(document).on('mouseleave', '.dealEditModal .toolTip', function() {
+
+			const tip = this.querySelector('.toolTipText');
+			if (tip) { tip.style.cssText = ''; tip.removeAttribute('data-arrow'); }   // back to CSS (display:none)
 		});
 
 
@@ -1787,12 +1839,20 @@ $(document).ready(function() {
 
 			if (col == 3) {
 
-				// TradingView Chart (Pair column; col 0 is Health)
+				// Deal chart (Pair column; col 0 is Health) — opens the deal-overlay chart with a
+				// TradingView tab. Falls back to the plain TradingView widget if the component is absent.
 				let pair = content;
 				let dealId = row.data('dealid');
-				let exchange = dealTracker[dealId]['config']['exchange'].toUpperCase();
+				let exchange = (dealTracker[dealId] && dealTracker[dealId]['config']) ? dealTracker[dealId]['config']['exchange'] : '';
 
-				showTradingView(modalId, 'modal', false, false, pair, exchange);
+				if (window.SymBot && SymBot.DealChart) {
+
+					SymBot.DealChart.open(dealId, { 'modalId': modalId, 'pair': pair, 'exchange': exchange });
+				}
+				else {
+
+					showTradingView(modalId, 'modal', false, false, pair, exchange);
+				}
 			}
 			else if (col < colCount - 1) {
 
@@ -1944,7 +2004,7 @@ $(document).ready(function() {
 
 				<thead style="position: sticky; top: 0; z-index: 1000;">
 					<tr class="tableHeader">
-						<th>Health</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>Profit &asymp;</th> <th>TP</th> <th>Safety Orders</th> <th>Max Funds</th> </th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th>
+						<th>Health</th> <th>Bot Name</th> <th>Deal ID</th> <th>Pair</th> <th>Duration</th> <th>Price</th> <th>Price Target</th> <th>Volume</th> <th>Profit</th> <th>Profit &#x25C9;</th> <th>Profit %</th> <th>Profit &asymp;</th> <th>TP</th> <th>Safety Orders</th> <th>Max Funds</th> <th>Deals</th> <th data-sorter="false" class="columnSelector-disable"></th>
 					</tr>
 				</thead>
 
@@ -1955,37 +2015,68 @@ $(document).ready(function() {
 		</div>
 
 
-		<div id="boxDealEdit" style="display: none; margin: 0 auto;">
-
-			<table id="botsCreate" style="margin-top: 20px; max-width: 225px;" cellpadding=0 cellspacing=0>
+		<div id="boxDealEdit" class="dealEditModal" style="display: none; margin: 0 auto;">
 
 			<form id="formDealEdit" autocomplete="off" action="">
 
 				<input id="dealEditId" name="dealEditId" type=hidden>
 
-				<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" class="form-field"></td></tr>
-				<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" class="form-field"></td></tr>
+				<div class="card">
+					<div class="section-title"><span class="icon icon-target"></span> Take Profit</div>
+					<table class="dealEditTable" cellpadding=0 cellspacing=0>
+						<tr><td>Target Profit %:</td> <td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" class="form-field"></td></tr>
+						<tr><td>Max Safety Orders:</td> <td><input id="dcaMaxOrder" name="dcaMaxOrder" class="form-field"></td></tr>
+					</table>
+				</div>
 
-				<tr><td>Profit Currency: 
+				<div class="card">
+					<div class="section-title"><span class="icon icon-shield"></span> Stop-Loss &amp; Trailing</div>
+					<table class="dealEditTable" cellpadding=0 cellspacing=0>
+						<tr><td>Stop-Loss:
+							<%- include('./partialsFieldTip', { 'tipKey': 'stopLoss', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><select id="dcaStopLossEnabled" name="dcaStopLossEnabled" class="form-field" style="width: 140px; cursor: pointer;"><option value="false">Disabled</option><option value="true">Enabled</option></select></td></tr>
+						<tr><td>Stop-Loss %:
+							<%- include('./partialsFieldTip', { 'tipKey': 'stopLossPct', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><input id="dcaStopLossPercent" name="dcaStopLossPercent" class="form-field"></td></tr>
+						<tr><td>Stop-Loss Reference:
+							<%- include('./partialsFieldTip', { 'tipKey': 'stopLossRef', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><select id="dcaStopLossReference" name="dcaStopLossReference" class="form-field" style="width: 160px; cursor: pointer;"><option value="average">DCA Average</option><option value="lastSafetyOrder">Last Safety Order</option></select></td></tr>
+						<tr><td>Move To Breakeven:
+							<%- include('./partialsFieldTip', { 'tipKey': 'moveBreakeven', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><select id="dcaStopLossMoveBreakeven" name="dcaStopLossMoveBreakeven" class="form-field" style="width: 140px; cursor: pointer;"><option value="false">Disabled</option><option value="true">Enabled</option></select></td></tr>
+						<tr><td>Breakeven Trigger %:
+							<%- include('./partialsFieldTip', { 'tipKey': 'breakevenTrigger', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><input id="dcaStopLossBreakevenTrigger" name="dcaStopLossBreakevenTrigger" class="form-field"></td></tr>
+						<tr><td>Trailing Stop:
+							<%- include('./partialsFieldTip', { 'tipKey': 'trailingStop', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><select id="dcaTrailingStopEnabled" name="dcaTrailingStopEnabled" class="form-field" style="width: 140px; cursor: pointer;"><option value="false">Disabled</option><option value="true">Enabled</option></select></td></tr>
+						<tr><td>Trailing Distance %:
+							<%- include('./partialsFieldTip', { 'tipKey': 'trailingDistance', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><input id="dcaTrailingStopDistance" name="dcaTrailingStopDistance" class="form-field"></td></tr>
+						<tr><td>Trailing Activation Profit %:
+							<%- include('./partialsFieldTip', { 'tipKey': 'trailingActivate', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><input id="dcaTrailingActivateProfit" name="dcaTrailingActivateProfit" class="form-field"></td></tr>
+						<tr><td>Trailing Rides Past Take-Profit:
+							<%- include('./partialsFieldTip', { 'tipKey': 'trailingRidesTP', 'tipContext': 'deal', 'tipStyle': 'padding: 0px 4px;' }) %>
+						</td> <td><select id="dcaTrailingReplacesTakeProfit" name="dcaTrailingReplacesTakeProfit" class="form-field" style="width: 140px; cursor: pointer;"><option value="false">Disabled</option><option value="true">Enabled</option></select></td></tr>
+					</table>
+				</div>
 
-					<span class="toolTip" style="padding: 0px 4px;">?<span class="toolTipText">
-					Currency used for the profit for this deal. Changing this will not affect other deals.
-					</span></span>
+				<div class="card">
+					<div class="section-title"><span class="icon icon-list"></span> Deal Options</div>
+					<table class="dealEditTable" cellpadding=0 cellspacing=0>
+						<tr><td>Profit Currency:
+							<span class="toolTip" style="padding: 0px 4px;">?<span class="toolTipText">Currency used for the profit for this deal. Changing this will not affect other deals.</span></span>
+						</td> <td><select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 140px; cursor: pointer;"><option value="base">Base<option value="quote">Quote</option></select></td></tr>
+						<tr><td>Last Deal:
+							<span class="toolTip" style="padding: 0px 4px;">?<span class="toolTipText">This will prevent a new deal from starting after this deal completes. Setting only applies to this deal. If you have multiple deals running with the same pair, it will not affect the other deals. Changing this may override all other bot or deal settings and signals, however it is possible signals received afterward can change this again.</span></span>
+						</td> <td><input id="dealLast" name="dealLast" type=checkbox class="form-field" style="width:auto;"></td></tr>
+					</table>
+				</div>
 
-				</td> <td><select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 100px; cursor: pointer;"><option value="base">Base<option value="quote">Quote</option></select></td></tr>
-
-				<tr><td>Last Deal:
-				
-				<span class="toolTip" style="padding: 0px 4px;">?<span class="toolTipText">
-				This will prevent a new deal from starting after this deal completes. Setting only applies to this deal. If you have multiple deals running with the same pair, it will not affect the other deals. Changing this may override all other bot or deal settings and signals, however it is possible signals received afterward can change this again.
-				</span></span>
-
-				</td> <td><input id="dealLast" name="dealLast" type=checkbox class="form-field"></td></tr>
-
-				<tr><td colspan=2 style="padding-top: 20px;"><button id="formSubmitEdit" class="btn">Update Deal</button></td></tr>
+				<div class="dealEditActions"><button id="formSubmitEdit" class="btn">Update Deal</button></div>
 			</form>
 
-			</table>
 		</div>
 
 	</div>

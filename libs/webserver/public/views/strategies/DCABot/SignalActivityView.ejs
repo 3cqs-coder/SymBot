@@ -1,0 +1,293 @@
+<%- include('../../partialsHeaderView'); %>
+
+<style>
+	/* This log reuses the shared .data-table look, but its cells are short labels — so override the
+	   audit-log's `overflow-wrap: anywhere` (which is there for long UUIDs) to break only at word
+	   boundaries, and keep most columns on one line. The wrapper scrolls horizontally when the columns
+	   need more room than the card. The free-text Reason wraps within a sensible width, and the long
+	   deal id may break within its column. */
+	#signalActivityTable td, #signalActivityTable th { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+	#signalActivityTable td.col-reason { white-space: normal; overflow-wrap: normal; max-width: 320px; }
+	#signalActivityTable td.col-deal { white-space: normal; overflow-wrap: anywhere; max-width: 180px; }
+</style>
+
+<script>
+
+	// Action tints mirror the Signal Bot alert panel: entry = green (open), add_funds = blue (add),
+	// close = amber (graceful), panic_sell = red (danger).
+	const ACTION_STYLE = {
+		'entry':      { label: 'Entry',      color: '#4aa602' },
+		'add_funds':  { label: 'Add Funds',  color: '#2a7fd0' },
+		'close':      { label: 'Close',      color: '#c8961e' },
+		'panic_sell': { label: 'Panic Sell', color: '#d23c3c' },
+		'close_all':  { label: 'Close All',  color: '#d23c3c' }
+	};
+
+	const OUTCOME_STYLE = {
+		'started':   { label: 'Started',   color: 'var(--color-success)' },
+		'processed': { label: 'Processed', color: '#2a7fd0' },
+		'rejected':  { label: 'Rejected',  color: 'var(--color-error, #d23c3c)' },
+		'duplicate': { label: 'Duplicate', color: 'var(--color-neutral, #888)' }
+	};
+
+
+	function actionBadge(action) {
+
+		const s = ACTION_STYLE[action] || { label: action || '—', color: 'var(--text-color)' };
+		return '<span style="color: ' + s.color + '; font-weight: 600;">' + SymBot.UI.esc(s.label) + '</span>';
+	}
+
+
+	function outcomeBadge(row) {
+
+		const key = row.outcome || (row.duplicate ? 'duplicate' : (row.success ? 'processed' : 'rejected'));
+		const s = OUTCOME_STYLE[key] || { label: key || '—', color: 'var(--text-color)' };
+		return '<span style="color: ' + s.color + '; font-weight: 600;">' + SymBot.UI.esc(s.label) + '</span>';
+	}
+
+
+	// The signal's channel (3CQS, Signal Bot, manual API, …). Friendly labels for the known channels; any
+	// new / renamed / unknown source shows its raw slug, so the UI keeps working as sources evolve.
+	const SOURCE_STYLE = {
+		'3cqs':       { label: '3CQS' },
+		'signal_bot': { label: 'Signal Bot' },
+		'api':        { label: 'API' },
+		'other':      { label: 'Other' },
+		'legacy':     { label: 'Legacy' }
+	};
+
+	function sourceLabel(source) {
+
+		const key = source || 'other';
+		const s = SOURCE_STYLE[key];
+		return '<span style="font-weight: 600;">' + SymBot.UI.esc(s ? s.label : key) + '</span>';
+	}
+
+	// A short "how slow are these signals" summary for the current filter, computed from the loaded rows.
+	// latency_ms is the webhook reply time — for an entry signal it includes waiting for the deal to open
+	// through the serial deal-start queue, so a high p95/max/slow count is queue backpressure, not network.
+	const LATENCY_SLOW_MS = 10000;
+
+	function fmtMs(ms) { return (ms >= 1000) ? (ms / 1000).toFixed(1) + 's' : Math.round(ms) + 'ms'; }
+
+	function latencySummary(rows) {
+
+		const vals = rows.filter(function (r) { return typeof r.latency_ms === 'number'; }).map(function (r) { return r.latency_ms; }).sort(function (a, b) { return a - b; });
+
+		if (!vals.length) { return ''; }
+
+		const n = vals.length;
+		let sum = 0; let slow = 0;
+		for (let i = 0; i < n; i++) { sum += vals[i]; if (vals[i] > LATENCY_SLOW_MS) { slow++; } }
+		const p95 = vals[Math.min(n - 1, Math.floor(0.95 * n))];
+
+		let out = 'Latency avg ' + fmtMs(Math.round(sum / n)) + ' · p95 ' + fmtMs(p95) + ' · max ' + fmtMs(vals[n - 1]);
+		if (slow > 0) { out += ' · <span style="color: var(--color-error, #d23c3c);">' + slow + ' slow</span>'; }
+		return out;
+	}
+
+	// The Source filter is data-driven: seeded with the common channels, then any source actually seen in
+	// the data is added — so a brand-new source becomes filterable the moment it appears, with no code change.
+	let seenSources = new Set(['3cqs', 'signal_bot', 'api', 'other']);
+
+	function rebuildSourceFilter() {
+
+		const current = $('#sourceValue').val() || '';
+		const arr = Array.from(seenSources).sort();
+		const opts = ['<option value="">All</option>'];
+
+		for (let i = 0; i < arr.length; i++) {
+
+			const label = (SOURCE_STYLE[arr[i]] && SOURCE_STYLE[arr[i]].label) || arr[i];
+			opts.push('<option value="' + SymBot.UI.esc(arr[i]) + '"' + (arr[i] === current ? ' selected' : '') + '>' + SymBot.UI.esc(label) + '</option>');
+		}
+
+		$('#sourceValue').html(opts.join(''));
+	}
+
+
+	function getActivity() {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		const filters = {
+			'from':    $('#fromDate').val(),
+			'to':      $('#toDate').val(),
+			'botId':   $('#botValue').val(),
+			'source':  $('#sourceValue').val(),
+			'action':  $('#actionValue').val(),
+			'outcome': $('#outcomeValue').val()
+		};
+
+		$.ajax({
+					type: 'GET',
+					url: './api/signals/activity',
+					data: filters,
+					dataType: 'json',
+					success: function({ data }) {
+
+						$('#spinner-overlay').fadeOut(100);
+						populateActivity(data || []);
+					},
+					error: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+						alertBox('Error: ' + JSON.stringify(data));
+					}
+		});
+	}
+
+
+	function getBots() { SymBot.UI.fetchBots(botList); }
+
+
+	function botList(bots) {
+
+		let botArr = [];
+
+		bots.forEach((bot) => { botArr.push({ 'id': bot.botId, 'name': bot.botName }); });
+
+		botArr = sortByKey(botArr, 'name');
+
+		const selector = ['<select id="botValue" class="form-field" style="width: 130px;">', '<option value="Default">All bots</option>'];
+
+		for (let i = 0; i < botArr.length; i++) {
+
+			selector.push('<option value="' + SymBot.UI.esc(botArr[i].id) + '">' + SymBot.UI.esc(botArr[i].name) + '</option>');
+		}
+
+		selector.push('</select>');
+
+		$('#botSelect').html(selector.join(''));
+	}
+
+
+	function populateActivity(rows) {
+
+		let contentArr = [];
+
+		for (let i = 0; i < rows.length; i++) {
+
+			const r = rows[i];
+			const ts = new Date(r.date).getTime();
+			const latency = (typeof r.latency_ms === 'number') ? r.latency_ms + ' ms' : '';
+			const dealCell = r.deal_id ? SymBot.UI.esc(r.deal_id) : '';
+
+			contentArr.push('<tr>');
+			contentArr.push('<td>' + dateConvertLocal(ts) + '</td>');
+			contentArr.push('<td>' + sourceLabel(r.source) + '</td>');
+			contentArr.push('<td>' + actionBadge(r.action) + '</td>');
+			contentArr.push('<td>' + SymBot.UI.esc(r.bot_name || r.bot_id || '') + '</td>');
+			contentArr.push('<td>' + SymBot.UI.esc(r.pair || '') + '</td>');
+			contentArr.push('<td>' + outcomeBadge(r) + '</td>');
+			contentArr.push('<td class="col-reason">' + SymBot.UI.esc(r.reason || '') + '</td>');
+			contentArr.push('<td>' + SymBot.UI.esc(r.source_ip || '') + '</td>');
+			contentArr.push('<td>' + latency + '</td>');
+			contentArr.push('<td class="col-deal">' + dealCell + '</td>');
+			contentArr.push('</tr>');
+		}
+
+		if (rows.length === 0) {
+
+			$('#activityBody').html('<tr><td colspan="10" class="data-empty">No signal activity recorded for this filter. If a TradingView or webhook alert is not showing here, check that webhooks are enabled and that the alert uses the correct token &mdash; an alert that fails authentication is never recorded.</td></tr>');
+		}
+		else {
+
+			$('#activityBody').html(contentArr.join(''));
+		}
+
+		// Grow the Source filter with any channel actually seen, so new sources become filterable.
+		for (let i = 0; i < rows.length; i++) { if (rows[i] && rows[i].source) { seenSources.add(rows[i].source); } }
+		rebuildSourceFilter();
+
+		$('#latencySummary').html(latencySummary(rows));
+		$('#totalRows').html(rows.length);
+	}
+
+
+	$(document).ready(function () {
+
+		$(document).on('click', '#submit', function() { getActivity(); });
+
+		$('#fromDate, #toDate').datepicker({
+			dateFormat: 'yy-mm-dd',
+			maxDate: '+0d',
+			changeMonth: true,
+			changeYear: true,
+			showWeek: false,
+			yearSuffix: '',
+			showAnim: 'slide',
+			onSelect: function (selectedDate, input) {
+
+				if (input.id === 'fromDate') { $('#toDate').datepicker('option', 'minDate', selectedDate); }
+				else { $('#fromDate').datepicker('option', 'maxDate', selectedDate); }
+			}
+		});
+
+		getBots();
+		getActivity();
+	});
+
+</script>
+
+
+<main>
+
+	<div id="contentBox" class="wide">
+
+		<div class="contentHeaderBox">
+			<b class="contentHeader">Signal Activity</b>
+		</div>
+
+		<div class="card">
+
+			<div class="section-desc">A read-only record of inbound Signal Bot activity &mdash; every authenticated webhook/API signal (from TradingView, 3CQS, or any source) and what SymBot did with it. Only authenticated signals are recorded, so an alert that never appears here is almost always using the wrong token or hitting a disabled webhook. Entries auto-expire after 30 days.</div>
+
+			<div style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;">
+				<span>From: <input id="fromDate" class="form-field" style="width: 100px;"></span>
+				<span>To: <input id="toDate" class="form-field" style="width: 100px;"></span>
+				<span>Bot: <span id="botSelect"></span></span>
+				<span>Source:
+					<select id="sourceValue" class="form-field" style="width: 120px;">
+						<option value="">All</option>
+					</select>
+				</span>
+				<span>Action:
+					<select id="actionValue" class="form-field" style="width: 120px;">
+						<option value="">All</option>
+						<option value="entry">Entry</option>
+						<option value="add_funds">Add Funds</option>
+						<option value="close">Close</option>
+						<option value="panic_sell">Panic Sell</option>
+					</select>
+				</span>
+				<span>Outcome:
+					<select id="outcomeValue" class="form-field" style="width: 120px;">
+						<option value="">All</option>
+						<option value="started">Started</option>
+						<option value="processed">Processed</option>
+						<option value="rejected">Rejected</option>
+						<option value="duplicate">Duplicate</option>
+					</select>
+				</span>
+				<button id="submit" class="btn" style="cursor: pointer;">Search</button>
+				<span id="latencySummary" style="margin-left: auto; opacity: 0.75;"></span>
+				<span style="opacity: 0.7;">Signals: <span id="totalRows">0</span></span>
+			</div>
+
+			<div class="data-tablewrap">
+				<table id="signalActivityTable" class="data-table">
+					<thead>
+						<tr>
+							<th>Date</th> <th>Source</th> <th>Action</th> <th>Bot</th> <th>Pair</th> <th>Outcome</th> <th>Reason</th> <th>Source IP</th> <th>Latency</th> <th>Deal ID</th>
+						</tr>
+					</thead>
+					<tbody id="activityBody"><tr><td colspan="10" class="data-empty">Loading&hellip;</td></tr></tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+</main>
+
+<%- include('../../partialsFooterView'); %>

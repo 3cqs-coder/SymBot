@@ -1,7 +1,10 @@
-version: '3.9'
 services:
   database:
-    image: mongo
+    # Pinned to a major version on purpose: an unpinned `mongo` (i.e. `latest`) means a future rebuild
+    # could pull a newer MongoDB major, which refuses to start against a data directory more than one
+    # major old — stranding the mongo-data volume and breaking the "your data carries across an upgrade"
+    # guarantee. Bump this deliberately (and follow MongoDB's major-version upgrade steps) when you mean to.
+    image: mongo:7
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
@@ -9,16 +12,28 @@ services:
       MONGO_INITDB_DATABASE: symbot
     volumes:
       - ./db-init.js:/docker-entrypoint-initdb.d/init.js:ro
+      # Persist the MongoDB data across container recreation and image rebuilds — without this the
+      # entire trading database (bots, deals, history, sessions) is lost on every `up --build`. On the
+      # first run /data/db is empty, so db-init.js runs and creates the symbot user; afterwards Mongo
+      # skips init because the data is already there.
+      - mongo-data:/data/db
 
+  # Optional web-based MongoDB admin UI. It exposes FULL database access, so it is bound to LOOPBACK ONLY
+  # (127.0.0.1) and protected with basic auth. Do NOT publish it on a public interface — on a production /
+  # VPS host reach it through an SSH tunnel, or comment this whole service out. Change the basic-auth
+  # password below before first use. (For reproducible builds, pin the image to a specific tag, e.g.
+  # mongo-express:1.0.2-20-alpine3.19.)
   mongo-express:
     image: mongo-express
     restart: always
     ports:
-      - 3010:8081
+      - 127.0.0.1:3010:8081
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: root
       ME_CONFIG_MONGODB_ADMINPASSWORD: symbotmongodb123
       ME_CONFIG_MONGODB_SERVER: database
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: changeme
     depends_on:
       - database
 
@@ -29,15 +44,41 @@ services:
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
-    environment:
-      # Use the username and password found in the db-init.js file instead of the root username.
-      MONGODB_URI: mongodb://symbot:symbot123@database/symbot
+    # No database env var is needed: with DOCKER_RUNNING set (in the Dockerfile) and an empty
+    # mongo_db_url, SymBot connects to the "database" service using the symbot user that db-init.js
+    # creates. To use a different database, set mongo_db_url in a mounted app.json.
     depends_on:
       - database
     ports:
       - 3000:3000
+    # Persist SymBot's state so an upgrade preserves it. These named volumes seed from the image on
+    # first run (a fresh install gets the default config) and are kept on every subsequent `up --build`,
+    # so your configuration and secrets (config/), the Hub database and runtime state (data/), your
+    # System backups (backups/), uploads, logs and rollback snapshots all survive an upgrade. Only the
+    # application CODE under /usr/src/app is replaced by a rebuild — this is what makes a Docker upgrade
+    # safe, matching the directories the in-app updater preserves.
+    volumes:
+      - symbot-config:/usr/src/app/config
+      - symbot-data:/usr/src/app/data
+      - symbot-backups:/usr/src/app/backups
+      - symbot-uploads:/usr/src/app/uploads
+      - symbot-logs:/usr/src/app/logs
+      - symbot-rollbacks:/usr/src/app/rollbacks
+    # Liveness only: SymBot's root requires auth and answers 401 to an unauthenticated probe, so `curl -f`
+    # (which treats 401 as failure) would keep the container permanently "unhealthy" even though the web
+    # server is up. Drop -f: any completed HTTP response means the server is listening; a real outage is a
+    # connection refusal, which still fails the probe.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000"]
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+volumes:
+  mongo-data:
+  symbot-config:
+  symbot-data:
+  symbot-backups:
+  symbot-uploads:
+  symbot-logs:
+  symbot-rollbacks:

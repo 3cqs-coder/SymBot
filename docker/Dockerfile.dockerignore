@@ -1,4 +1,36 @@
-.vscode/
+# Build-context exclusions (BuildKit reads this <Dockerfile>.dockerignore; the classic builder reads the
+# context-root .dockerignore, which is kept in sync with this file). The build context is the project
+# root (compose sets `context: ..`). Keep the image to CODE plus the shipped config TEMPLATES only —
+# never a developer's runtime state or real secrets.
+
 .git/
+.vscode/
+
+# Never copy the host's node_modules into the image: it may be built for a different OS/arch (e.g. macOS)
+# and would break the Alpine runtime. The Dockerfile installs dependencies cleanly inside the image.
 node_modules/
+
+# Runtime / generated state. These are Docker named volumes at runtime, and a fresh volume seeds from the
+# image on first run — so baking a developer's copy in would ship logs, backups, uploads and cached data
+# into a brand-new install. Excluding them means a fresh volume starts empty and the app creates what it
+# needs.
+data/
+logs/
+backups/
+uploads/
+rollbacks/
+temp/
+downloads/
+
+# Per-instance identity. Build images from the shipped config TEMPLATES — an app.json with an empty
+# mongo_db_url, a credential-free bot.json, and (for a future Hub build) a hub.json template — never a
+# populated working copy, otherwise the image would carry your exchange keys and app-password hash. Only
+# this host's identity file is excluded; the config templates are intentionally kept so a fresh install
+# (instance or Hub) can seed from them.
 config/server.json
+
+# Dev-only tooling and tests the runtime never needs (and which are not part of the deployed project).
+.githooks/
+scripts/
+libs/test/
+symbot-backlog.md

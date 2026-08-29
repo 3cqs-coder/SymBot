@@ -1,9 +1,6 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 
-const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
 
 const dealsMaxUsedFundsPipeline = (

@@ -188,7 +188,7 @@ async function start() {
         console.log("Balances:", balances);
 
         // Market ticker
-        const market = await sendApiAction("markets", { exchange: "coinbase", pair: "BTC/USDT" });
+        const market = await sendApiAction("markets", { exchange: "coinbase", pair: "BTC/USD" });
         console.log("Market:", market);
 
         // OHLCV candles

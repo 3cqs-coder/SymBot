@@ -2,16 +2,24 @@
 
 const fs = require('fs');
 const fsp = require('fs').promises;
-const path = require('path');
 const net = require('net');
 const ccxt = require('ccxt');
-const Convert = require('ansi-to-html');
 const { parseStringPromise } = require('xml2js');
 const { HUB_TO_WORKER, WORKER_TO_HUB } = require(__dirname + '/MessageTypes.js');
 
-const convertAnsi = new Convert();
-
 let shareData;
+
+// Ordered async log-append queue. The Hub relays every log line from every worker; writing each
+// with fs.appendFileSync would block the Hub's main event loop per line (and per instance). This
+// chains async appends so writes never block the loop yet still land in order. A failed append is
+// swallowed (logging must never crash the Hub).
+let _logAppendChain = Promise.resolve();
+function queueLogAppend(file, line) {
+	_logAppendChain = _logAppendChain.then(() => new Promise((resolve) => {
+		fs.appendFile(file, line, 'utf8', () => resolve());
+	}));
+	return _logAppendChain;
+}
 
 
 async function validateConfig(configsArr, isNew) {
@@ -117,8 +125,15 @@ async function validateConfig(configsArr, isNew) {
         const effectiveServerId = isValid(server_id) ? server_id : serverConfigServerId;
 
         if (!isValid(effectiveServerId) && !isNew) {
-            errors.push(`Invalid configuration for instance '${instance.name}': server_id is missing or empty.`);
-            continue;
+            // An empty server_id is a valid transient state, not a broken config: it's exactly
+            // what a "reset server ID" (or a fresh restore with that option) leaves behind. The
+            // instance regenerates a unique id on its next start (verifyServerId in symbot.js) —
+            // the same self-heal the standalone path already performs. So warn instead of
+            // aborting the entire Hub, and fall through (no `continue`) so the port / bot_config
+            // tracking below still runs for this instance. Empty values are naturally excluded
+            // from the duplicate-server_id checks further down (all guarded by isValid), so two
+            // just-reset instances cannot collide here — each is assigned its own id at boot.
+            warnings.push(`Instance '${instance.name}': server_id is empty — a new one will be generated automatically when the instance next starts.`);
         }
 
         // Check for duplicate server_ids in root config
@@ -243,7 +258,7 @@ async function processConfig(configsArr) {
 
 	const webServerPorts = validate.configs['web_server_ports'];
 
-	return { 'success': validate.success, 'error': validate.error, 'configs': configs, 'web_server_ports': webServerPorts };
+	return { 'success': validate.success, 'error': validate.error, 'warnings': validate.warnings, 'configs': configs, 'web_server_ports': webServerPorts };
 }
 
 
@@ -359,7 +374,13 @@ async function routeAddInstance(req, res) {
 
 	let maxSec = 20;
 
-	const body = req.body;
+	const body = req.body || {};
+
+	// A new-instance request may legitimately omit the optional overrides block. The branch below reads
+	// body['overrides'][...] in several places; without this default an absent overrides throws a
+	// TypeError that (the route is invoked un-awaited) becomes an unhandled rejection. Default it so a
+	// minimal/API add_instance can never crash the Hub.
+	if (!body['overrides'] || typeof body['overrides'] !== 'object') { body['overrides'] = {}; }
 
 	const instanceName = body['name'];
 
@@ -455,6 +476,7 @@ async function routeAddInstance(req, res) {
 		const configNew = {
 			'id': instanceId,
 			'name': instanceName,
+			'name_display': body['name_display'] || '',
 			'mongo_db_url': mongoDbUrl,
 			'web_server_port': webServerPort,
 			'app_config': appConfig,
@@ -618,16 +640,32 @@ async function setProxyPorts(ports) {
 }
 
 
-async function renameInstanceBackups(oldName, newName) {
+async function renameInstanceBackups(oldName, newName, instanceConfig) {
 
-	const backupPath = shareData.appData.path_root + '/backups';
+	// Backups live in the instance's own data folder, keyed by its immutable server_id — a rename does
+	// not move the folder, only the filenames inside it (the name is kept in the filename for SFTP
+	// off-site rotation). Resolve that one folder from the config's effective server_id.
+	const serverId = instanceConfig
+		? ((instanceConfig.overrides && instanceConfig.overrides.server_id) || instanceConfig.server_id || '')
+		: '';
+
+	if (!serverId) { return; }   // no resolvable data folder → nothing to rename
+
+	const backupPath = shareData.appData.path_root + '/data/instances/' + serverId + '/backups';
+
+	// Backup files are written as "<product>-<instanceName>-backup-<date>.zip.enc" (the writer uses
+	// appData.name = packageJson.description + '-' + instanceName). Match on that full prefix so the
+	// rename actually finds the files and the renamed files keep the same shape the writer, retention
+	// trim and SFTP rotation all key off — otherwise the rename is a silent no-op.
+	let product = 'SymBot';
+	try { const p = require(shareData.appData.path_root + '/package.json'); if (p && p.description) { product = p.description; } } catch (e) {}
 
 	try {
 
 		if (!fs.existsSync(backupPath)) return;
 
 		const files = fs.readdirSync(backupPath);
-		const prefix = oldName + '-backup-';
+		const prefix = product + '-' + oldName + '-backup-';
 		let renamed = 0;
 
 		for (const file of files) {
@@ -635,9 +673,14 @@ async function renameInstanceBackups(oldName, newName) {
 			if (!file.startsWith(prefix)) continue;
 
 			const suffix = file.slice(prefix.length);
-			const newFile = newName + '-backup-' + suffix;
+			const newFile = product + '-' + newName + '-backup-' + suffix;
 			const oldPath = backupPath + '/' + file;
 			const newPath = backupPath + '/' + newFile;
+
+			// Never clobber an existing archive at the target name — a backup is a binary .zip.enc, so
+			// overwriting (or appending) would destroy a good backup. On the rare same-name clash, keep
+			// both under their own names (matches the instance-side self-heal collision policy).
+			if (fs.existsSync(newPath)) { continue; }
 
 			fs.renameSync(oldPath, newPath);
 			renamed++;
@@ -836,7 +879,7 @@ async function routeUpdateInstances(req, res) {
 
 					if (origName && instanceName !== origName && !updatedConfig.enabled) {
 
-						await renameInstanceBackups(origName, instanceName);
+						await renameInstanceBackups(origName, instanceName, updatedConfig);
 					}
 
 					// Only restart workers if the config has changed or portUpdated is true
@@ -883,7 +926,7 @@ async function routeUpdateInstances(req, res) {
 						// Rename backup files if instance was renamed
 						if (instanceNameOrig && instanceName !== instanceNameOrig) {
 
-							await renameInstanceBackups(instanceNameOrig, instanceName);
+							await renameInstanceBackups(instanceNameOrig, instanceName, config);
 						}
 
 						await terminateInstance(instanceId);
@@ -940,12 +983,53 @@ async function logMemoryUsage() {
 }
 
 
-async function getActiveDeals() {
+// ── Poll cache for the live deal/bot fan-out ─────────────────────────────────
+// Each browser on the Hub dashboard refreshes /api/hub/deals (and /bots) as often as every few
+// seconds, and each call broadcasts to EVERY worker and awaits every reply. With several viewers
+// that fan-out multiplies for identical data. A short TTL cache + in-flight coalescing collapses
+// concurrent/near-simultaneous polls into one fan-out: callers within the TTL get the last result,
+// and callers arriving WHILE a fan-out is in progress await that same promise instead of starting
+// their own. TTL is well under the minimum poll interval, and any deal/bot ACTION calls
+// invalidatePollCache() so a user sees the effect of their own action immediately (a deal the bot
+// closes on its own may show for up to the TTL — acceptable for a dashboard, and it is a cost not a
+// correctness issue). Pass { fresh: true } to force a live fan-out (bypass cache + coalescing).
+const POLL_CACHE_TTL_MS = 2000;
+let _dealsPoll = { at: 0, data: null, inflight: null };
+let _botsPoll = { at: 0, data: null, inflight: null };
+
+function invalidatePollCache() { _dealsPoll = { at: 0, data: null, inflight: null }; _botsPoll = { at: 0, data: null, inflight: null }; }
+
+async function getActiveDeals(opts) {
+	const fresh = !!(opts && opts.fresh);
+	if (!fresh && _dealsPoll.data && (Date.now() - _dealsPoll.at) < POLL_CACHE_TTL_MS) { return _dealsPoll.data; }
+	if (!fresh && _dealsPoll.inflight) { return _dealsPoll.inflight; }
+	const p = getActiveDealsUncached().then((data) => { _dealsPoll = { at: Date.now(), data, inflight: null }; return data; });
+	if (!fresh) { _dealsPoll.inflight = p; }
+	try { return await p; }
+	finally { if (_dealsPoll.inflight === p) { _dealsPoll.inflight = null; } }
+}
+
+async function getActiveBots(opts) {
+	const fresh = !!(opts && opts.fresh);
+	if (!fresh && _botsPoll.data && (Date.now() - _botsPoll.at) < POLL_CACHE_TTL_MS) { return _botsPoll.data; }
+	if (!fresh && _botsPoll.inflight) { return _botsPoll.inflight; }
+	const p = getActiveBotsUncached().then((data) => { _botsPoll = { at: Date.now(), data, inflight: null }; return data; });
+	if (!fresh) { _botsPoll.inflight = p; }
+	try { return await p; }
+	finally { if (_botsPoll.inflight === p) { _botsPoll.inflight = null; } }
+}
+
+
+async function getActiveDealsUncached() {
 
 	const promises = [];
 	const aggregated = [];
 
 	for (const [id, { worker, instance }] of shareData.workerMap.entries()) {
+
+		// Per-call token so a reply is matched to THIS poll, not an overlapping one (the browser can
+		// refresh every few seconds, so two getActiveDeals() can be in flight for the same instance).
+		const requestId = shareData.Common.uuidv4();
 
 		// Wrap each worker response in a Promise
 		const p = new Promise((resolve, reject) => {
@@ -954,7 +1038,7 @@ async function getActiveDeals() {
 
 			const onMessage = (msg) => {
 
-				if (msg.type === WORKER_TO_HUB.DEALS_ACTIVE_RECEIVED && msg.id === instance.id) {
+				if (msg.type === WORKER_TO_HUB.DEALS_ACTIVE_RECEIVED && msg.id === instance.id && msg.requestId === requestId) {
 
 					// Cancel the timeout and remove the listener before resolving
 					clearTimeout(dealsTimeout);
@@ -973,7 +1057,8 @@ async function getActiveDeals() {
 			worker.postMessage({
 				type: HUB_TO_WORKER.DEALS_ACTIVE,
 				id: instance.id,
-				name: instance.name
+				name: instance.name,
+				requestId
 			});
 
 			// Reject and remove the listener if the worker doesn't respond in time
@@ -1005,12 +1090,15 @@ async function getActiveDeals() {
 }
 
 
-async function getActiveBots() {
+async function getActiveBotsUncached() {
 
 	const promises = [];
 	const aggregated = [];
 
 	for (const [id, { worker, instance }] of shareData.workerMap.entries()) {
+
+		// Per-call token so a reply is matched to THIS poll, not an overlapping refresh (see getActiveDeals).
+		const requestId = shareData.Common.uuidv4();
 
 		const p = new Promise((resolve, reject) => {
 
@@ -1018,7 +1106,7 @@ async function getActiveBots() {
 
 			const onMessage = (msg) => {
 
-				if (msg.type === WORKER_TO_HUB.BOTS_ACTIVE_RECEIVED && msg.id === instance.id) {
+				if (msg.type === WORKER_TO_HUB.BOTS_ACTIVE_RECEIVED && msg.id === instance.id && msg.requestId === requestId) {
 
 					clearTimeout(botsTimeout);
 					worker.off('message', onMessage);
@@ -1036,7 +1124,8 @@ async function getActiveBots() {
 			worker.postMessage({
 				type: HUB_TO_WORKER.BOTS_ACTIVE,
 				id: instance.id,
-				name: instance.name
+				name: instance.name,
+				requestId
 			});
 
 			botsTimeout = setTimeout(() => {
@@ -1068,6 +1157,9 @@ async function getActiveBots() {
 
 
 async function performDealAction(instanceId, action, dealId, botId, data) {
+
+	// A deal action changes live state — drop the poll cache so the next dashboard refresh refetches.
+	invalidatePollCache();
 
 	const instanceResult = await getInstance(instanceId);
 
@@ -1121,6 +1213,7 @@ async function getInstance(instanceId) {
     let worker;
     let workerId;
     let instanceName;
+    let webPort;
     let success = false;
 
     for (const [id, { worker: w, instance }] of shareData.workerMap.entries()) {
@@ -1131,13 +1224,20 @@ async function getInstance(instanceId) {
             worker = w;
             instanceName = instance.name;
 
+            // Effective web port used by the Hub's /instance/<port> reverse proxy — an override
+            // wins over the base port, matching how Manage Instances opens an instance. Callers use
+            // it to build proxy-relative URLs (e.g. Signal Bot webhook cards) that route back here.
+            webPort = (instance.overrides && instance.overrides.web_server_port)
+                ? instance.overrides.web_server_port
+                : instance.web_server_port;
+
             success = true;
 
             break;
         }
     }
 
-    return { success, name: instanceName, worker_id: workerId, worker };
+    return { success, name: instanceName, worker_id: workerId, worker, port: webPort };
 }
 
 
@@ -1151,15 +1251,17 @@ async function startInstance(instanceConfig) {
 
 async function terminateInstance(instanceId) {
 
-	// Clear cached proxy so next request gets a fresh connection
-	if (shareData.WebServer && shareData.WebServer.clearProxyCache) {
-
-		shareData.WebServer.clearProxyCache(instanceId);
-	}
-
 	try {
 
 		const instanceResult = await getInstance(instanceId);
+
+		// Clear the cached reverse proxy so the next request gets a fresh connection. The proxy maps are
+		// keyed by the instance's WEB PORT (the /instance/<port> route), not the instance UUID — clearing
+		// by UUID (as this did before) matched nothing and left a stale proxy pointing at the old port.
+		if (instanceResult.success && instanceResult.port != null && shareData.WebServer && shareData.WebServer.clearProxyCache) {
+
+			shareData.WebServer.clearProxyCache(instanceResult.port);
+		}
 
 		if (instanceResult.success) {
 
@@ -1374,24 +1476,92 @@ async function routeUpdateConfig(req, res) {
 
 	if (success) {
 
+		// Record the Hub configuration change in the audit trail (settings and/or credentials updated).
+		shareData.Common.auditEvent(req, 'config.update', '', 'hub configuration');
+
 		let data = await shareData.Common.getConfig('hub.json');
 
 		let appConfig = data.data;
 
+		if (!appConfig['mailer']) { appConfig['mailer'] = {}; }
+
+		const oldPasswordKey = shareData.appData.password;
+
 		if (passwordNew != undefined && passwordNew != null && passwordNew != '') {
 
-			const dataPassNew = await shareData.Common.genPasswordHash({ 'data': passwordNew });
+			shareData.Common.auditEvent(req, 'auth.password_change', '', 'hub configuration password changed');
+
+			// Hash the new Hub password at the strong OWASP PBKDF2 factor (a low-entropy human secret
+			// verified only at login), matching the instance-side password change. Without the explicit
+			// iterations this defaulted to the fast legacy factor meant for high-entropy API keys, leaving
+			// every Hub password 600x weaker. verifyPasswordHash tries the strong factor then the legacy one,
+			// so any existing hub.json password stored at the old factor still verifies and upgrades here.
+			const dataPassNew = await shareData.Common.genPasswordHash({ 'data': passwordNew, 'iterations': 600000 });
 
 			const passwordHashed = dataPassNew['salt'] + ':' + dataPassNew['hash'];
 
+			// Re-encrypt the stored SMTP password under the new Hub password before the key
+			// changes, so a password change never orphans it.
+			if (appConfig['mailer']['password']) {
+
+				const dec = await shareData.System.decrypt(appConfig['mailer']['password'], oldPasswordKey);
+
+				if (dec && dec.success) {
+
+					const enc = await shareData.System.encrypt(dec.data, passwordHashed);
+
+					if (enc && enc.success) { appConfig['mailer']['password'] = enc.data; }
+				}
+			}
+
 			appConfig['password'] = passwordHashed;
 			shareData['appData']['password'] = passwordHashed;
+
+			// Keep the "still on the default password" security nudge in sync on the Hub too — the Hub
+			// has its own config-save path (this function) separate from the instance's, so without this
+			// the red banner would linger until the Hub process restarted after a password change.
+			shareData['appData']['default_password'] = (passwordNew === 'admin');
 		}
+
+		// Shared SMTP settings. A blank password field preserves the stored (encrypted)
+		// value; the password is encrypted with the current Hub password.
+		const mailerPasswordExisting = appConfig['mailer']['password'] || '';
+
+		let mailerPasswordFinal = mailerPasswordExisting;
+
+		if (body.mailer_password) {
+
+			const enc = await shareData.System.encrypt(body.mailer_password, shareData.appData.password);
+
+			if (enc && enc.success) { mailerPasswordFinal = enc.data; }
+		}
+		// An explicit [Clear] from the shared mailer partial removes the stored password (same control the
+		// instance config uses — the partial is shared by both).
+		if (body.mailer_password_clear === '1') { mailerPasswordFinal = ''; }
+
+		appConfig['mailer'] = {
+			'enabled': shareData.Common.convertBoolean(body.mailer_enabled, false),
+			'host': (body.mailer_host || '').trim(),
+			'port': Number(body.mailer_port ?? 587) || 587,
+			'secure': shareData.Common.convertBoolean(body.mailer_secure, false),
+			'user': (body.mailer_user || '').trim(),
+			'from': (body.mailer_from || '').trim(),
+			'password': mailerPasswordFinal
+		};
+
+		shareData['appData']['mailer'] = appConfig['mailer'];
 
 		await shareData.Common.saveConfig('hub.json', appConfig);
 
+		// Rebuild the Hub mailer transport from the saved settings (fire-and-forget so the
+		// response is not held up).
+		if (shareData.Mailer && typeof shareData.Mailer.configure === 'function') {
+
+			shareData.Mailer.configure().catch(function () {});
+		}
+
 		let obj = { 'success': true, 'data': 'Configuration Updated' };
-		
+
 		res.send(obj);
 	}
 	else {
@@ -1523,6 +1693,12 @@ async function logger(type, msg) {
 		msg = JSON.stringify(msg);
 	}
 
+	// Reuse the instance-side secret scrub so the Hub's own log file and console — and any
+	// relayed instance line that arrived via a raw console write — are credential-free too.
+	if (shareData.Common && typeof shareData.Common.redactSecrets === 'function') {
+		msg = shareData.Common.redactSecrets(msg);
+	}
+
 	const logData = dateNow + ' ' + msg;
 
 	if (type == 'error') {
@@ -1537,39 +1713,38 @@ async function logger(type, msg) {
 	try {
 
 		// Strip ANSI codes before writing to file (same as Common.logger)
-		let logDataFile = logData.replace(
-			/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
-			''
-		);
+		let logDataFile = shareData.Common.stripAnsi(logData);
 
 		logDataFile = logDataFile.replace(/[\t\r\n]+/g, ' ');
 
-		// Write to dated hub log file: YYYY-MM-DD-hub.log
-		// Kept in the same /logs directory as instance logs so the existing
-		// delFiles cleanup in Common.logMonitor() handles rotation automatically.
+		// Write to the dated hub log file via the shared path-builder (the single source of truth), so
+		// this writer can never drift from what retention (Common.logMonitor) and the log viewers read.
+		// For the Hub process the builder resolves to the flat /logs dir (its hub_config gates
+		// instanceDataDir) and the name 'hub' (worker_data.name), i.e. /logs/YYYY-MM-DD-hub.log.
 		const dateStr = dateNow.substring(0, 10);
-		const logFile = shareData.appData.path_root + '/logs/' + dateStr + '-hub.log';
+		const logFile = shareData.Common.logFilePath(dateStr);
 
-		fs.appendFileSync(logFile, logDataFile + '\n', 'utf8');
+		// Async, order-preserving append — never blocks the Hub's main event loop (see queueLogAppend).
+		queueLogAppend(logFile, logDataFile + '\n');
 	}
 	catch (e) {}
 
 	try {
 
 		// Relay to both WebSocket rooms so Hub log viewer and notification
-		// panel receive the message (mirrors Common.logger behaviour)
+		// panel receive the message (mirrors Common.logger behavior)
 		shareData.Common.sendSocketMsg({
 
 			'room': 'logs',
 			'type': 'log',
-			'message': convertAnsi.toHtml(logData)
+			'message': shareData.Common.ansiToHtml(logData)
 		});
 
 		shareData.Common.sendSocketMsg({
 
 			'room': 'notifications',
 			'type': 'notification',
-			'message': convertAnsi.toHtml(logData)
+			'message': shareData.Common.ansiToHtml(logData)
 		});
 	}
 	catch (e) {}
@@ -1578,6 +1753,9 @@ async function logger(type, msg) {
 
 
 async function performBotAction(instanceId, action, botId, data) {
+
+	// A bot action (start deal, enable/disable, panic-sell) changes live state — drop the poll cache.
+	invalidatePollCache();
 
 	const instanceResult = await getInstance(instanceId);
 
@@ -1668,6 +1846,17 @@ async function getDashboardData() {
 
 	const instances = Object.values(instanceMap);
 
+	// Attach the friendly display label (from hub.json) so the dashboard cards can show it; the dashed
+	// `name` stays the identifier used for routing and deep links. Falls back to the identifier.
+	try {
+		const hubData = await shareData.Common.getConfig(shareData.appData.hub_config);
+		const cfgs = (hubData && hubData.success && hubData.data && Array.isArray(hubData.data.instances)) ? hubData.data.instances : [];
+		const labelByName = {};
+		for (const c of cfgs) { if (c && c.name) { labelByName[c.name] = (c.name_display && String(c.name_display).trim() !== '') ? c.name_display : c.name; } }
+		for (const inst of instances) { inst.name_display = labelByName[inst.name] || inst.name; }
+	}
+	catch (e) {}
+
 	const totals = instances.reduce((acc, inst) => {
 
 		acc.deals  += inst.deals;
@@ -1709,7 +1898,8 @@ async function getCreateBotData(instanceId) {
 		startConditionString:     scStr.startConditionString    || '',
 		startConditionSubString:  scStr.startConditionSubString || '',
 		symbolString:             scStr.symbolString            || '',
-		activeChecked:            scStr.activeChecked           || ''
+		activeChecked:            scStr.activeChecked           || '',
+		isSignalBot:              scStr.isSignalBot             || false
 	};
 }
 
@@ -1737,13 +1927,15 @@ async function getBotEditData(instanceId, botId) {
 	return {
 		success:                  true,
 		instanceName:             instResult.name,
+		webPort:                  instResult.port,
 		botData:                  botData2,
 		symbols:                  symbols2,
 		scData:                   scData2,
 		startConditionString:     scStr2.startConditionString    || '',
 		startConditionSubString:  scStr2.startConditionSubString || '',
 		symbolString:             scStr2.symbolString            || '',
-		activeChecked:            scStr2.activeChecked           || ''
+		activeChecked:            scStr2.activeChecked           || '',
+		isSignalBot:              scStr2.isSignalBot             || false
 	};
 }
 
@@ -1764,6 +1956,7 @@ module.exports = {
 	logMemoryUsage,
 	getActiveDeals,
 	getActiveBots,
+	invalidatePollCache,
 	getInstance,
 	getDashboardData,
 	getCreateBotData,

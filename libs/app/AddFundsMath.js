@@ -40,7 +40,7 @@
  *
  * Inputs for the projection are OPTIONAL. When currentAverageReal or
  * currentProfitPercent is absent/non-finite, projected_profit_valid stays false
- * and every other field is byte-identical to the pre-2026-08-08 behaviour.
+ * and every other field is byte-identical to the pre-2026-08-08 behavior.
  */
 
 function computeAddFundsForward(params) {
@@ -68,7 +68,9 @@ function computeAddFundsForward(params) {
 		fillPrice = parseFloat(params.price);
 	}
 
-	// Same fee model as estimateFunds: buy + sell => fee rate applied twice.
+	// Round-trip fee (buy + sell => fee applied twice) — used below for the fee TOTAL and the break-even
+	// price, both of which span a full buy-then-sell cycle. The take-profit TARGET applies a SINGLE fee
+	// instead (matching the live engine's calculateTargetPrice), so the two are computed separately.
 	const totalFeeRate = (exchangeFee / 100) * 2;
 
 	const result = {
@@ -122,9 +124,12 @@ function computeAddFundsForward(params) {
 	const newSum_gross = sumFloat + amountWithFees;
 	const avgPrice_gross = newQtySum_gross > 0 ? newSum_gross / newQtySum_gross : 0;
 
-	// New target price = new average x (1 + fees + desired profit). Identical
-	// formula estimateFunds uses.
-	const targetMultiplier = 1 + totalFeeRate + (targetProfitPct / 100);
+	// New target price = new average x (1 + ONE fee + desired profit). A SINGLE fee, to match where the
+	// deal ACTUALLY targets: the live ladder's calculateTargetPrice uses (takeProfit + one fee), which is
+	// consistent with the calculateProfit model (profit% deducts one combined fee+slippage). Using the
+	// round-trip 2x fee here made the projected target read ~fee% higher than the deal really closes at.
+	// (Break-even below correctly keeps the round-trip 2x fee — recovering cost needs both buy and sell.)
+	const targetMultiplier = 1 + (exchangeFee / 100) + (targetProfitPct / 100);
 	const newTargetPrice_net = avgPrice_net * targetMultiplier;
 	const newTargetPrice_gross = avgPrice_gross * targetMultiplier;
 

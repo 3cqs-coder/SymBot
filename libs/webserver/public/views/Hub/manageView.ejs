@@ -2,9 +2,6 @@
 
 	<script>
 
-		const tooltipDelayMs = 250;
-		const tooltipDisplayDelayMs = 1000;
-
 		const actionButtons = {
 								'login': {
 											'tooltip': 'Login to Instance'
@@ -23,55 +20,11 @@
 
 		$(document).ready(function () {
 
-			let tooltipDisplayTime = {};
-
-			function getTooltipText(id) {
-
-				for (var key in actionButtons) {
-
-					if (id.startsWith(key)) {
-
-						return actionButtons[key]['tooltip'];
-					}
-				}
-
+			// Shared hover-tooltip machinery (SymBot.UI). Here an id matches an action key by prefix.
+			SymBot.UI.initTooltips({ resolve: function(id) {
+				for (var key in actionButtons) { if (id && id.startsWith(key)) { return actionButtons[key]['tooltip']; } }
 				return null;
-			}
-
-			$(document).on('mouseenter', '[id]', function() {
-
-				let $this = $(this);
-				let tooltipText = getTooltipText($this.attr('id'));
-
-				if (tooltipText) {
-
-					let now = Date.now();
-					let lastDisplay = tooltipDisplayTime[$this.attr('id')];
-
-					if (!lastDisplay || now - lastDisplay >= tooltipDisplayDelayMs) {
-
-						$this.data('tooltipTimeout', setTimeout(function() {
-
-							let tooltip = $('<div class="toolTipButtons"></div>').appendTo('body');
-				
-							tooltip.text(tooltipText).css({
-															'top': $this.offset().top - tooltip.outerHeight() - 10,
-															'left': $this.offset().left + ($this.outerWidth() / 2) - (tooltip.outerWidth() / 2)
-														  }).fadeIn(200);
-
-							tooltipDisplayTime[$this.attr('id')] = now;
-
-						}, tooltipDelayMs));
-					}
-				}
-			});
-
-			$(document).on('mouseleave click', '[id]', function() {
-
-				clearTimeout($(this).data('tooltipTimeout'));
-
-				$('.toolTipButtons').fadeOut(200);
-			});
+			}});
 
 			$('#exchange').empty();
 
@@ -302,7 +255,7 @@
 						title: false,
 						boxWidth: '50%',
 						useBootstrap: false,
-						content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>',
+						content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' + msg + '</div>',
 						buttons: {
 
 									ok: {
@@ -330,7 +283,7 @@
 						title: false,
 						boxWidth: '50%',
 						useBootstrap: false,
-						content: '<div style="font-size: 1.2rem; text-align: left;">Update Instance Configurations?</div>',
+						content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Update Instance Configurations?</div>',
 						buttons: {
 
 								ok: {
@@ -358,7 +311,7 @@
 						title: false,
 						boxWidth: '50%',
 						useBootstrap: false,
-						content: '<div style="font-size: 1.2rem; text-align: left;">Restart ' + instanceName + '?</div>',
+						content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Restart ' + instanceName + '?</div>',
 						buttons: {
 
 									ok: {
@@ -393,6 +346,7 @@
 					let instanceId = $row.data('instanceid');
 					let instanceNameOrig = $row.data('instance');
 					let instanceName = $row.find('td[data-field="name"]').text().trim();
+					let nameDisplay = $row.find('td[data-field="name_display"]').text().trim();
 					let telegramEnabledOverride = $row.find('select#telegram_select_override').val();
 					let signals3CQSSelectOverride = $row.find('select#signals_3cqs_select_override').val();
 					let sandboxWalletOverride = $row.find('input#sandbox_wallet_override').val().trim();
@@ -409,11 +363,12 @@
 					if (instanceName && (mongoDbUrlOverride || webServerPort || botConfig || serverIdOverride)) {
 
 						let dataObj = buildDataObj({
-							
+
 							enabled: enabled,
 							startBoot: startBoot,
 							instanceId: instanceId,
 							instanceName: instanceName,
+							nameDisplay: nameDisplay,
 							appConfig: appConfig,
 							botConfig: botConfig,
 							serverConfig: serverConfig,
@@ -684,6 +639,7 @@
 						startBoot = false,
 						instanceId = '',
 						instanceName = '',
+						nameDisplay = '',
 						exchange = '',
 						appConfig = {},
 						botConfig = {},
@@ -696,6 +652,8 @@
 					return {
 								'id': instanceId,
 								'name': instanceName,
+								// Friendly display label (may contain spaces). Display only — `name` stays the identifier.
+								'name_display': nameDisplay,
 								'app_config': appConfig,
 								'bot_config': botConfig,
 								'server_config': serverConfig,
@@ -864,6 +822,7 @@
 				let botConfigMatches = [];
 
 				let instanceName = $('#instance_name').val().trim();
+				let nameDisplay = $('#name_display').val().trim();
 				let webServerPort = $('#web_server_port').val().trim();
 				let appConfig = $('#app_config').val().trim();
 				let botConfig = $('#bot_config').val().trim();
@@ -914,6 +873,7 @@
 							enabled: true,
 							startBoot: true,
 							instanceName: instanceName,
+							nameDisplay: nameDisplay,
 							appConfig: appConfig,
 							botConfig: botConfig,
 							mongoDbUrl: mongoDbUrl,
@@ -1007,9 +967,9 @@
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">' +
+					content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' +
 						'<b style="color: #d80f08;">Remove ' + instanceName + ' from Hub?</b><br><br>' +
-						'<div style="font-size: 1.0rem; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+						'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
 						'The instance will be shut down and removed from Hub. Its config files and database will <b>not</b> be deleted.' +
 						'</div><br><br>' +
 						'Type <b>' + instanceName + '</b> to confirm: ' +
@@ -1118,10 +1078,18 @@
 						<div class="hub-form-group">
 							<label for="instanceName">Instance Name:
 								<span class="toolTip">?<span class="toolTipText">
-									This is a unique name used to easily identify this instance.
+									A unique identifier for this instance. Letters, numbers and dashes only &mdash; it is used for this instance's log and backup filenames, its configuration filenames and its web address, so it stays fixed once set.
 								</span></span>
 							</label>
 							<input type="text" id="instance_name" name="instance_name" class="form-field" required>
+						</div>
+						<div class="hub-form-group">
+							<label for="name_display">Display Name:
+								<span class="toolTip">?<span class="toolTipText">
+									An optional friendly name shown throughout the interface (spaces are fine, e.g. "Binance Paper"). It does not affect filenames or the web address &mdash; leave it blank to just use the Instance Name.
+								</span></span>
+							</label>
+							<input type="text" id="name_display" name="name_display" class="form-field" placeholder="(optional)">
 						</div>
 						<div class="hub-form-group">
 							<label for="mongo_db_url">Mongo DB URL:
@@ -1167,14 +1135,14 @@
 						<br>
 						<div style="margin-top: 10px;">
 							<button id="add-button" type="button" class="hub-primary-btn" style="width: auto; padding: 5px 14px;">Add Instance</button>
-							<button id="cancel-add-btn" type="button" class="hub-stop-btn" style="width: auto; padding: 5px 14px; margin-left: 8px; font-size: 1.0rem;">Cancel</button>
+							<button id="cancel-add-btn" type="button" class="hub-stop-btn" style="width: auto; padding: 5px 14px; margin-left: 8px; font-size: var(--fs-body);">Cancel</button>
 						</div>
 					</form>
 				</div>
 
 				<!-- Managed Instances Table -->
 				<div class="hub-middle-container">
-					<h3 class="hub-middle-header">Managed Instances</h3>
+					<div class="section-title" style="display: inline-flex; margin: 0 0 10px 0; vertical-align: middle;"><span class="icon icon-list"></span> Managed Instances</div>
 					<span id="hubHostLoad" class="hub-hostload-strip" style="display: none;"></span>
 				</div>
 				
@@ -1184,6 +1152,7 @@
 							<tr>
 								<th data-sorter="false" class="columnSelector-disable"></th>
 								<th>Instance</th>
+								<th>Display Name</th>
 								<th data-sorter="false">Memory</th>
 								<th>Exchange</th>
 								<th>Mongo DB URL</th>
@@ -1210,6 +1179,9 @@
 										</td>
 										<td class="editable" data-field="name">
 											<%= config.name %>
+										</td>
+										<td class="editable" data-field="name_display">
+											<%= config.name_display || '' %>
 										</td>
 										<td class="hub-mem-cell" data-instanceid="<%= config.id %>"></td>
 										<td>

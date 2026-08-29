@@ -224,7 +224,7 @@ const pairName = pair || 'Unknown pair';
 | Take Profit Target | $<%= fmt(baseTarget, 6) %> |
 | Current P&L | $<%= fmt(currentNetProfit, 2) %> (<%= fmt(profitPct, 2) %>%) |
 | Projected Profit | $<%= fmt(profitQuoteProjected, 2) %> |
-| Safety Orders | <%= safetyOrdersUsed %> used / <%= safetyOrdersMax %> total (<%= safetyOrdersLeft %> remaining — <%= safetyOrdersPct %>%) |
+| Safety Orders | <%= safetyOrdersUsed %> of <%= safetyOrdersMax %> used · <%= safetyOrdersLeft %> still available (<%= safetyOrdersPct %>% of the safety-order ladder is unused) |
 | Last Order | <%= lastOrderDisplay %> |
 
 ---
@@ -290,6 +290,12 @@ Provide a concise analysis for Deal ID <%= dealId %> (<%= pairName %>) based on 
    - Scenario 1 (Hold): <%= scenario1.estimatedDays %> days, closes <%= scenario1.closingDate %>
 <% if (canAddFunds) { %>   - Scenario 2 (Add Funds): $<%= fmt(addedAmount, 2) %> required, <%= scenario2.estimatedDays %> days, closes <%= scenario2.closingDate %>
 <% } %>   Which scenario looks more favorable given current conditions, and why?
-4. Any notable risks (safety orders running low, overbought/oversold RSI, weak market score, etc.)
+4. Any notable risks that the data above actually supports — for example: few safety orders still available, an overbought or oversold RSI, or a weak market score. Only raise a risk the data supports: if most of the safety-order ladder is still unused, the safety orders are NOT running low, so do not say they are.
+
+When choosing between Hold and Add Funds, apply these rules and make sure your final recommendation agrees with the scenario numbers in point 3:
+- Hold is the default. Recommend Add Funds only when it clearly and materially improves the position.
+- If Hold reaches the target sooner than Add Funds, that favors Hold. Do NOT recommend Add Funds merely because it lowers the average or target — a faster close under Hold outweighs a lower target.
+- Add Funds commits fresh capital, so it only makes sense when it BOTH meaningfully lowers the target AND the market gives a reason to expect recovery (for example an oversold RSI or a stabilizing trend). A weak or down-trending market is a reason NOT to add funds.
+- State the recommendation your own scenario comparison supports; do not contradict it.
 
 Keep the tone factual and brief. This is a DCA strategy where patience is the default — the goal is to identify the best path to profit, not to exit. End with a single clear recommendation: **Hold** or **Add Funds**.

@@ -1,0 +1,576 @@
+<%- include('./partialsHeaderView'); %>
+
+<style>
+	/* Let a wide table scroll inside its card on narrow viewports instead of spilling
+	   past the white border. Each .ac-table is wrapped in a .ac-tablewrap.
+	   NOTE: overflow-x:auto makes the browser compute overflow-y to auto too — a latent nested
+	   scroll box (a second scrollbar) on top of the page's. The wrap only needs to scroll on a
+	   NARROW viewport (the table fits on desktop), so on desktop keep overflow visible: no nested
+	   scroll box, and the action-code "?" tooltips can escape the wrap instead of being clipped. */
+	.ac-tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
+	@media (min-width: 700px) { .ac-tablewrap { overflow: visible; } }
+	/* Modal instructional text — reads at the modal's content size (--fs-content), not the
+	   smaller helper tier, since it's the primary explanation of what the dialog does. */
+	.ac-sub { opacity: 0.7; font-size: var(--fs-content); margin: 0 0 10px; }
+	/* min-width keeps columns readable on a phone: below this the table scrolls horizontally
+	   inside .ac-tablewrap instead of crushing every column to a few characters. */
+	.ac-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: var(--fs-content); }
+	/* Cells wrap at natural break points (spaces). overflow-wrap: break-word breaks a word ONLY when it
+	   genuinely can't fit on its own line (a long UUID / key id) — unlike `anywhere`, it keeps each column's
+	   min-content at its longest word, so a short token ("watchdog", "auth.login_failed", an IP) is never
+	   split mid-word to make room for the Detail column. On a narrow screen the table scrolls inside
+	   .ac-tablewrap instead. */
+	.ac-table th, .ac-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--table-border-color, #333); vertical-align: top; overflow-wrap: break-word; }
+	/* Headers never wrap ("Action", "Capabilities", "Last used" stay on one line). */
+	.ac-table th { opacity: 0.7; font-weight: var(--fw-medium); white-space: nowrap; }
+	.ac-empty { opacity: 0.55; padding: 10px 2px; }
+	/* Status pills stay on one line (an "active"/"revoked" label must never wrap). */
+	.ac-pill { display: inline-block; white-space: nowrap; padding: 1px 8px; border-radius: 10px; font-size: var(--fs-small); border: 1px solid var(--table-border-color, #444); }
+	.ac-pill.ok { color: var(--color-success, #3ba55d); border-color: currentColor; }
+	.ac-pill.off { color: var(--color-warning, #d08a2a); border-color: currentColor; }
+	.ac-pill.bad { color: var(--color-danger, #d0433a); border-color: currentColor; }
+	/* Capability tokens read in the app's Heebo (matches the trading views); only the
+	   one-time secret key stays monospace (.ac-secret) where character-exactness matters. */
+	/* Dim the cell text via a translucent text COLOR, not `opacity`: an opacity < 1 on the cell
+	   creates a stacking/opacity group that also composites the absolutely-positioned diagnostic
+	   tooltip (.toolTipText) inside it, making the tooltip's dark background look semi-transparent
+	   (page content bled through it). color-mix dims only the glyphs, leaving the popup fully opaque;
+	   it degrades gracefully to the inherited full color on any engine that lacks color-mix. */
+	.ac-caps { font-size: var(--fs-content); color: color-mix(in srgb, currentColor 85%, transparent); }
+	.ac-catgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 18px; margin: 6px 0 10px; }
+	.ac-catgrid label { display: block; font-size: var(--fs-content); cursor: pointer; }
+	.ac-catgrid .ac-res { font-weight: var(--fw-medium); opacity: 0.8; margin-top: 4px; }
+	.ac-secret { font-family: var(--font-mono); word-break: break-all; background: var(--input-background-color, #111); padding: 10px; border-radius: 6px; border: 1px solid var(--table-border-color, #444); }
+	/* Each action link stays whole (never "Disabl e"); on a narrow screen the cell wraps
+	   BETWEEN links, stacking them cleanly instead of breaking a word. */
+	.ac-row-actions a { cursor: pointer; color: var(--link-color); margin-right: 10px; white-space: nowrap; display: inline-block; }
+	.ac-field { margin-bottom: 8px; }
+	.ac-field label { display: inline-block; min-width: 120px; }
+	#acMsg { margin-left: 10px; font-size: var(--fs-body); }
+	/* Audit filter row: comfortable spacing between the two filter inputs and Refresh; wraps on mobile. */
+	.ac-audit-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 4px; }
+
+	/* Section tabs — group API Keys / Users / Audit Log under one page, one click apart, so the
+	   audit log is no longer buried below the other two cards. Underline style, theme-aware. */
+	.ac-tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-bottom: 16px;
+		border-bottom: 1px solid var(--shell-section-border, rgba(0, 0, 0, 0.12));
+	}
+	.ac-tab {
+		appearance: none;
+		background: none;
+		border: none;
+		border-bottom: 2px solid transparent;
+		margin-bottom: -1px;
+		padding: 8px 16px;
+		cursor: pointer;
+		white-space: nowrap;
+		font-size: var(--fs-body);
+		color: var(--table-content-color);
+		transition: color 120ms ease, border-color 120ms ease;
+	}
+	.ac-tab:hover { color: var(--link-color); }
+	.ac-tab.is-active { color: var(--link-color); border-bottom-color: var(--link-color); font-weight: 600; }
+	.ac-panel.is-hidden { display: none; }
+
+	/* Mobile: tabs share the row as equal, comfortably tappable targets. */
+	@media (max-width: 600px) {
+		.ac-tabs { gap: 0; }
+		.ac-tab { flex: 1 1 0; min-width: 0; padding: 11px 6px; text-align: center; }
+	}
+</style>
+
+<main>
+	<div id="contentBox" class="wide">
+
+		<div class="contentHeaderBox">
+			<b class="contentHeader">Access Control</b>
+		</div>
+
+		<!-- Section tabs — one click each, no scrolling to reach the audit log. -->
+		<div class="ac-tabs" role="tablist" aria-label="Access Control sections">
+			<button type="button" class="ac-tab is-active" data-actab="keys"  role="tab" aria-selected="true">API Keys</button>
+			<button type="button" class="ac-tab"           data-actab="users" role="tab" aria-selected="false">Users</button>
+			<button type="button" class="ac-tab"           data-actab="audit" role="tab" aria-selected="false">Audit Log</button>
+		</div>
+
+		<!-- ── API Keys ─────────────────────────────────────────────────── -->
+		<div class="card ac-panel" id="acKeysSection">
+			<div class="section-title"><span class="icon icon-key"></span> API Keys</div>
+			<div class="section-desc">Scoped keys for the HTTP API. Each key can do only what you grant it, is shown once, and can be disabled or revoked anytime.</div>
+			<button type="button" id="acNewKeyBtn" class="btn" style="cursor:pointer;">+ New API key</button>
+			<span id="acKeyMsg" style="margin-left:10px; font-size:var(--fs-body);"></span>
+			<div class="ac-tablewrap">
+			<table class="ac-table">
+				<thead><tr><th>Name</th><th>Prefix</th><th>Capabilities</th><th>Status</th><th>Last used</th><th>Created</th><th></th></tr></thead>
+				<tbody id="acKeysBody"><tr><td colspan="7" class="ac-empty">Loading…</td></tr></tbody>
+			</table>
+			</div>
+		</div>
+
+		<!-- ── Users ────────────────────────────────────────────────────── -->
+		<div class="card ac-panel is-hidden" id="acUsersSection">
+			<div class="section-title"><span class="icon icon-users"></span> Users</div>
+			<div class="section-desc">People who can sign in. SymBot works with just you (the owner) — add users only when others need access. Roles: viewer (read-only), operator (can trade), admin, owner.</div>
+			<button type="button" id="acNewUserBtn" class="btn" style="cursor:pointer;">+ Add user</button>
+			<span id="acUserMsg" style="margin-left:10px; font-size:var(--fs-body);"></span>
+			<div class="ac-tablewrap">
+			<table class="ac-table">
+				<thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead>
+				<tbody id="acUsersBody"><tr><td colspan="5" class="ac-empty">Loading…</td></tr></tbody>
+			</table>
+			</div>
+		</div>
+
+		<!-- ── Audit log ────────────────────────────────────────────────── -->
+		<div class="card ac-panel is-hidden" id="acAuditSection">
+			<div class="section-title"><span class="icon icon-list"></span> Audit Log</div>
+			<div class="section-desc">Who did what. Every key/user change and state-changing action is recorded.</div>
+			<div class="ac-audit-filters">
+				<input type="text" id="acAuditAction" class="form-field" placeholder="Filter action (e.g. apikey.)" style="width:180px;">
+				<input type="text" id="acAuditActor" class="form-field" placeholder="Filter actor" style="width:150px;">
+				<button type="button" id="acAuditRefresh" class="btn" style="cursor:pointer;">Refresh</button>
+			</div>
+			<div class="ac-tablewrap">
+			<table class="ac-table">
+				<thead><tr><th>Date / Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr></thead>
+				<tbody id="acAuditBody"><tr><td colspan="6" class="ac-empty">Loading…</td></tr></tbody>
+			</table>
+			</div>
+		</div>
+
+	</div>
+</main>
+
+<!-- New key modal -->
+<div class="modal-overlay" id="acKeyModal">
+	<div class="modal-box modal-pad">
+		<b>New API key</b>
+		<div class="ac-field" style="margin-top:10px;"><label for="acKeyName">Name</label><input type="text" id="acKeyName" class="form-field" style="width:260px;" placeholder="reporting-service"></div>
+		<div style="margin:8px 0 4px;">
+			<b style="font-size: var(--fs-body);">Capabilities</b>
+			<span style="margin-left:8px; font-size: var(--fs-body);">
+				<a id="acKeyReadOnly" style="cursor:pointer; color:var(--link-color);">Read-only</a> ·
+				<a id="acKeyClear" style="cursor:pointer; color:var(--link-color);">Clear</a>
+			</span>
+			<div class="ac-sub">A key can never exceed your own permissions.</div>
+			<div class="ac-catgrid" id="acKeyCaps"></div>
+		</div>
+		<div class="ac-field"><label for="acKeySigning">Signing</label>
+			<select id="acKeySigning" class="form-field" style="width:200px;">
+				<option value="bearer">Bearer (simple, over TLS)</option>
+				<option value="hmac" disabled>HMAC-SHA256 (coming soon)</option>
+			</select>
+		</div>
+		<div class="ac-field"><label for="acKeyExpires">Expires</label><input type="date" id="acKeyExpires" class="form-field" style="width:200px;"></div>
+		<div class="ac-field" style="align-items:flex-start;"><label for="acKeyIpAllow">IP allowlist</label><textarea id="acKeyIpAllow" class="form-field" rows="2" style="width:260px;" placeholder="optional — one per line: 203.0.113.10, 10.0.0.0/8, 192.168.1.*"></textarea></div>
+		<div class="ac-field" style="align-items:flex-start;"><label for="acKeyIpBlock">IP blocklist</label><textarea id="acKeyIpBlock" class="form-field" rows="2" style="width:260px;"></textarea></div>
+		<div class="ac-sub">Optional. Restrict where this key may be used from — exact IP, subnet, or wildcard (blocklist wins). Leave empty to allow any IP. A bad list only affects this key, never your own access.</div>
+		<div style="text-align:right; margin-top:12px;">
+			<span id="acMsg"></span>
+			<button type="button" id="acKeyCreate" class="btn" style="cursor:pointer;">Create</button>
+			<button type="button" class="btn" style="cursor:pointer;" data-ac-close>Cancel</button>
+		</div>
+	</div>
+</div>
+
+<!-- Shown-once secret modal -->
+<div class="modal-overlay" id="acSecretModal">
+	<div class="modal-box modal-pad">
+		<b>Copy your API key now</b>
+		<div class="ac-sub">This is the only time the full key is shown. Store it securely — it can't be retrieved again.</div>
+		<div class="ac-secret" id="acSecretValue"></div>
+		<div style="text-align:right; margin-top:12px;">
+			<button type="button" id="acSecretCopy" class="btn" style="cursor:pointer;">Copy</button>
+			<button type="button" class="btn" style="cursor:pointer;" data-ac-close>Done</button>
+		</div>
+	</div>
+</div>
+
+<!-- Edit key IP lists modal -->
+<div class="modal-overlay" id="acIpModal">
+	<div class="modal-box modal-pad">
+		<b>IP restrictions</b>
+		<div class="ac-sub">One rule per line — exact IP, subnet (<code>10.0.0.0/8</code>), or wildcard (<code>192.168.1.*</code>). Blocklist wins. Empty allowlist = any IP. Only this key is affected.</div>
+		<div class="ac-field" style="align-items:flex-start; margin-top:8px;"><label for="acIpAllow">Allowlist</label><textarea id="acIpAllow" class="form-field" rows="3" style="width:260px;"></textarea></div>
+		<div class="ac-field" style="align-items:flex-start;"><label for="acIpBlock">Blocklist</label><textarea id="acIpBlock" class="form-field" rows="2" style="width:260px;"></textarea></div>
+		<div style="text-align:right; margin-top:12px;">
+			<span id="acIpMsg"></span>
+			<button type="button" id="acIpSave" class="btn" style="cursor:pointer;">Save</button>
+			<button type="button" class="btn" style="cursor:pointer;" data-ac-close>Cancel</button>
+		</div>
+	</div>
+</div>
+
+<!-- Edit key expiry modal -->
+<div class="modal-overlay" id="acExpiryModal">
+	<div class="modal-box modal-pad">
+		<b>Key expiry</b>
+		<div class="ac-sub">Set when this key stops working — it is rejected at authentication once expired. Leave blank (or Clear) for no expiry. Times are your local time.</div>
+		<div class="ac-field" style="align-items:flex-start; margin-top:8px;"><label for="acExpiryInput">Expires</label><input type="datetime-local" id="acExpiryInput" class="form-field" style="width:260px;"></div>
+		<div style="text-align:right; margin-top:12px;">
+			<span id="acExpiryMsg"></span>
+			<button type="button" id="acExpiryClear" class="btn" style="cursor:pointer;">Clear</button>
+			<button type="button" id="acExpirySave" class="btn" style="cursor:pointer;">Save</button>
+			<button type="button" class="btn" style="cursor:pointer;" data-ac-close>Cancel</button>
+		</div>
+	</div>
+</div>
+
+<!-- New user modal -->
+<div class="modal-overlay" id="acUserModal">
+	<div class="modal-box modal-pad">
+		<b>Add user</b>
+		<div class="ac-field" style="margin-top:10px;"><label for="acUserName">Username</label><input type="text" id="acUserName" class="form-field" style="width:220px;" autocomplete="off"></div>
+		<div class="ac-field"><label for="acUserPass">Password</label><input type="password" id="acUserPass" class="form-field" style="width:220px;" autocomplete="new-password"></div>
+		<div class="ac-field"><label for="acUserRole">Role</label>
+			<select id="acUserRole" class="form-field" style="width:200px;">
+				<option value="viewer">viewer — read-only</option>
+				<option value="operator">operator — can trade</option>
+				<option value="admin">admin</option>
+				<option value="owner">owner</option>
+			</select>
+		</div>
+		<div style="text-align:right; margin-top:12px;">
+			<span id="acUserModalMsg" style="font-size:var(--fs-body);"></span>
+			<button type="button" id="acUserCreate" class="btn" style="cursor:pointer;">Add</button>
+			<button type="button" class="btn" style="cursor:pointer;" data-ac-close>Cancel</button>
+		</div>
+	</div>
+</div>
+
+<script>
+(function () {
+	'use strict';
+	var CAPS = [];   // capability catalog
+	var KEY_IP = {}; // key_id -> { allow:[], block:[] } for the edit-IP modal
+	var KEY_EXP = {}; // key_id -> ISO expiry (or null) for the edit-expiry modal
+	// ISO -> datetime-local input value ("YYYY-MM-DDTHH:MM", local), for pre-filling the expiry field.
+	function toLocalInput(iso) { if (!iso) { return ''; } var d = new Date(iso); if (isNaN(d.getTime())) { return ''; } var p = function (n) { return ('0' + n).slice(-2); }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+
+	function esc(s) { return SymBot.UI.esc(s); }
+	// Canonical SymBot date/time format (dateConvertLocal is defined in partialsHeaderView and
+	// used everywhere — deal history, bots, etc.), so timestamps read identically across views.
+	function fmt(ts) { if (!ts) { return '—'; } try { return dateConvertLocal(ts); } catch (e) { return String(ts); } }
+	// Friendlier IP display: IPv6 loopback (::1) reads as cryptic to users, so show the familiar
+	// IPv4 loopback instead; blank stays an em dash. Display-only (stored value is untouched).
+	function fmtIp(ip) { if (!ip) { return '—'; } var s = String(ip); return s === '::1' ? '127.0.0.1' : s; }
+	function api(method, url, body) {
+		return $.ajax({ url: url, method: method, contentType: 'application/json', data: body ? JSON.stringify(body) : undefined });
+	}
+	// SymBotModal.open(id) / SymBotModal.close() and the backdrop / Escape / [data-ac-close] handling are
+	// provided by the shared /js/modal.js (loaded in the header partial).
+
+	// Styled confirmation for mistake-prone actions. Reuses the app-wide SymBot.UI.confirmDialog
+	// (jquery-confirm) so these dialogs match every other confirm in SymBot; falls back to a
+	// native confirm() only if that helper somehow isn't present.
+	function acConfirm(opts) {
+		if (window.SymBot && typeof SymBot.UI.confirmDialog === 'function') {
+			SymBot.UI.confirmDialog({
+				content: opts.content,
+				confirmText: opts.confirmText || '<div>Confirm</div>',
+				onConfirm: opts.onConfirm || function () {},
+				onCancel: opts.onCancel || function () {}
+			});
+		}
+		else if (confirm(opts.plain || 'Are you sure?')) { (opts.onConfirm || function () {})(); }
+		else { (opts.onCancel || function () {})(); }
+	}
+
+
+	// ── Capability catalog + key capability grid ──
+	function buildCapGrid() {
+		var byRes = {};
+		CAPS.forEach(function (c) { var r = c.key.split('.')[0]; (byRes[r] = byRes[r] || []).push(c); });
+		var html = '';
+		Object.keys(byRes).sort().forEach(function (res) {
+			html += '<div><div class="ac-res">' + esc(res) + '</div>';
+			byRes[res].forEach(function (c) {
+				html += '<label><input type="checkbox" class="ac-cap" value="' + esc(c.key) + '" style="width:auto;margin-right:6px;">' + esc(c.label) + '</label>';
+			});
+			html += '</div>';
+		});
+		$('#acKeyCaps').html(html);
+	}
+
+	// ── API keys ──
+	function loadKeys() {
+		api('GET', './api/keys').done(function (r) {
+			var rows = (r && r.keys) || [];
+			if (!rows.length) { $('#acKeysBody').html('<tr><td colspan="7" class="ac-empty">No API keys yet.</td></tr>'); return; }
+			KEY_IP = {};
+			$('#acKeysBody').html(rows.map(function (k) {
+				KEY_IP[k.key_id] = { allow: k.ip_allowlist || [], block: k.ip_blocklist || [] };
+				KEY_EXP[k.key_id] = k.expires_at || null;
+				var st = k.status === 'active' ? '<span class="ac-pill ok">active</span>' : (k.status === 'revoked' ? '<span class="ac-pill bad">revoked</span>' : '<span class="ac-pill off">disabled</span>');
+				// Surface an expiry when one is set: an expired key is flagged (it may still read
+				// "active" but is rejected at auth), a future expiry shows its date.
+				if (k.expires_at) {
+					var expMs = new Date(k.expires_at).getTime();
+					if (!isNaN(expMs)) {
+						st += (expMs < Date.now())
+							? ' <span class="ac-pill bad" title="This key is past its expiry">expired</span>'
+							: ' <span style="opacity:0.7; white-space:nowrap;" title="Expires">· ' + esc(fmt(k.expires_at)) + '</span>';
+					}
+				}
+				var caps = (k.capabilities || []).join(' ') || '—';
+				var nIp = (k.ip_allowlist || []).length + (k.ip_blocklist || []).length;
+				var actions = '';
+					var nameCell = esc(k.name || '—');
+					if (k.is_internal) { nameCell += ' <span class="ac-pill off" title="Managed by SymBot for the built-in signals client">system</span>'; }
+				if (!k.is_internal && k.status !== 'revoked') {
+					actions += '<a class="ac-key-toggle" data-id="' + esc(k.key_id) + '" data-to="' + (k.status === 'active' ? 'disabled' : 'active') + '">' + (k.status === 'active' ? 'Disable' : 'Enable') + '</a>';
+					actions += '<a class="ac-key-ip" data-id="' + esc(k.key_id) + '">IP' + (nIp ? ' (' + nIp + ')' : '') + '</a>';
+					actions += '<a class="ac-key-expiry" data-id="' + esc(k.key_id) + '">Expiry</a>';
+					actions += '<a class="ac-key-rotate" data-id="' + esc(k.key_id) + '" data-name="' + esc(k.name || '') + '">Rotate</a>';
+					actions += '<a class="ac-key-revoke" data-id="' + esc(k.key_id) + '">Revoke</a>';
+				}
+				return '<tr><td>' + nameCell + '</td><td class="ac-caps">' + esc(k.prefix) + '…</td><td class="ac-caps">' + esc(caps) + '</td><td>' + st + '</td><td style="white-space:nowrap;">' + fmt(k.last_used_at) + '</td><td style="white-space:nowrap;">' + fmt(k.created_at) + '</td><td class="ac-row-actions">' + actions + '</td></tr>';
+			}).join(''));
+		}).fail(function () { $('#acKeysBody').html('<tr><td colspan="6" class="ac-empty">You don\'t have permission to view API keys.</td></tr>'); });
+	}
+
+	function splitIpList(s) { return (s || '').split(/[\s,]+/).filter(Boolean); }
+	$('#acNewKeyBtn').on('click', function () { $('#acKeyName').val(''); $('#acKeyExpires').val(''); $('#acKeyIpAllow').val(''); $('#acKeyIpBlock').val(''); $('.ac-cap').prop('checked', false); $('#acMsg').text(''); SymBotModal.open('acKeyModal'); });
+	$('#acKeyReadOnly').on('click', function () { $('.ac-cap').each(function () { this.checked = /\.read$/.test(this.value); }); });
+	$('#acKeyClear').on('click', function () { $('.ac-cap').prop('checked', false); });
+
+	$('#acKeyCreate').on('click', function () {
+		var caps = $('.ac-cap:checked').map(function () { return this.value; }).get();
+		if (!caps.length) { $('#acMsg').css('color', 'var(--warning-color)').text('Pick at least one capability.'); return; }
+		var body = { name: $('#acKeyName').val(), capabilities: caps, signing: $('#acKeySigning').val(), ip_allowlist: splitIpList($('#acKeyIpAllow').val()), ip_blocklist: splitIpList($('#acKeyIpBlock').val()) };
+		var exp = $('#acKeyExpires').val(); if (exp) { body.expires_at = exp; }
+		$('#acMsg').css('color', '').text('Creating…');
+		api('POST', './api/keys', body).done(function (r) {
+			if (r && r.success) { SymBotModal.close(); $('#acSecretValue').text(r.clearKey); SymBotModal.open('acSecretModal'); loadKeys(); }
+			else { $('#acMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+	});
+
+	$('#acSecretCopy').on('click', function () {
+		var t = $('#acSecretValue').text();
+		var btn = this;
+		var done = function () { $(btn).text('Copied'); };
+		var fail = function () { $(btn).text('Select & copy manually'); try { var r = document.createRange(); r.selectNodeContents(document.getElementById('acSecretValue')); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch (e) {} };
+		// navigator.clipboard exists only in secure contexts (HTTPS/localhost). SymBot is often
+		// reached over plain HTTP on a LAN, so fall back to execCommand and only confirm on success.
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(t).then(done).catch(fail);
+		}
+		else {
+			var okc = false;
+			try { var r = document.createRange(); r.selectNodeContents(document.getElementById('acSecretValue')); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); okc = document.execCommand('copy'); sel.removeAllRanges(); } catch (e) { okc = false; }
+			if (okc) { done(); } else { fail(); }
+		}
+	});
+
+	$(document).on('click', '.ac-key-revoke', function () {
+		var id = $(this).data('id');
+		acConfirm({
+			content: 'Revoke this API key <b>permanently</b>?<br><br>Any client using it stops working immediately, and this cannot be undone.',
+			confirmText: '<div style="color: var(--color-danger);">Revoke key</div>',
+			plain: 'Revoke this key permanently? Any client using it stops working immediately.',
+			onConfirm: function () { api('POST', './api/keys/' + id + '/status', { status: 'revoked' }).done(loadKeys); }
+		});
+	});
+
+	// Rotate a key: mint a successor with the SAME scope and grace-expire this one, so a client can
+	// swap in the new secret before the old one stops working. The new secret is shown once, exactly
+	// like creation. Grace window is fixed at 24h here (the API also accepts a custom grace_hours).
+	$(document).on('click', '.ac-key-rotate', function () {
+		var id = $(this).data('id');
+		var name = $(this).data('name') || '';
+		acConfirm({
+			content: 'Rotate this API key' + (name ? ' (<b>' + esc(String(name)) + '</b>)' : '') + '?<br><br>'
+				+ 'A new key is issued with the same permissions and shown once. The current key keeps working for a <b>24-hour</b> grace period, then expires automatically — update your client with the new secret before then.',
+			confirmText: 'Rotate key',
+			plain: 'Rotate this key? A new secret is issued and shown once; the old key expires in 24 hours.',
+			onConfirm: function () {
+				api('POST', './api/keys/' + id + '/rotate', {}).done(function (r) {
+					if (r && r.success) { $('#acSecretValue').text(r.clearKey); SymBotModal.open('acSecretModal'); loadKeys(); }
+					else { acConfirm({ content: 'Rotation failed: ' + esc((r && r.error) || 'Unknown error'), confirmText: 'OK', plain: 'Rotation failed.', onConfirm: function () {} }); }
+				}).fail(function (x) { acConfirm({ content: x.status === 403 ? 'Not permitted.' : 'Request failed.', confirmText: 'OK', plain: 'Request failed.', onConfirm: function () {} }); });
+			}
+		});
+	});
+	// Edit a key's IP allow/block lists.
+	$(document).on('click', '.ac-key-ip', function () {
+		var id = $(this).data('id');
+		var cur = KEY_IP[id] || { allow: [], block: [] };
+		$('#acIpAllow').val((cur.allow || []).join('\n'));
+		$('#acIpBlock').val((cur.block || []).join('\n'));
+		$('#acIpMsg').text('');
+		$('#acIpSave').data('id', id);
+		SymBotModal.open('acIpModal');
+	});
+	$('#acIpSave').on('click', function () {
+		var id = $(this).data('id');
+		var body = { ip_allowlist: splitIpList($('#acIpAllow').val()), ip_blocklist: splitIpList($('#acIpBlock').val()) };
+		$('#acIpMsg').css('color', '').text('Saving…');
+		api('POST', './api/keys/' + id + '/ip', body).done(function (r) {
+			if (r && r.success) { SymBotModal.close(); loadKeys(); }
+			else { $('#acIpMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acIpMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+	});
+
+	$(document).on('click', '.ac-key-expiry', function () {
+		var id = $(this).data('id');
+		$('#acExpiryInput').val(toLocalInput(KEY_EXP[id]));
+		$('#acExpiryMsg').css('color', '').text('');
+		$('#acExpirySave').data('id', id);
+		SymBotModal.open('acExpiryModal');
+	});
+	function saveExpiry(id, value) {
+		$('#acExpiryMsg').css('color', '').text('Saving…');
+		api('POST', './api/keys/' + id + '/expiry', { expires_at: value }).done(function (r) {
+			if (r && r.success) { SymBotModal.close(); loadKeys(); }
+			else { $('#acExpiryMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acExpiryMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+	}
+	$('#acExpirySave').on('click', function () { saveExpiry($(this).data('id'), $('#acExpiryInput').val()); });
+	$('#acExpiryClear').on('click', function () { saveExpiry($('#acExpirySave').data('id'), ''); });
+
+	$(document).on('click', '.ac-key-toggle', function () {
+		var id = $(this).data('id');
+		var to = $(this).data('to');
+		var disabling = (to === 'disabled');
+		acConfirm({
+			content: disabling
+				? 'Disable this API key?<br><br>Any client using it will immediately start getting <b>401 / 403</b> errors until you re-enable it.'
+				: 'Re-enable this API key?<br><br>It will be accepted again immediately.',
+			confirmText: disabling ? '<div style="color: var(--color-danger);">Disable key</div>' : '<div>Enable key</div>',
+			plain: disabling ? 'Disable this API key? Clients using it will stop working.' : 'Re-enable this API key?',
+			onConfirm: function () { api('POST', './api/keys/' + id + '/status', { status: to }).done(loadKeys); }
+		});
+	});
+
+	// ── Users ──
+	function roleSelect(u) {
+		var roles = ['viewer', 'operator', 'admin', 'owner'];
+		var dis = u.is_initial ? ' disabled title="the initial owner cannot be re-roled"' : '';
+		return '<select class="ac-user-role form-field" data-id="' + esc(u.user_id) + '" data-current="' + esc(u.role) + '" style="width:130px;"' + dis + '>' +
+			roles.map(function (r) { return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select>';
+	}
+	function loadUsers() {
+		api('GET', './api/users').done(function (r) {
+			var rows = (r && r.users) || [];
+			if (!rows.length) { $('#acUsersBody').html('<tr><td colspan="5" class="ac-empty">Just you (the owner). Add a user to share access.</td></tr>'); return; }
+			$('#acUsersBody').html(rows.map(function (u) {
+				var st = u.status === 'active' ? '<span class="ac-pill ok">active</span>' : '<span class="ac-pill off">disabled</span>';
+				var name = esc(u.username) + (u.is_initial ? ' <span class="ac-pill">owner</span>' : '');
+				var actions = u.is_initial ? '' : '<a class="ac-user-toggle" data-id="' + esc(u.user_id) + '" data-to="' + (u.status === 'active' ? 'disabled' : 'active') + '">' + (u.status === 'active' ? 'Disable' : 'Enable') + '</a>';
+				return '<tr><td>' + name + '</td><td>' + roleSelect(u) + '</td><td>' + st + '</td><td>' + fmt(u.last_login_at) + '</td><td class="ac-row-actions">' + actions + '</td></tr>';
+			}).join(''));
+		}).fail(function () { $('#acUsersBody').html('<tr><td colspan="5" class="ac-empty">You don\'t have permission to view users.</td></tr>'); });
+	}
+	$('#acNewUserBtn').on('click', function () { $('#acUserName').val(''); $('#acUserPass').val(''); $('#acUserRole').val('viewer'); $('#acUserModalMsg').text(''); SymBotModal.open('acUserModal'); });
+	$('#acUserCreate').on('click', function () {
+		var body = { username: $('#acUserName').val(), password: $('#acUserPass').val(), role: $('#acUserRole').val() };
+		$('#acUserModalMsg').css('color', '').text('Adding…');
+		api('POST', './api/users', body).done(function (r) {
+			if (r && r.success) { SymBotModal.close(); loadUsers(); } else { $('#acUserModalMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acUserModalMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+	});
+	$(document).on('change', '.ac-user-role', function () {
+		var el = this;
+		var id = $(el).data('id');
+		var newRole = el.value;
+		var prevRole = $(el).data('current');
+		// Revert the select immediately; the role only actually changes if the user confirms. This
+		// avoids a confusing state where the dropdown shows a role that was never applied.
+		el.value = prevRole;
+		if (newRole === prevRole) { return; }
+		acConfirm({
+			content: 'Change this user\'s role from <b>' + esc(prevRole) + '</b> to <b>' + esc(newRole) + '</b>?<br><br>Their permissions change immediately.',
+			confirmText: '<div>Change role</div>',
+			plain: 'Change this user\'s role to ' + newRole + '?',
+			onConfirm: function () {
+				api('POST', './api/users/' + id + '/role', { role: newRole }).done(function (r) {
+					if (r && r.success) { el.value = newRole; $(el).data('current', newRole); }
+					else { alertBox((r && r.error) || 'Could not change the role.'); }
+				}).fail(function (x) { alertBox(SymBot.UI.ajaxError(x, 'Could not change the role.')); });
+			}
+		});
+	});
+	$(document).on('click', '.ac-user-toggle', function () {
+		var id = $(this).data('id');
+		var to = $(this).data('to');
+		var disabling = (to === 'disabled');
+		acConfirm({
+			content: disabling
+				? 'Disable this user?<br><br>They will be signed out and unable to log in until you re-enable them.'
+				: 'Re-enable this user?<br><br>They will be able to log in again immediately.',
+			confirmText: disabling ? '<div style="color: var(--color-danger);">Disable user</div>' : '<div>Enable user</div>',
+			plain: disabling ? 'Disable this user? They will be unable to log in.' : 'Re-enable this user?',
+			onConfirm: function () {
+				api('POST', './api/users/' + id + '/status', { status: to }).done(function (r) {
+					if (!r || !r.success) { alertBox((r && r.error) || 'Could not update the user.'); } loadUsers();
+				}).fail(function (x) { alertBox(SymBot.UI.ajaxError(x, 'Could not update the user.')); });
+			}
+		});
+	});
+
+	// ── Audit ──
+	// Clear-language explanations for diagnostic codes, fetched once and cached. When an audit action
+	// has an entry, its cell gets a hoverable "?" that tells the reader what it means and how to fix
+	// it — so a machine code like "watchdog.capability_drift" is never a dead end.
+	var acDiag = null;
+	function ensureDiag(cb) {
+		if (acDiag) { cb(); return; }
+		api('GET', './api/diagnostics').done(function (r) { acDiag = (r && r.catalog) || {}; }).always(function () { acDiag = acDiag || {}; cb(); });
+	}
+	// Render an action cell, adding the explanation tooltip when one exists for that code.
+	function actionCell(action) {
+		var d = acDiag && acDiag[action];
+		var base = '<td class="ac-caps">' + esc(action);
+		if (d) {
+			base += ' <span class="toolTip">?<span class="toolTipText"><b>What it means:</b> ' + esc(d.meaning) + '<br><br><b>How to fix:</b> ' + esc(d.fix) + '</span></span>';
+		}
+		return base + '</td>';
+	}
+	function loadAudit() {
+		ensureDiag(function () {
+			api('GET', './api/audit?limit=200&action=' + encodeURIComponent($('#acAuditAction').val() || '') + '&actor=' + encodeURIComponent($('#acAuditActor').val() || '')).done(function (r) {
+				var rows = (r && r.entries) || [];
+				if (!rows.length) { $('#acAuditBody').html('<tr><td colspan="6" class="ac-empty">No matching audit entries.</td></tr>'); return; }
+				$('#acAuditBody').html(rows.map(function (e) {
+					return '<tr><td style="white-space:nowrap;">' + fmt(e.ts) + '</td><td class="ac-caps">' + esc(e.actor) + '</td>' + actionCell(e.action) + '<td>' + esc(e.target) + '</td><td>' + esc(e.detail) + '</td><td class="ac-caps" style="white-space:nowrap;">' + esc(fmtIp(e.ip)) + '</td></tr>';
+				}).join(''));
+			}).fail(function () { $('#acAuditBody').html('<tr><td colspan="6" class="ac-empty">You don\'t have permission to view the audit log.</td></tr>'); });
+		});
+	}
+	$('#acAuditRefresh').on('click', loadAudit);
+
+	// ── Section tabs ──
+	// Show one panel at a time and load its data on FIRST open only — so the audit log's 200-row
+	// fetch is skipped until the user actually opens that tab. Reuses the existing per-section loaders.
+	var acPanels  = { keys: '#acKeysSection', users: '#acUsersSection', audit: '#acAuditSection' };
+	var acLoaders = { keys: loadKeys, users: loadUsers, audit: loadAudit };
+	var acLoaded  = { keys: false, users: false, audit: false };
+
+	function showTab(name) {
+		if (!acPanels[name]) { return; }
+		$('.ac-tab').each(function () {
+			var on = $(this).data('actab') === name;
+			$(this).toggleClass('is-active', on).attr('aria-selected', on ? 'true' : 'false');
+		});
+		$('.ac-panel').addClass('is-hidden');
+		$(acPanels[name]).removeClass('is-hidden');
+		if (!acLoaded[name]) { acLoaded[name] = true; (acLoaders[name] || function () {})(); }
+	}
+
+	$('.ac-tabs').on('click', '.ac-tab', function () { showTab($(this).data('actab')); });
+
+	// ── Init ──
+	$(document).ready(function () {
+		api('GET', './api/authz/capabilities').done(function (r) { CAPS = (r && r.capabilities) || []; buildCapGrid(); }).always(function () {
+			showTab('keys');   // default tab; Users and Audit Log load when first opened
+		});
+	});
+})();
+</script>
+
+<%- include('./partialsFooterView'); %>

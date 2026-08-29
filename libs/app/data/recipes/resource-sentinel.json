@@ -1,0 +1,32 @@
+{
+  "id": "core/resource-sentinel",
+  "version": "1.0",
+  "min_symbot_version": "7.0",
+  "name": "Resource sentinel",
+  "description": "Samples host disk, memory and CPU on a schedule and alerts you ONLY when one crosses its warning threshold — quiet when everything is healthy. Uses only built-in system stats (no extra software to install) and works on Linux, macOS and Windows. Memory uses true available memory on Linux and Windows; macOS doesn't expose that to a pure check, so memory is shown there but not alerted on. It reads the HOST machine, so in a Hub (many instances on one machine) enabling it on a single instance covers them all. Read-only: it checks the machine, it never places or changes a trade.",
+  "author": "core",
+  "categories": [
+    "monitoring",
+    "alerting"
+  ],
+  "icon": "gauge",
+  "requires_ai": false,
+  "type": "resource_sentinel",
+  "kind": "cron",
+  "cron": "*/15 * * * *",
+  "enabled": false,
+  "settings": {
+    "disk_free_pct": 10,
+    "mem_free_pct": 10,
+    "cpu_busy_pct": 92,
+    "notifications": [
+      {
+        "type": "browser",
+        "target": {},
+        "on": [
+          "always"
+        ]
+      }
+    ]
+  }
+}

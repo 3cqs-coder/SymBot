@@ -20,6 +20,8 @@
 	"cron_backup": {
 					"enabled": false,
 					"include_chats": true,
+					"include_schedules": true,
+					"include_config": false,
 					"schedule": "",
 					"password": "",
 					"max": "",
@@ -34,6 +36,15 @@
 								"enabled": false
 							}
 	},
+	"mailer": {
+					"enabled": false,
+					"host": "",
+					"port": 587,
+					"secure": false,
+					"user": "",
+					"from": "",
+					"password": ""
+				},
    "circuit_breaker": {
         "enabled": true,
         "deal_ratio_threshold": 0.5,
@@ -43,7 +54,14 @@
         "pause_duration_secs": 60,
         "repeat_alert_window_secs": 3600,
         "price_zero_alert_count": 4,
-		"price_drop_enabled": true
+        "price_deviation_high_ratio": 2,
+        "price_deviation_low_ratio": 10,
+        "price_implausible_alert_count": 4,
+        "close_held_alert_count": 15,
+		"price_drop_enabled": true,
+        "portfolio_loss_enabled": false,
+        "loss_window_hours": 24,
+        "loss_limit": 0
     },
 	"security": {
     	"login_throttle": {
@@ -51,8 +69,13 @@
         "window_ms": 900000,
         "block_ms": 900000,
         "max_tracked_ips": 5000
-    	}
+    	},
+    	"trust_proxy": true
 	},
+	"ip_filter": {
+					"server": { "enabled": false, "allowlist": [], "blocklist": [] },
+					"login":  { "enabled": false, "allowlist": [], "blocklist": [] }
+				},
 	"bots": {
 				"start_conditions": {
 										"asap": {
@@ -109,7 +132,35 @@
 					"use_router": true,
 					"router_model": "",
 					"router_timeout_ms": 12000
+				},
+				"generation": {
+					"analysis_model": "",
+					"chat_temperature": "",
+					"max_tokens": "",
+					"num_ctx": ""
+				},
+				"tools": {
+					"enabled": false,
+					"max_iterations": 5,
+					"verify": false,
+					"explore": false,
+					"deep_explore": false,
+					"trace": false,
+					"corrective": false,
+					"topic_guard": false
+				},
+				"learning": {
+					"enabled": false
 				}
-			},		
-	"verbose_log": true
+			},
+	"verbose_log": true,
+	"notifications": null,
+	"signal_activity": {
+		"retention": {
+			"signal_bot": { "max_rows": 50000 },
+			"api":        { "max_rows": 50000 },
+			"3cqs":       { "max_rows": 200000 },
+			"default":    { "max_rows": 25000 }
+		}
+	}
 }

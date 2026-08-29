@@ -18,12 +18,22 @@
 // them, and has no route to pause, cancel, sell or modify anything.
 
 
-const AILogScan = require('./AILogScan');
-const AIDealQuery = require('./AIDealQuery');
+const LogScan = require('../queries/LogScan');
+const DealQuery = require('../queries/DealQuery');
+const aiGuardrails = require('./AIGuardrails');
 
 
 const ROUTER_TIMEOUT_MS = 12000;
 const HISTORY_TURNS = 6;
+
+// The routing pass must return a strict JSON object and nothing else, so it runs
+// deterministically (temperature 0) and asks the provider for a schema-constrained
+// JSON object (structured outputs — more reliable than plain JSON mode on small
+// models), with plain JSON mode as the fallback. If the active model or endpoint
+// supports neither, completePrompt retries once without options and parseJsonObject
+// still recovers the object from the text. The schema itself is attached below, once
+// VALID_SCOPES (its scope enum) is defined.
+const ROUTER_GEN = { temperature: 0, json: true };
 
 // A short message with no data-seeking words is treated as conversational.
 const CONVERSATIONAL_MAX_WORDS = 6;
@@ -40,40 +50,44 @@ const MAX_CONTEXT_CHARS = 24000;
 
 const VALID_SCOPES = new Set([ 'one_deal', 'compare_deals', 'day_events', 'paused_deals', 'active_deals', 'log_search', 'general' ]);
 
+// Schema for the routing decision, matching the shape ROUTER_SYSTEM asks the model to
+// return. The scope enum is derived from VALID_SCOPES so the schema can never drift out
+// of sync with the code that validates it. Only the always-present fields are required;
+// the optional ones (searchTerm/resolvedQuery/ambiguous/clarify) are coerced by
+// validateRoute when absent.
+const ROUTER_SCHEMA = {
+	type: 'object',
+	properties: {
+		scope:         { type: 'string', enum: Array.from(VALID_SCOPES) },
+		dealIds:       { type: 'array', items: { type: 'string' } },
+		pair:          { type: 'string' },
+		days:          { type: 'integer', minimum: 1, maximum: 2 },
+		needLogs:      { type: 'boolean' },
+		searchTerm:    { type: 'string' },
+		resolvedQuery: { type: 'string' },
+		ambiguous:     { type: 'boolean' },
+		clarify:       { type: 'string' }
+	},
+	required: [ 'scope', 'dealIds', 'pair', 'days', 'needLogs' ]
+};
+
+ROUTER_GEN.schema = ROUTER_SCHEMA;
+
 // A deal id looks like PAIR_QUOTE-XXXXXX-<epoch>. Recognizing it directly means
 // the common case works even if the routing pass is unavailable.
 const DEAL_ID_RE = /\b[A-Z0-9]+_[A-Z0-9]+-[A-Z0-9]+-\d+\b/g;
 const PAIR_RE = /\b([A-Z0-9]{2,10})\/([A-Z]{3,5})\b/;
 
-// Rooms used for one-shot generated prompts such as deal analysis. Those build
-// their own context and must not be touched.
-const NON_CONVERSATIONAL_ROOM_RE = /^aiAnalyze/i;
+// Rooms used for one-shot generated prompts such as deal analysis and the
+// closed-deal journal narrative. Those build their own self-contained prompt
+// (the journal prompt explicitly says to use only the numbers it provides), so
+// the conversational routing pass must not run for them or add extra context.
+const NON_CONVERSATIONAL_ROOM_RE = /^(aiAnalyze|journal)/i;
 
 
-const ROUTER_SYSTEM = `You route questions for a cryptocurrency DCA trading bot called SymBot. You do NOT answer the question. You decide what data is needed to answer it.
-
-Return ONLY a compact JSON object, no markdown and no preamble:
-{
-  "scope": one of "one_deal" | "compare_deals" | "day_events" | "paused_deals" | "active_deals" | "log_search" | "general",
-  "dealIds": array of full deal ids mentioned or referred to (resolve "it"/"that deal" from the conversation); [] if none,
-  "pair": trading pair like "BTC/USD" if one is referred to, otherwise "",
-  "days": integer 1-2, how many days of logs are relevant (1 = today only),
-  "needLogs": true if answering needs raw log events (debugging, "what happened", "why did it"),
-  "searchTerm": when scope is "log_search", the exact phrase to look for in the logs, otherwise "",
-  "resolvedQuery": a short self-contained restatement of the question,
-  "ambiguous": true only if it is unclear which deal or pair is meant,
-  "clarify": one short question to disambiguate, otherwise ""
-}
-
-Guidance:
-- "why did X pause", "what happened to X", "trace X", "debug X" -> scope "one_deal", needLogs true
-- "compare these deals", "how does this compare to other BTC deals" -> scope "compare_deals"
-- "what happened today", "any errors today", "did anything break" -> scope "day_events", needLogs true
-- "what is paused", "what is stuck" -> scope "paused_deals"
-- "what is running", "how are my deals" -> scope "active_deals"
-- Asking about a specific phrase or message in the logs — "how many Client Disconnected are in the logs", "are there any timeout errors", "search the logs for X" -> scope "log_search", needLogs true, and put the exact phrase to match in searchTerm (for example "Client Disconnected")
-- general questions about how the bot works, or anything needing no data -> scope "general"
-- If the user refers to "it" or "that deal", resolve to the deal id discussed earlier in the conversation.`;
+// The router system prompt lives in libs/ai/data/router-system.txt (plain text, not inline code) so a
+// stray backtick can't silently truncate it — the same convention as the deep-analysis/persona prompts.
+const ROUTER_SYSTEM = aiGuardrails.readText('router-system.txt');
 
 
 let shareData;
@@ -102,13 +116,7 @@ function isConversationalRoom(room) {
 }
 
 
-function logger(msg) {
-
-	if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') {
-
-		shareData.Common.logger('AI context: ' + msg);
-	}
-}
+let logger = function () {};   // assigned in init() via Common.makeLogger
 
 
 // Local date as YYYY-MM-DD. Uses Common.getDateParts, which is the same helper
@@ -177,30 +185,12 @@ async function getInstanceName() {
 }
 
 
-// Pull a JSON object out of a model response that may carry stray prose or
-// code fences around it.
+// Pull a JSON object out of a model response that may carry stray prose or code fences around it.
+// Delegates to the shared tolerant parser so the router recovers the same fenced / trailing-comma
+// breakages every other AI caller does (this local copy previously did neither and silently dropped them).
 function parseJsonObject(text) {
 
-	const raw = typeof text === 'string' ? text : '';
-
-	const start = raw.indexOf('{');
-	const end = raw.lastIndexOf('}');
-
-	let parsed = null;
-
-	if (start !== -1 && end > start) {
-
-		try {
-
-			parsed = JSON.parse(raw.slice(start, end + 1));
-		}
-		catch (e) {
-
-			parsed = null;
-		}
-	}
-
-	return (parsed);
+	return aiGuardrails.parseModelJson(text);
 }
 
 
@@ -247,7 +237,7 @@ const TOPIC_TERMS = {
 // Pull the phrase to search for out of a question about the logs.
 //
 // A quoted phrase is taken as written. Otherwise the longest run of adjacent
-// capitalised words is used, which is how log messages tend to read ("Client
+// capitalized words is used, which is how log messages tend to read ("Client
 // Disconnected", "Circuit Breaker"). Returns '' when nothing usable is found,
 // which leaves the caller to fall back rather than search for filler words.
 function extractSearchTerm(message) {
@@ -264,8 +254,8 @@ function extractSearchTerm(message) {
 	}
 	else {
 
-		// Runs of two or more capitalised words, ignoring the leading word of the
-		// sentence which is capitalised for grammar rather than meaning.
+		// Runs of two or more capitalized words, ignoring the leading word of the
+		// sentence which is capitalized for grammar rather than meaning.
 		const body = raw.replace(/^\s*\S+\s+/, ' ');
 
 		const runs = body.match(/\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)\b/g) || [];
@@ -326,7 +316,7 @@ function heuristicRoute(message, history) {
 	// the fixed set of notable events.
 	// Questions about the log contents themselves, e.g. "how many X are in the
 	// logs", "search the logs for X". The word "log" is the clearest signal, but a
-	// recognised topic asked in counting terms is the same question — "how many
+	// recognized topic asked in counting terms is the same question — "how many
 	// times did symbot restart today" never says "log" and still means one.
 	const asksHowMany = /\bhow many|how often|how much|count|number of|search|find|any\b/.test(text);
 
@@ -337,8 +327,8 @@ function heuristicRoute(message, history) {
 	const wantsLogSearch = (mentionsLog && (asksHowMany || /\bwere|are there\b/.test(text)))
 		|| (topicHit.length > 0 && asksHowMany);
 
-	// A recognised topic supplies the log phrases directly; otherwise fall back to
-	// a quoted or capitalised phrase lifted from the question.
+	// A recognized topic supplies the log phrases directly; otherwise fall back to
+	// a quoted or capitalized phrase lifted from the question.
 	const topic = wantsLogSearch ? topicHit : [];
 
 	const searchTerm = wantsLogSearch ? extractSearchTerm(message) : '';
@@ -550,13 +540,19 @@ async function routeQuestion(message, history) {
 			{ 'role': 'user', 'content': 'CONVERSATION:\n' + (turns || '(none)') + '\n\nLATEST MESSAGE:\n' + message }
 		];
 
-		const timeout = new Promise(resolve => setTimeout(() => resolve(null), cfg.router_timeout_ms || ROUTER_TIMEOUT_MS));
+		let routerTimer;
+
+		const timeout = new Promise(resolve => {
+
+			routerTimer = setTimeout(() => resolve(null), cfg.router_timeout_ms || ROUTER_TIMEOUT_MS);
+			if (routerTimer && routerTimer.unref) { routerTimer.unref(); }
+		});
 
 		const started = Date.now();
 
 		try {
 
-			const raw = await Promise.race([ complete(messages, cfg.router_model), timeout ]);
+			const raw = await Promise.race([ complete(messages, cfg.router_model, ROUTER_GEN), timeout ]);
 
 			parsed = parseJsonObject(raw);
 
@@ -567,6 +563,10 @@ async function routeQuestion(message, history) {
 			logger('router failed after ' + (Date.now() - started) + 'ms (' + e.message + ') — using heuristic route');
 
 			parsed = null;
+		}
+		finally {
+
+			clearTimeout(routerTimer);
 		}
 	}
 
@@ -622,7 +622,8 @@ function formatProfit(deal) {
 
 		const outcome = deal.profitable === true ? 'PROFIT' : (deal.profitable === false ? 'LOSS' : 'result');
 
-		const quote = (typeof deal.pair === 'string' && deal.pair.includes('/')) ? deal.pair.split('/')[1] : '';
+		const q = (shareData && shareData.Common && typeof shareData.Common.quoteCurrency === 'function') ? shareData.Common.quoteCurrency(deal.pair) : '';
+		const quote = (q && q !== 'UNKNOWN') ? q : '';
 
 		const symbol = (shareData && shareData.Common && typeof shareData.Common.getCurrencySymbol === 'function')
 			? shareData.Common.getCurrencySymbol(quote)
@@ -682,7 +683,7 @@ function renderDeals(title, deals) {
 			return ('- ' + parts.join(' | '));
 		};
 
-		// One deal is described as labelled lines rather than a pipe-separated row.
+		// One deal is described as labeled lines rather than a pipe-separated row.
 		// A row of pipes reads as a table, and with a single entry the fields
 		// themselves were counted as separate deals. Lists keep the compact row
 		// form, where the repetition of the same shape makes each line read as one
@@ -793,7 +794,7 @@ async function gatherData(route) {
 
 		for (const dealId of route.dealIds.slice(0, 3)) {
 
-			const deal = await AIDealQuery.getDeal(dealId);
+			const deal = await DealQuery.getDeal(dealId);
 
 			// No outer title: the grouped heading below already names the deal and its
 			// status, and stacking two headers made one deal look like two entries.
@@ -801,7 +802,7 @@ async function gatherData(route) {
 
 			if (route.needLogs) {
 
-				const logs = await AILogScan.getDealEvents(dealId, dates, instanceName, MAX_LOG_LINES);
+				const logs = await LogScan.getDealEvents(dealId, dates, instanceName, MAX_LOG_LINES);
 
 				// Say so explicitly when nothing was found. A deal id is an exact
 				// identifier, so an empty result here is reliable: nothing was logged
@@ -823,7 +824,7 @@ async function gatherData(route) {
 
 			for (const dealId of route.dealIds.slice(0, 5)) {
 
-				const deal = await AIDealQuery.getDeal(dealId);
+				const deal = await DealQuery.getDeal(dealId);
 
 				sections.push(renderDeals('DEAL RECORD (' + dealId + '):', deal.deals));
 			}
@@ -831,13 +832,13 @@ async function gatherData(route) {
 
 		if (route.pair) {
 
-			const byPair = await AIDealQuery.getDealsByPair(route.pair, true, MAX_DEALS);
+			const byPair = await DealQuery.getDealsByPair(route.pair, true, MAX_DEALS);
 
 			sections.push(renderDeals('COMPLETED DEALS FOR ' + route.pair + ':', byPair.deals));
 		}
 		else {
 
-			const recent = await AIDealQuery.getRecentDeals(null, null, MAX_DEALS);
+			const recent = await DealQuery.getRecentDeals(null, null, MAX_DEALS);
 
 			sections.push(renderDeals('RECENTLY COMPLETED DEALS:', recent.deals));
 		}
@@ -849,7 +850,7 @@ async function gatherData(route) {
 		// may only have been given a sample of.
 		const needles = (route.searchTerms && route.searchTerms.length) ? route.searchTerms : [ route.searchTerm ];
 
-		let found = await AILogScan.scanLogs({
+		let found = await LogScan.scanLogs({
 			'needles': needles,
 			'dates': dates,
 			'instanceName': instanceName,
@@ -870,7 +871,7 @@ async function gatherData(route) {
 
 			if (retry.length) {
 
-				const second = await AILogScan.scanLogs({
+				const second = await LogScan.scanLogs({
 					'needles': retry,
 					'dates': dates,
 					'instanceName': instanceName,
@@ -948,7 +949,7 @@ async function gatherData(route) {
 	}
 	else if (route.scope === 'day_events') {
 
-		let events = await AILogScan.getNotableEvents(dates, instanceName, MAX_LOG_LINES);
+		let events = await LogScan.getNotableEvents(dates, instanceName, MAX_LOG_LINES);
 		let eventDates = dates;
 
 		// Shortly after midnight "today" holds almost nothing, and answering that
@@ -959,7 +960,7 @@ async function gatherData(route) {
 
 			const wider = recentDates(2);
 
-			const widerEvents = await AILogScan.getNotableEvents(wider, instanceName, MAX_LOG_LINES);
+			const widerEvents = await LogScan.getNotableEvents(wider, instanceName, MAX_LOG_LINES);
 
 			if (widerEvents.lines.length) {
 
@@ -990,20 +991,20 @@ async function gatherData(route) {
 	}
 	else if (route.scope === 'paused_deals') {
 
-		const paused = await AIDealQuery.getPausedDeals(null, MAX_DEALS);
+		const paused = await DealQuery.getPausedDeals(null, MAX_DEALS);
 
 		sections.push(renderDeals('PAUSED:', paused.deals));
 
 		if (route.needLogs) {
 
-			const events = await AILogScan.getNotableEvents(dates, instanceName, MAX_LOG_LINES);
+			const events = await LogScan.getNotableEvents(dates, instanceName, MAX_LOG_LINES);
 
 			sections.push(renderLogLines('NOTABLE LOG EVENTS:', events.lines));
 		}
 	}
 	else if (route.scope === 'active_deals') {
 
-		const active = await AIDealQuery.getActiveDeals(MAX_DEALS);
+		const active = await DealQuery.getActiveDeals(MAX_DEALS);
 
 		sections.push(renderDeals('', active.deals));
 	}
@@ -1015,9 +1016,17 @@ async function gatherData(route) {
 // Build the context block for a message, or '' when nothing applies.
 // This is the only function callers need. Single exit; every failure path
 // yields '' so the conversation continues unchanged.
-async function build(room, message, history) {
+//
+// A deal analysis (purpose 'analysis') is skipped outright: its prompt is a
+// self-contained report that already carries every figure the model needs, so
+// running the router over it only prepends redundant data and chat-oriented
+// rules. This mirrors the room-name exclusion above — the streamed UI analysis
+// simply runs in a chat room, so the purpose is what identifies it here.
+async function build(room, message, history, purpose) {
 
 	let context = '';
+
+	if (purpose === 'analysis') { return context; }
 
 	if (isEnabled() && isConversationalRoom(room) && typeof message === 'string' && message.trim() !== '') {
 
@@ -1102,7 +1111,7 @@ async function build(room, message, history) {
 
 					if (data.indexOf('WHAT HAPPENED ON') !== -1) {
 
-						rules.push('The log events below are the answer to what happened. Summarise them; do not '
+						rules.push('The log events below are the answer to what happened. Summarize them; do not '
 							+ 'say you lack information about past activity.');
 					}
 
@@ -1158,8 +1167,9 @@ module.exports = {
 	init: function(obj) {
 
 		shareData = obj;
+		logger = obj.Common.makeLogger('AI context: ');
 
-		AILogScan.init(obj);
-		AIDealQuery.init(obj);
+		LogScan.init(obj);
+		DealQuery.init(obj);
 	}
 };

@@ -6,7 +6,7 @@
 	<div id="contentBox">
 
 		<div class="contentHeaderBox">
-			<b class="contentHeader"><%- appData.name %> Logs</b>
+			<b class="contentHeader"><%= appData.name_display || appData.name %> Logs</b>
 
 			<span id="liveLogs">
 				<br><br>
@@ -17,20 +17,11 @@
 
 		<div id="dataBox" class="botsDealsBox" style="width: 100%;">
 
-			<div style="display: inline-block; text-align: left; font-size: 1.2rem; width: 100%;">
+			<div class="view-body">
 
-			<% 
-				for (let i = 0; i < files.length; i++) {
-					
-					let fileName = files[i]['name'].split(/[\\\/]/).pop();
-					let size = files[i]['size_human'];
-			%>
+				<%- include('./partialsInstancesMap') %>
 
-				<div class="mainMenuItem" style="justify-content: space-between;">
-					<a href="./logs/download/<%- fileName %>"><%- fileName %></a> <%- size %>
-				</div>
-			
-			<% } %>
+				<%- include('./partialsFileList', { listFiles: files, downloadBase: './logs/download/', emptyText: 'No logs yet.' }) %>
 
 			</div>
 		</div>

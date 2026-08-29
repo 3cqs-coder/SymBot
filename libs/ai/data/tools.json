@@ -1,0 +1,1254 @@
+[
+	{
+		"name": "list_open_deals",
+		"description": "List the user's currently open (active) deals with their key figures: pair, safety orders used/left, average entry, target, current price and unrealized profit/loss. Use this for questions about how deals are doing right now.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"limit": {
+					"type": "integer",
+					"description": "Maximum deals to return (default 15, max 50)."
+				}
+			}
+		},
+		"examples": [
+			"list my open deals",
+			"what deals do I have open",
+			"show my active deals"
+		]
+	},
+	{
+		"name": "get_deal",
+		"description": "Get one specific deal by its full deal id (looks like PAIR_QUOTE-XXXXXX-<number>). Returns its full summary. Use when the user names or refers to a specific deal.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"deal_id": {
+					"type": "string",
+					"description": "The full deal id."
+				}
+			},
+			"required": [
+				"deal_id"
+			]
+		},
+		"examples": [
+			"show me one specific deal by id",
+			"details of deal X",
+			"look up a deal by its id"
+		]
+	},
+	{
+		"name": "list_recent_completed_deals",
+		"description": "List the most recently completed (closed) deals with their outcomes (profit/loss, safety orders used, duration). Use to show recent finished trades. For HOW MANY deals completed over a period, or totals/win rate, use get_performance_summary instead — this returns only a recent page, not a full count.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"limit": {
+					"type": "integer",
+					"description": "Maximum deals to return (default 15)."
+				}
+			}
+		},
+		"examples": [
+			"show my recently closed deals",
+			"last few completed trades",
+			"recent finished deals and their profit"
+		]
+	},
+	{
+		"name": "get_deals_for_pair",
+		"description": "Get the deal(s) for a specific trading pair (e.g. \"ABT/USD\"), newest first, each with its live status — current price, average entry, target, unrealized P/L %, distance to take-profit, and safety orders used. This is the tool for ANY question about a named pair or a single deal: \"tell me about my ABT/USD deal\", \"how far underwater is X\", \"how is my BTC deal doing\", \"how many safety orders has X used\". To LIST a pair's deals CLOSED in a period (\"show me my BTC deals from last month\"), pass days/date or a from/to range — that restricts to deals closed in the window (for aggregate profit/win-rate of one pair over a period, prefer get_performance_summary with pair=). Optionally restrict to completed deals.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"pair": {
+					"type": "string",
+					"description": "Trading pair, e.g. \"BTC/USD\"."
+				},
+				"completed_only": {
+					"type": "boolean",
+					"description": "If true, only completed deals."
+				},
+				"days": {
+					"type": "integer",
+					"description": "Restrict to deals CLOSED in the last N days (implies completed)."
+				},
+				"date": {
+					"type": "string",
+					"description": "Restrict to deals closed on a single UTC day (YYYY-MM-DD). Overrides days."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO) for deals closed in an arbitrary window. Use with `to`."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive, or ISO). Pair with `from`."
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Maximum deals to return (default 15)."
+				}
+			},
+			"required": [
+				"pair"
+			]
+		},
+		"examples": [
+			"tell me about my ABT/USD deal",
+			"how is my BTC deal doing",
+			"how far underwater is a pair",
+			"deals for a specific pair"
+		]
+	},
+	{
+		"name": "get_paused_deals",
+		"description": "List deals that are currently paused or stuck, with the reason each is paused. Use for questions like 'what is stuck' or 'why did a deal pause'.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"limit": {
+					"type": "integer",
+					"description": "Maximum deals to return (default 15)."
+				}
+			}
+		},
+		"examples": [
+			"which deals are paused",
+			"what is stuck",
+			"why did a deal pause",
+			"halted or stuck deals"
+		]
+	},
+	{
+		"name": "search_logs",
+		"description": "Search SymBot's own log files. Accepts plain-language terms — several at once, separated by commas — and understands concepts like 'errors', 'insufficient funds', 'circuit breaker', 'canceled', 'paused', 'disconnect', expanding them to the phrases SymBot actually logs. Returns matching log lines and a count. Use for debugging or 'what happened' / 'any errors' questions. To COUNT orders (e.g. safety orders) in a period, use count_orders instead — order type and time are not reliable in the log text.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "What to look for — a phrase, a symbol, or a concept. Multiple terms may be comma-separated (e.g. 'insufficient funds, canceled')."
+				},
+				"days": {
+					"type": "integer",
+					"description": "How many days back to search, 1-3 (default 1 = today)."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day to search (YYYY-MM-DD, e.g. yesterday). Overrides days and isolates that single day."
+				},
+				"context": {
+					"type": "integer",
+					"description": "Lines of surrounding context to include with each match, 0-3 (default 1). Some events name their deal on the neighboring line (a funds warning is followed by 'Starting new deal … Deal ID:'), so keep context ≥ 1 for 'which deal' / 'more details' questions."
+				}
+			},
+			"required": [
+				"query"
+			]
+		},
+		"examples": [
+			"search the logs for insufficient funds",
+			"find sell errors in the logs",
+			"grep my logs for a message",
+			"look for a specific term in the logs"
+		]
+	},
+	{
+		"name": "analyze_logs",
+		"description": "Flexible log ANALYSIS over a time window — the tool for abstract 'how many / when / how often / correlate' questions the fixed tools don't cover. Give one or more comma-separated terms; mode 'count' returns totals, mode 'list' returns the matching lines. group_by 'hour' buckets a count by hour (to see when something spiked), group_by 'term' counts each term separately. from/to (UTC ISO, e.g. 2026-08-12T09:00:00Z) restrict to a window. Streams the log in flat memory and never blocks trading. Use for 'how many times did X happen', 'when did the errors spike', 'count AuthenticationError by hour', 'was there a burst of Y around this time'.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"terms": {
+					"type": "string",
+					"description": "What to look for — one phrase, or several comma-separated (e.g. 'AuthenticationError, Invalid Price')."
+				},
+				"mode": {
+					"type": "string",
+					"description": "'count' for totals (default when group_by is set), or 'list' for the matching lines."
+				},
+				"group_by": {
+					"type": "string",
+					"description": "'hour' to bucket a count by timestamp hour (see spikes), 'day' to bucket by date (which day had the most), or 'term' to count each term separately."
+				},
+				"from": {
+					"type": "string",
+					"description": "Window start, UTC ISO (e.g. 2026-08-12T09:00:00Z). Optional."
+				},
+				"to": {
+					"type": "string",
+					"description": "Window end, UTC ISO. Optional."
+				},
+				"date": {
+					"type": "string",
+					"description": "A single UTC day (YYYY-MM-DD) if not using from/to."
+				},
+				"days": {
+					"type": "integer",
+					"description": "Last N days (1-3) if not using from/to or date."
+				}
+			},
+			"required": [
+				"terms"
+			]
+		},
+		"examples": [
+			"how many times did X happen",
+			"when did the last Y occur",
+			"how often does this warning appear",
+			"correlate events over the last week"
+		]
+	},
+	{
+		"name": "get_events_in_window",
+		"description": "Everything notable that happened across ALL deals in a time window — the 'what happened between T1 and T2' question. Returns events, genuine errors, auth/network failures, invalid prices, deal resumes and restarts in chronological order. Give from/to as UTC ISO timestamps (e.g. from 2026-08-12T09:17:00Z to 2026-08-12T09:22:00Z). Use to reconstruct an incident or see the sequence of events around a moment.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"from": {
+					"type": "string",
+					"description": "Window start, UTC ISO (e.g. 2026-08-12T09:17:00Z)."
+				},
+				"to": {
+					"type": "string",
+					"description": "Window end, UTC ISO (e.g. 2026-08-12T09:22:00Z)."
+				}
+			},
+			"required": [
+				"from",
+				"to"
+			]
+		},
+		"examples": [
+			"what happened between 2pm and 3pm",
+			"everything that happened in that time window",
+			"events across all deals today"
+		]
+	},
+	{
+		"name": "find_incident",
+		"description": "Correlate an INCIDENT around an approximate time: clusters errors, auth/network failures, invalid prices, restarts, resumes and deal completions within a ± window, and lists the deal ids caught up in it. Returns by_kind (exact counts per marker) and by_category (the same counts rolled up into stable kinds — auth, network, order, funds, price, system, lifecycle, exchange — so you can say WHAT KIND of incident it was). Give `around` as an approximate UTC time (e.g. 2026-08-12T09:20) and optionally window_minutes (default 10). Use for 'what went wrong around 9am', 'why did a batch of deals close at once', 'was there an outage that affected my deals'. IMPORTANT when narrating: events are ordered by time, but one event happening BEFORE another does NOT prove it CAUSED it — describe the sequence and plausible links, and only claim causation where it is mechanically obvious (e.g. a stop-loss firing right after a price-feed error). Do not invent a cause the events don't support.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"around": {
+					"type": "string",
+					"description": "Approximate UTC time to center on, e.g. 2026-08-12T09:20 or a full ISO timestamp."
+				},
+				"window_minutes": {
+					"type": "integer",
+					"description": "Half-window in minutes (default 10, max 180)."
+				}
+			},
+			"required": [
+				"around"
+			]
+		},
+		"examples": [
+			"what happened around 3pm",
+			"correlate the errors at that time",
+			"was there an incident this morning"
+		]
+	},
+	{
+		"name": "scan_price_anomalies",
+		"description": "Scan the follow-loop price ticks and flag IMPLAUSIBLE prices — a zero/invalid price, a wildly large profit %, or a last price that deviates massively from the deal's DCA average. This catches the class of problem where a garbage price (e.g. from an exchange/auth hiccup) produces insane profit numbers or a wrong recorded close price. Optionally restrict to from/to (UTC ISO) or a date. Use for 'were there any bad/garbage prices', 'why did a deal show a crazy profit', 'check for price glitches'. Streams in flat memory; never blocks trading.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"from": {
+					"type": "string",
+					"description": "Window start, UTC ISO. Optional."
+				},
+				"to": {
+					"type": "string",
+					"description": "Window end, UTC ISO. Optional."
+				},
+				"date": {
+					"type": "string",
+					"description": "A single UTC day (YYYY-MM-DD) if not using from/to."
+				},
+				"days": {
+					"type": "integer",
+					"description": "Last N days (1-3) if not using from/to or date."
+				}
+			}
+		},
+		"examples": [
+			"any bad or implausible price ticks",
+			"were there price anomalies",
+			"zero or invalid prices in the feed"
+		]
+	},
+	{
+		"name": "count_orders",
+		"description": "Count filled orders in a time window, split into base orders and safety orders (DCA safety orders), with a per-deal breakdown (by_deal). This reads real deal data, so it is the correct and accurate way to answer 'how many safety orders were placed today / yesterday / in the last N days' AND 'which deals placed safety orders'. Use the by_deal list verbatim for which-deals answers, the by_bot list for 'how many orders did each BOT place' (authoritative per-bot totals — do not infer a bot from the per-deal list), and the totals for how-many answers; do not re-count from anything else. Optionally filter by pair. Give days (last N days) or a specific UTC date (YYYY-MM-DD, prefer the exact date for 'yesterday'), or from/to for an arbitrary range.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"days": {
+					"type": "integer",
+					"description": "Count over the last N days (default 1 = today). Ignored when date is given."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day to count, formatted YYYY-MM-DD (e.g. yesterday). Overrides days."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO) for an arbitrary window. Use with `to`. Overrides days/date."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive, or ISO). Pair with `from`."
+				},
+				"pair": {
+					"type": "string",
+					"description": "Optional trading pair filter, e.g. \"BTC/USD\"."
+				}
+			}
+		},
+		"examples": [
+			"how many orders were placed today",
+			"count of buy orders this week",
+			"how many trades executed recently"
+		]
+	},
+	{
+		"name": "compare_deal_to_baseline",
+		"description": "Contrastively diagnose ONE completed deal by comparing it to similar deals with the OPPOSITE outcome on the SAME pair (a losing deal vs your winners, or vice-versa). Returns, for the target and the baseline average: safety orders used vs max (ladder_exhausted), how far price fell below the base order (max_price_drop_pct), duration, and config (take-profit %, step %, size multiplier). Use to explain WHY a deal under- or over-performed relative to your norm — 'why did this deal fail', 'what did it do differently', 'compare it to my winners'. Complements diagnose_deal (which gives the deal's own log events). Report the single decisive difference from baseline_avg; never assert a cause the numbers don't support. NEEDS a real deal id: if the user names a deal indirectly (e.g. 'my worst KERNEL deal'), FIRST get the exact id (get_top_deals with direction 'worst' and that pair, or get_deals_for_pair, or find_deal_id) and pass that id here — never a made-up or placeholder id.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"deal_id": {
+					"type": "string",
+					"description": "The full deal id (must be a completed deal)."
+				},
+				"baseline_count": {
+					"type": "integer",
+					"description": "How many opposite-outcome deals on the same pair to compare against (default 5, max 10)."
+				}
+			},
+			"required": [
+				"deal_id"
+			]
+		},
+		"examples": [
+			"why did this deal do worse than my other ones",
+			"compare my losing deal to my winners",
+			"what did this deal do differently",
+			"why did deal X underperform",
+			"how does this deal compare to my successful ones on this pair"
+		]
+	},
+	{
+		"name": "diagnose_deal",
+		"description": "Diagnose one specific deal: returns its full summary PLUS its own log events (orders, pauses, errors) together, so you can explain what happened or what went wrong with it. Use when the user asks why a deal is stuck, failing, not filling, or behaving oddly.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"deal_id": {
+					"type": "string",
+					"description": "The full deal id."
+				},
+				"days": {
+					"type": "integer",
+					"description": "How many days of logs to include, 1-3. Default: the day of the deal's last activity."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). Overrides days."
+				}
+			},
+			"required": [
+				"deal_id"
+			]
+		},
+		"examples": [
+			"why is this deal stuck",
+			"why did my deal fail",
+			"what went wrong with deal X",
+			"why is this deal not filling"
+		]
+	},
+	{
+		"name": "analyze_error_baseline",
+		"description": "Compare the error mix in a TARGET window against a BASELINE window (the days just before it) and flag each error type as 'new', 'spiking' (≥2× the baseline per-day rate), 'elevated', 'normal' or 'gone'. This is the tool for 'are errors higher than usual?', 'anything unusual/abnormal in the logs?', 'is X error spiking?', 'how does today compare to normal?'. Report the flagged (new/spiking) types FIRST using each entry's `status` field, and read the pre-computed counts/ratios verbatim — do not re-rank or re-count. Give days (1-3) or a UTC date for the target, and optionally baseline_days (how many preceding days count as normal, default 3).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"days": {
+					"type": "integer",
+					"description": "Target window: how many days back, 1-3 (default 1 = today)."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC target day (YYYY-MM-DD). Overrides days."
+				},
+				"baseline_days": {
+					"type": "integer",
+					"description": "How many days immediately before the target to treat as the normal baseline (default 3, max 7)."
+				}
+			}
+		},
+		"examples": [
+			"are there more errors than usual",
+			"any unusual or abnormal errors today",
+			"is anything spiking in the logs",
+			"which errors are new or elevated",
+			"how does today compare to normal for errors"
+		]
+	},
+	{
+		"name": "summarize_recent_errors",
+		"description": "Scan logs for genuine errors/problems across all deals and RANK them by type with real counts — exchange/API failures (RateLimitExceeded, RequestTimeout, NetworkError, AuthenticationError), insufficient funds, invalid or exchange-cancelled orders, retries exhausted, circuit-breaker trips. Returns errors_by_type (ranked, most-frequent first), errors_by_day (ranked by date), and total_errors. Does NOT include normal events like finished deals. Use for 'any errors today?', 'anything going wrong?', 'what are the MOST errors / top errors / most common error', and 'which day had the most errors'. The reply must use the PRE-COMPUTED fields directly and never re-count or re-rank: most_common_error answers 'what is the most common error', busiest_day answers 'which day had the most errors' (report busiest_day.date and busiest_day.count — do NOT report total_errors as a single day's count), errors_by_type lists all types ranked, total_errors is the overall total across the whole period. Give days (1-3) or a specific UTC date to isolate one day.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"days": {
+					"type": "integer",
+					"description": "How many days back to scan, 1-3 (default 1 = today)."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD, e.g. yesterday). Overrides days and isolates that single day."
+				}
+			}
+		},
+		"examples": [
+			"show me the most errors in the logs",
+			"what errors happened over the last few days",
+			"most common error recently",
+			"how many errors today"
+		]
+	},
+	{
+		"name": "count_restarts",
+		"description": "Count how many times SymBot itself started/restarted in a period. Each launch writes one 'Starting SymBot' line, which is the reliable signal — the many per-deal 'SymBot is terminating' lines are NOT counted. Use for 'how many times did SymBot restart / shut down / go down today'. Give days (1-3) or a specific UTC date.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"days": {
+					"type": "integer",
+					"description": "How many days back, 1-3 (default 1 = today)."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). Overrides days."
+				}
+			}
+		},
+		"examples": [
+			"how many times has symbot restarted",
+			"when did it last restart",
+			"restart count today"
+		]
+	},
+	{
+		"name": "get_deal_orders",
+		"description": "Get the real order ladder for a specific deal: each FILLED order (the base order and every safety order actually placed) with its order number, price, amount, and exact fill time, plus the next safety order that would fire. This is the accurate source for per-order details — use it for 'details on the first/second/Nth safety order', 'when did a safety order fill', 'at what price', or 'what is the next safety order'. To get a specific ladder position (e.g. 'the fourth order'), pass order_no: order 1 is the base order, order 2 the first safety order, order 3 the second, and so on — it is returned even if not yet filled, with its trigger price. Do NOT read order times or prices from the logs; use this. For 'how many safety orders has this deal used/filled', report the pre-computed safety_orders_used field DIRECTLY — do not count the filled_orders list yourself (it may be capped to the most recent fills, and an empty orderId just means a paper/simulated fill, not an unfilled order).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"deal_id": {
+					"type": "string",
+					"description": "The full deal id."
+				},
+				"order_no": {
+					"type": "integer",
+					"description": "Optional. A specific order position to fetch: 1 = base order, 2 = first safety order, 3 = second safety order, and so on. Returned even if unfilled (with its trigger price)."
+				}
+			},
+			"required": [
+				"deal_id"
+			]
+		},
+		"examples": [
+			"show the orders on this deal",
+			"the fill ladder for a deal",
+			"what safety orders filled and when"
+		]
+	},
+	{
+		"name": "get_deal_timeline",
+		"description": "Reconcile one deal and explain what happened, in depth. Returns a computed analysis — identity, the enriched fill ladder (each fill's price, running average, cumulative cost, and minutes since the previous fill), how far price fell from the base order, the outcome (realized profit and sale price for a completed deal) or live unrealized P/L (for an open one), whether it is paused — PLUS a set of plain-language `findings` that already summarize the story, and the deal's own log events (pauses, resumes, errors). Use for 'reconcile deal X', 'what happened with this deal', 'trace/analyze/walk me through deal X'. Base your answer on `findings` and the reconciliation fields; the log events add color. For a single order use get_deal_orders; for just the current snapshot use get_deal.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"deal_id": {
+					"type": "string",
+					"description": "The full deal id."
+				},
+				"days": {
+					"type": "integer",
+					"description": "How many recent days of logs to include, 1-10 (default 7)."
+				}
+			},
+			"required": [
+				"deal_id"
+			]
+		},
+		"examples": [
+			"walk me through what happened to this deal",
+			"full timeline of a deal",
+			"what steps did this deal take",
+			"trace this deal from start to finish"
+		]
+	},
+	{
+		"name": "get_deal_events",
+		"description": "Get the log events for one specific deal id (what happened to it: orders, pauses, errors). Use to trace or debug a single deal, or to answer 'what do the logs show for deal X'. By default it searches around the deal's last activity, so it still finds events for a paused or idle deal that hasn't traded today.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"deal_id": {
+					"type": "string",
+					"description": "The full deal id."
+				},
+				"days": {
+					"type": "integer",
+					"description": "How many days back to search, 1-3. Default: the day of the deal's last activity."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). Overrides days."
+				}
+			},
+			"required": [
+				"deal_id"
+			]
+		},
+		"examples": [
+			"what log events happened to this deal",
+			"trace one deal's events",
+			"what did the logs say about this deal"
+		]
+	},
+	{
+		"name": "get_performance_summary",
+		"description": "Summarize trading performance (defaults to ALL-TIME; only set a period when the user names one) from completed deals: number of deals, total profit, average profit %, win rate, total safety orders used, the average time a deal stays open (avg_duration_mins), and the single best and worst deal. total_profit is a single number only when every deal shares one quote currency (also reported as profit_currency); if deals span several quote currencies it is null and profit_by_currency holds the per-currency totals — never add those together. It also returns a `winners`/`losers` breakdown (count, average safety orders and average percent per outcome) — use it for 'did winners use more/fewer safety orders than losers', 'do my winning deals run longer', and similar outcome-split questions rather than guessing. Use for 'how did I do', 'profit last week', 'what's my win rate', 'best/worst deals', and 'how long does an average/typical deal stay open / average deal duration'. Give days (last N days, default 7), a specific UTC date, a from/to range (for a named month or the PREVIOUS week in a comparison), or all_time:true for a lifetime total when NO period is named, and optionally a `pair` — with a pair this is the RIGHT tool for a SINGLE pair's performance over a period ('how did my ABT/USD deals do last week', 'how has BTC performed for me'), returning that pair's deal count, profit and win rate (get_pair_performance instead RANKS across pairs and cannot filter to one).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"days": {
+					"type": "integer",
+					"description": "OMIT for all-time (the default). Only set when the user names a recent window (e.g. 'last 7 days')."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). OMIT unless the user names a day; default is all-time."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO). Use with `to` for an arbitrary window — a named month, or the PREVIOUS week (the 7 days before last, for a week-vs-week comparison). Overrides days/date."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive of that whole day, or ISO). Pair with `from`."
+				},
+				"all_time": {
+					"type": "boolean",
+					"description": "Set true for an ALL-TIME summary over EVERY completed deal (no period). Use for 'total/overall/lifetime profit', 'my all-time win rate', 'how have I done overall' when NO period is named. Do not also pass days/date/from/to."
+				},
+				"pair": {
+					"type": "string",
+					"description": "Optional single-pair filter, e.g. \"BTC/USD\" — set ONLY when the user EXPLICITLY names one pair. NEVER invent or guess a pair. For 'which pair/coin is most profitable' or ranking pairs against each other, do NOT set this — use get_pair_performance instead."
+				}
+			}
+		},
+		"examples": [
+			"how many deals have I completed",
+			"what is my win rate",
+			"overall performance this month",
+			"total realized profit",
+			"total realized profit all time",
+			"my lifetime win rate",
+			"how did my ABT/USD deals do over the last week",
+			"how has BTC performed for me this month"
+		]
+	},
+	{
+		"name": "get_deals_over_time",
+		"description": "Time-SERIES of completed deals bucketed by day, week or month over a window: per bucket the number of deals closed, total realized profit, wins/losses and win rate. Use for 'how many deals did I close each day/week/month', 'profit by month this year', 'my daily/weekly/monthly breakdown', or any 'per day/week/month over <period>' question — do NOT answer these from get_performance_summary, which gives ONE lump total for the whole window, not a per-period breakdown. group_by is 'day' (default), 'week' or 'month'. Give days (last N days) or a from/to range; buckets are UTC, oldest-first. The result also has a `totals` object (deals, total_profit, win rate across the whole window) — report the grand total from `totals`, do NOT sum the per-bucket rows yourself. total_profit is a raw sum (meaningful when deals share one quote currency, the usual case).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"group_by": {
+					"type": "string",
+					"enum": [
+						"day",
+						"week",
+						"month"
+					],
+					"description": "Bucket size: 'day' (default), 'week' or 'month'."
+				},
+				"days": {
+					"type": "integer",
+					"description": "Cover the last N days (e.g. 7 for this week, 30 for this month). The span is split into buckets by group_by."
+				},
+				"date": {
+					"type": "string",
+					"description": "A single UTC day (YYYY-MM-DD)."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO) for an arbitrary span (a named month/quarter/year). Use with `to`."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive, or ISO). Pair with `from`."
+				}
+			}
+		},
+		"examples": [
+			"how many deals did I close each day this week",
+			"my profit by month this year",
+			"deals closed per week over the last month",
+			"daily deal count",
+			"monthly performance breakdown"
+		]
+	},
+	{
+		"name": "get_top_deals",
+		"description": "Leaderboard of deals ranked by performance. IMPORTANT: set `direction` to match the question — 'best' for 'top/best/most performing deals', 'worst' for 'worst/losing deals' — and then report the returned `deals` array verbatim (it is already the correct ranking; do NOT re-sort, and never negate or flip the profit signs). With direction 'best' or 'worst' you get a single `deals` list; omit it to get both `best` and `worst` arrays. Use for 'top/best performing deals', 'my top 10 deals', 'worst deals', 'biggest winners/losers'. scope 'completed' (DEFAULT) ranks by REALIZED profit from closed trades — the natural meaning of 'best/most performing deals'; scope 'open' ranks current open deals by live UNREALIZED P/L. metric 'percent' (DEFAULT, comparable across currencies), 'amount' (money — can mix quote currencies), or 'duration' (how long each deal ran; best=longest-running, worst=shortest — the tool for 'my longest/shortest completed deal ever'). limit sets how many (default 10). TIME WINDOW: by default the ranking is ALL-TIME. If the user names a period — 'over the last week', 'this month', 'yesterday', 'in the last 30 days' — you MUST pass `days` (last N days) or `date` (a single UTC day) so only deals that CLOSED in that window are ranked; otherwise you would return the all-time leaders and wrongly present them as the period's. The window applies to completed scope only. The result echoes a `window` field ('all_time' or the from/to used) — state the period you actually got. For overall totals/win rate use get_performance_summary; for 'closest to take-profit' use get_open_deals_status; for best/worst by BOT use get_bot_performance.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"direction": {
+					"type": "string",
+					"enum": [
+						"best",
+						"worst",
+						"both"
+					],
+					"description": "'best' for top/best/most-performing, 'worst' for worst/losing deals, 'both' (default) for both ends."
+				},
+				"scope": {
+					"type": "string",
+					"enum": [
+						"completed",
+						"open"
+					],
+					"description": "'completed' (default) = realized profit of closed trades; 'open' = live unrealized P/L of current open deals."
+				},
+				"metric": {
+					"type": "string",
+					"enum": [
+						"percent",
+						"amount",
+						"duration"
+					],
+					"description": "Rank by profit 'amount' (money — the DEFAULT, because 'most/least profitable' colloquially means dollars), 'percent' (currency-agnostic percentage return — use only when the user explicitly asks for percentage/return), or 'duration' — how long each deal ran (best=longest-running, worst=shortest; for 'my longest/shortest deal ever'). Duration applies to completed scope."
+				},
+				"limit": {
+					"type": "integer",
+					"description": "How many deals to return (default 10, max 50)."
+				},
+				"days": {
+					"type": "integer",
+					"description": "Restrict to deals CLOSED in the last N days (e.g. 7 for 'over the last week', 30 for 'this month'). Completed scope only. Omit for an all-time ranking."
+				},
+				"date": {
+					"type": "string",
+					"description": "Restrict to deals closed on a single UTC day (YYYY-MM-DD). Overrides days. Completed scope only."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO) for an arbitrary window — a named month, or a specific span. Use with `to`. Completed scope only."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive, or ISO). Pair with `from`."
+				}
+			}
+		},
+		"examples": [
+			"what are my best performing deals",
+			"top 10 most performing deals",
+			"my worst deals by profit",
+			"biggest winners and losers",
+			"top 5 most profitable deals that closed over the last week",
+			"best deals this month"
+		]
+	},
+	{
+		"name": "list_bots",
+		"description": "List the configured DCA bots and their key settings: whether each is active (enabled) or disabled, its exchange, how many pairs it trades, max safety orders, take-profit %, price step %, order sizes, and max active deals. Use for 'how many bots do I have', 'which bots are enabled', or questions about a bot's configuration.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"active_only": {
+					"type": "boolean",
+					"description": "If true, only active (enabled) bots."
+				}
+			}
+		},
+		"examples": [
+			"what bots do I have",
+			"list my bots",
+			"show my bot configuration"
+		]
+	},
+	{
+		"name": "get_exchanges",
+		"description": "The exchange(s) the user actually trades on, taken from their bot configs, with a live/sandbox flag per exchange. Use for 'which exchange(s) am I trading on', 'what exchange do I use', 'am I live or in sandbox'. Returns an `exchanges` array (each with exchange name, live, sandbox) and a count — report those names exactly; never name an exchange that is not in the result.",
+		"parameters": {
+			"type": "object",
+			"properties": {}
+		}
+	},
+	{
+		"name": "get_open_deals_status",
+		"description": "Live status of every open deal using the latest observed price: current price, average entry, unrealized profit/loss (amount and %), whether it is in profit, how far in % it is from take-profit (pctToTakeProfit) with a readyToTakeProfit flag when the target is reached, and how far in % above its next safety-order trigger (pctToNextSafetyOrder) with a nextSafetyOrderReady flag when it would fire — plus total unrealized P/L across all open deals. Deals are sorted worst-first by unrealized P/L, and the result includes biggest_gain and biggest_loss single-deal summaries. IMPORTANT for 'closest to profit' questions: use the pre-ranked closest_to_take_profit array (already ordered nearest-target first by pctToTakeProfit, over ALL open deals) — do NOT rank by unrealized P/L in dollars, which is a different question: a deal with a large dollar loss can be nearer its take-profit than a deal with a small dollar loss. Use readyToTakeProfit / nextSafetyOrderReady for 'is any deal about to hit take profit / place a safety order' rather than interpreting the percentages, and biggest_gain / biggest_loss for 'which deal gained/lost the most'. Use for 'unrealized P/L', 'which deals are underwater', 'total open profit/loss', 'rank my open deals', 'which deal is closest to a safety order', or 'which deals are closest to profit / will close soon / soonest / are most likely to close' (→ read closest_to_take_profit directly and list its entries; it already covers ALL open deals, so never ask for a smaller range or time frame — this tool takes no such argument). Prices are cached from SymBot's follow loop (no exchange call); a deal not currently being followed is flagged priceStale.",
+		"parameters": {
+			"type": "object",
+			"properties": {}
+		},
+		"examples": [
+			"status of all my open deals",
+			"current state of every open position",
+			"live snapshot of my deals"
+		]
+	},
+	{
+		"name": "get_deals_closest_to_take_profit",
+		"description": "The deals most likely to CLOSE SOON: a single ranked list of open deals ordered by how close each is to its take-profit target (nearest first). This is the direct, unambiguous answer to 'which deals are closest to profit / will close soon / soonest / are most likely to close / are near closing'. Each entry has the pair, dealId, pctToTakeProfit (smaller = closer; negative or readyToTakeProfit=true means already at/over target), and its unrealized P/L. Just list the entries in the order returned — do NOT re-rank by dollar profit/loss. Takes an optional `limit` (default 10). Prefer THIS tool over get_open_deals_status for any 'close soon / closest to profit' question, because it returns only the ranked answer with nothing else to mis-read.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"limit": {
+					"type": "number",
+					"description": "How many to return (default 10, max 25)."
+				}
+			}
+		},
+		"examples": [
+			"which deal will close first",
+			"closest to take profit",
+			"most likely to close soon",
+			"nearest to hitting target"
+		]
+	},
+	{
+		"name": "get_portfolio_summary",
+		"description": "Summarize current exposure across open deals: number of open deals, funds deployed so far (filled orders), the maximum that would be committed if every safety order fills, and available balance from the cached balance tracker. Use for 'how much am I exposed', 'how much is deployed', or 'do I have enough dry powder'. No live prices, so no unrealized profit/loss.",
+		"parameters": {
+			"type": "object",
+			"properties": {}
+		},
+		"examples": [
+			"overall portfolio summary",
+			"how is my whole account doing",
+			"how much am I exposed and how much dry powder is left"
+		]
+	},
+	{
+		"name": "get_pair_performance",
+		"description": "Rank trading pairs AGAINST EACH OTHER over a period from completed deals: per pair, number of deals, total profit, average profit %, and win rate. Every result also includes best_pair and worst_pair (by profit), so 'my best and worst pair' is answered in one call. Set order to 'least_profitable' for the worst pairs, or 'most_active' to rank by number of completed deals (for 'my most active/traded pair'). Defaults to ALL-TIME (all completed deals). Do NOT set any time period for 'overall / most / best / worst / top / ever / all-time' — only set days/date/from/to when the user explicitly names a recent window. IMPORTANT: this ranks ACROSS pairs and returns only the top `top` (default 20) — it takes NO pair filter, so it is the WRONG tool for a SINGLE named pair. For 'how did my ABT/USD deals do' or 'how has BTC performed for me' use get_performance_summary with pair= (aggregate profit/win-rate for that one pair over a period) or get_deals_for_pair (that pair's individual deals).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"days": {
+					"type": "integer",
+					"description": "OMIT this for all-time (the default). Only set it when the user EXPLICITLY names a recent window (e.g. 'last 7 days', 'this week')."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). OMIT unless the user names a specific day; the default is all-time."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO). OMIT unless the user names an explicit span (e.g. a named month, 'between X and Y'); default is all-time. Use with `to`."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive, or ISO). OMIT unless the user names an explicit span; pair with `from`."
+				},
+				"top": {
+					"type": "integer",
+					"description": "How many pairs to return (default 20, max 50)."
+				},
+				"order": {
+					"type": "string",
+					"enum": [
+						"most_profitable",
+						"least_profitable",
+						"most_active"
+					],
+					"description": "Ranking: 'most_profitable' (default), 'least_profitable' (worst pairs), or 'most_active' (by completed deal count)."
+				}
+			}
+		},
+		"examples": [
+			"profit by pair",
+			"which pairs make me the most money",
+			"my best and worst pairs",
+			"my most traded pairs",
+			"rank my pairs by profit"
+		]
+	},
+	{
+		"name": "get_bot_performance",
+		"description": "Rank the configured bots by realized performance over a period from completed deals: per bot, number of deals, total profit (with profit_currency; null and a profit_by_currency breakdown if that bot traded several quote currencies — never add currencies together), average profit %, win rate, average duration, and average safety orders used, plus best_bot and worst_bot. Use for 'which bot is doing best/worst', 'compare my bots', 'which bot makes the most money'. For bot SETTINGS or which are enabled use list_bots instead. Give days (last N days, default 30) or a specific UTC date; order can be 'least_profitable' or 'most_active'. Defaults to ALL-TIME; only set days/date/from/to when the user explicitly names a time period (for 'best/worst bot' pass no period).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"days": {
+					"type": "integer",
+					"description": "OMIT this for all-time (the default). Only set it when the user EXPLICITLY names a recent window (e.g. 'last 7 days', 'this week')."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). OMIT unless the user names a specific day; the default is all-time."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO). OMIT unless the user names an explicit span (e.g. a named month, 'between X and Y'); default is all-time. Use with `to`."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive, or ISO). OMIT unless the user names an explicit span; pair with `from`."
+				},
+				"order": {
+					"type": "string",
+					"enum": [
+						"most_profitable",
+						"least_profitable",
+						"most_active"
+					],
+					"description": "Ranking: 'most_profitable' (default), 'least_profitable', or 'most_active' (by completed deal count)."
+				}
+			}
+		},
+		"examples": [
+			"how is my SymSync bot doing",
+			"performance of a specific bot",
+			"which bot makes the most profit"
+		]
+	},
+	{
+		"name": "find_oldest_open_deals",
+		"description": "List individual open deals ranked by age, oldest first, to surface long-running or stagnating positions: for each, how long it has been open, safety orders used vs max, average entry and target price. Use for 'which deals have been open longest', 'my oldest/stalest deals', 'stagnating positions'. NOT for the AVERAGE time deals stay open across the account — that is get_performance_summary (avg_duration_mins). For live P/L ranking use get_open_deals_status instead.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"limit": {
+					"type": "integer",
+					"description": "How many to return (default 10, max 25)."
+				},
+				"min_age_hours": {
+					"type": "number",
+					"description": "Optional: only deals open at least this many hours."
+				}
+			}
+		},
+		"examples": [
+			"which deals have been open the longest",
+			"my oldest deals",
+			"longest running positions",
+			"stalest open deals"
+		]
+	},
+	{
+		"name": "find_newest_open_deals",
+		"description": "The most-recently-opened OPEN deals, newest first. Use for 'my newest deal', 'most recently opened deal', 'what did I open last / most recently', 'my latest position'. Returns a `deals` array (newest first) with pair, age, safety orders, average/target price — report the first as the newest. (Use find_oldest_open_deals for the oldest/longest-running.)",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"limit": {
+					"type": "integer",
+					"description": "How many to return (default 10)."
+				}
+			}
+		}
+	},
+	{
+		"name": "find_deals_near_max_safety_orders",
+		"description": "List open deals that have used most or all of their safety-order ladder (the least DCA cushion remaining), most-exhausted first: safety orders used vs max, whether the ladder is exhausted, age, average entry and target price. Use for 'which deals are running out of safety orders', 'near max safety orders', 'ladder exhausted', 'least room to average down'. This is a DCA risk view, not a count of orders placed (that is count_orders).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"min_used_fraction": {
+					"type": "number",
+					"description": "Fraction of the ladder used to qualify, 0-1 (default 0.7)."
+				},
+				"limit": {
+					"type": "integer",
+					"description": "How many to return (default 15, max 25)."
+				}
+			}
+		},
+		"examples": [
+			"which deals are running out of safety orders",
+			"deals near max safety orders",
+			"who has used the most safety orders",
+			"which deals are nearly exhausted"
+		]
+	},
+	{
+		"name": "find_deal_id",
+		"description": "Resolve a natural reference to a deal — e.g. 'the BTC deal', 'my newest deal', 'the XLM position' — into concrete open-deal id(s), so you can then call get_deal / get_deal_timeline / diagnose_deal with an exact id. Use this FIRST whenever the user names a deal by pair or description rather than giving an exact deal id. Returns candidate matches (dealId, pair, botName); if several match, pick by pair/bot or ask the user.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"reference": {
+					"type": "string",
+					"description": "The user's description of the deal, e.g. 'the BTC deal' or 'my newest one'."
+				}
+			},
+			"required": [
+				"reference"
+			]
+		},
+		"examples": [
+			"what is the deal id for BTC",
+			"find the id of my ETH deal",
+			"which deal id matches this pair"
+		]
+	},
+	{
+		"name": "get_open_risk_summary",
+		"description": "Risk snapshot across all open deals in one call: total unrealized P/L, how many deals are underwater by more than 2%, 5% and 10%, the single worst deal, and the stop-loss picture — how many deals have an armed stop-loss and which deals are within a few percent of triggering theirs. Use for 'how much am I underwater', 'how many deals are deep in the red', 'am I close to any stop-loss', 'overall risk on open deals'. Prices are cached from the follow loop (no exchange call).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"near_stop_loss_pct": {
+					"type": "number",
+					"description": "How close (in %) price must be to a stop-loss to count as near (default 3)."
+				}
+			}
+		},
+		"examples": [
+			"which deals are most at risk",
+			"how far underwater am I overall",
+			"my riskiest positions",
+			"how much am I down"
+		]
+	},
+	{
+		"name": "get_exposure_summary",
+		"description": "Break down open-deal capital exposure by quote currency (default) or by pair: per group, number of open deals, funds deployed now, the maximum committed if every remaining safety order fills, the additional funds that would take, and the available balance for that currency — flagging a potential shortfall when the extra needed exceeds what is available. Use for 'exposure by currency', 'how much USDT am I committing', 'which pair ties up the most capital', 'could I fund all safety orders'. For a single portfolio-wide total use get_portfolio_summary instead.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"group_by": {
+					"type": "string",
+					"enum": [
+						"quote",
+						"pair"
+					],
+					"description": "Bucket exposure by 'quote' currency (default) or by 'pair'."
+				}
+			}
+		},
+		"examples": [
+			"how much capital is deployed",
+			"what is my total exposure",
+			"how much dry powder do I have",
+			"how much am I invested"
+		]
+	},
+	{
+		"name": "get_expert_analysis",
+		"description": "Consult a stronger reasoning model for an in-depth judgement on data you have ALREADY gathered from other tools — e.g. 'given these figures, is this deal recovering or a concern?', or interpreting a reconciliation. Pass the question together with the key figures/context to reason over (the expert cannot see the tools). Use sparingly, only when a question needs deeper reasoning than a direct lookup. Read-only.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"question": {
+					"type": "string",
+					"description": "The analysis question, INCLUDING the relevant figures and context to reason over."
+				}
+			},
+			"required": [
+				"question"
+			]
+		},
+		"examples": [
+			"give me an expert analysis of my account",
+			"deep analysis of my trading",
+			"what should I be worried about"
+		]
+	},
+	{
+		"name": "explore",
+		"description": "Delegate a BROAD, multi-step research question to a focused sub-agent that can call the read-only data tools many times on its own and return one synthesized answer. Use ONLY when a question needs gathering and comparing a lot of data across many deals, pairs, bots or logs that no single tool answers — e.g. 'review all my completed BTC deals this month and identify which safety-order setups performed best', or 'look across my open and recent deals for any pattern in which pairs keep underwaters'. For a single lookup, call the specific tool directly instead — do NOT use explore for that. Read-only. The sub-agent cannot see this conversation, so state the task fully and self-contained.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"task": {
+					"type": "string",
+					"description": "The research task, stated fully and self-contained, including any specifics (pairs, time window, what to compare or find)."
+				}
+			},
+			"required": [
+				"task"
+			]
+		},
+		"examples": [
+			"review all my completed BTC deals this month and find the best-performing safety-order setup",
+			"look across my open and recent deals for any pattern in which pairs keep going underwater"
+		]
+	},
+	{
+		"name": "get_circuit_breaker_status",
+		"description": "Report the safety circuit breaker: whether it is currently active (deal processing paused), when it will clear, and whether it is enabled in configuration. Use for 'is the circuit breaker on', 'did it trip', or 'why is trading paused'.",
+		"parameters": {
+			"type": "object",
+			"properties": {}
+		},
+		"examples": [
+			"is the circuit breaker active",
+			"why are new deals not starting",
+			"is trading paused"
+		]
+	},
+	{
+		"name": "calculate",
+		"description": "Evaluate an arithmetic expression EXACTLY (supports + - * / ^ % and parentheses). Use this for any multi-step number crunching instead of doing it in your head: safety-order size compounding (a 1.5 size scale over 3 steps is 1.5^3), percentage math, break-even moves, or totals. Pass the whole expression as one string.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"expression": {
+					"type": "string",
+					"description": "The arithmetic expression to evaluate, e.g. \"1.5^3\" or \"100*(1.05^4-1)\"."
+				}
+			},
+			"required": [ "expression" ]
+		},
+		"examples": [
+			"what is 1.5 to the power of 3",
+			"how much bigger is the 4th safety order at a 1.5 size scale",
+			"calculate 100 * (1.05^4 - 1)"
+		]
+	},
+	{
+		"name": "get_system_status",
+		"description": "Report this SymBot instance's live runtime status: how long it has been running (uptime), when it started, its memory use, host CPU load, the number of active deals, the app version, and the platform. Use for 'how long has SymBot been running / been up', 'what is the uptime', 'how much memory is it using', 'is it healthy', 'what version am I on'. This is the ONLY source for uptime — never guess or state a product age.",
+		"parameters": {
+			"type": "object",
+			"properties": {}
+		},
+		"examples": [
+			"how long has symbot been running",
+			"what is the uptime",
+			"how much memory is it using",
+			"what version am i on"
+		]
+	},
+	{
+		"name": "get_balance",
+		"description": "Report the latest known account balances per exchange and currency, from SymBot's cached balance tracker (no live exchange call, so it reflects the last refresh). Use for 'how much USDT/USDC do I have', or 'what's my available balance'.",
+		"parameters": {
+			"type": "object",
+			"properties": {}
+		},
+		"examples": [
+			"what is my account balance",
+			"how much USD do I have",
+			"available funds on the exchange"
+		]
+	},
+	{
+		"name": "list_schedules",
+		"description": "List this instance's scheduled/automation tasks (backups, reports, watchdog scans, notifications) with their status: whether each is enabled, its cron, when it last ran, the last run's status, total run count, and consecutive failures. READ-ONLY status view — it never creates, edits, enables, disables, or runs a schedule. Use for 'what scheduled tasks do I have', 'did my backup run', 'is any automation failing'.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"enabled_only": {
+					"type": "boolean",
+					"description": "Only return enabled schedules."
+				},
+				"failing_only": {
+					"type": "boolean",
+					"description": "Only return schedules that are currently failing (one or more consecutive failures, or a failed last run)."
+				}
+			}
+		},
+		"examples": [
+			"what scheduled tasks do I have",
+			"did my morning summary run",
+			"is any schedule failing",
+			"when does my backup run"
+		]
+	},
+	{
+		"name": "list_audit_events",
+		"description": "Read recent entries from the tamper-evident AUDIT LOG: who did what and when (settings changes, API-key mint/revoke, user role changes, logins, deal actions, system backup/restore/rollback/update). READ-ONLY. Filter by action prefix (e.g. 'apikey', 'auth.login', 'deal', 'system'), by actor, and by time period. Defaults to ALL-TIME; only set a period when the user names one. Use for 'what changed recently', 'who created a key', 'show recent logins', 'what admin actions happened this week'.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"description": "Filter to actions starting with this dot-namespaced prefix, e.g. 'apikey', 'auth.login', 'deal.close', 'system'."
+				},
+				"actor": {
+					"type": "string",
+					"description": "Filter to a specific actor, e.g. 'user:owner' or an api-key id."
+				},
+				"days": {
+					"type": "integer",
+					"description": "OMIT for all-time (the default). Only set when the user names a recent window like 'last 7 days'."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). OMIT unless the user names a day."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC YYYY-MM-DD or ISO). OMIT unless the user names a span. Use with to."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC YYYY-MM-DD, inclusive, or ISO). Pair with from."
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Max events to return (default 50, max 200), newest first."
+				}
+			}
+		},
+		"examples": [
+			"what settings changed recently",
+			"who created an api key",
+			"show recent logins",
+			"recent admin actions",
+			"audit log this week"
+		]
+	},
+	{
+		"name": "get_drawdown_risk",
+		"description": "Rank OPEN deals by risk: those underwater beyond a percentage threshold and/or that have used most of their safety-order ladder (little averaging-down room left). READ-ONLY. Use for 'which deals are underwater by more than 15%', 'my worst-drawdown positions', 'deals deep in the red with no safety orders left'. For a plain band-count risk snapshot use get_open_risk_summary; for the ladder alone use find_deals_near_max_safety_orders.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"underwater_pct": {
+					"type": "number",
+					"description": "Minimum percent underwater to include (e.g. 15 = at least 15% below break-even). Default 10."
+				},
+				"so_used_fraction": {
+					"type": "number",
+					"description": "Optional 0..1 threshold on how much of the safety-order ladder is used (e.g. 0.8 = deals that have used 80%+ of their safety orders)."
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Max deals to return (default 15, max 25), most at-risk first."
+				}
+			}
+		},
+		"examples": [
+			"which deals are underwater by more than 15%",
+			"worst drawdown positions",
+			"deals with no safety orders left and deep in the red",
+			"riskiest open deals"
+		]
+	},
+	{
+		"name": "compare_bot_performance",
+		"description": "Compare specific bots HEAD-TO-HEAD: pass the bot names in `bots` and it returns each bot's total profit, win rate, deal count, average profit %, duration and safety orders side by side, names the leader, and gives the profit gap between them. Use for 'how is SymSync 100 doing vs SymSync 90', 'compare my bots', 'which of these two bots is better'. Defaults to ALL-TIME; only set a period when the user names one. With no bots named it ranks them all (like get_bot_performance).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"bots": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "The bot names to compare, e.g. [\"SymSync 100\",\"SymSync 90\"]. Omit to compare all bots."
+				},
+				"days": {
+					"type": "integer",
+					"description": "OMIT for all-time (the default). Only set when the user names a recent window."
+				},
+				"date": {
+					"type": "string",
+					"description": "A specific UTC day (YYYY-MM-DD). OMIT unless the user names a day."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC YYYY-MM-DD or ISO). OMIT unless the user names a span. Use with to."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC YYYY-MM-DD, inclusive, or ISO). Pair with from."
+				}
+			}
+		},
+		"examples": [
+			"how is SymSync 100 doing compared to SymSync 90",
+			"compare my two best bots",
+			"which bot is better, A or B",
+			"bot A vs bot B",
+			"compare bot performance"
+		]
+	},
+	{
+		"name": "get_open_orders_summary",
+		"description": "Total order usage across ALL currently-open deals in one shot: the TOTAL number of safety orders used across every open deal, total base orders, total filled orders, the average safety orders per open deal, the single most-laddered deal, and a per-deal breakdown. Use for 'how many safety orders are used across all my open deals', 'total safety orders in play', 'how deep are my ladders overall'. For per-deal ladder room / near-max use find_deals_near_max_safety_orders; for orders in a TIME window use count_orders. Read-only.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"top": {
+					"type": "integer",
+					"description": "How many deals to include in the by_deal breakdown, most-laddered first (default 5, max 25)."
+				}
+			}
+		},
+		"examples": [
+			"how many safety orders are used across all my open deals",
+			"total safety orders in play right now",
+			"how many safety orders total on my open positions",
+			"average safety orders per open deal",
+			"which open deal has the most safety orders"
+		]
+	},
+	{
+		"name": "get_signal_activity",
+		"description": "Read-only summary of inbound Signal Bot activity — every authenticated webhook/API signal (from a TradingView Signal Bot alert, the 3CQS client, or any webhook source) and what SymBot did with it: totals by outcome (started / processed / rejected / duplicate) and by action (entry / add_funds / close / panic_sell), the top rejection reasons with counts, processing-latency stats (avg / p95 / max / slow-count) overall AND broken down by source and by action, and a few recent examples. THIS is the tool for 'did my TradingView/webhook alert arrive?', 'why didn't a deal open for X?', 'how many signals were rejected and why', 'how many signals did bot Y get today', 'is my signal source working', and 'why are my 3CQS (or other source) signals slow?' — the per-source/per-action latency shows where the delay is (a high p95/max/slow count means those signals are waiting on the serial deal-start queue, which the entry handler polls up to ~30s, not a network issue). Optionally filter by bot, source (3cqs / signal_bot / api / …), action, outcome, and a time window; the summary also breaks totals down by source. Read-only.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"bot": {
+					"type": "string",
+					"description": "Optional bot name or id to restrict to signals targeting that bot."
+				},
+				"action": {
+					"type": "string",
+					"description": "Optional action filter: entry | add_funds | close | panic_sell."
+				},
+				"outcome": {
+					"type": "string",
+					"description": "Optional outcome filter: started | processed | rejected | duplicate."
+				},
+				"source": {
+					"type": "string",
+					"description": "Optional source/channel filter: 3cqs | signal_bot | api | other (or any source seen in the data). Use for 'how many 3CQS signals arrived', 'is my TradingView signal bot working vs 3CQS'."
+				},
+				"days": {
+					"type": "integer",
+					"description": "Restrict to signals received in the last N days."
+				},
+				"date": {
+					"type": "string",
+					"description": "Restrict to a single UTC day (YYYY-MM-DD). Overrides days."
+				},
+				"from": {
+					"type": "string",
+					"description": "Range START (UTC 'YYYY-MM-DD' or ISO). Use with `to`."
+				},
+				"to": {
+					"type": "string",
+					"description": "Range END (UTC 'YYYY-MM-DD', inclusive, or ISO). Pair with `from`."
+				}
+			}
+		},
+		"examples": [
+			"did my TradingView alert arrive",
+			"why didn't a deal open for a pair",
+			"how many signals were rejected today and why",
+			"how many signals did my bot get",
+			"is my signal source working"
+		]
+	}
+]

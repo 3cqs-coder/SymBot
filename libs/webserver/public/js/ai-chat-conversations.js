@@ -5,11 +5,54 @@
 
 (function() {
 
-	// Guard against double-initialisation (inline chat opens multiple times)
+	// Guard against double-initialization (inline chat opens multiple times)
 	if (window.AIChatConv_initialized) return;
 	window.AIChatConv_initialized = true;
 
 	function getRoom() { return window.AIChatConv_room || ''; }
+
+	// Styled confirmation — reuses the app-wide SymBot.UI.confirmDialog (jquery-confirm) so these
+	// prompts match every other confirm in SymBot instead of the native blocking confirm(). Falls back
+	// to the native dialog only if that helper isn't present (a surface that didn't load symbot-ui.js).
+	function chatConfirm(message, onConfirm, onCancel, confirmText) {
+		onConfirm = onConfirm || function() {};
+		onCancel  = onCancel  || function() {};
+		if (window.SymBot && SymBot.UI && typeof SymBot.UI.confirmDialog === 'function') {
+			SymBot.UI.confirmDialog({
+				content: message,
+				confirmText: confirmText || '<div style="color: var(--color-danger);">Confirm</div>',
+				onConfirm: onConfirm,
+				onCancel: onCancel
+			});
+		}
+		else if (window.confirm(message)) { onConfirm(); }
+		else { onCancel(); }
+	}
+
+	// Tag an outgoing chat message with the correct purpose and model routing.
+	// This is the ONE place that decision lives, so every chat surface (inline
+	// modal, popout, and any future one) sends consistently instead of each view
+	// re-deriving it — the drift that let follow-ups quietly fall back to the chat
+	// model. Behavior:
+	//   • The first message of an analysis conversation IS the deal-analysis report
+	//     prompt → purpose 'analysis' (runs on the Deal Analysis Model, gets the
+	//     footer + grounding check).
+	//   • Every other message is a normal chat turn (purpose 'chat'); inside an
+	//     analysis conversation it stays on the Deal Analysis Model too, so the
+	//     whole deal discussion uses one model, while general chat uses the chat model.
+	function tagChatMessage(message, isInitial) {
+		message = message || {};
+		var isAnalysisConv = (window.AIChatConv_type === 'analysis');
+		if (isInitial && isAnalysisConv) {
+			message.purpose = 'analysis';
+		}
+		else {
+			message.purpose = 'chat';
+			if (isAnalysisConv) { message.useAnalysisModel = true; }
+		}
+		return message;
+	}
+	window.AIChatConv_tagMessage = tagChatMessage;
 
 	function timeAgo(isoString) {
 		if (!isoString) return '';
@@ -53,7 +96,7 @@
 				listLoading = false;
 				const $sel = $('#conversationSelect');
 				$sel.empty().append($('<option>', { value: '', text: 'New conversation' }));
-				if (res.success && res.data && res.data.length) {
+				if (res && res.success && res.data && res.data.length) {
 					res.data.forEach(function(conv) {
 						const icon    = conv.type === 'analysis' ? '⚡ ' : '💬 ';
 						const tooltip = conv.updatedAt ? 'Last active: ' + timeAgo(conv.updatedAt) : '';
@@ -111,7 +154,7 @@
 	}
 	window.AIChatConv_doSave = doSave;
 
-	// ── Auto-save (called on END_OF_CHAT) ────────────────────────────────────
+	// ── Auto-save (called on chat_end) ───────────────────────────────────────
 
 	window.AIChatConv_autoSave = function() {
 		const id = window.AIChatConv_activeId;
@@ -204,15 +247,10 @@
 		$('#conversationSelect').off('change.conv').on('change.conv', function() {
 			const id = $(this).val();
 			if (!id) {
-				const doConfirm = (typeof window.confirmBox === 'function')
-					? window.confirmBox
-					: function(msg, cb) {
-						if (confirm(msg)) cb();
-						else { $('#conversationSelect').val(window.AIChatConv_activeId || ''); updateDeleteBtn(); }
-					};
-				doConfirm('Start a new conversation? This will clear the current chat.', function() {
-					resetConversation();
-				});
+				chatConfirm('Start a new conversation? This will clear the current chat.',
+					function() { resetConversation(); },
+					function() { $('#conversationSelect').val(window.AIChatConv_activeId || ''); updateDeleteBtn(); },
+					'<div>Start New</div>');
 				return;
 			}
 			loadIntoRoom(id);
@@ -240,10 +278,11 @@
 			const id   = $('#conversationSelect').val();
 			const name = $('#conversationSelect option:selected').text();
 			if (!id) return;
-			const doConfirm = (typeof window.confirmBox === 'function')
-				? window.confirmBox
-				: function(msg, cb) { if (confirm(msg)) cb(); };
-			doConfirm('Delete conversation "' + name + '"?', function() {
+			// Escape the conversation name — the styled confirm dialog injects its content as HTML, and a
+			// name is user/derived text (a saved title or a first message), so an unescaped "<img onerror>"
+			// would execute here. The native confirm() fallback renders text and is already safe.
+			const safeName = (window.SymBot && SymBot.UI && typeof SymBot.UI.esc === 'function') ? SymBot.UI.esc(name) : name;
+			chatConfirm('Delete conversation "' + safeName + '"?', function() {
 				$.ajax({
 					type: 'DELETE',
 					url: getBase() + 'api/ai/chat/conversations/' + id,
@@ -260,7 +299,7 @@
 						}
 					}
 				});
-			});
+			}, null, '<div style="color: var(--color-danger);">Delete</div>');
 		});
 
 	}

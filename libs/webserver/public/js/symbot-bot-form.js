@@ -28,6 +28,14 @@
 		$('#ordersBox').hide();
 
 		BotForm.disableAll(false);
+
+		// disableAll(false) just re-enabled every field, including the Start
+		// Condition dropdown — re-apply the Signal Bot lock if mode is on. (Used by
+		// the Hub bot-edit view, which resets through BotForm.resetForm.)
+		if (window.SignalBot && typeof window.SignalBot.applyMode === 'function') {
+
+			window.SignalBot.applyMode();
+		}
 	};
 
 

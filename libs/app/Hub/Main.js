@@ -1,11 +1,31 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const colors = require('colors');
 
-const pathRoot = path.resolve(__dirname, '..', '..', '..'); 
+const pathRoot = path.resolve(__dirname, '..', '..', '..');
 const { HUB_TO_WORKER, WORKER_TO_HUB } = require(__dirname + '/MessageTypes.js');
+// Reuse the instance-side learning module for its PURE pack helpers (buildPack / packKey /
+// verifyPack) — no init/store needed on the Hub; it only pools and repackages patterns.
+const aiMemory = require(pathRoot + '/libs/ai/AIMemory.js');
+
+const LEARNING_BROADCAST_MS = 300000; // push the pooled learning pack to instances every 5 min
+
+// Build the current pooled learning pack from the Hub store, or null if there is nothing
+// to send. Shared by the on-online push and the periodic broadcast.
+function buildHubLearningPack() {
+
+	try {
+
+		if (!shareData.HubStore || typeof shareData.HubStore.listLearningPatterns !== 'function') { return null; }
+
+		const patterns = shareData.HubStore.listLearningPatterns();
+		if (!patterns.length) { return null; }
+
+		return aiMemory.buildPack(patterns, { source: 'hub', created: Date.now() });
+	}
+	catch (e) { return null; }
+}
 
 let Worker;
 let shutDownFunction;
@@ -26,9 +46,22 @@ function processWorkerMessage(workerId, instanceName) {
 
 	return (message) => {
 
+	  // One guard around the WHOLE dispatcher: a malformed or unexpected message from any worker can
+	  // never throw past this point into the Hub's last-resort uncaughtException net (a Hub crash would
+	  // take every worker down). Individual branches keep their own try/catch for finer handling; this
+	  // is the backstop that isolates one bad message to a logged warning.
+	  try {
+
 		if (message.type === WORKER_TO_HUB.LOG) {
 
 			shareData.Hub.logger('info', message.data);
+		}
+		else if (message.type === WORKER_TO_HUB.LOG_BATCH) {
+
+			// A batch of relayed lines — log each exactly as a single LOG would be (prefix, ordered
+			// async append, broadcast), so batching changes only the cross-thread message count.
+			const lines = Array.isArray(message.lines) ? message.lines : [];
+			for (let i = 0; i < lines.length; i++) { shareData.Hub.logger('info', lines[i]); }
 		}
 		else if (message.type === WORKER_TO_HUB.MEMORY) {
 
@@ -40,7 +73,8 @@ function processWorkerMessage(workerId, instanceName) {
 				// separate: it reports the whole process (all worker threads share
 				// it), so it is a single process-level figure rather than a
 				// per-instance one.
-				const memoryAttributed = (message.data.heapUsed || 0) + (message.data.external || 0) + (message.data.arrayBuffers || 0);
+				const memData = message.data || {};
+				const memoryAttributed = (memData.heapUsed || 0) + (memData.external || 0) + (memData.arrayBuffers || 0);
 
 				let msgObj = {
 					'instanceId': workerInfo.instance.id,
@@ -48,16 +82,16 @@ function processWorkerMessage(workerId, instanceName) {
 					'workerId': workerId,
 					'threadId': workerInfo.threadId,
 					'memoryUsage': {
-						'rss': message.data.rss,
-						'heapTotal': message.data.heapTotal,
-						'heapUsed': message.data.heapUsed,
-						'external': message.data.external || 0,
-						'arrayBuffers': message.data.arrayBuffers || 0,
+						'rss': memData.rss,
+						'heapTotal': memData.heapTotal,
+						'heapUsed': memData.heapUsed,
+						'external': memData.external || 0,
+						'arrayBuffers': memData.arrayBuffers || 0,
 						'attributed': memoryAttributed,
 						// Host CPU load (same for every instance on this host) — carried
 						// on the same channel so the Manage view can show it per row.
-						'loadAvg': message.data.loadAvg || null,
-						'cpuCount': message.data.cpuCount != null ? message.data.cpuCount : null
+						'loadAvg': memData.loadAvg || null,
+						'cpuCount': memData.cpuCount != null ? memData.cpuCount : null
 					}
 				};				
 
@@ -99,7 +133,92 @@ function processWorkerMessage(workerId, instanceName) {
 
 			shutDownFunction();
 		}
+		else if (message.type === WORKER_TO_HUB.SEND_EMAIL) {
+
+			// An instance with no SMTP of its own relayed an outbound email; deliver it
+			// through the Hub's shared mailer. Fire-and-forget — must never block the
+			// message loop or throw back into it.
+			if (shareData.Mailer && typeof shareData.Mailer.send === 'function' && shareData.Mailer.ready !== false) {
+
+				try { shareData.Mailer.send(message.payload || {}); }
+				catch (e) { shareData.Hub.logger('error', `Hub mailer relay send failed: ${e.message}`); }
+			}
+			else {
+
+				shareData.Hub.logger('error', `Worker ID ${workerId} [${instanceName}] relayed an email but the Hub has no SMTP configured`);
+			}
+		}
+		else if (message.type === WORKER_TO_HUB.LEARNING) {
+
+			// An instance relayed a patterns-only learning note; pool it so instances that do
+			// not share a database still learn from each other. Deduped by the same key the
+			// instances use. Fire-and-forget — must never throw back into the message loop.
+			try {
+
+				const p = message.payload || {};
+
+				if (p.question && shareData.HubStore && typeof shareData.HubStore.addLearningPattern === 'function') {
+
+					shareData.HubStore.addLearningPattern(p, aiMemory.packKey(p));
+				}
+			}
+			catch (e) { shareData.Hub.logger('error', `Hub learning relay failed: ${e.message}`); }
+		}
+
+		else if (message.type === WORKER_TO_HUB.TOOLS) {
+
+			// An instance reported its AI-tool names. Record them on the workerMap entry so a
+			// maintainer aggregating contributed learning packs can validate against the union of
+			// tools the fleet actually has, and see which instances support a given tool. Best-effort.
+			try {
+
+				const names = Array.isArray(message.payload) ? message.payload.filter(n => typeof n === 'string') : [];
+				const info = shareData.workerMap.get(workerId);
+
+				if (info) { info.tools = names; }
+			}
+			catch (e) { /* best-effort — must never throw back into the message loop */ }
+		}
+
+	  }
+	  catch (e) { try { shareData.Hub.logger('error', 'Hub worker-message dispatch failed (type ' + (message && message.type) + '): ' + (e && e.message)); } catch (_) {} }
 	};
+}
+
+
+// Push the pooled learning pack to a single worker (used when an instance comes online).
+function pushLearningPackToWorker(worker) {
+
+	try {
+
+		const pack = buildHubLearningPack();
+		if (pack && worker && typeof worker.postMessage === 'function') {
+
+			worker.postMessage({ type: HUB_TO_WORKER.LEARNING_PACK, payload: pack });
+		}
+	}
+	catch (e) { /* best-effort */ }
+}
+
+
+// Broadcast the pooled learning pack to every running worker, so patterns learned by one
+// instance reach the others without waiting for a restart.
+function broadcastLearningPack() {
+
+	try {
+
+		const pack = buildHubLearningPack();
+		if (!pack) { return; }
+
+		for (const entry of shareData.workerMap.values()) {
+
+			if (entry && entry.worker && typeof entry.worker.postMessage === 'function') {
+
+				entry.worker.postMessage({ type: HUB_TO_WORKER.LEARNING_PACK, payload: pack });
+			}
+		}
+	}
+	catch (e) { /* best-effort */ }
 }
 
 
@@ -242,6 +361,11 @@ function startWorker(instanceData) {
 
 			shareData.Hub.logger('info', colors.green.bold(`Instance ${instanceName} recovered successfully after crash (attempt ${instanceData._crashAttempt}).`));
 		}
+
+		// Give the newly-online instance the pooled AI-learning pack so it starts with what
+		// every other instance has already learned. A brief delay lets it finish wiring its
+		// AI client first; it's best-effort either way.
+		setTimeout(() => pushLearningPackToWorker(worker), 8000);
 	});
 }
 
@@ -250,7 +374,12 @@ async function startAllWorkers(configs) {
 
 	for (const config of configs) {
 
-		const serverIdInUse = [...shareData.workerMap.values()].some(worker => worker.instance.server_id === (config.overrides.server_id || null));
+		// Compare against the EFFECTIVE server_id (override, else root config.server_id) — not just the
+		// override. An instance whose id comes from the root config had `null` on the right here, so the
+		// equality never held and a duplicate could slip past. Safe today (runs once at boot on an empty
+		// map) but correct now for any later re-entry.
+		const effectiveServerId = (config.overrides && config.overrides.server_id) || config.server_id || null;
+		const serverIdInUse = [...shareData.workerMap.values()].some(worker => worker.instance.server_id === effectiveServerId);
 
 		if (!serverIdInUse) {
 
@@ -281,9 +410,20 @@ async function startAllWorkers(configs) {
 }
 
 
+let learningBroadcastTimer = null;
+
 async function start(configs) {
 
 	startAllWorkers(configs);
+
+	// Periodically share the pooled AI-learning pack with every running instance, so a
+	// pattern learned by one propagates to the others without waiting for a restart. Cheap
+	// (patterns only, deduped, capped) and best-effort. `unref` so it never holds the Hub open.
+	if (!learningBroadcastTimer) {
+
+		learningBroadcastTimer = setInterval(broadcastLearningPack, LEARNING_BROADCAST_MS);
+		if (typeof learningBroadcastTimer.unref === 'function') { learningBroadcastTimer.unref(); }
+	}
 }
 
 
@@ -291,6 +431,11 @@ module.exports = {
 
 	start,
 	startWorker,
+	// Exposed so the worker-message routing (e.g. the SEND_EMAIL relay) can be unit-tested
+	// against the real handler with a stub shareData; production never calls this directly.
+	processWorkerMessage,
+	buildHubLearningPack,
+	broadcastLearningPack,
 	get shutDown() {
         return shutDownFunction;
     },

@@ -1,4 +1,8 @@
 **/.DS_Store
+/libs/test/
+**/*.test.js
+**/__tests__/
 node_modules
 *.log
 .vscode
+

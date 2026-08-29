@@ -1,0 +1,39 @@
+<%
+  // Shared field help text — the SINGLE source for tooltips that are reused across the
+  // bot create/update form (partialsBotForm.ejs) and the deal-edit modal
+  // (DCABotDealsActiveView.ejs). Edit a tooltip HERE once and it updates everywhere,
+  // so the two surfaces can never drift apart on future changes.
+  //
+  // Usage: include this partial with a local { 'tipKey': 'stopLoss' }. Pass an optional
+  // { 'tipStyle': 'padding: 0px 4px;' } to match the deal-edit modal's tooltip spacing.
+  // Pass { 'tipContext': 'deal' } from the live deal-edit modal: a handful of fields
+  // carry an extra "this affects only this deal" caveat there; every other field falls
+  // back to the shared base text below, so the two surfaces still can't drift apart.
+  const FIELD_TIPS = {
+    'stopLoss':          'Enable a hard stop-loss that closes a deal at market when the price falls to the stop level. Disabled by default. It is never triggered on an unreliable / implausible price feed.',
+    'stopLossPct':       'How far below the reference price the stop sits. For safety, set this so the stop is BELOW your full safety-order ladder — otherwise it can trigger before the bot finishes averaging down.',
+    'stopLossRef':       'What the Stop-Loss % is measured from. "DCA Average" mirrors the take-profit model and moves with the position. "Last Safety Order" places the stop below the deepest safety order as an after-the-ladder backstop.',
+    'moveBreakeven':     'Once the deal reaches the Breakeven Trigger profit %, ratchet the stop up to the break-even price (entry plus fees) so a winning deal cannot turn into a loss. The stop only ever moves up, never down.',
+    'breakevenTrigger':  'The live net profit % at which the stop moves to break-even. Only used when Move Stop To Breakeven is enabled.',
+    'trailingStop':      'Enable a trailing stop that follows the price up once the deal is in profit, then closes on a pullback from the peak — used to let a winner run. Disabled by default. It never triggers on an unreliable price feed.',
+    'trailingDistance':  'How far below the running price peak the trailing stop sits. A smaller distance locks in more of the gain but exits on smaller pullbacks; a larger distance gives the price more room. Only meaningful on liquid pairs.',
+    'trailingActivate':  'The live net profit % at which the trailing stop activates and begins tracking the price peak. Below this the deal behaves normally.',
+    'trailingRidesTP':   'When enabled (default), an active trailing stop overrides the fixed Target Profit so the deal can ride an extended run-up and exit on the pullback. When disabled, the deal still closes at the fixed Target Profit and the trailing stop only protects the way there.'
+  };
+
+  // Deal-context overrides: only the fields that need the live-deal caveat live here.
+  // Any key not present falls through to FIELD_TIPS above, so there is nothing to keep
+  // in sync manually — the base text stays the single source for everything else.
+  const FIELD_TIPS_DEAL = {
+    'stopLoss':      'Enable a hard stop-loss that closes this deal at market when the price falls to the stop level. It never triggers on an unreliable price feed. Changing this affects only this deal.',
+    'moveBreakeven': 'Once this deal reaches the Breakeven Trigger profit %, ratchet the stop up to break-even (entry plus fees) so a winning deal cannot turn into a loss. The stop only moves up. Editing stop-loss on a live deal resets this.',
+    'trailingStop':  'Follow the price up once this deal is in profit, then close on a pullback from the peak — used to let a winner run. It never triggers on an unreliable price feed. Changing this affects only this deal.'
+  };
+
+  const _tipKey     = (typeof tipKey     !== 'undefined') ? tipKey     : null;
+  const _tipStyle   = (typeof tipStyle   !== 'undefined') ? tipStyle   : '';
+  const _tipContext = (typeof tipContext !== 'undefined') ? tipContext : 'form';
+  const _tipText    = _tipKey
+    ? ((_tipContext === 'deal' && FIELD_TIPS_DEAL[_tipKey]) ? FIELD_TIPS_DEAL[_tipKey] : (FIELD_TIPS[_tipKey] || ''))
+    : '';
+%><% if (_tipText) { %><span class="toolTip"<%- _tipStyle ? (' style="' + _tipStyle + '"') : '' %>>?<span class="toolTipText"><%= _tipText %></span></span><% } %>

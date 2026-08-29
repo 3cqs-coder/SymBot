@@ -300,7 +300,17 @@ function buildRows(deals, opts) {
 // Escape a single CSV field: wrap in double quotes, double any embedded quotes.
 function csvField(val) {
 
-	const s = (val === undefined || val === null) ? '' : String(val);
+	let s = (val === undefined || val === null) ? '' : String(val);
+
+	// Neutralize spreadsheet formula injection: a cell that begins with = + - @ (or a leading tab /
+	// carriage return) is executed as a formula by Excel / Google Sheets when the file is opened, so a
+	// free-text field (e.g. a journal note or a crafted pair symbol) could run =HYPERLINK(...) etc. Prefix
+	// such a cell with a single quote so it is treated as literal text. Do this ONLY when the value is not
+	// a plain number, so legitimate negative amounts (e.g. -30.50) stay numeric for tax / spreadsheet tools.
+	if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s)) {
+
+		s = "'" + s;
+	}
 
 	return '"' + s.replace(/"/g, '""') + '"';
 }
@@ -331,14 +341,6 @@ function rowsToCsv(rows, opts) {
 	return lines.join('\r\n') + '\r\n';
 }
 
-/**
- * Convenience: deals -> CSV text in one call.
- */
-function dealsToCsv(deals, opts) {
-
-	return rowsToCsv(buildRows(deals, opts), opts);
-}
-
 module.exports = {
 	KOINLY_HEADERS,
 	// pure helpers (exported for testing)
@@ -350,6 +352,5 @@ module.exports = {
 	buildDealRows,
 	buildRows,
 	// serialization
-	rowsToCsv,
-	dealsToCsv
+	rowsToCsv
 };

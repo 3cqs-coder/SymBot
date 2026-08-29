@@ -1,0 +1,34 @@
+{
+  "id": "core/drawdown-sentinel",
+  "version": "1.0",
+  "min_symbot_version": "7.0",
+  "name": "Drawdown sentinel",
+  "description": "Watches your open deals and alerts you only when one goes underwater past a threshold, or its safety-order ladder is nearly exhausted — quiet when everything is healthy. Read-only: it looks at your deals, it never places or changes a trade. Works without AI; you can optionally have it add a short AI summary.",
+  "author": "core",
+  "categories": [
+    "risk",
+    "monitoring",
+    "alerting"
+  ],
+  "icon": "shield",
+  "requires_ai": false,
+  "ai_optional": true,
+  "type": "drawdown_sentinel",
+  "kind": "cron",
+  "cron": "0 */4 * * *",
+  "enabled": false,
+  "settings": {
+    "underwater_pct": 10,
+    "so_used_fraction": 0.8,
+    "ai_enhance": false,
+    "notifications": [
+      {
+        "type": "browser",
+        "target": {},
+        "on": [
+          "always"
+        ]
+      }
+    ]
+  }
+}

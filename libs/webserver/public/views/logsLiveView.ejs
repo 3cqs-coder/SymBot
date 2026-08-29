@@ -11,13 +11,19 @@ let countdownTimerLogs;
 
 			const socket = socketGlobal;
 
-			socket.on('connect', (data) => {
+			function joinLogRooms() {
 
-				socket.emit('joinRooms', {
+				socket.emit('joinRooms', { 'rooms': ['notifications', 'logs'] });
+			}
 
-					'rooms': ['notifications', 'logs']
-				});
-			});
+			// The shared socket is created earlier (partialsSocketView), so binding the 'logs' join
+			// to the 'connect' event alone can MISS it (the event may have already fired), and no
+			// realtime logs would stream. Emit the join unconditionally now — socket.io buffers the
+			// emit until the connection is ready and flushes it on connect — and re-join on any
+			// reconnect. This makes the logs room reliable regardless of connection timing.
+			joinLogRooms();
+
+			socket.on('connect', joinLogRooms);
 
             socket.on('data', (data) => {
 
@@ -152,7 +158,7 @@ function flushBuffer() {
 	<div id="contentBox" class="wide">
 
         <div class="contentHeaderBox" style="display: flex; align-items: center; justify-content: space-between;">
-            <b class="contentHeader"><%- appData.name %> Realtime Logs</b>
+            <b class="contentHeader"><%= appData.name_display || appData.name %> Realtime Logs</b>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <input type="checkbox" id="simple-switch" checked>
                 <span id="status-text" style="min-width: 40px; display: inline-block;">Live</span>

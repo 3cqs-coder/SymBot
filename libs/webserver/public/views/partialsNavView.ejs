@@ -29,6 +29,7 @@
 			[ hrefDeals,             navIsHub ? 'Deals' : 'Active Deals', 'deals', 'activity', true,   false ],
 			[ hrefDashboard,         'Dashboard',               'dashboard', 'grid',      !navIsHub,   false ],
 			[ './deals/history',     'Deals History',           'history',   'history',   !navIsHub,   false ],
+			[ './signals/activity',  'Signal Activity',         'signal-activity', 'signal', !navIsHub, false ],
 			[ './manage',            'Manage Instances',        'manage',    'instances', navIsHub,    false ],
 			[ './news',              'News',                    'news',      'news',      navIsHub,    false ]
 		] },
@@ -37,6 +38,8 @@
 			[ './deals/export',      'Transaction Export',      'transaction-export','download', !navIsHub, false ],
 			[ './journal',           'Trading Journal',         'journal',   'book',      !navIsHub,   false ],
 			[ './config',            'Configuration',           'config',    'gear',      true,        false ],
+			[ './access',            'Access Control',          'access',    'key',       true,        false ],
+			[ './schedules',         'Schedules',               'schedules', 'clock',     !navIsHub,   false ],
 			[ './system',            'System Tools',            'system',    'tools',     !navIsHub,   false ],
 			[ './backups',           'Backups',                 'backups',   'archive',   true,        false ],
 			[ './logs',              'Logs',                    'logs',      'list',      true,        false ]
@@ -47,7 +50,7 @@
 	];
 
 	// Inline SVG path data — stroke-based, 24x24 viewBox. Quiet guides, not
-	// actions (kept muted via .nav-ic colour), consistent with the prior
+	// actions (kept muted via .nav-ic color), consistent with the prior
 	// menu-icon philosophy but sharper than the old unicode glyphs.
 	var navIcons = {
 		plus:     '<path d="M12 5v14M5 12h14"/>',
@@ -57,6 +60,7 @@
 		history:  '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
 		external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
 		gear:     '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.3 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.3 2.5h5l.3-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/>',
+		clock:    '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 		tools:    '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.7 2.7-2-2z"/>',
 		archive:  '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>',
 		download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
@@ -64,7 +68,9 @@
 		book:     '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
 		instances:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
 		news:     '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
-		logout:   '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'
+		signal:   '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+		logout:   '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+		key:      '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 20 3M18 5l2 2M15 8l2 2"/>'
 	};
 
 	function navIcon(key) {

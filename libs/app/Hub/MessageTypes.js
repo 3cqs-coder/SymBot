@@ -30,6 +30,8 @@ const HUB_TO_WORKER = {
 	DEAL_ACTION:			'deal_action',
 	SYSTEM_PAUSE:			'system_pause',
 	BOT_ACTION:			'bot_action',
+	// Aggregated AI-learning pack the Hub pushes down for the instance to import.
+	LEARNING_PACK:			'learning_pack',
 };
 
 
@@ -46,6 +48,21 @@ const WORKER_TO_HUB = {
 	SYSTEM_PAUSE_ALL:		'system_pause_all',
 	SHUTDOWN_HUB:			'shutdown_hub',
 	LOG:				'log',
+	// A batch of relayed log LINES (strings), flushed together to avoid one cross-thread message
+	// per line. `error` lines are still relayed immediately (see Worker.js). Each line is logged
+	// on the Hub exactly as a single LOG would be.
+	LOG_BATCH:			'log_batch',
+	// An instance with no SMTP of its own relays an outbound email to the Hub, which
+	// sends it through the Hub's shared mailer. Fire-and-forget: no matching ack.
+	SEND_EMAIL:			'send_email',
+	// An instance relays a patterns-only AI-learning note (question → tools) to the Hub,
+	// which pools it so separate-database instances learn from each other. Fire-and-forget.
+	LEARNING:			'learning',
+	// An instance reports its AI-tool names to the Hub (once, on startup). The Hub unions these
+	// across the fleet so a maintainer aggregating contributed learning packs validates against the
+	// tools instances actually have — not only the Hub process's own registry — and can see which
+	// instances support a given tool. Fire-and-forget.
+	TOOLS:				'tools',
 };
 
 

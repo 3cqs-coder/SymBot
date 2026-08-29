@@ -11,21 +11,31 @@
 
 <main>
 
-	<div id="contentBox" style="width: 95%; max-width: 500px;">
-		
-		<center>
-		<table id="login" cellpadding=0 cellspacing=0>
+	<div class="loginWrap">
 
-		<form method=POST autocomplete="off" action="./login">
+		<div class="card loginCard">
 
-			<tr>
-				<td style="padding-right: 10px;">Password:</td> <td><input id="password" name="password" type="password" style="width: 150px;" class="form-field"> <input type=submit value="Login" class="btn"></td>
-			</tr>
+			<div class="loginBrand"><%= appData.name_display || appData.name %></div>
+			<div class="section-sub">Log in to your instance.</div>
 
-		</form>
+			<form class="loginForm" method="POST" autocomplete="off" action="./login">
 
-		</table>
-		</center>
+				<div class="formRow">
+					<label class="fieldLabel" for="username">Username</label>
+					<input id="username" name="username" type="text" autocomplete="off" class="form-field">
+					<div class="loginHint">Leave blank to sign in as the owner.</div>
+				</div>
+
+				<div class="formRow">
+					<label class="fieldLabel" for="password">Password</label>
+					<input id="password" name="password" type="password" class="form-field">
+				</div>
+
+				<button type="submit" class="loginBtn">Log in</button>
+
+			</form>
+
+		</div>
 
 	</div>
 

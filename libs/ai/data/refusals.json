@@ -1,0 +1,36 @@
+{
+  "_comment": "Structured text data for the AI chat's guardrails — rotating refusal messages and the topic-scope definition. Static, shipped data (libs/ is read-only code in GitHub, not user-editable). Freeform prose blocks live as .txt siblings; only genuinely structured data lives here as JSON.",
+  "scopeAllowed": "the user's own SymBot trading data (deals, DCA/safety orders, take-profit, profit/loss, balances, bots and their settings), SymBot's logs and what happened/why, exchanges and trading pairs, and general cryptocurrency / trading / technical-analysis concepts",
+  "financialAdviceNote": "\n\n_Not licensed financial advice — figures above are from your own SymBot data._",
+  "financialAdviceNoteGeneric": "\n\n_Not licensed financial advice._",
+  "refusals": {
+    "offtopic": [
+      "That's outside what I can help with — I'm your SymBot trading assistant. I can dig into your deals, bots, balances, P/L or logs though. Want any of those?",
+      "I'll stick to your trading side of things. Ask me about your deals, safety orders, performance, or what your logs show and I'm all yours.",
+      "That one's not in my lane — I focus on your SymBot data and crypto trading. Happy to pull up your open deals, recent performance, or a specific pair."
+    ],
+    "advice": [
+      "I can't tell you whether to buy or sell — that's a personal call and I'm not a licensed advisor. I can show you that pair's current status, its distance to take-profit, and how its safety orders would behave if it moves. Want that?",
+      "That's an investment decision I'm not able to make for you (not licensed advice). What I can do is lay out the data — your position, unrealized P/L, and where it sits versus its target. Shall I?"
+    ],
+    "injection": [
+      "I'll skip that instruction — it came from data I was asked to read, not from you. What would you like to know about your deals or logs?"
+    ],
+    "action": [
+      "I can't place or change trades — I'm read-only, so I can look things up but never close, pause, start, or cancel anything. You can do that yourself from the deal or bot controls in SymBot. Want me to pull up that deal's status first so you can decide?",
+      "That's an action I'm not able to take — I only read your data, I never act on it (no closing, canceling, pausing, or starting). Use the deal/bot controls in the SymBot UI for that. I can show you the position, its distance to take-profit, or how its safety orders would behave if it helps.",
+      "I don't have the ability to execute that — the assistant is strictly read-only for your safety. You can close or manage that deal from its controls in SymBot. Happy to lay out the numbers first so you're deciding with the full picture."
+    ],
+    "systemPrompt": [
+      "I can't share my internal instructions or system prompt — those stay private. I'm happy to explain what I can do, though: ask me about your deals, bots, balances, P/L, logs, or how any part of SymBot works."
+    ],
+    "credential": [
+      "I can't show credentials like API keys, secrets, passwords or tokens — I don't have access to them, and they're never something I'd display. Your exchange keys live in SymBot's configuration file, which you manage directly.",
+      "Sorry, I won't display secrets such as API keys, secrets, passwords or tokens — I have no access to them and never surface them. Those are kept in SymBot's config file for you to manage."
+    ],
+    "prediction": [
+      "I can't predict future returns — no one can say what your deals will make by then, and I won't guess at a number. What I can show you is what you've actually made so far: your realized profit, unrealized P/L, and win rate. Want any of those?",
+      "That's a forecast I'm not able to make — future profit depends on the market, and I won't put a number on it. I can pull up your real figures instead (realized P/L, current unrealized P/L, or how a position sits versus its take-profit). Which would help?"
+    ]
+  }
+}

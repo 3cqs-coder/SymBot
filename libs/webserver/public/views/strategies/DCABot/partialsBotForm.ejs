@@ -9,9 +9,12 @@
   //   formAction           — (instance only) form action URL; omit for Hub
   const _isHub        = (typeof isHub !== 'undefined') && isHub;
   const _formAction   = (typeof formAction !== 'undefined') ? formAction : null;
+  // Collapsible advanced sections start collapsed on CREATE (a clean first impression)
+  // and open on UPDATE (so an existing bot's configured values are visible at a glance).
+  // Both hosts pass an explicit botUpdate flag (instance DCABotManager render + Hub
+  // botEditView routes), which is the reliable signal; fall back to a botId on botData.
+  const _isUpdate     = (typeof botUpdate !== 'undefined') ? !!botUpdate : !!(botData && botData.botId);
 %>
-
-<table id="botsCreate" style="margin-top: 20px;" cellpadding=0 cellspacing=0>
 
 <% if (_formAction !== null) { %>
 <form id="formBotsCreate" autocomplete="off" action=".<%- _formAction %>">
@@ -20,123 +23,239 @@
 <input type=hidden id="active" name="active">
 <% } %>
 
-	<tr id="botIdRow" style="display: none;"><td>Bot ID:</td> <td><%- botData.botId || '' %></td></tr>
+	<div class="card">
+	<div class="section-title"><span class="icon icon-settings"></span> Bot Settings</div>
+	<div class="section-desc">Name your bot and choose the trading pair(s) it is allowed to trade.</div>
+	<table id="botsCreate" cellpadding=0 cellspacing=0>
 
-	<tr><td>Bot Name:</td>
-		<td><input id="botName" name="botName" value="<%- botData.botName || '' %>" class="form-field" style="width: 200px;"></td></tr>
+		<tr id="botIdRow" style="display: none;"><td>Bot ID:</td> <td><%= botData.botId || '' %></td></tr>
 
-	<tr><td style="vertical-align: top;">Pairs:
-		<span class="toolTip">?<span class="toolTipText">Please select the trading pair(s) this bot is allowed to use. It is recommended that you update your bots periodically as exchanges occasionally add and remove pairs.</span></span>
-		</td><td>
-		<div style="position: relative;">
-			<div style="position: relative; float: left;">
-				<select id="pair" name="pair" class="form-select-pair" style="width: 200px;" multiple="multiple"><%- symbolString %></select>
+		<tr><td>Bot Name:</td>
+			<td><input id="botName" name="botName" value="<%= botData.botName || '' %>" class="form-field" style="width: 200px;"></td></tr>
+
+		<tr><td style="vertical-align: top;">Pairs:
+			<span class="toolTip">?<span class="toolTipText">Please select the trading pair(s) this bot is allowed to use. It is recommended that you update your bots periodically as exchanges occasionally add and remove pairs.</span></span>
+			</td><td>
+			<div style="position: relative;">
+				<div style="position: relative; float: left;">
+					<select id="pair" name="pair" class="form-select-pair" style="width: 200px;" multiple="multiple"><%- symbolString %></select>
+				</div>
+				<div style="position: relative; float: left; left: 5px;">
+					<button id="clearAll" class="btnAll">Clear</button>
+				</div>
+				<br>
+				<div id="pairButtons" style="position: relative; float: left; margin-top: 5px; margin-bottom: 5px;"></div>
 			</div>
-			<div style="position: relative; float: left; left: 5px;">
-				<button id="clearAll" class="btnAll">Clear</button>
-			</div>
-			<br>
-			<div id="pairButtons" style="position: relative; float: left; margin-top: 5px; margin-bottom: 5px;"></div>
-		</div>
-		</td></tr>
+			</td></tr>
 
-	<tr><td>Base Order Size:
-		<span class="toolTip">?<span class="toolTipText">This is the amount of funds used for the first order the bot will create when starting a new deal.</span></span>
-		</td>
-		<td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount || '' %>" class="form-field"></td></tr>
+	</table>
+	</div>
 
-	<tr><td>Safety Order Size:
-		<span class="toolTip">?<span class="toolTipText">This is the amount of funds your DCA (safety) orders will use to average down the cost of the asset being traded.</span></span>
-		</td>
-		<td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount || '' %>" class="form-field"></td></tr>
+	<div class="card">
+	<div class="section-title"><span class="icon icon-lifebuoy"></span> Base &amp; Safety Orders</div>
+	<div class="section-desc">The base order opens each deal; safety orders average down the position as price moves against it.</div>
+	<table id="botsCreate" cellpadding=0 cellspacing=0>
 
-	<tr><td>Max Safety Orders:
-		<span class="toolTip">?<span class="toolTipText">This is the total number of DCA (safety) orders the bot is allowed to use per deal.</span></span>
-		</td>
-		<td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder || '' %>" class="form-field"></td></tr>
+		<tr><td>Base Order Size:
+			<span class="toolTip">?<span class="toolTipText">This is the amount of funds used for the first order the bot will create when starting a new deal.</span></span>
+			</td>
+			<td><input id="firstOrderAmount" name="firstOrderAmount" value="<%- botData.firstOrderAmount || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Safety Order Price Deviation:
-		<span class="toolTip">?<span class="toolTipText">This is the price percentage difference to create the first DCA (safety) order. All DCA (safety) orders are calculated from the price the initial base order was filled on the exchange.</span></span>
-		</td>
-		<td><input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent || '' %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Size:
+			<span class="toolTip">?<span class="toolTipText">This is the amount of funds your DCA (safety) orders will use to average down the cost of the asset being traded.</span></span>
+			</td>
+			<td><input id="dcaOrderAmount" name="dcaOrderAmount" value="<%- botData.dcaOrderAmount || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Safety Order Volume Scale:
-		<span class="toolTip">?<span class="toolTipText">This will multiply the amount of funds used by the last DCA (safety) order that was created. Using a larger amount allows the bot to be more aggressive at dollar cost averaging the price of the asset being traded.</span></span>
-		</td>
-		<td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier || '' %>" class="form-field"></td></tr>
+		<tr><td>Max Safety Orders:
+			<span class="toolTip">?<span class="toolTipText">This is the total number of DCA (safety) orders the bot is allowed to use per deal.</span></span>
+			</td>
+			<td><input id="dcaMaxOrder" name="dcaMaxOrder" value="<%- botData.dcaMaxOrder || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Safety Order Step Scale:
-		<span class="toolTip">?<span class="toolTipText">This will multiply the price deviation percentage used by the last DCA (safety) order placed on the exchange. Using a larger value will reduce the number of DCA (safety) orders required to cover a larger price movement.</span></span>
-		</td>
-		<td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier || '' %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Price Deviation:
+			<span class="toolTip">?<span class="toolTipText">This is the price percentage difference to create the first DCA (safety) order. All DCA (safety) orders are calculated from the price the initial base order was filled on the exchange.</span></span>
+			</td>
+			<td><input id="dcaOrderStepPercent" name="dcaOrderStepPercent" value="<%- botData.dcaOrderStepPercent || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Target Profit %:
-		<span class="toolTip">?<span class="toolTipText">This is the take profit target percentage the bot will use to close successful deals.</span></span>
-		</td>
-		<td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent || '' %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Volume Scale:
+			<span class="toolTip">?<span class="toolTipText">This will multiply the amount of funds used by the last DCA (safety) order that was created. Using a larger amount allows the bot to be more aggressive at dollar cost averaging the price of the asset being traded.</span></span>
+			</td>
+			<td><input id="dcaOrderSizeMultiplier" name="dcaOrderSizeMultiplier" value="<%- botData.dcaOrderSizeMultiplier || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Max Deals:
-		<span class="toolTip">?<span class="toolTipText">Maximum number of deals that will be run before the bot is disabled. Multi-pair bots count as one deal per pair. To limit concurrent deals for multi-pair bots, leave empty or set to 0 and set Max Pairs instead. Deals will only start again if the bot is re-enabled manually, through the API, or if an automated signal is received.</span></span>
-		</td>
-		<td><input id="dealMax" name="dealMax" value="<%- botData.dealMax !== undefined ? botData.dealMax : 0 %>" class="form-field"></td></tr>
+		<tr><td>Safety Order Step Scale:
+			<span class="toolTip">?<span class="toolTipText">This will multiply the price deviation percentage used by the last DCA (safety) order placed on the exchange. Using a larger value will reduce the number of DCA (safety) orders required to cover a larger price movement.</span></span>
+			</td>
+			<td><input id="dcaOrderStepPercentMultiplier" name="dcaOrderStepPercentMultiplier" value="<%- botData.dcaOrderStepPercentMultiplier || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Max Pairs:
-		<span class="toolTip">?<span class="toolTipText">Maximum number of pairs that can be run concurrently when a bot is using more than one pair. Only used for multi-pair bots and has no effect on single pair bots.</span></span>
-		</td>
-		<td><input id="pairMax" name="pairMax" value="<%- botData.pairMax !== undefined ? botData.pairMax : 0 %>" class="form-field"></td></tr>
+	</table>
+	</div>
 
-	<tr><td>Max Pair Deals:
-		<span class="toolTip">?<span class="toolTipText">Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0.</span></span>
-		</td>
-		<td><input id="pairDealsMax" name="pairDealsMax" value="<%- botData.pairDealsMax !== undefined ? botData.pairDealsMax : 0 %>" class="form-field"></td></tr>
+	<div class="card">
+	<div class="section-title"><span class="icon icon-target"></span> Take Profit</div>
+	<div class="section-desc">The profit target the bot uses to close a successful deal.</div>
+	<table id="botsCreate" cellpadding=0 cellspacing=0>
 
-	<tr><td>Max Pair Deals (All Bots):
-		<span class="toolTip">?<span class="toolTipText">Maximum number of same pair deals that can run concurrently including all other active bots. For example, if set to 1 then any pair in this bot will not start a deal if another bot is already running a deal for that same pair.</span></span>
-		</td>
-		<td><input id="pairBotsDealsMax" name="pairBotsDealsMax" value="<%- botData.pairBotsDealsMax !== undefined ? botData.pairBotsDealsMax : 0 %>" class="form-field"></td></tr>
+		<tr><td>Target Profit %:
+			<span class="toolTip">?<span class="toolTipText">This is the take profit target percentage the bot will use to close successful deals.</span></span>
+			</td>
+			<td><input id="dcaTakeProfitPercent" name="dcaTakeProfitPercent" value="<%- botData.dcaTakeProfitPercent || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Minimum 24h Volume:
-		<span class="toolTip">?<span class="toolTipText">Set this to prevent trading assets with low liquidity. Volume is calculated in quote currency and defined in millions. If an asset has less daily trading volume than the value entered, the bot will not start a deal.</span></span>
-		</td>
-		<td><input id="volumeMin" name="volumeMin" value="<%- botData.volumeMin || '' %>" class="form-field"> Million</td></tr>
+	</table>
+	</div>
 
-	<tr><td>Cooldown Between Deals:
-		<span class="toolTip">?<span class="toolTipText">Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair.</span></span>
-		</td>
-		<td><input id="dealCoolDown" name="dealCoolDown" value="<%- botData.dealCoolDown || '' %>" class="form-field"> Seconds</td></tr>
+	<div class="card">
+		<details<%= _isUpdate ? ' open' : '' %> class="bot-form-section">
+			<summary style="cursor: pointer; padding: 2px 0; font-weight: 600; user-select: none; font-size: var(--fs-section);"><span class="icon icon-shield" style="width:15px;height:15px;vertical-align:-2px;"></span> Stop-Loss &amp; Trailing Stop</summary>
+			<table id="botsCreate" style="margin-top: 12px;" cellpadding=0 cellspacing=0>
 
-	<tr><td>Profit Currency:
-		<span class="toolTip">?<span class="toolTipText">Currency used for the profit when trading with this bot.</span></span>
-		</td>
-		<td>
-			<select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 200px; cursor: pointer;">
-				<option value="base"  <%- botData.profitCurrency === 'base'  ? 'selected' : '' %>>Base</option>
-				<option value="quote" <%- botData.profitCurrency !== 'base'  ? 'selected' : '' %>>Quote</option>
+		<tr><td>Stop-Loss:
+			<%- include('./partialsFieldTip', { 'tipKey': 'stopLoss' }) %>
+			</td>
+			<td>
+			<select id="dcaStopLossEnabled" name="dcaStopLossEnabled" class="form-field" style="width: 200px; cursor: pointer;">
+				<option value="false" <%- String(botData.dcaStopLossEnabled) === 'true' ? '' : 'selected' %>>Disabled</option>
+				<option value="true"  <%- String(botData.dcaStopLossEnabled) === 'true' ? 'selected' : '' %>>Enabled</option>
 			</select>
-		</td>
-	</tr>
+			</td></tr>
 
-	<tr id="startConditionFirst"><td>Start Condition:</td>
-		<td>
-			<select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select>
-			<span id="infoBox" style="position: relative; display: flex; justify-content: left; padding-top: 5px;"></span>
-		</td></tr>
-	<%- startConditionSubString %>
+		<tr><td>Stop-Loss %:
+			<%- include('./partialsFieldTip', { 'tipKey': 'stopLossPct' }) %>
+			</td>
+			<td><input id="dcaStopLossPercent" name="dcaStopLossPercent" value="<%- botData.dcaStopLossPercent || '' %>" class="form-field"></td></tr>
 
-	<tr><td>Enabled:</td>
-		<td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>
+		<tr><td>Stop-Loss Reference:
+			<%- include('./partialsFieldTip', { 'tipKey': 'stopLossRef' }) %>
+			</td>
+			<td>
+			<select id="dcaStopLossReference" name="dcaStopLossReference" class="form-field" style="width: 200px; cursor: pointer;">
+				<option value="average"         <%- String(botData.dcaStopLossReference) === 'lastSafetyOrder' ? '' : 'selected' %>>DCA Average</option>
+				<option value="lastSafetyOrder" <%- String(botData.dcaStopLossReference) === 'lastSafetyOrder' ? 'selected' : '' %>>Last Safety Order</option>
+			</select>
+			</td></tr>
 
-	<tr>
-		<td style="padding-top: 25px; text-align: center;" colspan=2>
-			<button id="formSubmitPreview" class="btn">Preview Bot</button>
-			<button id="formSubmitReset"   class="btn" style="display: none;">Modify Bot</button>
-			&nbsp;&nbsp;&nbsp;
-			<button id="formSubmitStart"   class="btn" style="display: none;"></button>
-		</td>
-	</tr>
+		<tr><td>Move Stop To Breakeven:
+			<%- include('./partialsFieldTip', { 'tipKey': 'moveBreakeven' }) %>
+			</td>
+			<td>
+			<select id="dcaStopLossMoveBreakeven" name="dcaStopLossMoveBreakeven" class="form-field" style="width: 200px; cursor: pointer;">
+				<option value="false" <%- String(botData.dcaStopLossMoveBreakeven) === 'true' ? '' : 'selected' %>>Disabled</option>
+				<option value="true"  <%- String(botData.dcaStopLossMoveBreakeven) === 'true' ? 'selected' : '' %>>Enabled</option>
+			</select>
+			</td></tr>
+
+		<tr><td>Breakeven Trigger %:
+			<%- include('./partialsFieldTip', { 'tipKey': 'breakevenTrigger' }) %>
+			</td>
+			<td><input id="dcaStopLossBreakevenTrigger" name="dcaStopLossBreakevenTrigger" value="<%- botData.dcaStopLossBreakevenTrigger || '' %>" class="form-field"></td></tr>
+
+		<tr><td>Trailing Stop:
+			<%- include('./partialsFieldTip', { 'tipKey': 'trailingStop' }) %>
+			</td>
+			<td>
+			<select id="dcaTrailingStopEnabled" name="dcaTrailingStopEnabled" class="form-field" style="width: 200px; cursor: pointer;">
+				<option value="false" <%- String(botData.dcaTrailingStopEnabled) === 'true' ? '' : 'selected' %>>Disabled</option>
+				<option value="true"  <%- String(botData.dcaTrailingStopEnabled) === 'true' ? 'selected' : '' %>>Enabled</option>
+			</select>
+			</td></tr>
+
+		<tr><td>Trailing Distance %:
+			<%- include('./partialsFieldTip', { 'tipKey': 'trailingDistance' }) %>
+			</td>
+			<td><input id="dcaTrailingStopDistance" name="dcaTrailingStopDistance" value="<%- botData.dcaTrailingStopDistance || '' %>" class="form-field"></td></tr>
+
+		<tr><td>Trailing Activation Profit %:
+			<%- include('./partialsFieldTip', { 'tipKey': 'trailingActivate' }) %>
+			</td>
+			<td><input id="dcaTrailingActivateProfit" name="dcaTrailingActivateProfit" value="<%- botData.dcaTrailingActivateProfit || '' %>" class="form-field"></td></tr>
+
+		<tr><td>Trailing Rides Past Take-Profit:
+			<%- include('./partialsFieldTip', { 'tipKey': 'trailingRidesTP' }) %>
+			</td>
+			<td>
+			<select id="dcaTrailingReplacesTakeProfit" name="dcaTrailingReplacesTakeProfit" class="form-field" style="width: 200px; cursor: pointer;">
+				<option value="false" <%- String(botData.dcaTrailingReplacesTakeProfit) === 'false' ? 'selected' : '' %>>Disabled</option>
+				<option value="true"  <%- String(botData.dcaTrailingReplacesTakeProfit) === 'false' ? '' : 'selected' %>>Enabled</option>
+			</select>
+			</td></tr>
+
+			</table>
+		</details>
+	</div>
+
+	<div class="card">
+		<details<%= _isUpdate ? ' open' : '' %> class="bot-form-section">
+			<summary style="cursor: pointer; padding: 2px 0; font-weight: 600; user-select: none; font-size: var(--fs-section);"><span class="icon icon-list" style="width:15px;height:15px;vertical-align:-2px;"></span> Deal Limits &amp; Options</summary>
+			<table id="botsCreate" style="margin-top: 12px;" cellpadding=0 cellspacing=0>
+
+		<tr><td>Max Deals:
+			<span class="toolTip">?<span class="toolTipText">Maximum number of deals that will be run before the bot is disabled. Multi-pair bots count as one deal per pair. To limit concurrent deals for multi-pair bots, leave empty or set to 0 and set Max Pairs instead. Deals will only start again if the bot is re-enabled manually, through the API, or if an automated signal is received.</span></span>
+			</td>
+			<td><input id="dealMax" name="dealMax" value="<%- botData.dealMax !== undefined ? botData.dealMax : 0 %>" class="form-field"></td></tr>
+
+		<tr><td>Max Pairs:
+			<span class="toolTip">?<span class="toolTipText">Maximum number of pairs that can be run concurrently when a bot is using more than one pair. Only used for multi-pair bots and has no effect on single pair bots.</span></span>
+			</td>
+			<td><input id="pairMax" name="pairMax" value="<%- botData.pairMax !== undefined ? botData.pairMax : 0 %>" class="form-field"></td></tr>
+
+		<tr><td>Max Pair Deals:
+			<span class="toolTip">?<span class="toolTipText">Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0.</span></span>
+			</td>
+			<td><input id="pairDealsMax" name="pairDealsMax" value="<%- botData.pairDealsMax !== undefined ? botData.pairDealsMax : 0 %>" class="form-field"></td></tr>
+
+		<tr><td>Max Pair Deals (All Bots):
+			<span class="toolTip">?<span class="toolTipText">Maximum number of same pair deals that can run concurrently including all other active bots. For example, if set to 1 then any pair in this bot will not start a deal if another bot is already running a deal for that same pair.</span></span>
+			</td>
+			<td><input id="pairBotsDealsMax" name="pairBotsDealsMax" value="<%- botData.pairBotsDealsMax !== undefined ? botData.pairBotsDealsMax : 0 %>" class="form-field"></td></tr>
+
+		<tr><td>Minimum 24h Volume:
+			<span class="toolTip">?<span class="toolTipText">Set this to prevent trading assets with low liquidity. Volume is calculated in quote currency and defined in millions. If an asset has less daily trading volume than the value entered, the bot will not start a deal.</span></span>
+			</td>
+			<td><input id="volumeMin" name="volumeMin" value="<%- botData.volumeMin || '' %>" class="form-field"> Million</td></tr>
+
+		<tr><td>Cooldown Between Deals:
+			<span class="toolTip">?<span class="toolTipText">Wait a number of seconds before starting a new deal after the last one completes. Multi-pair bots will have different timers for each pair.</span></span>
+			</td>
+			<td><input id="dealCoolDown" name="dealCoolDown" value="<%- botData.dealCoolDown || '' %>" class="form-field"> Seconds</td></tr>
+
+		<tr><td>Profit Currency:
+			<span class="toolTip">?<span class="toolTipText">Currency used for the profit when trading with this bot.</span></span>
+			</td>
+			<td>
+				<select id="profitCurrency" name="profitCurrency" class="form-field" style="width: 200px; cursor: pointer;">
+					<option value="base"  <%- botData.profitCurrency === 'base'  ? 'selected' : '' %>>Base</option>
+					<option value="quote" <%- botData.profitCurrency !== 'base'  ? 'selected' : '' %>>Quote</option>
+				</select>
+			</td>
+		</tr>
+
+			</table>
+		</details>
+	</div>
+
+	<div class="card">
+	<div class="section-title"><span class="icon icon-play"></span> Start Condition</div>
+	<div class="section-desc">Choose what triggers a new deal, then enable the bot when you are ready to run it.</div>
+	<table id="botsCreate" cellpadding=0 cellspacing=0>
+
+		<tr id="startConditionFirst"><td>Start Condition:</td>
+			<td>
+				<select id="startCondition" name="startCondition" class="form-field" style="width: 200px;"><%- startConditionString %></select>
+				<span id="infoBox" style="position: relative; display: flex; justify-content: left; padding-top: 5px;"></span>
+			</td></tr>
+		<%- startConditionSubString %>
+
+		<tr><td>Enabled:</td>
+			<td><input id="botActive" name="botActive" type=checkbox class="form-field" <%- activeChecked %>></td></tr>
+
+	</table>
+	</div>
+
+	<div style="padding-top: 15px; padding-bottom: 10px; text-align: center;">
+		<button id="formSubmitPreview" class="btn">Preview Bot</button>
+		<button id="formSubmitReset"   class="btn" style="display: none;">Modify Bot</button>
+		&nbsp;&nbsp;&nbsp;
+		<button id="formSubmitStart"   class="btn" style="display: none;"></button>
+	</div>
 
 <% if (_formAction !== null) { %>
 </form>
 <% } %>
-
-</table>

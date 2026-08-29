@@ -4,14 +4,15 @@
 
 <script>
     <% const { active_deals, total_in_deals, available_balance, total_profit, total_pl } = kpi; %>
-    const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map, equity_curve_map = {}, win_rate_map = {}, pair_profit_map = {}, pair_profit_pos_map = {}, pair_profit_neg_map = {}, so_utilisation_map = {} } = <%- JSON.stringify(charts) %>;
+    <% const kpiByCurrency = kpi.by_currency || {}; const kpiCurrencies = kpi.currencies || []; const kpiMultiCurrency = !!kpi.multi_currency; const kpiCurrencySymbols = kpi.currency_symbols || {}; %>
+    const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map, equity_curve_map = {}, win_rate_map = {}, pair_profit_map = {}, pair_profit_pos_map = {}, pair_profit_neg_map = {}, so_utilization_map = {} } = <%- JSON.stringify(charts) %>;
     const balances = <%- JSON.stringify(available_balance) %>;
-    const currencies = <%- '[' + currencies.map(currency => `'${currency}'`).join(',') + ']'; %>;
+    const currencies = <%- JSON.stringify(currencies || []).replace(/</g, '\\u003c') %>;
 
     // kpiSymbol derived server-side from most common quote currency in completed deals
     const getCurrencySymbol = <%- getCurrencySymbol %>;
     let currencySymbol = '<%- kpiSymbol %>';
-    const botIdNameMap = <%- JSON.stringify(botIdNameMap) %>;
+    const botIdNameMap = <%- JSON.stringify(botIdNameMap).replace(/</g, '\\u003c') %>;
 
     const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
     const chartGridColor = isDarkMode ? '#555555' : undefined;
@@ -247,7 +248,7 @@
         } else {
             document.getElementById('pairProfitNegChart').parentElement.style.display = 'none';
         }
-        createChart(document.getElementById('soUtilisationChart').getContext('2d'), 'Avg Safety Orders Used', so_utilisation_map);
+        createChart(document.getElementById('soUtilizationChart').getContext('2d'), 'Avg Safety Orders Used', so_utilization_map);
 
         // Hide the Max Deal Exposure chart
         document.getElementById('maxDealsFundsChart').parentElement.style.display = 'none';
@@ -284,26 +285,48 @@
             <div id="innerContent" style="flex: 1;">
                 <div class="kpi-container">
                     <div class="performance-kpi">
-                        <span style="font-size: 11px">Active Deals</span>
-                        <span style="font-size: 20px;"><%- active_deals %></span>
+                        <span style="font-size: var(--fs-content)">Active Deals</span>
+                        <span style="font-size: var(--fs-stat);"><%- active_deals %></span>
                     </div>
                     <div class="performance-kpi">
-                        <span style="font-size: 11px">Total In Deals</span>
-                        <span style="font-size: 20px;"><%- kpiSymbol %><%- total_in_deals.toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content)">Total In Deals</span>
+                        <span style="font-size: var(--fs-stat);"><%- kpiSymbol %><%- total_in_deals.toLocaleString() %></span>
                     </div>
                     <div class="performance-kpi">
-                        <span style="font-size: 11px">Available Funds</span>
-                        <span id="balance" style="font-size: 20px;"></span>
+                        <span style="font-size: var(--fs-content)">Available Funds</span>
+                        <span id="balance" style="font-size: var(--fs-stat);"></span>
                     </div>
                     <div class="performance-kpi">
-                        <span style="font-size: 11px">Profit</span>
-                        <span style="font-size: 20px;"><%- kpiSymbol %><%- total_profit.toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content)">Profit</span>
+                        <span style="font-size: var(--fs-stat);"><%- kpiSymbol %><%- total_profit.toLocaleString() %></span>
                     </div>
                     <div class="performance-kpi">
-                        <span style="font-size: 11px">Active P/L</span>
-                        <span style="font-size: 20px;"><%- kpiSymbol %><%- total_pl.toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content)">Active P/L</span>
+                        <span style="font-size: var(--fs-stat);"><%- kpiSymbol %><%- total_pl.toLocaleString() %></span>
                     </div>
                 </div>
+
+                <% if (kpiMultiCurrency) { %>
+                <div style="margin: 8px 2px 0; font-size: var(--fs-content); color: var(--text-color); opacity: 0.85;">
+                    This instance trades more than one quote currency, so the combined tiles above mix currencies. Per-currency totals:
+                </div>
+                <div class="kpi-container" style="margin-top: 6px;">
+                    <% kpiCurrencies.forEach(function(c){ var b = kpiByCurrency[c] || {}; var sym = kpiCurrencySymbols[c] || ''; %>
+                    <div class="performance-kpi">
+                        <span style="font-size: var(--fs-content); font-weight: 600;"><%- c %></span>
+                        <span style="font-size: var(--fs-content);">Profit <%- sym %><%- Number(b.profit || 0).toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content);">Active P/L <%- sym %><%- Number(b.pl || 0).toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content);">In Deals <%- sym %><%- Number(b.in_deals || 0).toLocaleString() %></span>
+                    </div>
+                    <% }); %>
+                </div>
+                <% } %>
+
+                <% if (kpiMultiCurrency) { %>
+                <div style="margin: 14px 2px 0; font-size: var(--fs-content); color: var(--text-color); opacity: 0.85;">
+                    Note: the money charts below (Bot Profit, Active/Adjusted P/L, Profit Per Day, Funds in Use, Pair Profit/Losses and the cumulative curve) combine all quote currencies into one axis, so bars and points that span currencies are not directly comparable. Use the per-currency totals above for exact figures.
+                </div>
+                <% } %>
 
                 <div class="dashboard-container">
                     <div class="chart-container">
@@ -328,7 +351,7 @@
                         <canvas id="botDealDurationChart"></canvas>
                     </div>
                     <div class="chart-container" style="flex:1 1 300px; min-width:300px; display:flex; flex-direction:column; align-items:center;">
-                        <p style="font-size:12px; text-align:center; margin-bottom:5px;">
+                        <p style="font-size: var(--fs-body); text-align:center; margin-bottom:5px;">
                             Max deal exposure ever per bot shown
                         </p>
                         <canvas id="fundsInUseChart"></canvas>
@@ -352,7 +375,7 @@
                         <canvas id="winRateChart"></canvas>
                     </div>
                     <div class="chart-container" style="flex:1 1 300px; min-width:300px;">
-                        <canvas id="soUtilisationChart"></canvas>
+                        <canvas id="soUtilizationChart"></canvas>
                     </div>
                 </div>
 

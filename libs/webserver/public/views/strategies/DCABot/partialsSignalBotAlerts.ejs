@@ -1,0 +1,186 @@
+<%
+  // partialsSignalBotAlerts.ejs — Signal Bot setup panel for the bot
+  // create/update view. SHARED by the single-instance DCABotCreateUpdateView and
+  // the Hub botEditView (like partialsBotForm), so there is one implementation.
+  // Renders the "Signal Bot mode" toggle and the copy-paste webhook alert
+  // messages (entry / add_funds / close / panic_sell).
+  //
+  // Kept lean on purpose: a toggle plus the copy-paste cards up front, with the
+  // longer explanation and security notes tucked into collapsibles. Text uses
+  // the app's normal size and contrast — no shrinking or dimming.
+  //
+  // Optional locals from the host view (all guarded):
+  //   signalAlerts    — object from libs/strategies/DCABot/signalBot.js, or null
+  //   apiToken        — the instance's API token (revealed only on demand), or ''
+  //   webhookEnabled  — boolean; whether the webhook front door is turned on
+  //   isSignalBot     — boolean; whether this bot already uses the api start condition
+  //   isHub           — boolean; rendered inside the Hub. When true the alert URL
+  //                     is the webhook PATH (the Hub cannot know the instance's
+  //                     public address), and the client does NOT prepend the Hub
+  //                     origin — the user prepends their instance's public URL.
+  const _alerts        = (typeof signalAlerts !== 'undefined' && signalAlerts) ? signalAlerts : null;
+  const _apiToken      = (typeof apiToken !== 'undefined' && apiToken) ? String(apiToken) : '';
+  const _webhookOn     = (typeof webhookEnabled !== 'undefined') ? !!webhookEnabled : false;
+  const _isSignalBot   = (typeof isSignalBot !== 'undefined') ? !!isSignalBot : false;
+  const _isHub         = (typeof isHub !== 'undefined') ? !!isHub : false;
+  // Path prefix the browser prepends to each webhook path (after the live origin). Empty on a
+  // single instance (the client auto-detects the Hub proxy prefix from the URL when opened through
+  // the proxy); set to '/instance/<port>' by the Hub's native editor so its cards route back to the
+  // instance through the Hub. Origin is always taken from window.location, so a custom domain / HTTPS
+  // reverse proxy in front of the Hub is reflected automatically.
+  const _urlPrefix     = (typeof webhookUrlPrefix !== 'undefined' && webhookUrlPrefix) ? String(webhookUrlPrefix) : '';
+
+  // Per-command color so the four cards are easy to tell apart at a glance:
+  // entry = green (open), add_funds = blue (add), close = amber (graceful),
+  // panic_sell = red (danger). Tints are low-opacity so they read in both themes.
+  const _cmdColors = {
+    'entry':      { 'border': '#4aa602', 'bg': 'rgba(74,166,2,0.09)' },
+    'add_funds':  { 'border': '#2a7fd0', 'bg': 'rgba(42,127,208,0.09)' },
+    'close':      { 'border': '#c8961e', 'bg': 'rgba(200,150,30,0.10)' },
+    'panic_sell': { 'border': '#d23c3c', 'bg': 'rgba(210,60,60,0.10)' }
+  };
+%>
+
+<div id="signalBotBox" class="signal-bot-box" style="margin: 0 0 22px 0; text-align: left; border: 1px solid rgba(128,128,128,0.35); border-radius: 8px; padding: 18px 22px;">
+
+	<div id="signalBotSavedNote" style="display: none; margin-bottom: 14px; padding: 10px 14px; border-radius: 6px; border: 1px solid rgba(74,166,2,0.5); background: rgba(74,166,2,0.10);">
+		<b>Bot saved.</b> Copy an alert below into your TradingView alert (or any webhook source).
+	</div>
+
+	<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+		<b style="font-size: 1.25rem;">Signal Bot</b>
+		<label style="cursor: pointer; user-select: none;">
+			<input type="checkbox" id="signalBotMode" <%- _isSignalBot ? 'checked' : '' %>>
+			Signal Bot mode
+		</label>
+	</div>
+
+	<div style="margin-top: 10px;">
+		Let a TradingView (or webhook) alert trigger this bot &mdash; point-and-click, no coding.
+	</div>
+
+	<div id="signalBotHint" style="margin-top: 10px; display: none;">
+		Start Condition is now <b>Manually / API</b>. Preview and create the bot as usual.
+		Safety orders are your call: leave them on and SymBot&rsquo;s DCA ladder averages down
+		automatically after your entry signal, or set <b>Max Safety Orders</b> to <b>0</b> and
+		average only when the <b>Add Funds</b> alert fires (a fully signal-driven bot).
+	</div>
+
+	<details style="margin-top: 12px;">
+		<summary style="cursor: pointer;">How it works</summary>
+		<div style="margin-top: 8px;">
+			Your DCA bot works exactly as it always has. Signal Bot mode is optional: it lets an
+			outside source tell this bot <i>when</i> to enter, add a safety order, or close. SymBot
+			still owns the deal, the safety-order ladder, and the exits &mdash; the alert only says
+			&ldquo;now.&rdquo; You keep your bot here and just add a TradingView alert that pastes in
+			the short message below; you are not rebuilding your strategy in TradingView.
+		</div>
+	</details>
+
+<% if (!_webhookOn) { %>
+	<div style="margin-top: 14px; padding: 12px 14px; border-radius: 6px; border: 1px solid rgba(200,120,0,0.5); background: rgba(200,120,0,0.08);">
+		<b>Heads up:</b> webhooks are currently <b>disabled</b>, so these alerts will be rejected
+		until you enable them on the Config page.
+	</div>
+<% } %>
+
+	<div id="signalBotAlerts" style="margin-top: 16px; display: none;">
+
+<% if (_alerts === null) { %>
+		<div>
+			Create the bot, then reopen it here &mdash; your copy-paste alerts will appear on this panel.
+		</div>
+<% } else { %>
+<% if (_isHub) { %>
+		<div style="margin-bottom: 16px; padding: 12px 14px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.3);">
+			These URLs reach this bot&rsquo;s instance <b>through the Hub</b> &mdash; the
+			<code>/instance/&hellip;</code> path routes the webhook to the right instance for you &mdash; using
+			whatever address you reach the Hub on (your own domain and HTTPS included). Point your alert source
+			(e.g. TradingView) at them exactly as shown.
+		</div>
+<% } %>
+
+		<div style="display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-bottom: 14px;">
+			<label style="cursor: pointer; user-select: none;">
+				<input type="checkbox" id="signalBotSinglePair"> Single-pair bot
+			</label>
+<% if (_apiToken !== '') { %>
+			<label style="cursor: pointer; user-select: none;">
+				<input type="checkbox" id="signalBotShowToken"> Fill in my token
+			</label>
+<% } %>
+		</div>
+
+		<div style="margin-bottom: 16px; padding: 12px 14px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.3);">
+			<div style="margin-bottom: 6px;"><b>About the two placeholders in each message:</b></div>
+			<div><code>{{ticker}}</code> &mdash; TradingView fills this in automatically with the chart&rsquo;s
+			symbol when the alert fires. Leave it exactly as-is. SymBot matches common symbol formats
+			(such as <code>BTCUSD</code> or <code>COINBASE:BTC-USD</code>) back to this bot&rsquo;s configured
+			pair automatically, so the alert finds the right pair without any hand-formatting.</div>
+			<div style="margin-top: 6px;"><code>{{YOUR_TOKEN}}</code> &mdash; your credential for this webhook; replace
+			it with a key you create. It is <i>not</i> a TradingView variable.
+			<div style="margin-top: 4px;"><b>Recommended:</b> a scoped <b>API key</b>, created under
+			<b>Access Control &rarr; API Keys</b>. When you create it, tick <b>Start deals</b> &mdash; that one permission
+			covers both the entry and add-funds signals. Also tick <b>Close / cancel deals</b> if your alerts send the
+			<code>close</code> or <code>panic_sell</code> commands. (Those are the <code>deal.create</code> and
+			<code>deal.close</code> capabilities, if you&rsquo;re scripting.) A scoped key can be limited to exactly what a
+			signal needs and revoked or rotated on its own, without touching anything else &mdash; the better choice now
+			that API Keys are fully built out.<% if (_apiToken !== '') { %> Ticking &ldquo;Fill in my token&rdquo; above
+			instead inserts this instance&rsquo;s <em>legacy</em> per-instance token: still accepted, but it follows your
+			main API key, so rotating it changes every signal setup at once.<% } %></div></div>
+			<div style="margin-top: 6px;">Running a single-pair bot? Tick <b>Single-pair bot</b> to drop the
+			<code>pair</code> line entirely &mdash; then the pair comes from the bot, not the alert, for the
+			simplest possible setup.</div>
+		</div>
+
+<% _alerts.commands.forEach(function(cmd) { %>
+<% const _c = _cmdColors[cmd.command] || { 'border': '#888888', 'bg': 'rgba(128,128,128,0.06)' }; %>
+		<div class="signal-alert-card"
+			 data-path="<%= cmd.path %>"
+			 data-json-multi="<%= cmd.json_multi %>"
+			 data-json-single="<%= cmd.json_single %>"
+			 style="border: 1px solid rgba(128,128,128,0.3); border-left: 4px solid <%= _c.border %>; background: <%= _c.bg %>; border-radius: 6px; padding: 14px 16px; margin-bottom: 14px;">
+
+			<div style="font-weight: 600; font-size: 1.05rem; margin-bottom: 8px;"><%= cmd.label %></div>
+
+			<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+				<input type="text" class="form-field signal-alert-url" readonly value="<%= cmd.path %>"
+					   style="flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); font-size: 1rem;">
+				<button type="button" class="btn signal-copy" data-copy="url">Copy URL</button>
+			</div>
+
+			<textarea class="form-field signal-alert-body" readonly rows="4"
+					  style="width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 1rem; resize: vertical;"><%= cmd.json_multi %></textarea>
+			<div style="text-align: right; margin-top: 8px;">
+				<button type="button" class="btn signal-copy" data-copy="body">Copy message</button>
+			</div>
+		</div>
+<% }); %>
+
+		<details style="margin-top: 6px;">
+			<summary style="cursor: pointer;">Notes &amp; security</summary>
+			<div style="margin-top: 8px;">
+				<div>The <code>close</code> command is a graceful exit: it closes the deal only once it
+				reaches your Target Profit %, and otherwise leaves it open. <code>panic_sell</code> is the
+				emergency exit &mdash; it ignores profit and sells at market immediately.</div>
+				<div style="margin-top: 8px;">The <code>apiToken</code> value is a credential: use an HTTPS URL,
+				don&rsquo;t share alert JSON, and revoke or rotate it if it leaks. It accepts either a scoped
+				<b>API key</b> (tick <b>Start deals</b> under Access Control &rarr; API Keys &mdash; recommended, since you
+				can revoke just that key without disturbing anything else) or the legacy per-instance webhook token.
+				TradingView charges for its webhook alerts (their fee, not SymBot&rsquo;s); any service that can POST a
+				webhook works too.</div>
+			</div>
+		</details>
+<% } %>
+	</div>
+</div>
+
+<%# The token is emitted for the optional "Fill in my token" toggle only; it is
+    kept out of the alert bodies until the user asks for it. %>
+<% if (_apiToken !== '') { %>
+<script>window.__signalBotToken = <%- JSON.stringify(_apiToken) %>;</script>
+<% } %>
+<% if (_urlPrefix) { %>
+<script>window.__signalBotUrlPrefix = <%- JSON.stringify(_urlPrefix) %>;</script>
+<% } %>
+<script src="/js/symbot-signal-bot.js"></script>

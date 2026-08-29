@@ -9,7 +9,7 @@
 	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-	<title><%- appData.name %> <%- appData.version %></title>
+	<title><%= appData.name_display || appData.name %> <%- appData.version %></title>
 
 	<link rel="icon" href="/images/favicon.ico?v=<%- appData.version %>" sizes="any" />
 	<link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png?v=<%- appData.version %>" />
@@ -43,6 +43,8 @@
 	<script src="/js/vendor/tablesorter/widgets/widget-columnSelector.min.js"></script>
 	<script src="/js/vendor/tablesorter/widgets/widget-filter-formatter-jui.min.js"></script>
 	<script src="/js/symbot-ui.js?v=<%- appData.version %>"></script>
+	<script src="/js/symbot-deal-chart.js?v=<%- appData.version %>"></script>
+	<script src="/js/modal.js?v=<%- appData.version %>"></script>
 	<script src="/js/symbot-mascot.js?v=<%- appData.version %>"></script>
 
 	<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -130,7 +132,7 @@
 					boxWidth: '50%',
 					useBootstrap: false,
 					content:
-						'<div style="font-size: 1.2rem; text-align: left;">' +
+						'<div style="font-size: var(--fs-dialog-title); text-align: left;">' +
 						'Do you want to close chat?' +
 						'</div>',
 					buttons: {
@@ -283,7 +285,7 @@
 
 	// Match the current path to a nav item and flag it active. Longest matching
 	// href wins so /deals/history beats /deals. External links never match, and
-	// an unrecognised path simply highlights nothing rather than guessing.
+	// an unrecognized path simply highlights nothing rather than guessing.
 	function markActiveNav() {
 
 		let path = window.location.pathname.replace(/\/+$/, '');
@@ -406,6 +408,10 @@
 		dataTracker['mode'] = mode;
 
 		updateDataTracker();
+
+		// Notify open components (e.g. an open deal chart) that the app theme changed, so any that follow
+		// the app theme can recolor immediately instead of waiting for their next redraw.
+		try { $(document).trigger('symbot:thememode'); } catch (e) {}
 	}
 
 
@@ -528,7 +534,7 @@
 
 		if (Object.keys(dataTracker['tradingView']).length == 0) {
 
-			dataTracker['tradingView']['inverval'] = intervals[0].split('-')[0];
+			dataTracker['tradingView']['interval'] = intervals[0].split('-')[0];
 			dataTracker['tradingView']['bar_style'] = barStyles[8].split('-')[0];
 			dataTracker['tradingView']['studies'] = {};
 		}
@@ -761,22 +767,22 @@
 
 		if (days > 0) {
 			
-			diffString += days === 1 ? `${days}d` : `${days}d`;
+			diffString += `${days}d`;
 		}
 
 		if (hours > 0) {
 
-			diffString += hours === 1 ? ` ${hours}h` : ` ${hours}h`;
+			diffString += ` ${hours}h`;
 		}
 
 		if (minutes > 0) {
 
-			diffString += minutes === 1 ? ` ${minutes}m` : ` ${minutes}m`;
+			diffString += ` ${minutes}m`;
 		}
 
 		if (seconds > 0) {
 
-			diffString += seconds === 1 ? ` ${seconds}s` : ` ${seconds}s`;
+			diffString += ` ${seconds}s`;
 		}
 
 		diffString = diffString.trim();
@@ -789,15 +795,6 @@
 
 		return Object.keys(hash)
 		.sort()
-		.reduce((acc, key) => ({ ...acc, [key]: hash[key] }), {});
-	}
-
-
-	function sortHashDesc(hash) {
-
-		return Object.keys(hash)
-		.sort()
-		.reverse()
 		.reduce((acc, key) => ({ ...acc, [key]: hash[key] }), {});
 	}
 
@@ -873,7 +870,7 @@
 					title: false,
 					boxWidth: '50%',
 					useBootstrap: false,
-					content: '<div style="font-size: 1.2rem; text-align: left;">' + msg + '</div>',
+					content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' + msg + '</div>',
 					buttons: {
 								ok: {
 										btnClass: 'btn-default',
@@ -891,7 +888,7 @@
 	}
 
 
-	function openModal(modalId, divModal, title, content, divAppend) {
+	function openModal(modalId, divModal, title, content, divAppend, width) {
 
 		modalTracker[modalId] = $(divModal).dialog({
 
@@ -912,7 +909,7 @@
 			title: title,
 			autoOpen: false,
 			draggable: false,
-			width: '90%',
+			width: (typeof width !== 'undefined' && width) ? width : '90%',
 			height: ($(window).height() - 200),
 			dialogClass: 'dialogClass',
 			modal: true,
@@ -1089,12 +1086,21 @@
 				}
 			}
 
-			if (data['manual']) {
+			// A manual rung is shown in amber, tagged system-vs-user from its DB flag via the shared classifier
+			// (the order-rung analogue of the deal list's system-pause labeling), so it is clear who did it.
+			const orderInfo = SymBot.UI.systemOrderInfo(data);
+			let manualTag = '';
+			let manualTip = '';
+			if (orderInfo.isManual) {
 
 				style += ' color: #e38302;';
+				// Escape via the shared helper even though the label/tooltip are static today — so a future
+				// manualReason mapped from exchange- or user-derived text can never break out of the attribute.
+				manualTag = ' <span style="font-size: 0.82em; opacity: 0.85;">(' + SymBot.UI.esc(orderInfo.label) + ')</span>';
+				manualTip = ' title="' + SymBot.UI.esc(orderInfo.tooltip) + '"';
 			}
 
-			row.append($('<td style="' + style + '">' + count + '.</td>'));
+			row.append($('<td style="' + style + '"' + manualTip + '>' + count + '.' + manualTag + '</td>'));
 			row.append($('<td>' + dateFilled + '</td>'));
 			row.append($('<td>' + orderSym + convertNotation(data['price']) + '</td>'));
 			row.append($('<td>' + data['qty'] + '</td>'));
@@ -1121,21 +1127,8 @@
 			return;
 		}
 
-		const ccxtToTradingView = {
-
-			"coinbasepro": "COINBASE",
-			"coinbaseexchange": "COINBASE",
-			"coinbaseinternational": "COINBASE",
-			"binanceus": "BINANCEUS",
-			"gate": "GATEIO",
-			"myokx": "OKX"
-		};
-
-		exchange = exchange.toLowerCase();
-
-		exchange = ccxtToTradingView[exchange] || exchange.toUpperCase();
-
-		let url = `./api/tradingview?jquery=${jquery}&script=${script}&exchange=${exchange}&pair=${pair.replace(/[^a-z0-9]/gi, "_")}`;
+		// Shared URL builder (ccxt→TradingView exchange mapping lives in SymBot.UI.tradingViewUrl).
+		let url = SymBot.UI.tradingViewUrl(pair, exchange, jquery, script);
 
 		openModal(modalId, `#${divId}`, `<span id="tradingViewSettings" style="display:inline-flex;align-items:center;vertical-align:middle;margin-right:6px;cursor:pointer;"><span class="ui-icon ui-icon-gear" style="display:inline-block;"></span></span>TradingView Chart ${pair}`, "Loading...");
 
@@ -1241,7 +1234,22 @@
 
 </head>
 
-<body class="<%- (typeof isLoginPage !== 'undefined' && isLoginPage) ? '' : 'has-shell' %>">
+<%
+	// Shell/banner state, computed once and reused for the body class and the banners below.
+	var _isLogin = (typeof isLoginPage !== 'undefined' && isLoginPage);
+
+	// CONFIGURATION MODE: a fresh install (or no database URL set) — the UI is up but SymBot is NOT
+	// trading until the operator finishes setup. Shown on EVERY page, login included.
+	var _cfgMode = (typeof appData !== 'undefined' && appData && (appData['config_mode'] === true || appData['config_mode'] === 'true'));
+
+	// "Still on the shipped default password" — a non-blocking security nudge. Only once the bot is
+	// live (not config mode, which already prompts setup) and only on authenticated pages: never on
+	// the public login screen, where it would tell an attacker the password is still the default.
+	var _defaultPass = (!_cfgMode && !_isLogin && typeof appData !== 'undefined' && appData && (appData['default_password'] === true || appData['default_password'] === 'true'));
+
+	var _bodyClass = (_isLogin ? '' : 'has-shell') + (_cfgMode ? ' config-mode' : '') + (_defaultPass ? ' default-pass' : '');
+%>
+<body class="<%- _bodyClass %>">
 
 <div id="headerBox"> 
 
@@ -1263,6 +1271,19 @@
 		<div id="notifications" class="headerIconBtn notificationButton"><span class="icon icon-bell" style="width:17px;height:17px;"></span><span class="notif-dot"></span></div>
 	</div>
 </div>
+
+<% if (_cfgMode) { %>
+<div id="configModeBanner" role="status">
+	<span class="cfg-badge">CONFIGURATION MODE</span>
+	<span class="cfg-text"><%= (typeof appData !== 'undefined' && appData && appData['name']) ? appData['name'] : 'SymBot' %> is not trading yet — finish setup on the <a href="/config">Configuration</a> page (set your database connection).</span>
+</div>
+<% } %>
+<% if (_defaultPass) { %>
+<div id="defaultPassBanner" role="status">
+	<span class="cfg-badge">SECURITY</span>
+	<span class="cfg-text">This instance is still using the default password. <a href="/config">Change it now</a> on the Configuration page to secure access.</span>
+</div>
+<% } %>
 
 <% if (typeof isLoginPage === 'undefined' || !isLoginPage) { %>
 <%- include('./partialsNavView'); %>

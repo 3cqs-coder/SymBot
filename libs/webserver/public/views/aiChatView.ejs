@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%- appData.name %> Chat</title>
+    <title><%= appData.name_display || appData.name %> Chat</title>
 </head>
 <body>
+
+    <%- include('./partialsChatRatingScript') %>
 
     <div class="aiChatContainer">
         <div id="aiChatSpinner" class="spinner-dynamic-container" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none;"><div class="spinner-dynamic"></div></div>
@@ -30,12 +32,17 @@
 	
 			let $currentMessageElement = null;
 			let messageBuffer = '';
+			let $lastAssistantMessage = null;
+
+			// Minimal 👍/👎 on a finished answer — the control lives in the shared
+			// partialsChatRatingScript partial so the modal and pop-out stay identical.
+			function attachLearningRating(id) { if (window.SymBotChatRating) { window.SymBotChatRating.attach($lastAssistantMessage, id); } }
 			let canSendMessage = true;
 
 			// Determine analysis-vs-chat up front from the payload, BEFORE the mascot
 			// controller runs its first layout — otherwise the empty-state hero flashes
 			// before we know this is an analysis. An analysis has real bodyData content.
-			const content = <%- JSON.stringify(bodyData) %> || {};
+			const content = <%- JSON.stringify(bodyData).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %> || {};
 			const contentOrigObj = { ...content };
 			const _isAnalysis = content && Object.keys(content).length > 0;
 			window.AIChatConv_type = _isAnalysis ? 'analysis' : 'chat';
@@ -57,7 +64,7 @@
 			// Pending file attachments — declared first to avoid temporal dead zone
 			let pendingAttachments = [];
 
-			// Reset shared module so it re-initialises for this new chat instance
+			// Reset shared module so it re-initializes for this new chat instance
 			window.AIChatConv_initialized = false;
 			$('#chatAttachments').empty();
 			window.AIChatConv_room         = room;
@@ -110,6 +117,16 @@
 							displayMessage(messageContent);
 						}
 					}
+					else if (data.type === 'chat_end') {
+
+						// Out-of-band end-of-answer signal (see endChat / the server's sendChatEnd) — content can
+						// never trigger this, so any streamed text is safe.
+						endChat();
+					}
+					else if (data.type === 'learning') {
+
+						attachLearningRating(data.message && data.message.id);
+					}
 					else if (data.type === 'aborted') {
 
 						$('#aiChatSpinner').hide();
@@ -124,7 +141,7 @@
 							'border-left': '3px solid #f0a500',
 						}).text('⚠ ' + (data.message || 'Response stopped due to timeout.'));
 
-						$('#chatMessages').append($notice);
+						$('#aiChatBox').append($notice);
 					}
 				});
 	
@@ -142,6 +159,14 @@
 			}
 	
 			function postChatPrompt(content) {
+
+				// Tell the assistant which timezone the user is in (IANA name), so "today", "this month"
+				// and "on the 10th" resolve to the USER's calendar day rather than the server's. Best-effort.
+				try {
+					if (content && content.message && !content.message.timezone) {
+						content.message.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+					}
+				} catch (e) {}
 
 				// Mascot handles the activity indicator (header thinking + inline bubble).
 				toggleInputState(true);
@@ -165,44 +190,45 @@
 				});
 			}
 	
+			// End of a streamed answer — fired by the out-of-band 'chat_end' socket event, never by message
+			// text, so an answer (or a document it quotes) that contains the literal words can no longer end
+			// or blank the chat.
+			function endChat() {
+
+				$('#aiChatSpinner').hide();
+
+				// React to the tone of the completed answer, from structured cues (not free-form sentiment).
+				const finished = messageBuffer;
+
+				if ($currentMessageElement) {
+					$lastAssistantMessage = $currentMessageElement;
+					messageBuffer = '';
+					$currentMessageElement = null;
+				}
+
+				if (mascot) mascot.onComplete(finished);
+
+				canSendMessage = true;      // Allow sending messages
+				toggleInputState(false);    // Enable input box and button
+
+				// Auto-save if conversation already saved
+				if (typeof window.AIChatConv_autoSave === 'function') window.AIChatConv_autoSave();
+
+				scrollToBottom();
+			}
+
 			function displayMessage(content) {
 
-				if (content === 'END_OF_CHAT') {
+				if (!$currentMessageElement) {
 
-					// React to the tone of the completed answer, from structured cues
-					// (not free-form sentiment). Concern always wins over positive so
-					// the mascot is never cheerful about a loss or warning.
-					const finished = messageBuffer;
-
-					if ($currentMessageElement) {
-						messageBuffer = '';
-						$currentMessageElement = null;
-					}
-
-					if (mascot) mascot.onComplete(finished);
-
-					canSendMessage = true; // Allow sending messages
-					toggleInputState(false); // Enable input box and button
-
-					// Auto-save if conversation already saved
-					if (typeof window.AIChatConv_autoSave === 'function') window.AIChatConv_autoSave();
+					$currentMessageElement = $('<div>', { class: 'message bot-message' });
+					$chatBox.append($currentMessageElement);
+					if (mascot) mascot.onStreamChunk();
 				}
-				else {
 
-					if (!$currentMessageElement) {
+				messageBuffer += content;
+				$currentMessageElement.html(DOMPurify.sanitize(marked.parse(messageBuffer, { breaks: true })));
 
-						$currentMessageElement = $('<div>', {
-							class: 'message bot-message'
-						});
-
-						$chatBox.append($currentMessageElement);
-						if (mascot) mascot.onStreamChunk();
-					}
-	
-					messageBuffer += content;
-					$currentMessageElement.html(DOMPurify.sanitize(marked.parse(messageBuffer, { breaks: true })));
-				}
-	
 				scrollToBottom();
 			}
 
@@ -357,6 +383,9 @@
 
 				userContent.message.content     = userMessage;
 				userContent.message.attachments = attachmentsToSend;
+				// Tag via the shared helper so a follow-up stays on the analysis model
+				// inside an analysis conversation (chat behavior otherwise).
+				if (window.AIChatConv_tagMessage) window.AIChatConv_tagMessage(userContent.message, false);
 
 				if (!window.AIChatConv_firstMessage) window.AIChatConv_firstMessage = userMessage;
 
@@ -382,6 +411,14 @@
 				// show the header mascot in "thinking" from the start.
 				// Analysis streams immediately — controller shows header "thinking".
 				if (mascot) { mascot.refresh(); mascot.setThinking(); }
+
+				// The first message IS the deal-analysis prompt → runs on the Deal
+				// Analysis Model (server resolves it from purpose 'analysis', and adds the
+				// footer + grounding check). Set inline, NOT via the shared helper: this
+				// send fires the instant the AJAX-injected modal opens, before the shared
+				// ai-chat-conversations.js has finished loading. Follow-ups fire later on
+				// user input, by which time the shared helper is available.
+				if (contentOrigObj.message) contentOrigObj.message.purpose = 'analysis';
 
 				postChatPrompt(contentOrigObj);
 			}

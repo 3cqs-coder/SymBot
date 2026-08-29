@@ -1,13 +1,14 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const ejs = require('ejs');
+
+const analysisGuard = require('../../ai/AIAnalysisGuard');
 
 const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
 let shareData;
-// Deal starts are serialised by DCABot.requestDealStart via dealStartQueue
+// Deal starts are serialized by DCABot.requestDealStart via dealStartQueue
 let symbolList = {};
 
 /*
@@ -28,6 +29,12 @@ let symbolList = {};
  */
 const JOURNAL_STATS_CACHE_MAX = 32;          // hard cap on entries (memory bound)
 const JOURNAL_STATS_CACHE_TTL = 30 * 1000;   // ms; auto-refresh window
+// Hard upper bound on dcaMaxOrder (number of safety orders). It drives an order-generation loop that
+// allocates one order object per iteration, so an absurd value (e.g. 1e9 from a crafted request) would
+// exhaust memory and crash the process. Real DCA ladders use at most tens of safety orders; this ceiling
+// gives enormous headroom while making a memory-exhaustion request impossible. Enforced at both bot-config
+// and per-deal update entry points below.
+const MAX_DCA_ORDERS = 5000;
 const journalStatsCache = new Map();          // key -> { at, payload }
 
 function journalStatsCacheGet(key) {
@@ -109,7 +116,23 @@ async function viewCreateUpdateBot(req, res, botId) {
 	const symbolString  = buildSymbolString(symbols, botData);
 	const activeChecked = buildActiveChecked(botData);
 
-	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'botData': botData, 'errorData': errMsg, 'startConditionString': startConditionString, 'startConditionSubString': startConditionSubString, 'symbolString': symbolString, 'activeChecked': activeChecked } );
+	// Signal Bot panel data. Alerts need a botId, so they are generated only for
+	// an existing bot (update); on create the panel tells the user to save first.
+	// URLs are left as relative paths — the browser prepends its own origin so the
+	// URL is correct behind whatever host / proxy / HTTPS the user reaches SymBot on.
+	let signalAlerts = null;
+
+	if (botUpdate && botId != undefined && botId != null && botId != '') {
+
+		signalAlerts = shareData.SignalBot.buildSignalAlerts({
+			'botId': botId,
+			'addFundsVolume': Number(botData.dcaOrderAmount) || undefined
+		});
+	}
+
+	const isSignalBot = buildIsSignalBot(botData);
+
+	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'botData': botData, 'errorData': errMsg, 'startConditionString': startConditionString, 'startConditionSubString': startConditionSubString, 'symbolString': symbolString, 'activeChecked': activeChecked, 'signalAlerts': signalAlerts, 'apiToken': (shareData.appData.api_token || ''), 'webhookEnabled': (shareData.appData.webhook_enabled ? true : false), 'isSignalBot': isSignalBot } );
 }
 
 
@@ -181,6 +204,7 @@ async function apiAiAnalyzeDeal(req, res, sendResponse = true) {
 		'limit': body.limit ?? 200,
 		'prompt': body.prompt,
 		'template': body.template,
+		'model': body.model,
 		'timeZoneOffset': body.timeZoneOffset ?? '+00:00'
 	}
 
@@ -211,13 +235,40 @@ async function apiAiAnalyzeDeal(req, res, sendResponse = true) {
 
 	if (prompt.success) {
 
+		// Deal analysis is a low-volume, non-streaming, reasoning-heavy call, so it
+		// can use a stronger model than day-to-day chat. The model is chosen in this
+		// order: an explicit per-request override (lets the UI re-run one analysis
+		// with another model), then the configured Deal Analysis Model, then the
+		// active chat model as the fallback inside streamChat.
+		const aiCfg = (shareData.appData && shareData.appData.ai) || {};
+		const analysisModel = (aiCfg.generation && typeof aiCfg.generation.analysis_model === 'string')
+			? aiCfg.generation.analysis_model.trim()
+			: '';
+
+		const requestedModel = (typeof queryOverride.model === 'string' && queryOverride.model.trim() !== '')
+			? queryOverride.model.trim()
+			: '';
+
+		const chosenModel = requestedModel || analysisModel;
+
 		const aiBody = {
 						'message': {
 							'content': prompt.data,
  							'room': 'aiAnalyze' + Math.floor(1000 + Math.random() * 90000),
-							'stream': false
+							'stream': false,
+							'purpose': 'analysis'
 						}
 					};
+
+		if (chosenModel !== '') {
+
+			aiBody.message.model = chosenModel;
+		}
+
+		// The model actually used, for the footer below. Falls back to whatever the
+		// client reports as its current model when no override/config model applies.
+		const modelUsed = chosenModel
+			|| (typeof shareData.AIClient.getModelName === 'function' ? shareData.AIClient.getModelName() : '');
 
 		let aiOut;
 
@@ -237,6 +288,55 @@ async function apiAiAnalyzeDeal(req, res, sendResponse = true) {
 		}
 
 		dataOut = aiOut.data;
+
+		// Advisory grounding check on the standard analysis template (skipped for a
+		// user-supplied custom prompt, whose format we do not control). Log-only —
+		// it never alters or blocks the reply, it just makes drift visible: a reply
+		// that dropped the Hold / Add Funds call, or that cites a figure absent from
+		// the data the model was given.
+		const standardTemplate = !(queryOverride.prompt && queryOverride.prompt != '');
+
+		if (aiOut.success && standardTemplate && typeof dataOut === 'string') {
+
+			try {
+
+				const guard = analysisGuard.checkAnalysis(dataOut, prompt.data);
+
+				if (!guard.hasRecommendation) {
+
+					shareData.Common.logger('AI analysis guard: deal ' + queryOverride.dealId
+						+ ' — reply is missing a clear Hold / Add Funds recommendation');
+				}
+
+				if (guard.ungroundedNumbers.length > 0) {
+
+					shareData.Common.logger('AI analysis guard: deal ' + queryOverride.dealId
+						+ ' — ' + guard.ungroundedNumbers.length + ' figure(s) not found in the source data: '
+						+ guard.ungroundedNumbers.slice(0, 8).join(', '));
+				}
+			}
+			catch (e) {}
+		}
+
+		// State the data provenance on the report itself — deterministically, read from the prompt's own
+		// provenance note (the SAME source the "did you use OHLCV?" follow-up answers from), so the user sees
+		// whether OHLCV was used without asking and the model can never misstate it. Added after the grounding
+		// check (it is not model output) and only for the standard template, which carries the note.
+		if (aiOut.success && standardTemplate && typeof dataOut === "string"
+			&& typeof shareData.AIClient.parseAnalysisProvenance === "function") {
+
+			const provText = shareData.AIClient.analysisProvenanceText(shareData.AIClient.parseAnalysisProvenance(prompt.data));
+
+			if (provText) { dataOut = dataOut.replace(/\s+$/, "") + "\n\n_" + provText + "_"; }
+		}
+
+		// Note which model produced the analysis, so different models can be compared
+		// at a glance. Added after the grounding check so the guard only ever sees the
+		// model's own output. Standard template only.
+		if (aiOut.success && standardTemplate && typeof dataOut === "string" && modelUsed !== "") {
+
+			dataOut = dataOut.replace(/\s+$/, "") + "\n\n_Analyzed with " + modelUsed + "_";
+		}
 	}
 	else {
 
@@ -298,19 +398,19 @@ async function apiAiAnalyzeDealPrompt(req, res, sendResponse = true) {
 
 		const filledOrders = (orders || []).filter(o => o && o.filled);
 
-		const exchange = await shareData.DCABot.connectExchange({
-			exchange: exchangeName.toLowerCase()
+		// Candles come from the isolated read-only market-data service (keyless ccxt), so this AI-analysis
+		// path never spins up or shares the credentialed trading client or its rate-limit queue. The rows
+		// are the same [ts, o, h, l, c, v] shape the indicator/template code below already expects.
+		const dataObj = await shareData.MarketData.getOhlc({
+			'exchange':    exchangeName,
+			'pair':        pair,
+			'timeframe':   timeframe,
+			'defaultType': deal.config?.exchangeOptions?.defaultType,
+			'since':       since,
+			'limit':       limit
 		});
 
-		const dataObj = await shareData.DCABot.getOHLCV(
-			exchange,
-			pair,
-			timeframe,
-			since,
-			limit
-		);
-
-		if (dataObj.success) {
+		if (dataObj.success && Array.isArray(dataObj.data)) {
 
 			ohlcvData = dataObj.data;
 		}
@@ -411,6 +511,38 @@ async function apiGetMarkets(req, res, sendResponse = true) {
 
 	if (success) {
 
+		// OHLCV candles are served by the isolated public market-data module (keyless ccxt, never the
+		// trading connection). Handle it BEFORE connectExchange so a chart/candle fetch never spins up or
+		// shares the credentialed trading client. Returns the raw `data` rows the legacy text/AI consumer
+		// reads PLUS candles / available / timeframes for the deal chart. Unified: the legacy text/AI
+		// consumer and the deal chart both go through this one /api/markets/ohlcv source.
+		if (apiPath == 'ohlcv') {
+
+			const md = await shareData.MarketData.getOhlc({
+				'exchange':    exchangeName,
+				'pair':        pair,
+				'timeframe':   timeframe,
+				'defaultType': req.query.type,
+				'since':       since,
+				'limit':       limit
+			});
+
+			const obj = {
+				'date':       new Date(),
+				'success':    md.success,
+				'data':       md.data || [],
+				'candles':    md.candles || [],
+				'available':  md.available,
+				'timeframes': md.timeframes || [],
+				'timeframe':  md.timeframe,
+				'error':      md.error
+			};
+
+			if (sendResponse) { res.send(obj); return; }
+
+			return obj;
+		}
+
 		let config = { 'exchange': exchangeName.toLowerCase() };
 
 		const exchange = await shareData.DCABot.connectExchange(config);
@@ -438,18 +570,10 @@ async function apiGetMarkets(req, res, sendResponse = true) {
 
 			if (apiPath != undefined && apiPath != null && apiPath != '') {
 
-				if (apiPath == 'ohlcv' && exchange.has['fetchOHLCV']) {
-
-					const dataObj = await shareData.DCABot.getOHLCV(exchange, pair, timeframe, since, limit);
-
-					data = dataObj.data;
-					success = dataObj.success;
-				}
-				else {
-
-					success = false;
-					data = 'Invalid path or unable to retrieve data';
-				}
+				// 'ohlcv' is handled above via the isolated MarketData module (before connectExchange);
+				// any other sub-path is unsupported.
+				success = false;
+				data = 'Invalid path or unable to retrieve data';
 			}
 			else {
 
@@ -544,7 +668,11 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 	let fromDate = req.query.from;
 	let toDate = req.query.to || fromDate;
 	const timeZoneOffset = req.query.timeZoneOffset;
-	const botId = req.query.botId;
+	let botId = req.query.botId;
+
+	// Coerce to a string so a Mongo-operator object (e.g. ?botId[$ne]=Default) can never reach the
+	// getDeals find filter — same defense as resolveActiveDealId applies on the action path.
+	if (botId != null && typeof botId !== 'string') { botId = String(botId); }
 
 	let query = { 'sellData': { '$exists': true }, 'status': 1 };
 	let queryOptions = { sort: { 'sellData.date': -1 } };
@@ -592,8 +720,11 @@ async function apiExportTransactionsCsv(req, res) {
 	let fromDate = req.query.from;
 	let toDate = req.query.to || fromDate;
 	const timeZoneOffset = req.query.timeZoneOffset || 'Z';
-	const botId = req.query.botId;
+	let botId = req.query.botId;
 	const includeSandbox = String(req.query.includeSandbox) === 'true';
+
+	// Coerce to a string so a Mongo-operator object can never reach the getDeals find filter.
+	if (botId != null && typeof botId !== 'string') { botId = String(botId); }
 
 	let query = { 'sellData.date': { '$exists': true } };
 	let queryOptions = { sort: { 'sellData.date': 1 } };
@@ -640,7 +771,86 @@ async function apiExportTransactionsCsv(req, res) {
 	// Prefix with the instance name so multiple instances' exports are distinct.
 	const rawName = (shareData.appData && shareData.appData.name) ? String(shareData.appData.name) : 'SymBot';
 	const safeName = rawName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'SymBot';
-	const fileName = safeName + '-transactions-' + (fromDate || 'all') + (fromDate ? '-to-' + toDate : '') + '.csv';
+	// Scrub the date parts too (like safeName) — they land in the quoted Content-Disposition filename,
+	// so a stray quote in from/to would otherwise break out of the filename parameter.
+	const safeFrom = String(fromDate || 'all').replace(/[^a-zA-Z0-9._-]+/g, '-');
+	const safeTo = String(toDate || '').replace(/[^a-zA-Z0-9._-]+/g, '-');
+	const fileName = safeName + '-transactions-' + safeFrom + (fromDate ? '-to-' + safeTo : '') + '.csv';
+
+	// UTF-8 BOM for spreadsheet apps, then the CSV.
+	const BOM = '\uFEFF';
+
+	res.set('Content-Type', 'text/csv; charset=utf-8');
+	res.set('Content-Disposition', 'attachment; filename="' + fileName + '"');
+	res.set('Cache-Control', 'no-store');
+
+	res.send(BOM + csvBody);
+}
+
+
+// Deal-level summary CSV: one row per closed deal (open/close, duration, safety orders, close
+// price, realized profit with SIGN, plus the user's journal mood/note). Distinct from the tax
+// TransactionExport above (which emits per-transaction legs). Honors the same journal filters
+// (from/to/botId) as the Trading Journal so "what I'm looking at" is what gets exported.
+async function apiExportDealsCsv(req, res) {
+
+	const DealCsv = require('./DealCsv.js');
+
+	const query = buildJournalQuery(req.query);
+	// Newest first, matching the journal's default ordering. No pagination — an export is the
+	// whole matching set (same as the transaction export).
+	const queryOptions = { sort: { 'sellData.date': -1 } };
+
+	let dealsRaw = [];
+
+	try {
+
+		dealsRaw = await shareData.DCABot.getDeals(query, queryOptions) || [];
+	}
+	catch (e) {
+
+		shareData.Common.logger('Deals export query error: ' + JSON.stringify(e));
+
+		res.status(500).send('Error generating deals export');
+
+		return;
+	}
+
+	// Merge each deal's saved journal note/mood (same source the journal view reads).
+	const savedByDeal = {};
+
+	for (const d of dealsRaw) {
+
+		if (d.journal != undefined && d.journal != null) { savedByDeal[d.dealId] = d.journal; }
+	}
+
+	const processed = await getProcessedDeals(dealsRaw);
+
+	const entries = processed.map(d => {
+
+		const saved = savedByDeal[d.deal_id] || {};
+
+		return {
+			...d,
+			mood: typeof saved.mood === 'string' ? saved.mood : '',
+			note: typeof saved.note === 'string' ? saved.note : ''
+		};
+	});
+
+	const csvBody = DealCsv.buildCsv(entries);
+
+	shareData.Common.logger('Deals export: ' + dealsRaw.length + ' deal(s) matched, ' + entries.length + ' summary row(s) generated');
+
+	const fromDate = req.query.from;
+	const toDate = req.query.to || fromDate;
+
+	// Prefix with the instance name so multiple instances' exports are distinct.
+	const rawName = (shareData.appData && shareData.appData.name) ? String(shareData.appData.name) : 'SymBot';
+	const safeName = rawName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'SymBot';
+	// Scrub the date parts too (like safeName) — they land in the quoted Content-Disposition filename.
+	const safeFrom = String(fromDate || 'all').replace(/[^a-zA-Z0-9._-]+/g, '-');
+	const safeTo = String(toDate || '').replace(/[^a-zA-Z0-9._-]+/g, '-');
+	const fileName = safeName + '-deals-' + safeFrom + (fromDate ? '-to-' + safeTo : '') + '.csv';
 
 	// UTF-8 BOM for spreadsheet apps, then the CSV.
 	const BOM = '\uFEFF';
@@ -824,6 +1034,11 @@ async function apiGetActiveDeals(req, res, sendResponse = true) {
 
 			portfolioSummary = portfolioSummary || {};
 			portfolioSummary['balance_updated'] = balanceTracker?.updated || null;
+			// Whether we actually have a balance snapshot (fresh OR last-known) vs none at all, and whether the
+			// latest fetch is failing. The view uses these to show "updating…" instead of a misleading "$0.00"
+			// when the exchange balance is temporarily unavailable (e.g. a Coinbase outage). See getBalanceTracker.
+			portfolioSummary['balance_available'] = Object.keys(balances).length > 0;
+			portfolioSummary['balance_stale'] = !!balanceTracker?.stale;
 		}
 
 		// Total max funds across all active deals
@@ -893,6 +1108,10 @@ async function apiGetActiveDeals(req, res, sendResponse = true) {
 			'risk_percent':       riskPercent,
 			'is_sandbox':         isSandbox,
 			'balance_updated':    isSandbox ? null : (portfolioSummary?.balance_updated || null),
+			// Sandbox always has a known wallet; live mode carries the flags set above (default available/fresh
+			// so a missing field never reads as "unavailable" on an older payload).
+			'balance_available':  isSandbox ? true : (portfolioSummary?.balance_available !== false),
+			'balance_stale':      isSandbox ? false : !!portfolioSummary?.balance_stale,
 		};
 	}
 	catch (e) {
@@ -938,6 +1157,57 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 	const dcaMaxOrder         = body.dcaMaxOrder;
 	const dcaTakeProfitPercent = body.dcaTakeProfitPercent;
 	const profitCurrency      = body.profitCurrency;
+	const dcaStopLossEnabled          = body.dcaStopLossEnabled;
+	const dcaStopLossPercent          = body.dcaStopLossPercent;
+	const dcaStopLossReference        = body.dcaStopLossReference;
+	const dcaStopLossMoveBreakeven    = body.dcaStopLossMoveBreakeven;
+	const dcaStopLossBreakevenTrigger = body.dcaStopLossBreakevenTrigger;
+	const dcaTrailingStopEnabled       = body.dcaTrailingStopEnabled;
+	const dcaTrailingStopDistance      = body.dcaTrailingStopDistance;
+	const dcaTrailingActivateProfit    = body.dcaTrailingActivateProfit;
+	const dcaTrailingReplacesTakeProfit = body.dcaTrailingReplacesTakeProfit;
+
+	// Validate provided numeric fields up front: reject non-finite or negative values before any
+	// of them reach the order-recomputation math. Fields not provided are left untouched.
+	const numericFields = [
+		[ 'dcaMaxOrder',                 dcaMaxOrder ],
+		[ 'dcaTakeProfitPercent',        dcaTakeProfitPercent ],
+		[ 'dcaStopLossPercent',          dcaStopLossPercent ],
+		[ 'dcaStopLossBreakevenTrigger', dcaStopLossBreakevenTrigger ],
+		[ 'dcaTrailingStopDistance',     dcaTrailingStopDistance ],
+		[ 'dcaTrailingActivateProfit',   dcaTrailingActivateProfit ]
+	];
+
+	for (const [ fname, fval ] of numericFields) {
+
+		if (fval !== undefined && fval !== null && fval !== '') {
+
+			const n = Number(fval);
+
+			if (!Number.isFinite(n) || n < 0) {
+
+				const resObj = { 'date': new Date(), 'success': false, 'data': 'Invalid value for ' + fname };
+				shareData.Common.logger('API Update Deal: ' + JSON.stringify(resObj));
+				if (sendResponse) { res.send(resObj); } else { return resObj; }
+				return resObj;
+			}
+		}
+	}
+
+	// dcaMaxOrder additionally must be a WHOLE number within the safe ceiling — it drives an order-build
+	// loop, so an out-of-range value could exhaust memory. Reject clearly rather than let it reach the loop.
+	if (dcaMaxOrder !== undefined && dcaMaxOrder !== null && dcaMaxOrder !== '') {
+
+		const n = Number(dcaMaxOrder);
+
+		if (!Number.isInteger(n) || n > MAX_DCA_ORDERS) {
+
+			const resObj = { 'date': new Date(), 'success': false, 'data': 'dcaMaxOrder must be a whole number no greater than ' + MAX_DCA_ORDERS };
+			shareData.Common.logger('API Update Deal: ' + JSON.stringify(resObj));
+			if (sendResponse) { res.send(resObj); } else { return resObj; }
+			return resObj;
+		}
+	}
 
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
 
@@ -1030,6 +1300,72 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 				}
 			}
 
+			// Stop-loss config can be changed on a live deal (a deal snapshots the bot config
+			// at creation, so a bot edit never touches running deals). These never change the
+			// order ladder, so they take the light no-recalc path below (isUpdate stays false);
+			// the engine reads them from deal.config on the next tick. slUpdate also resets the
+			// break-even ratchet so a reconfigured stop governs from scratch.
+			let slUpdate = false;
+
+			if (dcaStopLossEnabled != undefined && dcaStopLossEnabled != null) {
+
+				const v = shareData.Common.convertBoolean(dcaStopLossEnabled, false);
+				if (v != config['dcaStopLossEnabled']) { slUpdate = true; }
+				config['dcaStopLossEnabled'] = v;
+			}
+
+			if (dcaStopLossPercent != undefined && dcaStopLossPercent != null && dcaStopLossPercent != '') {
+
+				if (dcaStopLossPercent != config['dcaStopLossPercent']) { slUpdate = true; }
+				config['dcaStopLossPercent'] = dcaStopLossPercent;
+			}
+
+			if (dcaStopLossReference != undefined && dcaStopLossReference != null && dcaStopLossReference != '') {
+
+				const r = (dcaStopLossReference == 'lastSafetyOrder') ? 'lastSafetyOrder' : 'average';
+				if (r != config['dcaStopLossReference']) { slUpdate = true; }
+				config['dcaStopLossReference'] = r;
+			}
+
+			if (dcaTrailingStopEnabled != undefined && dcaTrailingStopEnabled != null) {
+
+				const v = shareData.Common.convertBoolean(dcaTrailingStopEnabled, false);
+				if (v != config['dcaTrailingStopEnabled']) { slUpdate = true; }
+				config['dcaTrailingStopEnabled'] = v;
+			}
+
+			if (dcaTrailingStopDistance != undefined && dcaTrailingStopDistance != null && dcaTrailingStopDistance != '') {
+
+				if (dcaTrailingStopDistance != config['dcaTrailingStopDistance']) { slUpdate = true; }
+				config['dcaTrailingStopDistance'] = dcaTrailingStopDistance;
+			}
+
+			if (dcaTrailingActivateProfit != undefined && dcaTrailingActivateProfit != null && dcaTrailingActivateProfit != '') {
+
+				if (dcaTrailingActivateProfit != config['dcaTrailingActivateProfit']) { slUpdate = true; }
+				config['dcaTrailingActivateProfit'] = dcaTrailingActivateProfit;
+			}
+
+			if (dcaTrailingReplacesTakeProfit != undefined && dcaTrailingReplacesTakeProfit != null) {
+
+				const v = shareData.Common.convertBoolean(dcaTrailingReplacesTakeProfit, true);
+				if (v != config['dcaTrailingReplacesTakeProfit']) { slUpdate = true; }
+				config['dcaTrailingReplacesTakeProfit'] = v;
+			}
+
+			if (dcaStopLossMoveBreakeven != undefined && dcaStopLossMoveBreakeven != null) {
+
+				const v = shareData.Common.convertBoolean(dcaStopLossMoveBreakeven, false);
+				if (v != config['dcaStopLossMoveBreakeven']) { slUpdate = true; }
+				config['dcaStopLossMoveBreakeven'] = v;
+			}
+
+			if (dcaStopLossBreakevenTrigger != undefined && dcaStopLossBreakevenTrigger != null && dcaStopLossBreakevenTrigger != '') {
+
+				if (dcaStopLossBreakevenTrigger != config['dcaStopLossBreakevenTrigger']) { slUpdate = true; }
+				config['dcaStopLossBreakevenTrigger'] = dcaStopLossBreakevenTrigger;
+			}
+
 			// Block updating until refactoring calculations can be implemented
 			if (isUpdate && manualOrders.length > 0) {
 
@@ -1084,60 +1420,109 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
 						const editReserveId = shareData.Common.uuidv4();
 						await shareData.DCABot.createStartDealTracker(editReserveId, botId);
 
-						let stopData = await shareData.DCABot.stopDeal(dealId);
+						// The whole stop → update → resume sequence runs under try/finally so a throw in any
+						// step can never (a) leak the pair-slot reservation — which would inflate the pending
+						// count in requestDealStart and block future starts for this bot — or (b) leave the deal
+						// stopped but unmonitored (take-profit / safety orders silent until a restart). The
+						// finally always releases the reservation; the catch attempts a best-effort resume.
+						try {
 
-						// Verify deal is stopped
-						if (stopData['success']) {
+							let stopData = await shareData.DCABot.stopDeal(dealId);
 
-							// Apply new order calculations to deal, update db, then resume
-							let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps, 'metadata': ordersMetadata });
+							// Verify deal is stopped
+							if (stopData['success']) {
 
-							// Update deal in database
-							let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
+								// Apply new order calculations to deal, update db, then resume
+								let ordersNew = await shareData.DCABot.updateOrders({ 'orig': ordersOrig, 'new': orderSteps, 'metadata': ordersMetadata });
 
-							let recalcObj = await shareData.DCABot.recalculateOrders({
-								'exchange': undefined,
-								'dealId': dealId,
-								'orderIndex': undefined,
-								'orderNo': 1,
-								'orderId': undefined,
-								'price': undefined,
-								'dryRun': false
-							});
+								// Update deal in database
+								let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config, 'orders': ordersNew });
 
-							// Check for active deal and resume
-							let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
+								let recalcObj = await shareData.DCABot.recalculateOrders({
+									'exchange': undefined,
+									'dealId': dealId,
+									'orderIndex': undefined,
+									'orderNo': 1,
+									'orderId': undefined,
+									'price': undefined,
+									'dryRun': false
+								});
 
-							if (dealActive && dealActive.length > 0) {
+								// Check for active deal and resume so monitoring is restored
+								let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
 
-								let deal = dealActive[0];
+								if (dealActive && dealActive.length > 0) {
 
-								await shareData.DCABot.resumeDeal(deal);
+									await shareData.DCABot.resumeDeal(dealActive[0]);
+								}
 
-								// DB update failed
+								// Surface a persist failure regardless of whether the deal was re-found active —
+								// the resume above restores monitoring on whatever persisted, but the user must
+								// still be told the new orders/config did not save.
 								if (!dataUpdate['success']) {
 
 									success = false;
 									content = 'Error updating deal in database';
 								}
 							}
+							else {
+
+								success = false;
+								content = stopData['data'];
+							}
 						}
-						else {
+						catch (e) {
 
 							success = false;
-							content = stopData['data'];
-						}
+							content = 'Error updating deal: ' + e.message;
 
-						// Release the reservation once resumeDeal has completed (or failed)
-						await shareData.DCABot.deleteStartDealTracker(editReserveId);
+							// The deal may have been stopped above but not resumed — attempt a best-effort resume
+							// so it is not left live-but-unmonitored until the next process restart.
+							try {
+
+								const dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
+
+								if (dealActive && dealActive.length > 0) {
+
+									await shareData.DCABot.resumeDeal(dealActive[0]);
+								}
+							}
+							catch (resumeErr) {
+
+								shareData.Common.logger('apiUpdateDeal recovery resume failed for deal ' + dealId + ': ' + resumeErr.message);
+							}
+						}
+						finally {
+
+							// Always release the reservation, even on error, so a throw can't leak it.
+							try {
+
+								await shareData.DCABot.deleteStartDealTracker(editReserveId);
+							}
+							catch (relErr) {
+
+								shareData.Common.logger('apiUpdateDeal reservation release failed for deal ' + dealId + ': ' + relErr.message);
+							}
+						}
 					}
 				}
 				else {
 
-					if (dealLastUpdate && !isUpdate) {
+					if ((dealLastUpdate || slUpdate) && !isUpdate) {
 
 						// Update last deal flag without stopping deal
-						let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, { 'config': config });
+						const liveUpdateFields = { 'config': config };
+
+						// A stop-loss reconfiguration resets the break-even ratchet so the new settings
+						// govern from scratch (no stale locked stop from the old config).
+						if (slUpdate) {
+
+							liveUpdateFields['stopLossBreakevenArmed'] = false;
+							liveUpdateFields['activeStopLossPrice'] = 0;
+							liveUpdateFields['trailHighPrice'] = 0;
+						}
+
+						let dataUpdate = await shareData.DCABot.updateDeal(botId, dealId, liveUpdateFields);
 
 						// Notify deal tracker to update
 						let dataRefresh = await shareData.DCABot.refreshUpdateDeal({ 'deal_id': dealId, 'config': config });
@@ -1187,6 +1572,14 @@ async function apiUpdateDeal(req, res, sendResponse = true, directDealId = null,
  */
 async function resolveActiveDealId(botId, pair) {
 
+	// Coerce the query inputs to strings up front so a Mongo-operator object (e.g. {"$ne":null}) supplied in
+	// the request body can never reach the getBots/getDeals find filter (it would otherwise match every
+	// bot/deal), and a non-string pair can never throw on .toUpperCase() in an un-awaited handler (which
+	// would surface as an unhandled rejection and hang the request). A coerced non-string matches nothing,
+	// yielding a clean "not found" instead.
+	if (botId != null && typeof botId !== 'string') { botId = String(botId); }
+	if (pair != null && typeof pair !== 'string') { pair = String(pair); }
+
 	if (botId == undefined || botId == null || botId == '') {
 
 		return { 'success': false, 'error': 'Bot ID is required' };
@@ -1203,8 +1596,14 @@ async function resolveActiveDealId(botId, pair) {
 
 	if (pair != undefined && pair != null && pair != '') {
 
-		// Match the bot's stored pair casing (pairs are stored upper-cased)
-		query['pair'] = pair.toUpperCase();
+		// Resolve an inbound ticker ("BTCUSD", "COINBASE:BTC-USD") to the bot's configured pair so a
+		// multi-pair signal that sends the raw chart symbol still finds the right deal. Falls back to the
+		// raw upper-cased pair when nothing resolves, so an already-correct pair matches exactly as before
+		// and an unknown one still yields the clean "no active deal" message. Pairs are stored upper-cased.
+		const configuredPairs = (bots[0] && bots[0].config && Array.isArray(bots[0].config.pair)) ? bots[0].config.pair : [];
+		const resolvedPair = shareData.SignalBot.resolveConfiguredPair(pair, configuredPairs);
+
+		query['pair'] = (resolvedPair != undefined && resolvedPair != null ? resolvedPair : pair).toUpperCase();
 	}
 
 	const deals = await shareData.DCABot.getDeals(query);
@@ -1301,6 +1700,176 @@ async function apiPanicSellDeal(req, res, sendResponse = true) {
 	}
 
 	return resObj;
+}
+
+
+/**
+ * Graceful `close` command for the Signal Bot.
+ *
+ * Resolves the deal exactly like panic_sell / add_funds (by dealId, or by
+ * botId + optional pair for static signal sources), verifies it is active, then
+ * hands off to DCABot.gracefulCloseDeal — a PROFIT-GATED wrapper around the
+ * existing panic_sell close path. The close only happens when the deal's
+ * take-profit target is met; otherwise the deal is left open and the response
+ * says so.
+ *
+ * `close` ALWAYS respects the profit target. There is no config that turns it
+ * into an unconditional close — that is what the separate panic_sell command is
+ * for.
+ *
+ * Response shape adds a `closed` boolean so a caller can distinguish
+ * "handled, but target not met, nothing closed" (success:true, closed:false)
+ * from an actual close (success:true, closed:true) or an error (success:false).
+ */
+async function apiCloseDeal(req, res, sendResponse = true) {
+
+	let dealId = req.params.dealId;
+
+	// If no dealId was given in the URL, resolve the bot's active deal from
+	// botId (+ optional pair) supplied by params or body. Leaves the dealId path
+	// completely unchanged when a dealId IS provided.
+	if (dealId == undefined || dealId == null || dealId == '') {
+
+		const botId = req.params.botId || req.body.botId;
+		const pair = req.body.pair;
+
+		const resolved = await resolveActiveDealId(botId, pair);
+
+		if (!resolved['success']) {
+
+			const resObj = { 'date': new Date(), 'success': false, 'closed': false, 'data': resolved['error'] };
+			shareData.Common.logger('API Close Deal: ' + JSON.stringify(resObj));
+			if (sendResponse) { res.send(resObj); }
+			return resObj;
+		}
+
+		dealId = resolved['dealId'];
+	}
+
+	let success = true;
+	let closed = false;
+	let content = 'Success';
+	let metrics;
+
+	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+	if (data && data.length > 0) {
+
+		let dealData = await shareData.DCABot.removeDbKeys(JSON.parse(JSON.stringify(data[0])));
+
+		const status = dealData['status'];
+
+		if (status != 0) {
+
+			success = false;
+			content = 'Deal ID ' + dealId + ' is not active';
+		}
+		else {
+
+			// Profit-gated close: delegates to the existing panic_sell close path
+			// only if the take-profit target is met.
+			const closeData = await shareData.DCABot.gracefulCloseDeal(dealId);
+
+			success = closeData['success'];
+			closed = closeData['closed'];
+			content = closeData['data'];
+			metrics = closeData['metrics'];
+		}
+	}
+	else {
+
+		success = false;
+		content = 'Invalid Deal ID';
+	}
+
+	const resObj = { 'date': new Date(), 'success': success, 'closed': closed, 'data': content };
+
+	if (metrics != undefined && metrics != null) {
+
+		resObj['profit_percentage'] = metrics['profit_percentage'];
+		resObj['take_profit_percent'] = metrics['take_profit_percent'];
+	}
+
+	shareData.Common.logger('API Close Deal: ' + JSON.stringify(resObj));
+
+	if (sendResponse) {
+
+		res.send(resObj);
+	}
+
+	return resObj;
+}
+
+
+/**
+ * Single Signal Bot dispatcher: one webhook URL for every command.
+ *
+ * A convenience layer over the existing per-action handlers so a user can point
+ * ALL their alerts at one URL (/webhook/api/signal/{botId}) and vary only an
+ * `action` field. It adds NO new order logic — it just forwards to the same
+ * handler the dedicated endpoint would call. botId comes from the URL and
+ * pair / volume / signalId stay in the body, exactly as those handlers expect,
+ * so behavior is identical to calling the per-action endpoint directly.
+ *
+ *   action: "entry" | "add_funds" | "close" | "panic_sell"
+ *   ("close_all" is accepted as an alias of the emergency panic_sell.)
+ */
+async function apiSignalDispatch(req, res) {
+
+	const action = (req.body && req.body.action != undefined && req.body.action != null)
+		? String(req.body.action).trim().toLowerCase()
+		: '';
+
+	const handlers = {
+		'entry':      apiStartDeal,
+		'add_funds':  apiAddFundsDeal,
+		'close':      apiCloseDeal,
+		'panic_sell': apiPanicSellDeal,
+		'close_all':  apiPanicSellDeal
+	};
+
+	const handler = handlers[action];
+
+	if (handler == undefined) {
+
+		const resObj = {
+			'date': new Date(),
+			'success': false,
+			'data': 'Unknown or missing action "' + action + '". Valid actions: entry, add_funds, close, panic_sell'
+		};
+
+		shareData.Common.logger('API Signal Dispatch: ' + JSON.stringify(resObj));
+
+		res.send(resObj);
+
+		return resObj;
+	}
+
+	// Per-action capability enforcement. The route is coarsely gated on deal.create, but close /
+	// panic_sell / close_all are deal.close-class actions — without this, an API key scoped to only
+	// deal.create could force-close or liquidate the whole book. Mirrors the Hub's per-action cap map.
+	// A resolved principal must hold the action's capability; owner and the legacy webhook token both
+	// carry deal.close so they are unaffected, and a request with no resolved principal falls through
+	// to the route's own gate unchanged (nothing that worked before breaks).
+	const ACTION_CAPS = { 'entry': 'deal.create', 'add_funds': 'deal.create', 'close': 'deal.close', 'panic_sell': 'deal.close', 'close_all': 'deal.close' };
+	const neededCap = ACTION_CAPS[action];
+
+	if (req && req.principal && neededCap && shareData.Authz && typeof shareData.Authz.can === 'function' && !shareData.Authz.can(req.principal, neededCap)) {
+
+		const resObj = {
+			'date': new Date(),
+			'success': false,
+			'data': 'Forbidden — this credential lacks the "' + neededCap + '" permission required for action "' + action + '"'
+		};
+
+		if (res && typeof res.status === 'function') { res.status(403); }
+		if (res && typeof res.send === 'function') { res.send(resObj); }
+
+		return resObj;
+	}
+
+	// Forward to the existing handler; it sends the response itself.
+	return handler(req, res);
 }
 
 
@@ -1428,7 +1997,10 @@ async function apiAddFundsDeal(req, res, sendResponse = true) {
 	let content = 'Success';
 	
 	let dealId = req.params.dealId;
-	const volume = parseFloat(req.body.volume);
+	// Coerce with Number (not parseFloat) and require a finite, positive value. parseFloat lets
+	// "abc" → NaN and NaN == 0 is false, so the old `== 0`-only guard admitted NaN and negatives
+	// straight into the order-sizing math (qty = volume / price). Reject them before touching the deal.
+	const volume = Number(req.body.volume);
 
 	// If no dealId was given in the URL, resolve the bot's active deal from
 	// botId (+ optional pair) supplied by params or body. Leaves the dealId path
@@ -1453,7 +2025,7 @@ async function apiAddFundsDeal(req, res, sendResponse = true) {
 
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
 
-	if (volume == undefined || volume == null || volume == 0) {
+	if (!Number.isFinite(volume) || volume <= 0) {
 
 		isValid = false;
 	}
@@ -1476,22 +2048,39 @@ async function apiAddFundsDeal(req, res, sendResponse = true) {
 			// Verify deal is stopped
 			if (stopData['success']) {
 
-				const addData = await shareData.DCABot.addFundsDeal(dealId, volume);
+				// The deal is stopped; the resume runs in finally so a throw in addFundsDeal can never leave
+				// it live-but-unmonitored (take-profit / safety orders silent until a restart).
+				try {
 
-				if (!addData['success']) {
+					const addData = await shareData.DCABot.addFundsDeal(dealId, volume);
+
+					if (!addData['success']) {
+
+						success = false;
+						content = addData['data'];
+					}
+				}
+				catch (e) {
 
 					success = false;
-					content = addData['data'];
+					content = 'Error adding funds to deal: ' + e.message;
 				}
+				finally {
 
-				// Check for active deal and resume
-				let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
+					// Check for active deal and resume so monitoring is always restored
+					try {
 
-				if (dealActive && dealActive.length > 0) {
+						let dealActive = await shareData.DCABot.getDeals({ 'status': 0, 'dealId': dealId });
 
-					let deal = dealActive[0];
-				
-					await shareData.DCABot.resumeDeal(deal);
+						if (dealActive && dealActive.length > 0) {
+
+							await shareData.DCABot.resumeDeal(dealActive[0]);
+						}
+					}
+					catch (resumeErr) {
+
+						shareData.Common.logger('apiAddFundsDeal recovery resume failed for deal ' + dealId + ': ' + resumeErr.message);
+					}
 				}
 			}
 			else {
@@ -1626,7 +2215,8 @@ async function apiCreateUpdateBot(req, res) {
 
 		// Add currency symbol derived from quote of first selected pair
 		const previewPair = Array.isArray(pairs) ? (pairs[0] || '') : (pairs || '');
-		const previewQuote = previewPair.split('/')[1] || '';
+		const pq = shareData.Common.quoteCurrency(previewPair);
+		const previewQuote = (pq && pq !== 'UNKNOWN') ? pq : '';
 		orders['data']['content']['currency_symbol'] = shareData.Common.getCurrencySymbol(previewQuote);
 	}
 
@@ -1681,7 +2271,10 @@ async function apiCreateUpdateBot(req, res) {
 							shareData.Common.sendNotification({ 'message': msg, 'type': 'bot_start', 'telegram_id': shareData.appData.telegram_id });
 						}
 
-						shareData.DCABot.requestDealStart(config, i + 1, 'bot create');
+						// Fire-and-forget into the serial deal-start queue, but guard the synchronous pre-enqueue
+						// phase (it awaits createStartDealTracker) so a rejection there can't become an unhandled
+						// process-level rejection.
+						shareData.DCABot.requestDealStart(config, i + 1, 'bot create').catch((e) => { shareData.Common.logger('requestDealStart (bot create) failed: ' + e.message); });
 					}
 				}
 			}
@@ -1701,6 +2294,27 @@ async function apiCreateUpdateBot(req, res) {
 				botData['botName'] = botName;
 
 				if (botOrig && botOrig.length > 0) {
+
+					// ── Sticky per-bot trading mode (paper/live) ──────────────────────────────────
+					// calculateOrders rebuilds botData from the bot-config FILE, whose sandBox is only
+					// the default mode for NEW bots. Persisting that on every edit would silently
+					// re-inherit the global default and could flip an existing bot between paper and
+					// live, so its next deal would trade in the wrong mode. Trading mode is a STICKY
+					// per-bot property: preserve the bot's OWN stored sandBox across ordinary edits. It
+					// changes only when the request deliberately submits a DIFFERENT sandBox value (a
+					// JSON/API caller that sends the field, or a future dedicated per-bot mode action —
+					// there is no in-form mode control, and mode is normally set once at bot creation); an
+					// ordinary edit sends none and is therefore always mode-preserving.
+					const storedSandBox = botOrig[0]['config'] != undefined && botOrig[0]['config']['sandBox'] === true;
+
+					let nextSandBox = storedSandBox;
+
+					if (body.sandBox !== undefined && body.sandBox !== null && body.sandBox !== '') {
+
+						nextSandBox = shareData.Common.convertBoolean(body.sandBox, storedSandBox);
+					}
+
+					botData.sandBox = nextSandBox;
 
 					// Update config data
 					const configData = await shareData.DCABot.removeConfigData(botData);
@@ -1737,14 +2351,22 @@ async function apiCreateUpdateBot(req, res) {
 
 						const dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
-						let config = bot[0]['config'];
+						// Skip pairs that already have an active deal — the serial deal-start queue would
+						// block them anyway; skipping avoids the wasteful blocked-start log noise (mirrors
+						// the enable branch).
+						if (dealsActive && dealsActive.length > 0) { continue; }
+
+						// Clone the config per iteration so applyConfigData's in-place enrichment can't leak
+						// across pairs. requestDealStart additionally snapshots its pair at enqueue time, so
+						// the deal-start path is race-proof regardless.
+						let config = JSON.parse(JSON.stringify(bot[0]['config']));
 						config['pair'] = pair;
 						config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
 						if (bot && bot.length > 0 && bot[0]['active'] && startCondition == 'asap') {
 
 							// requestDealStart handles all checks inside the serial queue
-							shareData.DCABot.requestDealStart(config, i + 1, 'bot update');
+							shareData.DCABot.requestDealStart(config, i + 1, 'bot update').catch((e) => { shareData.Common.logger('requestDealStart (bot update) failed: ' + e.message); });
 							pairCount++;
 						}
 					}
@@ -1849,7 +2471,18 @@ async function apiEnableDisableBot(req, res, sendResponse = true, directBotId = 
 				const pair = pairs[i];
 				const dealsActive = await shareData.DCABot.getDeals({ 'botId': botId, 'pair': pair, 'status': 0 });
 
-				let config = bot['config'];
+				// Skip pairs that already have an active deal. They are already counted in pairCount's
+				// seed (botDealsActive.length above), and re-issuing a start for them is a no-op the serial
+				// deal-start queue rejects. Without this skip, each already-active pair was counted a SECOND
+				// time by pairCount++ below, so pairCount hit pairMax early and the loop broke before the
+				// still-idle pairs were reached — leaving some pairs unstarted on a bot re-enable. This
+				// mirrors the ASAP auto-start path, which pre-filters already-active pairs the same way.
+				if (dealsActive.length > 0) { continue; }
+
+				// Clone the config per iteration so applyConfigData's in-place enrichment can't leak
+				// across pairs. requestDealStart additionally snapshots its pair at enqueue time, so
+				// the deal-start path is race-proof regardless.
+				let config = JSON.parse(JSON.stringify(bot['config']));
 				config['pair'] = pair;
 				config = await shareData.DCABot.applyConfigData({ 'bot_id': botId, 'bot_name': botName, 'config': config });
 
@@ -1859,7 +2492,7 @@ async function apiEnableDisableBot(req, res, sendResponse = true, directBotId = 
 				// requestDealStart handles all checks inside the serial queue
 				if (startCondition === 'asap') {
 
-					shareData.DCABot.requestDealStart(config, i + 1, 'bot enable');
+					shareData.DCABot.requestDealStart(config, i + 1, 'bot enable').catch((e) => { shareData.Common.logger('requestDealStart (bot enable) failed: ' + e.message); });
 					pairCount++;
 				}
 			}
@@ -1983,6 +2616,11 @@ async function apiStartDeal(req, res, sendResponse = true) {
 	let pair = body.pair;
 	let signalId = body.signalId;
 
+	// A non-string pair (e.g. a JSON object in the body) would throw on the .toUpperCase()/matching below;
+	// this handler runs un-awaited, so the throw would surface as an unhandled rejection and hang the
+	// request. Coerce to a string — a bad value simply won't match any configured pair.
+	if (pair != null && typeof pair !== 'string') { pair = String(pair); }
+
 	const botId = req.params.botId;
 
 	const bots = await shareData.DCABot.getBots({ 'botId': botId });
@@ -2009,13 +2647,16 @@ async function apiStartDeal(req, res, sendResponse = true) {
 
 				pairPassed = true;
 
-				for (let i = 0; i < pairs.length; i++) {
+				// Resolve the inbound pair/ticker to one of the bot's OWN configured pairs. An exact match
+				// wins (unchanged); only if that fails is an equivalent ticker form ("BTCUSD",
+				// "COINBASE:BTC-USD") accepted for a configured "BTC/USD", and only when it maps to exactly
+				// one configured pair. Downstream then uses the canonical configured pair.
+				const resolvedPair = shareData.SignalBot.resolveConfiguredPair(pair, pairs);
 
-					if (pair.toUpperCase() == pairs[i].toUpperCase()) {
+				if (resolvedPair != undefined && resolvedPair != null) {
 
-						pairFound = true;
-						break;
-					}				
+					pairFound = true;
+					pair = resolvedPair;
 				}
 			}
 
@@ -2159,11 +2800,55 @@ async function calculateOrders(body) {
 	botData.firstOrderAmount = body.firstOrderAmount;
 	botData.dcaOrderAmount = body.dcaOrderAmount;
 	botData.dcaMaxOrder = body.dcaMaxOrder;
+	// Defensive cap: a safety-order count above the ceiling would drive the order-build loop into a
+	// memory-exhausting allocation. Clamp so an out-of-range value can never crash the process. Legitimate
+	// ladders (tens of safety orders) are far below MAX_DCA_ORDERS and pass through unchanged.
+	if (Number(botData.dcaMaxOrder) > MAX_DCA_ORDERS) { botData.dcaMaxOrder = MAX_DCA_ORDERS; }
 	botData.dcaOrderSizeMultiplier = body.dcaOrderSizeMultiplier;
 	botData.dcaOrderStartDistance = body.dcaOrderStepPercent;
 	botData.dcaOrderStepPercent = body.dcaOrderStepPercent;
 	botData.dcaOrderStepPercentMultiplier = body.dcaOrderStepPercentMultiplier;
 	botData.dcaTakeProfitPercent = body.dcaTakeProfitPercent;
+
+	// Stop-loss (#104a). Config-only here — the engine does not act on these until the
+	// stop-loss trigger is wired (Stage 3); an existing bot with none of these keys
+	// reads as disabled. Booleans normalized to real booleans; blanks to safe no-op
+	// defaults so a form left empty behaves exactly as "stop-loss off".
+	botData.dcaStopLossEnabled = shareData.Common.convertBoolean(body.dcaStopLossEnabled, false);
+	botData.dcaStopLossPercent = body.dcaStopLossPercent;
+	botData.dcaStopLossReference = body.dcaStopLossReference;
+	botData.dcaStopLossMoveBreakeven = shareData.Common.convertBoolean(body.dcaStopLossMoveBreakeven, false);
+	botData.dcaStopLossBreakevenTrigger = body.dcaStopLossBreakevenTrigger;
+
+	if (botData.dcaStopLossPercent == undefined || botData.dcaStopLossPercent == null || botData.dcaStopLossPercent == '') {
+
+		botData.dcaStopLossPercent = 0;
+	}
+
+	if (botData.dcaStopLossBreakevenTrigger == undefined || botData.dcaStopLossBreakevenTrigger == null || botData.dcaStopLossBreakevenTrigger == '') {
+
+		botData.dcaStopLossBreakevenTrigger = 0;
+	}
+
+	if (botData.dcaStopLossReference != 'lastSafetyOrder') {
+
+		botData.dcaStopLossReference = 'average';
+	}
+
+	botData.dcaTrailingStopEnabled = shareData.Common.convertBoolean(body.dcaTrailingStopEnabled, false);
+	botData.dcaTrailingStopDistance = body.dcaTrailingStopDistance;
+	botData.dcaTrailingActivateProfit = body.dcaTrailingActivateProfit;
+	botData.dcaTrailingReplacesTakeProfit = shareData.Common.convertBoolean(body.dcaTrailingReplacesTakeProfit, true);
+
+	if (botData.dcaTrailingStopDistance == undefined || botData.dcaTrailingStopDistance == null || botData.dcaTrailingStopDistance == '') {
+
+		botData.dcaTrailingStopDistance = 0;
+	}
+
+	if (botData.dcaTrailingActivateProfit == undefined || botData.dcaTrailingActivateProfit == null || botData.dcaTrailingActivateProfit == '') {
+
+		botData.dcaTrailingActivateProfit = 0;
+	}
 
 	if (botData.dealMax == undefined || botData.dealMax == null || botData.dealMax == '') {
 
@@ -2215,27 +2900,6 @@ async function calculateOrders(body) {
 	let orders = await shareData.DCABot.start({ 'create': false, 'config': botData });
 
 	return ({ 'active': active, 'pairs': pairs, 'orders': orders, 'botData': botData });
-}
-
-
-async function calculateMaxFundsExchange(configObj) {
-
-	let config = JSON.parse(JSON.stringify(configObj));
-
-	config['createStep'] = 'getOrders';
-	config['pair'] = config['pair'][0];
-
-	// Remove data to only calculate orders
-	delete config['botId'];
-	delete config['botName'];
-
-	// Set first start condition for calculate orders
-	config['startCondition'] = config['startConditions'][0];
-
-	const orderData = await calculateOrders(config);
-	const maxFunds = orderData.orders.data.content;
-
-	return maxFunds;
 }
 
 
@@ -2298,7 +2962,13 @@ async function getProcessedDeals(deals) {
 				profit_percent: profitPerc,
 				profit_currency: profitCurrency,
 				minimum_movement_amount: minMoveAmount,
-				safety_orders: orderCount - 1
+				safety_orders: orderCount - 1,
+				// A deal that closed but genuinely could not sell all its coin (retries exhausted) records
+				// the leftover on sellData.qtyUnsold. It is still a completed deal (status 1), so it stays
+				// in every stat — but surfaced here so views/AI/CSV can flag it as "closed (partial)"
+				// distinctly from a clean finish and prompt the user to reconcile the untracked remainder.
+				qty_unsold: Number(sellData.qtyUnsold) || 0,
+				partial: (Number(sellData.qtyUnsold) || 0) > 0
 			});
 		}
 	}
@@ -2362,11 +3032,36 @@ async function getDashboardData({ duration, timeZoneOffset }) {
     let max_funds_deals_map = {};
     let win_rate_map = {};
     let pair_profit_map = {};
-    let so_utilisation_map = {};
+    let so_utilization_map = {};
     let total_profit = 0;
     let total_in_deals = 0;
     let total_pl = 0;
     let currencies = [];
+
+    // Guard-when-mixed (cross-currency): additionally bucket the money KPIs by the currency each deal's
+    // profit is denominated in. Summing profit across different quote currencies into one figure is wrong
+    // and the codebase forbids it elsewhere (DealQuery.profitByCurrency). The existing single totals are
+    // left untouched — for a single-currency instance this resolves to exactly one bucket and the display
+    // is unchanged; only when more than one currency is present does the view show a per-currency split.
+    const kpi_by_currency = {};   // ccy -> { profit, pl, in_deals }
+    function kpiCcyOf(pair) {
+        // Bucket by the pair's QUOTE currency via the ONE canonical helper (Common.quoteCurrency), the same
+        // one DealQuery's per-currency bucketing uses, so the dashboard and the journal can never label the
+        // money differently. The money we sum here (deal.profit / info.profit / order.sum) is ALWAYS
+        // quote-denominated, so quote is the correct denomination label. (A deal's profit_currency='base'
+        // setting drives a SEPARATE profit_base field, not the quote-denominated deal.profit we bucket;
+        // keying on it would mislabel the money and could falsely split a single-currency instance in two.)
+        // An unparseable pair yields 'UNKNOWN', which kpiBucket keeps in its own bucket rather than merging
+        // it into a real currency's total.
+        return shareData.Common.quoteCurrency(pair);
+    }
+    function kpiBucket(ccy) {
+        // Skip a missing or unparseable ('UNKNOWN') currency so a single malformed pair can never spin up a
+        // phantom bucket and falsely flip a genuinely single-currency instance into a multi-currency split.
+        if (!ccy || ccy === 'UNKNOWN') { return null; }
+        if (!kpi_by_currency[ccy]) { kpi_by_currency[ccy] = { profit: 0, pl: 0, in_deals: 0 }; }
+        return kpi_by_currency[ccy];
+    }
 
     // Available balance
     const available_balance = await (async () => {
@@ -2423,6 +3118,8 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         if (typeof deal.profit === 'number') {
             profit_by_bot_map[botKey] += deal.profit;
             total_profit += deal.profit;
+            const b = kpiBucket(kpiCcyOf(deal.pair));
+            if (b) { b.profit += deal.profit; }
         }
 
         // Profit by day
@@ -2439,17 +3136,17 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         deals_by_bot[botKey].push(deal);
     });
 
-    // Per-bot win rate, average duration and average SO utilisation — one shared
+    // Per-bot win rate, average duration and average SO utilization — one shared
     // definition (Common.computeDealSetStats) rather than three hand-rolled
     // reductions. Populates the same maps the rest of the function/consumers use.
     for (const botKey in deals_by_bot) {
         const stats = shareData.Common.computeDealSetStats(deals_by_bot[botKey]);
         win_rate_map[botKey] = stats.win_rate;
         bot_deal_duration_map[botKey] = stats.avg_duration_mins;
-        so_utilisation_map[botKey] = stats.avg_safety_orders;
+        so_utilization_map[botKey] = stats.avg_safety_orders;
     }
 
-    // (Per-bot duration, SO utilisation and win rate are computed above via
+    // (Per-bot duration, SO utilization and win rate are computed above via
     // Common.computeDealSetStats.)
 
     // Sort profit by day
@@ -2471,11 +3168,12 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
         const { deal: { botId, botName, orders }, info: { profit } } = deal_tracker[key];
         const botKey = getBotKey(botId || botName);
-        if (!profit) continue;
 
-        active_pl_map[botKey] = (active_pl_map[botKey] || 0) + profit;
-        total_pl += profit;
-
+        // Funds-in-use is independent of unrealized P/L — always count the deployed capital for every
+        // active deal, even while `info.profit` is still populating (it can be absent mid-load or exactly
+        // 0 after rounding). Only the P/L sum is gated on a real number. This matches the Active Deals
+        // view, which previously disagreed with the dashboard because the old `if (!profit) continue`
+        // dropped such deals from the "Total in Deals" figure too.
         let inDeal = 0;
         for (const order of orders) {
             if (order.filled) inDeal = Number(order.sum);
@@ -2483,6 +3181,16 @@ async function getDashboardData({ duration, timeZoneOffset }) {
         }
         bot_funds_in_use_map[botKey] = (bot_funds_in_use_map[botKey] || 0) + inDeal;
         total_in_deals += inDeal;
+
+        const activeDeal = deal_tracker[key].deal;
+        const ab = kpiBucket(kpiCcyOf(activeDeal.pair));
+        if (ab) { ab.in_deals += inDeal; }
+
+        if (typeof profit === 'number' && !isNaN(profit)) {
+            active_pl_map[botKey] = (active_pl_map[botKey] || 0) + profit;
+            total_pl += profit;
+            if (ab) { ab.pl += profit; }
+        }
     }
 
     // Adjusted P/L
@@ -2516,7 +3224,7 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
     bot_deal_duration_map = sortDesc(bot_deal_duration_map);
     bot_funds_in_use_map = sortDesc(bot_funds_in_use_map);
-    so_utilisation_map = sortDesc(so_utilisation_map);
+    so_utilization_map = sortDesc(so_utilization_map);
     win_rate_map = sortDesc(win_rate_map);
     // Split pair profit into profitable and losing
     const pair_profit_pos_map = Object.fromEntries(
@@ -2533,16 +3241,22 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
     pair_profit_map = sortDesc(pair_profit_map);
 
-    // Derive KPI display symbol from most common quote currency in completed deals
+    // Derive KPI display symbol from most common QUOTE currency in completed deals (the money is
+    // quote-denominated regardless of a deal's profit_currency setting — see kpiCcyOf above).
     const quoteCounts = {};
     complete_deals.forEach(deal => {
-        const quote = deal.profit_currency === 'base'
-            ? (deal.pair || '').split('/')[0]
-            : (deal.pair || '').split('/')[1];
-        if (quote) quoteCounts[quote] = (quoteCounts[quote] || 0) + 1;
+        const quote = shareData.Common.quoteCurrency(deal.pair);
+        if (quote && quote !== 'UNKNOWN') quoteCounts[quote] = (quoteCounts[quote] || 0) + 1;
     });
     const kpiCurrency = Object.keys(quoteCounts).sort((a, b) => quoteCounts[b] - quoteCounts[a])[0] || currencies[0] || 'USD';
     const kpiSymbol = shareData.Common.getCurrencySymbol(kpiCurrency);
+
+    // Cross-currency guard flags for the view. When more than one currency is present the single
+    // blended KPI figure is misleading, so the view shows the per-currency breakdown instead.
+    const kpi_currencies = Object.keys(kpi_by_currency);
+    const kpi_multi_currency = kpi_currencies.length > 1;
+    const kpi_currency_symbols = {};
+    kpi_currencies.forEach(c => { kpi_currency_symbols[c] = shareData.Common.getCurrencySymbol(c); });
 
     return {
         kpi: {
@@ -2550,7 +3264,11 @@ async function getDashboardData({ duration, timeZoneOffset }) {
             total_in_deals,
             available_balance,
             total_profit,
-            total_pl
+            total_pl,
+            by_currency: kpi_by_currency,
+            currencies: kpi_currencies,
+            multi_currency: kpi_multi_currency,
+            currency_symbols: kpi_currency_symbols
         },
         charts: {
             profit_by_bot_map,
@@ -2565,7 +3283,7 @@ async function getDashboardData({ duration, timeZoneOffset }) {
             pair_profit_map,
             pair_profit_pos_map,
             pair_profit_neg_map,
-            so_utilisation_map
+            so_utilization_map
         },
         botIdNameMap,
         currencies,
@@ -2578,7 +3296,7 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
 async function initApp() {
 
-	// queueStartDeal removed — deal serialisation handled by DCABot.dealStartQueue
+	// queueStartDeal removed — deal serialization handled by DCABot.dealStartQueue
 }
 
 
@@ -2816,6 +3534,15 @@ function buildActiveChecked(botData) {
 }
 
 
+// Whether this bot is a Signal Bot (primary start condition `api`). Built here
+// alongside the other bot-form fields so it travels with them — the Hub reads it
+// off the same get_sc_strings result rather than requiring SignalBot itself.
+function buildIsSignalBot(botData) {
+
+	return shareData.SignalBot.isApiStart(botData && botData.startConditions);
+}
+
+
 // ─── Trading Journal ────────────────────────────────────────────────────────
 // Entries auto-generate from closed deals (no blank-notebook to fill). Each
 // closed deal is already an entry with its facts (pair, dates, profit, safety
@@ -2841,7 +3568,10 @@ function buildJournalQuery(reqQuery) {
 	const fromDate = reqQuery.from;
 	const toDate = reqQuery.to || fromDate;
 	const timeZoneOffset = reqQuery.timeZoneOffset || 'Z';
-	const botId = reqQuery.botId;
+	let botId = reqQuery.botId;
+
+	// Coerce to a string so a Mongo-operator object can never reach the getDeals find filter.
+	if (botId != null && typeof botId !== 'string') { botId = String(botId); }
 
 	let query = { 'sellData.date': { '$exists': true } };
 
@@ -3115,24 +3845,71 @@ async function apiGetJournalStats(req, res) {
 				label: m.label,
 				emoji: m.emoji,
 				count: s.count,
-				win_rate: s.count > 0 ? Math.round((s.wins / s.count) * 100) : 0,
+				win_rate: shareData.Common.roundWinRate(s.wins, s.count),
 				avg_profit: s.count > 0 ? s.profit / s.count : 0
 			};
 		});
+
+	// Cross-currency guard (mirrors the dashboard): computeDealSetStats sums profit across ALL deals, so
+	// when the filtered set spans more than one quote currency that single total mixes currencies. Surface
+	// a per-currency profit breakdown so the view can show it instead of one blended sum.
+	const journalByCcy = {};
+	const journalDealsByCcy = {};
+	deals.forEach(function (d) {
+		// Bucket by QUOTE currency via the ONE canonical helper — the money (d.profit) is quote-denominated
+		// regardless of profit_currency, and sharing the helper keeps this identical to the dashboard split.
+		const ccy = shareData.Common.quoteCurrency(d.pair);
+		if (!ccy || ccy === 'UNKNOWN') { return; }
+		journalByCcy[ccy] = (journalByCcy[ccy] || 0) + (typeof d.profit === 'number' ? d.profit : 0);
+		(journalDealsByCcy[ccy] = journalDealsByCcy[ccy] || []).push(d);
+	});
+	const journalCurrencies = Object.keys(journalByCcy);
+	const journalCurrencySymbols = {};
+	journalCurrencies.forEach(function (c) { journalCurrencySymbols[c] = shareData.Common.getCurrencySymbol(c); });
+
+	// The derived analytics (profit factor, expectancy, drawdown, avg win/loss) come from the blended
+	// `base` above, so when the set spans more than one quote currency they mix currencies exactly as a
+	// blended total would — and would visibly disagree with the per-currency Total P/L shown beside them.
+	// Recompute them per quote currency by reusing the SAME shared primitive on each bucket, so the view
+	// can show a per-currency split (identical treatment to total_profit).
+	const journalStatsByCcy = {};
+	journalCurrencies.forEach(function (c) {
+		const s = shareData.Common.computeDealSetStats(journalDealsByCcy[c] || []);
+		journalStatsByCcy[c] = {
+			total_profit: s.total_profit,
+			profit_factor: s.profit_factor,
+			expectancy: s.expectancy,
+			max_drawdown: s.max_drawdown,
+			avg_win: s.avg_win,
+			avg_loss: s.avg_loss
+		};
+	});
 
 	const summary = {
 		total_deals: base.total,
 		win_rate: base.win_rate,
 		wins: base.wins,
 		losses: base.losses,
+		break_even: base.break_even,
 		total_profit: base.total_profit,
 		avg_duration_mins: base.avg_duration_mins,
+		// Derived analytics (from the shared computeDealSetStats primitive).
+		profit_factor: base.profit_factor,
+		expectancy: base.expectancy,
+		max_drawdown: base.max_drawdown,
+		avg_win: base.avg_win,
+		avg_loss: base.avg_loss,
 		current_streak: curStreak,
 		current_streak_type: curStreakType,
 		best: best ? { pair: best.pair, profit_percent: best.profit_percent } : null,
 		worst: worst ? { pair: worst.pair, profit_percent: worst.profit_percent } : null,
 		tagged_count: taggedCount,
-		untagged_count: base.total - taggedCount
+		untagged_count: base.total - taggedCount,
+		profit_by_currency: journalByCcy,
+		stats_by_currency: journalStatsByCcy,
+		currencies: journalCurrencies,
+		multi_currency: journalCurrencies.length > 1,
+		currency_symbols: journalCurrencySymbols
 	};
 
 	const payload = { 'date': new Date(), 'moods': JOURNAL_MOODS, 'summary': summary, 'mood_correlation': moodCorrelation };
@@ -3203,7 +3980,8 @@ async function apiGenerateJournalNarrative(req, res) {
 		'message': {
 			'content': prompt,
 			'room': 'journal' + Math.floor(1000 + Math.random() * 90000),
-			'stream': false
+			'stream': false,
+			'purpose': 'journal'
 		}
 	};
 
@@ -3307,6 +4085,7 @@ module.exports = {
 	apiGetActiveDeals,
 	apiGetDealsHistory,
 	apiExportTransactionsCsv,
+	apiExportDealsCsv,
 	viewTransactionExport,
 	apiGetJournal,
 	apiSaveJournalNote,
@@ -3321,6 +4100,8 @@ module.exports = {
 	apiUpdateDeal,
 	apiAddFundsDeal,
 	apiPanicSellDeal,
+	apiCloseDeal,
+	apiSignalDispatch,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,
 	apiDeleteBot,
@@ -3339,6 +4120,7 @@ module.exports = {
 	buildStartConditionStrings,
 	buildSymbolString,
 	buildActiveChecked,
+	buildIsSignalBot,
 
 	init: function(obj) {
 

@@ -8,22 +8,12 @@
 	const journalMoodById = {};
 	journalMoods.forEach(m => { journalMoodById[m.id] = m; });
 
-	function journalSym(code) {
+	// Resolve a deal's display currency symbol the same way the Active / History / Hub deal views do,
+	// via the shared helper, so all deal-facing views pick the base-vs-quote leg identically.
+	function getDealSym(pair, profitCurrency) { return SymBot.UI.dealSymbol(pair, profitCurrency, getCurrencySymbol); }
 
-		return getCurrencySymbol(code) || '$';
-	}
 
-
-	function getBots() {
-
-		$.ajax({
-					type: 'GET',
-					url: './api/bots',
-					dataType: 'json',
-					success: function(data) { populateBotSelect(data.data || []); },
-					error: function() { populateBotSelect([]); }
-		});
-	}
+	function getBots() { SymBot.UI.fetchBots(populateBotSelect); }
 
 
 	function populateBotSelect(bots) {
@@ -47,8 +37,9 @@
 
 	function fmtDate(d) {
 
-		const dt = new Date(d);
-		return dt.toLocaleString();
+		// Canonical SymBot format (dateConvertLocal, shared via partialsHeaderView) so the
+		// journal reads the same as deal history and every other view.
+		return dateConvertLocal(d);
 	}
 
 
@@ -69,12 +60,9 @@
 	}
 
 
-	function escapeHtml(s) {
-
-		return String(s == null ? '' : s)
-			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-	}
+	// Delegates to the shared SymBot.UI.esc — every call site here places the value in a
+	// double-quoted attribute or in text content, so escaping & < > " is sufficient.
+	function escapeHtml(s) { return SymBot.UI.esc(s); }
 
 
 	// Ensures the "Delete note" button is present after a note is saved.
@@ -137,15 +125,55 @@
 
 		const profitClass = s.total_profit >= 0 ? 'profit-positive' : 'profit-negative';
 		const profitSign = s.total_profit >= 0 ? '+' : '';
+
+		// Total P/L: when the filtered deals span more than one quote currency, one summed figure would mix
+		// currencies (which is wrong) — show a per-currency breakdown instead. For a single currency show the
+		// one figure WITH its currency symbol (previously it had none).
+		let totalPlCell;
+		if (s.multi_currency && s.profit_by_currency) {
+			totalPlCell = (s.currencies || []).map(function (c) {
+				const v = Number(s.profit_by_currency[c] || 0);
+				const sym = (s.currency_symbols && s.currency_symbols[c]) || '';
+				const cls = v >= 0 ? 'profit-positive' : 'profit-negative';
+				return '<span class="' + cls + '">' + (v >= 0 ? '+' : '') + sym + v.toFixed(2) + '</span> <span class="journal-stat-sub">' + escapeHtml(c) + '</span>';
+			}).join('<br>');
+		}
+		else {
+			const only = (s.currencies && s.currencies.length === 1) ? s.currencies[0] : '';
+			const sym = (only && s.currency_symbols && s.currency_symbols[only]) || '';
+			totalPlCell = '<span class="' + profitClass + '">' + profitSign + sym + s.total_profit.toFixed(2) + '</span>';
+		}
+
 		const streakNice = s.current_streak_type
 			? (s.current_streak + (s.current_streak_type === 'win' ? (s.current_streak === 1 ? ' win' : ' wins') : (s.current_streak === 1 ? ' loss' : ' losses')))
 			: '—';
 
+		// Derived money-denominated analytics (profit factor, expectancy, drawdown) blend currencies when the
+		// filtered set spans more than one quote currency — just like the Total P/L above. Render them per
+		// currency in that case (from stats_by_currency), else the single blended figure with its descriptor.
+		// One formatter per stat feeds both paths so the blended and per-currency renderings can't drift.
+		function fmtPf(x) { return (x.profit_factor == null ? '—' : x.profit_factor); }
+		function fmtExp(x) { return (typeof x.expectancy === 'number' ? (x.expectancy >= 0 ? '+' : '') + x.expectancy.toFixed(2) : '—'); }
+		function fmtDd(x) { return (typeof x.max_drawdown === 'number' ? '<span class="profit-negative">-' + x.max_drawdown.toFixed(2) + '</span>' : '—'); }
+
+		function derivedCell(fmtFn, subLabel) {
+			if (s.multi_currency && s.stats_by_currency) {
+				return (s.currencies || []).map(function (c) {
+					const st = s.stats_by_currency[c] || {};
+					return fmtFn(st) + ' <span class="journal-stat-sub">' + escapeHtml(c) + '</span>';
+				}).join('<br>');
+			}
+			return fmtFn(s) + '<span class="journal-stat-sub">' + subLabel + '</span>';
+		}
+
 		const cells = [
 			['Deals', s.total_deals],
 			['Win rate', s.win_rate + '%<span class="journal-stat-sub">' + s.wins + 'W / ' + s.losses + 'L</span>'],
-			['Total P/L', '<span class="' + profitClass + '">' + profitSign + s.total_profit.toFixed(2) + '</span>'],
+			['Total P/L', totalPlCell],
 			['Avg hold', fmtMins(s.avg_duration_mins)],
+			['Profit factor', derivedCell(fmtPf, 'gross win ÷ loss')],
+			['Expectancy', derivedCell(fmtExp, 'avg / deal')],
+			['Max drawdown', derivedCell(fmtDd, 'realized peak→trough')],
 			['Current streak', streakNice],
 			['Best', s.best ? (escapeHtml(s.best.pair) + '<span class="journal-stat-sub">+' + s.best.profit_percent + '%</span>') : '—'],
 			['Worst', s.worst ? (escapeHtml(s.worst.pair) + '<span class="journal-stat-sub">' + s.worst.profit_percent + '%</span>') : '—']
@@ -278,7 +306,7 @@
 
 		entries.forEach((e) => {
 
-			const sym = journalSym(e.profit_currency === 'base' ? e.pair.split('/')[0] : e.pair.split('/')[1]);
+			const sym = getDealSym(e.pair, e.profit_currency);
 			const profitClass = e.profit_percent >= 0 ? 'profit-positive' : 'profit-negative';
 			const profitSign = e.profit_percent >= 0 ? '+' : '';
 
@@ -303,6 +331,7 @@
 						'<span class="journal-head-left">' +
 							'<span class="journal-pair">' + escapeHtml(e.pair) + '</span>' +
 							'<span class="journal-dealid" title="Deal ID">' + escapeHtml(e.deal_id) + '</span>' +
+								(e.partial ? '<span class="journal-partial-badge" title="Closed but ' + (Number(e.qty_unsold) || 0) + ' ' + escapeHtml((e.pair || '').split('/')[0] || '') + ' could not be sold (retries exhausted) and is not tracked in the deal — reconcile the remainder on the exchange.">Closed (partial)</span>' : '') +
 						'</span>' +
 						'<span class="journal-profit ' + profitClass + '">' + profitSign + e.profit_percent + '%  (' + sym + e.profit + ')</span>' +
 					'</div>' +
@@ -470,7 +499,7 @@
 			title: false,
 			boxWidth: '50%',
 			useBootstrap: false,
-			content: '<div style="font-size: 1.2rem; text-align: left;">Delete your ' + label + ' for this <b>' + escapeHtml(pair) + '</b> entry?<br><br>The deal itself is not affected. This cannot be undone.</div>',
+			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Delete your ' + label + ' for this <b>' + escapeHtml(pair) + '</b> entry?<br><br>The deal itself is not affected. This cannot be undone.</div>',
 			buttons: {
 
 				ok: {
@@ -536,6 +565,22 @@
 		loadStats();
 
 		$('#journalRefresh').click(function() { loadJournal(false); loadStats(); });
+
+		// Export the currently-filtered closed deals as a deal-level CSV. A plain navigation to the
+		// download URL (same bot + date filters as the list) lets the browser handle the file save;
+		// the endpoint sets Content-Disposition: attachment so it downloads rather than navigating.
+		// Confirm first — a wide date range with many deals can take a while to build server-side, so
+		// this avoids a surprise pause on a mis-click. Reuses the app-wide SymBot.UI.confirmDialog.
+		function doJournalExport() { window.location = './api/deals/export/deals?' + journalFilterParams(); }
+		$('#journalExportBtn').click(function() {
+			var msg = 'Export the closed deals shown here (your current bot and date filters) as a CSV summary?<br><br>'
+				+ 'A large date range with many deals can take a little time to build before the download starts.';
+			if (window.SymBot && typeof SymBot.UI.confirmDialog === 'function') {
+				SymBot.UI.confirmDialog({ content: msg, confirmText: 'Export', cancelText: 'Cancel', onConfirm: doJournalExport });
+			} else {
+				doJournalExport();
+			}
+		});
 		$('#journalBotFilter').on('change', function() { loadJournal(false); loadStats(); });
 		$('#journalLoadMoreBtn').click(function() { loadJournal(true); });
 
@@ -566,6 +611,7 @@
 				<span>From: <input type="date" id="journalFrom" class="form-field"></span>
 				<span>To: <input type="date" id="journalTo" class="form-field"></span>
 				<button type="button" id="journalRefresh" class="btnAll">Apply</button>
+				<button type="button" id="journalExportBtn" class="btnAll" title="Download the deals shown here (bot + date filters applied) as a CSV summary — one row per closed deal.">Export CSV</button>
 			</div>
 
 			<div id="journalStatsLoading" class="journal-stats-loading" style="display: none;">

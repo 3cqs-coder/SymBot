@@ -1,0 +1,94 @@
+<%
+	// Shared "Email Notifications (SMTP)" settings block, used by both the instance Configuration
+	// page and the Hub Configuration page so the markup lives in one place. Locals:
+	//   mailer     : { enabled, host, port, secure, user, from, password_set }  (normalized shape)
+	//   hubOverride: true on an instance (adds the "Hub shared SMTP" override note); false on the Hub
+	// The element IDs match what each page's existing JS (showMailerPassword / testMailerBtn /
+	// simpleSwitch) already targets, so no JS changes are needed.
+	var _m = (typeof mailer !== 'undefined' && mailer) ? mailer : {};
+	var _hubOverride = (typeof hubOverride !== 'undefined') ? hubOverride : false;
+%>
+
+<div class="section-title"><span class="icon icon-mail"></span> Email Notifications (SMTP)
+	<span class="toolTip">?<span class="toolTipText">
+		Outbound email server used to deliver notifications sent to an <b>Email</b> destination.
+		<% if (_hubOverride) { %>When this instance runs under a Hub, email is sent through the <b>Hub's shared SMTP automatically</b> &mdash; set these fields only to override email for this one instance; leave them blank/disabled to inherit the Hub's.<% } %>
+		Use <b>Test SMTP</b> to verify before saving.
+	</span></span>
+</div>
+
+<table class="mailerTable" cellpadding=0 cellspacing=0>
+
+	<tr>
+		<td>
+			<label for="mailer_host">Host:
+				<span class="toolTip">?<span class="toolTipText">SMTP server hostname (e.g. smtp.gmail.com).</span></span>
+			</label>
+		</td>
+		<td><input name="mailer_host" id="mailer_host" class="form-field" style="width: 250px;" value="<%= _m.host || '' %>"></td>
+	</tr>
+
+	<tr>
+		<td>
+			<label for="mailer_port">Port:
+				<span class="toolTip">?<span class="toolTipText">SMTP port. Common values: 587 (STARTTLS), 465 (implicit TLS/SSL), 25 (unencrypted).</span></span>
+			</label>
+		</td>
+		<td>
+			<input name="mailer_port" id="mailer_port" class="form-field" style="width: 50px;" value="<%= _m.port || 587 %>">
+			<label for="mailer_secure" style="display: inline; margin-left: 28px;">SSL/TLS:
+				<span class="toolTip">?<span class="toolTipText">Enable for implicit TLS (usually port 465). Leave off for STARTTLS (port 587), which upgrades the connection automatically.</span></span>
+			</label>
+			<input id="mailer_secure" name="mailer_secure" type="checkbox" style="margin-left: 8px; vertical-align: middle;" <%= _m.secure ? 'checked' : '' %>>
+		</td>
+	</tr>
+
+	<tr>
+		<td>
+			<label for="mailer_user">Username:
+				<span class="toolTip">?<span class="toolTipText">SMTP account username &mdash; often your full email address. Leave blank for a server that needs no authentication.</span></span>
+			</label>
+		</td>
+		<td><input name="mailer_user" id="mailer_user" class="form-field" style="width: 250px;" value="<%= _m.user || '' %>"></td>
+	</tr>
+
+	<tr>
+		<td>
+			<label for="mailer_password">Password:
+				<span class="toolTip">?<span class="toolTipText">SMTP account password (encrypted before storage). Leave blank to keep the existing saved password.</span></span>
+			</label>
+		</td>
+		<td>
+			<input type="password" autocomplete="off" name="mailer_password" id="mailer_password" class="form-field secretClearField" style="width: 250px;" value="" placeholder="<%= _m.password_set ? 'leave blank to keep existing' : '' %>">
+			<span id="showMailerPassword" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
+			<%- include('partialsSecretClear', { field: 'mailer_password', isSet: _m.password_set, label: 'Password is set' }) %>
+		</td>
+	</tr>
+
+	<tr>
+		<td>
+			<label for="mailer_from">From Address:
+				<span class="toolTip">?<span class="toolTipText">The From address on notification emails (e.g. alerts@example.com). Defaults to the username if left blank.</span></span>
+			</label>
+		</td>
+		<td><input name="mailer_from" id="mailer_from" class="form-field" style="width: 250px;" value="<%= _m.from || '' %>"></td>
+	</tr>
+
+	<tr>
+		<td style="padding-bottom: 20px;">Enabled:</td>
+		<td style="padding-bottom: 20px;"><input id="mailer_enabled" name="mailer_enabled" type="checkbox" style="vertical-align: middle;" <%= _m.enabled ? 'checked' : '' %>></td>
+	</tr>
+
+	<tr>
+		<td>
+			<label for="mailer_test_to">Test Recipient:
+				<span class="toolTip">?<span class="toolTipText">Where the Test SMTP message is sent. Defaults to the From address (or username) if blank. This value is not saved.</span></span>
+			</label>
+		</td>
+		<td>
+			<input name="mailer_test_to" id="mailer_test_to" class="form-field" style="width: 250px;" value="">
+			<button type="button" id="testMailerBtn" class="btn" style="margin-left: 10px; cursor: pointer;">Test SMTP</button>
+			<span id="mailerTestResult" style="margin-left: 10px; font-size: var(--fs-body);"></span>
+		</td>
+	</tr>
+</table>

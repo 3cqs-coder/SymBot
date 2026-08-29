@@ -10,6 +10,11 @@ const path = require('path');
 
 const pathRoot = path.resolve(__dirname, ...Array(3).fill('..'));
 
+// Escape a value for safe use inside a RegExp / Mongo $regex. The 3CQS `symbol` is external input, so a
+// metacharacter in it must not corrupt the query (or throw). Mirrors the plain-string prefix match used
+// for the in-memory pair comparison below.
+function escapeRegExp(str) { return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 const signalsFile = path.dirname(fs.realpathSync(__filename)) + '/signals.json';
 const signalsJson = require(signalsFile);
 
@@ -27,11 +32,17 @@ let socketGlobal;
 let shareData;
 
 
-setInterval(() => {
+const _cleanupInterval = setInterval(() => {
 
-	removeDataDb();
+	// Fire-and-forget hourly cleanup; guard the async call so a rejection can never surface as an unhandled
+	// rejection from the timer (matches the trading-loop timer convention). removeDataDb also self-catches.
+	Promise.resolve(removeDataDb()).catch(() => {});
 
 }, (60000 * 60));
+
+// Don't let this housekeeping timer keep the process alive on its own (matches the unref'd retry timers
+// inside start()).
+if (_cleanupInterval.unref) { _cleanupInterval.unref(); }
 
 
 async function start(enabled, apiKey) {
@@ -122,7 +133,9 @@ async function start(enabled, apiKey) {
 			content += ' (HISTORY)';
 		}
 
-		processSignal(data);
+		// Never let a signal-handler error become an unhandled rejection (which could take the
+		// process down); log and drop the individual signal instead.
+		processSignal(data).catch(e => shareData.Common.logger('3CQS processSignal error: ' + (e && e.message ? e.message : e)));
 
 		if (shareData.appData.verboseLog) {
 
@@ -146,11 +159,16 @@ async function start(enabled, apiKey) {
 
 			socket.disconnect();
 
-			setTimeout(() => {
+			const retryTimer = setTimeout(() => {
 
-				socket.connect();
+				// Only revive if this is still the active socket. stop()/disable clears socketGlobal and a
+				// config reload replaces it; an orphaned reconnect timer must never resurrect a retired
+				// socket, or it would keep receiving signals and starting deals after being turned off.
+				if (socket === socketGlobal) { socket.connect(); }
 
 			}, 30000);
+
+			if (retryTimer && retryTimer.unref) { retryTimer.unref(); }
 		}
 
 		showLog('3CQS SIGNAL ERROR', data);
@@ -183,11 +201,15 @@ async function start(enabled, apiKey) {
 
 				sendNotification('3CQS SIGNAL Server disconnected the client. Trying to reconnect.', true);
 
-				setTimeout(() => {
+				const reconnectTimer = setTimeout(() => {
 
-					socket.connect();
+					// Only revive if this is still the active socket (see the 429 handler above) — a
+					// retired socket must not resurrect itself and resume starting deals.
+					if (socket === socketGlobal) { socket.connect(); }
 
 				}, 10000);
+
+				if (reconnectTimer && reconnectTimer.unref) { reconnectTimer.unref(); }
 			}
 
 		}, disconnectDelayMs);
@@ -233,13 +255,6 @@ async function processSignal(data) {
 		return;
 	}
 
-	if (shareData.appData.circuit_breaker_active && signal == 'BOT_START') {
-
-		// Log that CB is active when a BOT_START arrives — enforcement is handled
-		// authoritatively in canStartDeal so all clients are treated consistently.
-		shareData.Common.logger(colors.yellow.bold('Circuit Breaker Active: BOT_START signal received for ' + symbol + ' — will be blocked by canStartDeal'));
-	}
-
 	const maxMins = 5;
 
 	const symbol = data['symbol'];
@@ -248,26 +263,25 @@ async function processSignal(data) {
 	const signalId = data['signal_id'];
 	const signalNameId = data['signal_name_id'];
 
-	const symRank = data['sym_rank'];
-	const symScore = data['sym_score'];
-	const symSense = data['sym_sense'];
-	const symSenser = data['sym_senser'];
-	const symSync = data['sym_sync'];
-	const volatilityScore = data['volatility_score'];
-	const priceActionScore = data['price_action_score'];
-	const marketCapRank = data['market_cap_rank'];
-	const rsi1415m = data['rsi14_15m'];
+	// Note: the individual sym_* / score fields are read directly from `data` by the start-condition
+	// evaluator (compareCondition) below, so they need no local copies here.
 
 	const startCondition = 'signal|' + providerId + '|' + signalNameId;
 
 	let port = shareData.appData.web_server_port;
-	let apiToken = shareData.appData.api_token;
+	// Prefer the protected internal scoped API key (native to the new API-key system); fall back
+	// to the legacy per-instance webhook token if it has not been provisioned (e.g. config mode).
+	let apiToken = shareData.appData.internal_signals_key || shareData.appData.api_token;
 
 	let baseUrl = 'http://127.0.0.1:' + port;
 
 	let headers = {
 						'Accept': 'application/json',
-						'Content-Type': 'application/json'
+						'Content-Type': 'application/json',
+						// Declare this signal's channel so the Signal Activity log buckets it under '3cqs' for
+						// per-source retention. Trusted only because this posts to the loopback webhook; it is a
+						// retention label, never an auth signal.
+						'X-Signal-Source': '3cqs'
 				  };
 
 	let diffSec = (new Date().getTime() - new Date(created).getTime()) / 1000;
@@ -277,7 +291,7 @@ async function processSignal(data) {
 		let query = {
 						'active': true,
 						'config.pair': {
-											'$regex': '^' + symbol + '/',
+											'$regex': '^' + escapeRegExp(symbol) + '/',
 											'$options': 'i'
 									   },
 						'config.startConditions': { '$eq': startCondition }
@@ -305,14 +319,14 @@ async function processSignal(data) {
 				// Only start if signal has not been seen before
 				if (signalDataDb.length != 0) {
 
-					return;
+					continue;
 				}
 
 				if (config.startConditions != undefined && config.startConditions != null) {
 
 					if (typeof config.startConditions !== 'string' && config.startConditions.length > 1) {
 
-						let condition = '';
+						let signalValid = true;
 
 						for (let x = 1; x < config.startConditions.length; x++) {
 
@@ -324,21 +338,15 @@ async function processSignal(data) {
 							let operator = conditionData[3];
 							let content = conditionData[4];
 
-							let cond1 = data[id];
-							let cond2 = content;
+							// Evaluate each start condition directly with a fixed operator set — never eval() a
+							// string built from bot-config values. An unknown operator fails the condition
+							// (fail-safe: the signal simply will not fire).
+							if (!compareCondition(data[id], operator, content)) {
 
-							cond1 = await convertCondition(cond1);
-							cond2 = await convertCondition(cond2);
-
-							if (x > 1) {
-
-								condition += ' && ';
+								signalValid = false;
+								break;
 							}
-
-							condition += '(' + cond1 + ' ' + operator + ' ' + cond2 + ')';
 						}
-
-						let signalValid = eval(condition);
 
 						if (!signalValid) {
 
@@ -347,11 +355,16 @@ async function processSignal(data) {
 					}
 				}
 	
+				// Case-insensitive prefix match ("<symbol>/..."). A plain string compare rather than a
+				// RegExp built from the external `symbol`, so a symbol containing regex metacharacters can
+				// never throw a SyntaxError (which would silently drop the signal).
+				const prefix = String(symbol + '/').toUpperCase();
+
 				for (let x = 0; x < pairs.length; x++) {
 
 					let pair = pairs[x];
 
-					if (new RegExp(`^${symbol + '/'}`, 'i').test(pair)) {
+					if (String(pair).toUpperCase().indexOf(prefix) === 0) {
 
 						pairUse = pair;
 						break;
@@ -420,7 +433,7 @@ async function processSignal(data) {
 		let query = {
 						'status': 0,
 						'config.pair': {
-											'$regex': '^' + symbol + '/',
+											'$regex': '^' + escapeRegExp(symbol) + '/',
 											'$options': 'i'
 									   },
 						'config.startConditions': { '$eq': startCondition }
@@ -488,20 +501,33 @@ async function removeDataDb() {
 }
 
 
-async function convertCondition(data) {
+// Coerce a start-condition operand to a comparable value: a numeric string becomes a Number,
+// anything else stays a string (matching the historical comparison semantics).
+function toComparable(value) {
 
-	const numsRegEx = /^-?[0-9. ]+$/;
+	const s = (value === undefined || value === null) ? '' : String(value);
 
-	if (numsRegEx.test(data)) {
+	return /^-?[0-9. ]+$/.test(s) ? Number(s) : s;
+}
 
-		data = 'Number("' + data + '")';
+
+// Compare two start-condition operands with a fixed, safe operator set (no eval). Returns false
+// for an unrecognized operator so a malformed condition can never fire a signal.
+function compareCondition(rawA, operator, rawB) {
+
+	const a = toComparable(rawA);
+	const b = toComparable(rawB);
+
+	switch (operator) {
+
+		case '==': return a == b;
+		case '!=': return a != b;
+		case '>=': return a >= b;
+		case '<=': return a <= b;
+		case '>':  return a > b;
+		case '<':  return a < b;
+		default:   return false;
 	}
-	else {
-
-		data = '"' + data + '"';
-	}
-
-	return data;
 }
 
 

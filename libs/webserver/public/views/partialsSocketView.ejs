@@ -3,6 +3,28 @@
 let socketGlobal;
 const removeNotifsSec = 12;
 
+// Notification messages are inserted into the DOM as HTML (line breaks are meaningful), so
+// every dynamic value MUST be HTML-escaped first. Notification text can originate from
+// untrusted sources — exchange/deal/pair names, raw log lines, and AI analysis output that
+// echoes those — and rendering any of it unescaped would be a stored-XSS vector. Escape the
+// text, THEN turn newlines into <br> so formatting survives without letting markup through.
+function escNotify(s) {
+
+	return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) {
+
+		return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+	});
+}
+
+function escNotifyLines(s) { return escNotify(s).replace(/\n/g, '<br>'); }
+
+// A notification MESSAGE arrives already sanitized: the server runs it through ansi-to-html with
+// escapeXML on, so its text is HTML-escaped and the only markup is the converter's own color <span>s.
+// Render it as-is (newlines → <br>) so ANSI colors show, exactly like the live Logs view. Do NOT pass
+// it through escNotify — that would double-escape the spans and they would appear as literal text.
+// (Other notification fields — type, date — are still untrusted and MUST stay escaped via escNotify.)
+function renderNotifyMsg(s) { return String(s == null ? '' : s).replace(/\n/g, '<br>'); }
+
 function removeNotificationDisplay(id) {
 
 	$('#' + id).fadeOut(1000, function() {
@@ -90,7 +112,7 @@ $(document).ready(function() {
 
 			for (let i = 0; i < dataArr.length; i++) {
 
-				let msg = (dataArr[i]['message'] || '').replace(/\n/g, '<br>');
+				let msg = renderNotifyMsg(dataArr[i]['message']);
 				let typeMsg = dataArr[i]['type'];
 				let dateMsg = dataArr[i]['date'];
 
@@ -99,14 +121,14 @@ $(document).ready(function() {
 					typesObj[typeMsg] = 1;
 				}
 
-				content += '<div class="notificationsRow" data-type="' + typeMsg + '">' + msg + '<div class="notificationsItem">' + dateConvertLocal(dateMsg) + '</div></div>';
+				content += '<div class="notificationsRow" data-type="' + escNotify(typeMsg) + '">' + msg + '<div class="notificationsItem">' + escNotify(dateConvertLocal(dateMsg)) + '</div></div>';
 			}
 
 			typesObj = sortHashAsc(typesObj);
 
 			for (let typeMsg in typesObj) {
 
-				$('#notificationsList').append('<option>' + typeMsg);
+				$('#notificationsList').append('<option>' + escNotify(typeMsg));
 			}
 		}
 
@@ -211,7 +233,7 @@ function processNotificationData(data) {
 
 	let id = 'notifs-' + Math.random().toString(36).slice(2, 10) + Math.floor(1000 + Math.random() * 9000);
 
-	let msg = '<div id="' + id + '" class="notificationsRow">' + (data || '').replace(/\n/g, '<br>') + '</div>';
+	let msg = '<div id="' + id + '" class="notificationsRow">' + renderNotifyMsg(data) + '</div>';
 
 	if (dataTracker['notifications'] == undefined || dataTracker['notifications'] == null) {
 
