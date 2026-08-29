@@ -221,6 +221,38 @@ function rateLimit(req, res, next) {
 }
 
 
+// ── System-control throttle ───────────────────────────────────────────────────
+// rateLimit() above is a no-op for sessions/the owner (only scoped keys carry a rateLimit), yet
+// the disruptive system-control endpoints (/system/restore, /system/update, /system/rollback,
+// /system/shutdown) are reachable by any authenticated principal. This applies a small fixed
+// per-minute cap to EVERY principal on those routes, keyed by apiKeyId/user id (falling back to
+// client IP for the legacy/owner session), reusing the same fixed-window mechanics as rateLimit().
+const SYSTEM_CONTROL_LIMIT = 5;   // requests/min per identity for system-control endpoints
+const systemControlWindows = new Map();
+
+function systemControlLimit(req, res, next) {
+
+	const p = req.principal;
+	const id = (p && (p.apiKeyId || p.id)) || clientIp(req);
+
+	const now = Date.now();
+	let w = systemControlWindows.get(id);
+	if (!w || now - w.windowStart >= RATE_WINDOW_MS) { w = { windowStart: now, count: 0 }; systemControlWindows.set(id, w); }
+	w.count++;
+
+	if (w.count > SYSTEM_CONTROL_LIMIT) {
+
+		const resetSec = Math.max(1, Math.ceil((w.windowStart + RATE_WINDOW_MS - now) / 1000));
+		res.set('Retry-After', String(resetSec));
+
+		if (wantsJson(req)) { return res.status(429).json({ success: false, error: 'Rate limit exceeded (' + SYSTEM_CONTROL_LIMIT + '/min)' }); }
+		return res.status(429).send('Rate limit exceeded (' + SYSTEM_CONTROL_LIMIT + '/min).');
+	}
+
+	next();
+}
+
+
 module.exports = {
 	init: function (obj) { shareData = obj; },
 	keyFromRequest,
@@ -231,5 +263,6 @@ module.exports = {
 	requireCap,
 	requireAuth,
 	rateLimit,
+	systemControlLimit,
 	can
 };

@@ -135,7 +135,14 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.post('/system/update', (req, res) => {
+	// Disruptive, session-gated endpoints below get an extra per-identity throttle (systemControlLimit)
+	// since the per-key rateLimit() is a no-op for sessions/the owner — see AuthMiddleware.js.
+	const systemControlLimit = (req, res, next) => {
+		if (shareData.AuthMiddleware && typeof shareData.AuthMiddleware.systemControlLimit === 'function') { return shareData.AuthMiddleware.systemControlLimit(req, res, next); }
+		next();
+	};
+
+	router.post('/system/update', systemControlLimit, (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
@@ -165,7 +172,7 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.post('/system/rollback', (req, res) => {
+	router.post('/system/rollback', systemControlLimit, (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
@@ -180,7 +187,7 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.post('/system/shutdown', (req, res) => {
+	router.post('/system/shutdown', systemControlLimit, (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
 
