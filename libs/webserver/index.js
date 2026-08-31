@@ -280,8 +280,14 @@ function initApp() {
 	});
 
 	// Per-key rate limiting: enforces a scoped key's optional requests/min limit (429 +
-	// X-RateLimit-* headers). No-op for sessions, the owner, and keys with no limit set.
+	// X-RateLimit-* headers). No-op for sessions, the owner, and keys with no limit set. The
+	// disruptive, session-gated system-control endpoints below get a separate, small fixed
+	// per-identity cap instead (defense-in-depth — see AuthMiddleware.systemControlLimit),
+	// since the per-key limit above is a no-op for sessions/the owner. Enforced here ONLY —
+	// do not duplicate this check at the route level, or the effective cap becomes inconsistent.
+	const SYSTEM_CONTROL_PATHS = [ '/system/restore', '/system/update', '/system/rollback', '/system/shutdown' ];
 	app.use((req, res, next) => {
+		if (SYSTEM_CONTROL_PATHS.indexOf(req.path) !== -1 && shareData.AuthMiddleware && typeof shareData.AuthMiddleware.systemControlLimit === 'function') { return shareData.AuthMiddleware.systemControlLimit(req, res, next); }
 		if (shareData.AuthMiddleware && typeof shareData.AuthMiddleware.rateLimit === 'function') { return shareData.AuthMiddleware.rateLimit(req, res, next); }
 		next();
 	});
