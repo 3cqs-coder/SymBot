@@ -175,20 +175,26 @@ function can(req, capability, resourceId) {
 }
 
 
-// ── Per-key rate limiting ─────────────────────────────────────────────────────
+// ── Fixed-window rate limiting ────────────────────────────────────────────────
+// Shared fixed-window-per-minute counters, in-memory only (resets on restart, adds no storage).
+// Two independent limiters below register their own Map with this same cleanup/unref lifecycle
+// so neither grows unbounded across restart-free uptime.
+const RATE_WINDOW_MS = 60000;
+
+function startWindowCleanup(map) {
+	const timer = setInterval(() => {
+		const now = Date.now();
+		for (const [ k, w ] of map) { if (now - w.windowStart >= RATE_WINDOW_MS * 2) { map.delete(k); } }
+	}, RATE_WINDOW_MS * 5);
+	if (timer.unref) { timer.unref(); }
+}
+
 // A scoped API key may carry a `rate_limit` (requests per minute). This enforces it with a simple
 // fixed-window-per-minute counter keyed by the key id, returns 429 + Retry-After when exceeded,
 // and emits X-RateLimit-* headers on every throttled key's response. Sessions, the owner, and the
-// legacy key have no rateLimit on their principal, so they are never throttled. In-memory only —
-// resets on restart, adds no storage.
-const RATE_WINDOW_MS = 60000;
+// legacy key have no rateLimit on their principal, so they are never throttled.
 const rateWindows = new Map();   // apiKeyId -> { windowStart, count }
-
-const _rateCleanup = setInterval(() => {
-	const now = Date.now();
-	for (const [ k, w ] of rateWindows) { if (now - w.windowStart >= RATE_WINDOW_MS * 2) { rateWindows.delete(k); } }
-}, RATE_WINDOW_MS * 5);
-if (_rateCleanup.unref) { _rateCleanup.unref(); }
+startWindowCleanup(rateWindows);
 
 function rateLimit(req, res, next) {
 
@@ -221,6 +227,41 @@ function rateLimit(req, res, next) {
 }
 
 
+// ── System-control throttle ───────────────────────────────────────────────────
+// Defense-in-depth for the disruptive, session-gated system-control endpoints (/system/restore,
+// /system/update, /system/rollback, /system/shutdown): rateLimit() above only throttles a scoped
+// API key's configured limit, which is a no-op for sessions/the owner. This applies a small fixed
+// per-minute cap to EVERY principal on those routes instead, keyed by apiKeyId/user id (falling
+// back to client IP), so an authenticated admin session can't re-fire e.g. /system/restore in a
+// tight loop. These endpoints already require an authenticated session to reach — this is
+// hardening, not a fix for unauthenticated access.
+const SYSTEM_CONTROL_LIMIT = 5;   // requests/min per identity for system-control endpoints
+const systemControlWindows = new Map();   // apiKeyId/user id/IP -> { windowStart, count }
+startWindowCleanup(systemControlWindows);
+
+function systemControlLimit(req, res, next) {
+
+	const p = req.principal;
+	const id = (p && (p.apiKeyId || p.id)) || clientIp(req);
+
+	const now = Date.now();
+	let w = systemControlWindows.get(id);
+	if (!w || now - w.windowStart >= RATE_WINDOW_MS) { w = { windowStart: now, count: 0 }; systemControlWindows.set(id, w); }
+	w.count++;
+
+	if (w.count > SYSTEM_CONTROL_LIMIT) {
+
+		const resetSec = Math.max(1, Math.ceil((w.windowStart + RATE_WINDOW_MS - now) / 1000));
+		res.set('Retry-After', String(resetSec));
+
+		if (wantsJson(req)) { return res.status(429).json({ success: false, error: 'Rate limit exceeded (' + SYSTEM_CONTROL_LIMIT + '/min)' }); }
+		return res.status(429).send('Rate limit exceeded (' + SYSTEM_CONTROL_LIMIT + '/min).');
+	}
+
+	next();
+}
+
+
 module.exports = {
 	init: function (obj) { shareData = obj; },
 	keyFromRequest,
@@ -231,5 +272,6 @@ module.exports = {
 	requireCap,
 	requireAuth,
 	rateLimit,
+	systemControlLimit,
 	can
 };
