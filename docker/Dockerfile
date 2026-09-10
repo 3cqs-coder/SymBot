@@ -33,12 +33,13 @@ RUN apk add --no-cache curl
 
 # Create non-root container user | prepare dir structure | grant ownership.
 # Pre-create every directory that docker-compose persists as a named volume (config, data, backups,
-# uploads, logs, rollbacks) BEFORE the chown and before those volumes mount. A named volume seeds its
+# uploads, logs, rollbacks, sessions) BEFORE the chown and before those volumes mount. A named volume seeds its
 # contents AND ownership from the image directory it covers on first creation, so these must exist and
 # be owned by the non-root symbot user or the app could not write to a freshly-mounted volume.
 RUN addgroup -S symbot && adduser -S symbot -G symbot && \
     mkdir -p /usr/src/app/config /usr/src/app/data /usr/src/app/backups \
-             /usr/src/app/uploads /usr/src/app/logs /usr/src/app/rollbacks && \
+             /usr/src/app/uploads /usr/src/app/logs /usr/src/app/rollbacks \
+             /usr/src/app/sessions && \
     chown -R symbot:symbot /usr/src/app
 
 # Switch to non-root user

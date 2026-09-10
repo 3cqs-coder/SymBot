@@ -783,6 +783,21 @@ async function runUserJob(scheduleId, manual) {
 	let noHandler = false;
 	const startedAt = Date.now();
 
+	// Occurrence claim — crash-safety for catch-up. Record last_run BEFORE running the handler, so if the
+	// process is killed mid-handler — after a side-effect (a sent notification, a written backup) but before
+	// the run is recorded below — the catch-up planner on the next boot sees this occurrence as already fired
+	// and does NOT re-run it. That makes a caught-up ('once'/'all') schedule at-most-once across a hard crash,
+	// which is the safe default for side-effecting handlers: a double alert or a duplicate backup is worse than
+	// skipping one occurrence, and the next scheduled run covers it anyway. A successful run overwrites last_run
+	// with its completion time below, so normal, non-crash behavior is unchanged. Manual test runs never affect
+	// scheduling, and a schedule whose catch-up is 'skip' (the default) never re-fires regardless — but claiming
+	// unconditionally keeps the record honest and is a single cheap write on an infrequent path. Best-effort:
+	// a failed claim simply falls through to the prior behavior and never blocks the run.
+	if (!manual) {
+		try { await ScheduleDB.ScheduleSchema.updateOne({ 'schedule_id': scheduleId, 'server_id': serverId() }, { '$set': { 'last_run': new Date(startedAt) } }); }
+		catch (e) { /* best-effort claim */ }
+	}
+
 	if (typeof handler !== 'function') {
 
 		status = 'error';

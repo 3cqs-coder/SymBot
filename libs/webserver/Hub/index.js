@@ -53,6 +53,17 @@ async function initApp() {
 
 	const hashPassword = crypto.createHash('sha256').update(shareData.appData.password).digest('hex');
 
+	const sessionStore = new FileStore({
+		'path': shareData.appData.path_root + '/sessions',
+		'ttl': sessionExpireMins * 60,
+		'reapInterval': sessionExpireMins * 60,
+		'reapAsync': true,
+		'logFn': function() {}
+	});
+
+	// Expose the store so the session-management feature (libs/app/Sessions.js) can list and revoke sessions.
+	shareData.sessionStore = sessionStore;
+
 	const sessionMiddleware = session({
 
 		'secret': hashPassword,
@@ -60,13 +71,7 @@ async function initApp() {
 		'resave': false,
 		'saveUninitialized': false,
 		'rolling': true,
-		'store': new FileStore({
-			'path': shareData.appData.path_root + '/sessions',
-			'ttl': sessionExpireMins * 60,
-			'reapInterval': sessionExpireMins * 60,
-			'reapAsync': true,
-			'logFn': function() {}
-		}),
+		'store': sessionStore,
 		'cookie': {
 			'maxAge': (sessionExpireMins * 60) * 1000,
 			'sameSite': 'lax'
@@ -112,6 +117,11 @@ async function initApp() {
 	});
 
 	app.use(sessionMiddleware);
+
+	// Keep each logged-in session's recorded source IP and device current (e.g. a phone moving from Wi-Fi
+	// to mobile data, or a browser update), so the Sessions view reflects where it is used now. Best-effort;
+	// writes only on a real change.
+	app.use((req, res, next) => { if (shareData.Sessions && typeof shareData.Sessions.noteRequestMeta === 'function') { shareData.Sessions.noteRequestMeta(req); } next(); });
 
 	app.disable('x-powered-by');
 

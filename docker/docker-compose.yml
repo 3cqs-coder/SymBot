@@ -54,9 +54,11 @@ services:
     # Persist SymBot's state so an upgrade preserves it. These named volumes seed from the image on
     # first run (a fresh install gets the default config) and are kept on every subsequent `up --build`,
     # so your configuration and secrets (config/), the Hub database and runtime state (data/), your
-    # System backups (backups/), uploads, logs and rollback snapshots all survive an upgrade. Only the
-    # application CODE under /usr/src/app is replaced by a rebuild — this is what makes a Docker upgrade
-    # safe, matching the directories the in-app updater preserves.
+    # System backups (backups/), uploads, logs, rollback snapshots, and login sessions (sessions/) all
+    # survive an upgrade. Only the application CODE under /usr/src/app is replaced by a rebuild — this is
+    # what makes a Docker upgrade safe, matching the directories the in-app updater preserves. (sessions/
+    # holds the per-instance session secret; without it a rebuild would sign a new secret and log everyone
+    # out — exactly what the in-app updater's preserve-list avoids, so Docker matches it here.)
     volumes:
       - symbot-config:/usr/src/app/config
       - symbot-data:/usr/src/app/data
@@ -64,6 +66,7 @@ services:
       - symbot-uploads:/usr/src/app/uploads
       - symbot-logs:/usr/src/app/logs
       - symbot-rollbacks:/usr/src/app/rollbacks
+      - symbot-sessions:/usr/src/app/sessions
     # Liveness only: SymBot's root requires auth and answers 401 to an unauthenticated probe, so `curl -f`
     # (which treats 401 as failure) would keep the container permanently "unhealthy" even though the web
     # server is up. Drop -f: any completed HTTP response means the server is listening; a real outage is a
@@ -82,3 +85,4 @@ volumes:
   symbot-uploads:
   symbot-logs:
   symbot-rollbacks:
+  symbot-sessions:

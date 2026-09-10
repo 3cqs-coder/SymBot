@@ -76,6 +76,26 @@ function initRoutes(router, upload) {
 	});
 
 
+	// The user guide (the shipped docs/README.md) for the in-app Help viewer. ONE source of truth — the SAME
+	// file the project ships — so in-app Help can never drift from the docs. It is public documentation (nothing
+	// secret) but is served only to a logged-in session, matching every other page, and is rendered client-side
+	// by the vendored markdown library (see the Help block in symbot-ui.js). The Hub serves the identical file
+	// from its own router, so both surfaces show the same guide.
+	router.get('/readme.md', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (!req.session.loggedIn) { denyUnauthorized(req, res); return; }
+
+		res.type('text/markdown; charset=utf-8');
+
+		res.sendFile(path.join(__dirname, '..', '..', 'docs', 'README.md'), (err) => {
+
+			if (err && !res.headersSent) { res.status(404).type('text').send('The guide is unavailable.'); }
+		});
+	});
+
+
 	router.get('/system', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -1600,6 +1620,43 @@ function initRoutes(router, upload) {
 		catch (e) { sendErr(res, e); }
 	});
 
+	// ── Logged-in sessions: view + revoke ────────────────────────────────────
+	// Sessions are an access-management concern, so they reuse the user.manage capability rather than
+	// introducing new ones. Both viewing and revoking require user.manage (admin/owner) — the active
+	// session list exposes each device's source IP, which a read-only viewer should not see. Store-agnostic
+	// list/destroy lives in libs/app/Sessions.js. Gated inline, so the default-deny middleware auto-detects
+	// the guard.
+	router.get('/api/sessions', cap('user.manage'), async (req, res) => {
+		try {
+			const r = await shareData.Sessions.list(req.sessionID);
+			res.status(200).json({ success: true, supported: r.supported, current: req.sessionID, sessions: r.sessions });
+		}
+		catch (e) { sendErr(res, e); }
+	});
+
+	router.post('/api/sessions/revoke', cap('user.manage'), async (req, res) => {
+		try {
+			const sid = (req.body && req.body.sid) || '';
+			if (!sid) { return res.status(400).json({ success: false, error: 'A session id is required.' }); }
+			// Ending your OWN session is a logout — route it there so the cookie is cleared and the UI redirects
+			// cleanly, rather than a silent store-destroy of the request's own session mid-response.
+			if (sid === req.sessionID) { return res.status(400).json({ success: false, error: 'That is your current session — use Log out.', self: true }); }
+			const ok = await shareData.Sessions.revoke(sid);
+			if (ok) { shareData.Common.auditEvent(req, 'session.revoke', String(sid).slice(0, 12), 'ended one session'); }
+			res.status(200).json({ success: ok });
+		}
+		catch (e) { sendErr(res, e); }
+	});
+
+	router.post('/api/sessions/revoke-others', cap('user.manage'), async (req, res) => {
+		try {
+			const n = await shareData.Sessions.revokeAllExcept(req.sessionID);
+			shareData.Common.auditEvent(req, 'session.revoke_others', String(n), 'signed out all other sessions');
+			res.status(200).json({ success: true, revoked: n });
+		}
+		catch (e) { sendErr(res, e); }
+	});
+
 	// ── Authorization: audit log + capability catalog (for the UIs) ──────────
 	router.get('/api/audit', cap('audit.read'), async (req, res) => {
 		try { res.status(200).json({ success: true, entries: await shareData.Audit.list({ action: req.query.action, actor: req.query.actor, limit: req.query.limit }) }); }
@@ -1728,6 +1785,15 @@ function initRoutes(router, upload) {
 
 		if (!isLoggedIn(req, res)) return;
 		try { res.status(200).json(await shareData.ScheduleRecipes.resetToDefaults(req.params.id)); }
+		catch (e) { sendErr(res, e); }
+	});
+
+	// Additive (non-destructive) update: adopt a newer shipped recipe by adding only its new settings, keeping
+	// the user's tuned settings and schedule. The opt-in alternative to the full "reset" above.
+	router.post('/api/recipes/:id/update', async (req, res) => {
+
+		if (!isLoggedIn(req, res)) return;
+		try { res.status(200).json(await shareData.ScheduleRecipes.applyRecipeUpdate(req.params.id)); }
 		catch (e) { sendErr(res, e); }
 	});
 

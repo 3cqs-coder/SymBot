@@ -81,6 +81,7 @@ const RULES = [
 	// of change as creating a schedule directly.
 	{ m: 'POST',   re: /^\/api\/recipes\/[^/]+\/add$/,             cap: 'settings.write' },
 	{ m: 'POST',   re: /^\/api\/recipes\/[^/]+\/reset$/,           cap: 'settings.write' },
+	{ m: 'POST',   re: /^\/api\/recipes\/[^/]+\/update$/,          cap: 'settings.write' },
 
 	// System / operations — backup, restore, update, rollback, shutdown are highly privileged and
 	// would otherwise be reachable by any resolved key or non-owner session. Gate behind settings.write.

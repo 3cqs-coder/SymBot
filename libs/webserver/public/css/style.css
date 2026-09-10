@@ -80,6 +80,9 @@
 	--fs-content:    1.15rem;    /* primary readable data rows/lists — the size the trading tables
 	                               (deals, journal, bots) already render at; card/list views
 	                               (schedules, access) reference this so every data view matches */
+	--fs-reading:    1.3rem;     /* long-form reading surfaces (the AI chat transcript and the in-app
+	                               guide) — comfortably larger than dense data, and shared so both read
+	                               at one consistent size tunable in a single place */
 	--fs-body:       1rem;
 	--fs-label:      0.92rem;    /* uppercase field labels */
 	--fs-small:      0.9rem;
@@ -1210,7 +1213,7 @@ form textarea {
 	position: relative;
 	width: 100%;
 	height: 100%;
-	font-size: 1.3rem;
+	font-size: var(--fs-reading);
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
@@ -5044,19 +5047,25 @@ body.has-shell #contentBox.home-welcome {
    Used by Access Control and Schedules (and future dialogs) so modal styling
    lives in one place. `.modal-pad` = a simple padded box; `.modal-flex` = a
    structured, scrollable box with head/body/foot. */
+/* Vertical room a modal must leave for the FIXED top chrome — the z-9999 top bar, and above it the
+   z-10000 config/security banner when one is present — so a modal's own header never hides behind them,
+   plus a small bottom gap. Kept as variables (banner-aware) and reused by BOTH the padding that positions
+   the modal AND the max-height that caps it, so the two can never drift and every state stays correct. */
+:root { --modal-top: calc(var(--shell-topbar-h, 60px) + 12px); --modal-bottom: 24px; }
+body.config-mode, body.default-pass { --modal-top: calc(var(--cfg-banner-h, 44px) + var(--shell-topbar-h, 60px) + 12px); }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; display: none; }
-.modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; padding: 70px 12px 24px; overflow-y: auto; }
+.modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; padding: var(--modal-top) 12px var(--modal-bottom); overflow-y: auto; }
 .modal-box { width: 100%; max-width: 600px; background: var(--content-box-background-color, #fff); color: var(--content-box-color, #222); border: 1px solid var(--table-border-color, #ccc); border-radius: 8px; box-shadow: 0 12px 44px rgba(0,0,0,0.45); }
 /* Cap the padded modal to the viewport and let it scroll inside itself (the flex modals
    already do this), so on a short screen the Create/Cancel buttons are reachable by scrolling
    within the modal instead of the modal running off the bottom of the page. */
-.modal-box.modal-pad { padding: 18px 20px; font-size: var(--fs-content); max-height: calc(100vh - 94px); overflow-y: auto; }
-.modal-box.modal-flex { display: flex; flex-direction: column; max-height: calc(100vh - 108px); }
-/* On short viewports, trim the overlay's top gap so the modal gets nearly the full height. */
+.modal-box.modal-pad { padding: 18px 20px; font-size: var(--fs-content); max-height: calc(100vh - var(--modal-top) - var(--modal-bottom)); overflow-y: auto; }
+.modal-box.modal-flex { display: flex; flex-direction: column; max-height: calc(100vh - var(--modal-top) - var(--modal-bottom)); overflow: hidden; }
+/* On a short viewport, trim the gaps (never below the fixed chrome height, so the header still clears it)
+   so the modal gets nearly the full remaining height. */
 @media (max-height: 640px) {
-	.modal-overlay.open { padding-top: 16px; padding-bottom: 16px; }
-	.modal-box.modal-pad { max-height: calc(100vh - 32px); }
-	.modal-box.modal-flex { max-height: calc(100vh - 32px); }
+	:root { --modal-top: calc(var(--shell-topbar-h, 60px) + 6px); --modal-bottom: 12px; }
+	body.config-mode, body.default-pass { --modal-top: calc(var(--cfg-banner-h, 44px) + var(--shell-topbar-h, 60px) + 6px); }
 }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--table-border-color, #ccc); }
 .modal-head b { font-size: var(--fs-dialog-title); }
@@ -5067,6 +5076,14 @@ body.has-shell #contentBox.home-welcome {
 .modal-foot { padding: 10px 16px; border-top: 1px solid var(--table-border-color, #ccc); display: flex; align-items: center; gap: 10px; }
 .modal-close { font-size: 1.4rem; line-height: 1; text-decoration: none; color: var(--content-box-color, #222); opacity: 0.6; cursor: pointer; }
 .modal-close:hover { opacity: 1; }
+/* In a flex modal the head and foot stay fixed while ONLY the body scrolls, so the action buttons
+   (Save / Cancel / Close) are always reachable no matter how tall the content is or how short the screen.
+   The body needs min-height:0 to be allowed to shrink below its content and scroll inside a flex column
+   (a flex item defaults to min-height:auto, which is what let the footer overflow and get cut off). Scoped
+   to .modal-flex so the simple .modal-pad box and any other markup are untouched. */
+.modal-flex .modal-head { flex: 0 0 auto; }
+.modal-flex .modal-body { flex: 1 1 auto; min-height: 0; }
+.modal-flex .modal-foot { flex: 0 0 auto; }
 
 
 /* ── Section-header icons (extend the shared .icon mask system; renders identically on every
@@ -5094,3 +5111,48 @@ body.has-shell #contentBox.home-welcome {
 .section-title > .icon,
 #formConfig > div.card > b > .icon,
 #formConfig .config-section-toggle b > .icon{width:1.15rem;height:1.15rem;color:var(--link-color);position:relative;top:1px;margin-right:2px;}
+
+
+/* ── In-app Help / searchable guide ──────────────────────────────────────────────
+   The shipped README rendered client-side (SymBot.UI.renderMarkdown) inside the
+   standard app modal (#helpModal), with a client-side find that highlights and jumps
+   between matches. The search row + section chips stick to the top of the scrolling
+   modal so they stay reachable while the guide scrolls. Themed via existing tokens so
+   light and dark both work; the yellow match highlight is intentionally fixed. */
+#helpModal { padding: 0; text-align: left; }
+.help-sticky { position: sticky; top: 0; z-index: 3; background: var(--content-box-background-color); }
+.help-search-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--table-border-color); }
+.help-search-row .help-search-ic { flex: 0 0 auto; color: var(--label-color); display: inline-flex; }
+#helpSearch { flex: 1 1 auto; min-width: 0; border: 1px solid var(--table-border-color); border-radius: 999px; padding: 7px 12px; font-size: var(--fs-body); background: var(--input-background-color); color: var(--text-color); outline: none; }
+#helpSearch:focus { border-color: var(--link-color); }
+.help-search-count { flex: 0 0 auto; font-size: var(--fs-small); color: var(--label-color); white-space: nowrap; }
+.help-nav-btn { flex: 0 0 auto; border: 1px solid var(--table-border-color); background: var(--content-box-background-color); color: var(--label-color); cursor: pointer; font-size: 11px; line-height: 1; padding: 5px 7px; border-radius: 6px; }
+.help-nav-btn:hover { color: var(--link-color); border-color: var(--link-color); }
+.help-matches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--table-border-color); max-height: 96px; overflow-y: auto; }
+.help-matches::before { content: "Jump to:"; font-size: var(--fs-small); color: var(--label-color); margin-right: 2px; }
+.help-chip { border: 1px solid var(--table-border-color); background: var(--content-box-background-color); color: var(--text-color); border-radius: 999px; padding: 3px 10px; font-size: var(--fs-small); cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.help-chip:hover { border-color: var(--link-color); color: var(--link-color); }
+.help-chip-n { display: inline-block; margin-left: 5px; padding: 0 6px; border-radius: 999px; background: var(--table-background-color); color: var(--label-color); font-size: .85em; }
+/* A friendly, article-like reading surface — not a dense manual. It uses the shared --fs-reading size
+   the AI chat transcript uses (so the two read alike), an airy line-height, and a constrained reading
+   column so lines stay a comfortable length instead of stretching the full width of a wide modal.
+   Headings scale proportionally from the body via em, so the hierarchy holds at any base size. */
+.help-body { max-width: 820px; padding: 20px 26px 44px; line-height: 1.7; color: var(--text-color); font-size: var(--fs-reading); }
+.help-body > :first-child { margin-top: 0; }
+.help-body p { margin: 0 0 1em; }
+.help-body li { margin: .3em 0; }
+.help-body h1, .help-body h2, .help-body h3, .help-body h4 { line-height: 1.3; margin: 1.5em 0 .5em; color: var(--content-box-color); font-weight: var(--fw-bold); }
+.help-body h1 { font-size: 1.6em; }
+.help-body h2 { font-size: 1.3em; border-bottom: 1px solid var(--table-border-color); padding-bottom: .3em; }
+.help-body h3 { font-size: 1.15em; }
+.help-body h4 { font-size: 1em; }
+.help-body a { color: var(--link-color); }
+.help-body code { background: var(--table-background-color); border: 1px solid var(--table-border-color); border-radius: 5px; padding: .1em .35em; font-size: .9em; font-family: var(--font-mono); }
+.help-body pre { background: var(--table-background-color); border: 1px solid var(--table-border-color); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+.help-body pre code { background: none; border: none; padding: 0; }
+.help-body table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+.help-body th, .help-body td { border: 1px solid var(--table-border-color); padding: 6px 10px; text-align: left; }
+.help-body blockquote { margin: 1em 0; padding: .2em 1em; border-left: 3px solid var(--table-border-color); color: var(--label-color); }
+.help-body mark { background: #ffe066; color: #1a1400; border-radius: 3px; padding: 0 1px; }
+.help-body mark.help-hit-active { background: #ffb300; }
+.help-body .muted { color: var(--label-color); }

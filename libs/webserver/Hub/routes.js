@@ -122,6 +122,24 @@ function initRoutes(router) {
 	});
 
 
+	// The user guide for the in-app Help viewer — the SAME shipped docs/README.md the instance serves, so the
+	// Hub and every instance show one identical, always-current guide. Public documentation, but served only to
+	// a logged-in session, and rendered client-side by the vendored markdown library (see symbot-ui.js).
+	router.get('/readme.md', (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (!authed(req)) { denyUnauthorized(req, res); return; }
+
+		res.type('text/markdown; charset=utf-8');
+
+		res.sendFile(path.join(__dirname, '..', '..', '..', 'docs', 'README.md'), (err) => {
+
+			if (err && !res.headersSent) { res.status(404).type('text').send('The guide is unavailable.'); }
+		});
+	});
+
+
 	router.get('/login', (req, res) => {
 
 		res.set('Cache-Control', 'no-store');
@@ -372,6 +390,39 @@ function initRoutes(router) {
 			const r = shareData.HubStore.setUserStatus(req.params.id, st);
 			if (r.success) { shareData.Common.auditEvent(req, 'user.status', req.params.id, st); }
 			res.status(200).json(r);
+		}
+		catch (e) { sendErr(res, e); }
+	});
+
+	// ── Logged-in sessions: view + revoke ────────────────────────────────────
+	// Same shared, store-agnostic Sessions module (libs/app/Sessions.js) and capability (user.manage for
+	// both view and revoke) as the instance, so the Sessions tab in the shared accessView works identically
+	// on the Hub. View is user.manage, not user.read, because the list exposes each device's source IP.
+	router.get('/api/sessions', cap('user.manage'), async (req, res) => {
+		try {
+			const r = await shareData.Sessions.list(req.sessionID);
+			res.status(200).json({ 'success': true, 'supported': r.supported, 'current': req.sessionID, 'sessions': r.sessions });
+		}
+		catch (e) { sendErr(res, e); }
+	});
+
+	router.post('/api/sessions/revoke', cap('user.manage'), async (req, res) => {
+		try {
+			const sid = (req.body && req.body.sid) || '';
+			if (!sid) { return res.status(400).json({ success: false, error: 'A session id is required.' }); }
+			if (sid === req.sessionID) { return res.status(400).json({ success: false, error: 'That is your current session — use Log out.', self: true }); }
+			const ok = await shareData.Sessions.revoke(sid);
+			if (ok) { shareData.Common.auditEvent(req, 'session.revoke', String(sid).slice(0, 12), 'ended one session'); }
+			res.status(200).json({ 'success': ok });
+		}
+		catch (e) { sendErr(res, e); }
+	});
+
+	router.post('/api/sessions/revoke-others', cap('user.manage'), async (req, res) => {
+		try {
+			const n = await shareData.Sessions.revokeAllExcept(req.sessionID);
+			shareData.Common.auditEvent(req, 'session.revoke_others', String(n), 'signed out all other sessions');
+			res.status(200).json({ 'success': true, 'revoked': n });
 		}
 		catch (e) { sendErr(res, e); }
 	});

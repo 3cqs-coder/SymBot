@@ -46,6 +46,10 @@ const CATALOG = {
 		meaning: 'A tool available to the AI assistant has a name that looks like it could change something (for example "create" or "sell"). The assistant is required to be strictly read-only and must never be able to place or alter a trade, so this is flagged as a safety violation.',
 		fix: 'Do not rely on the AI assistant until this is resolved, and report the listed tool name. On an official build this should never appear; updating to a released version is the fix.'
 	},
+	'watchdog.guide_missing': {
+		meaning: 'The built-in user guide file that the in-app Help panel displays could not be found (or is empty). Everything else works normally; only the Help button would fail to open the guide. This usually means a trimmed or incomplete install that did not include the documentation.',
+		fix: 'Reinstall or update from an official build so the shipped documentation is present. Nothing about trading is affected.'
+	},
 	'watchdog.ai_learning_coverage': {
 		meaning: 'The AI assistant\'s local knowledge base is missing example coverage for one or more of its tools. The assistant still works; its answers for the uncovered areas may just be less sharp.',
 		fix: 'Nothing is required — the knowledge base rebuilds itself over time. This is informational.'

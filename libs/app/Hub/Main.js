@@ -91,6 +91,7 @@ function processWorkerMessage(workerId, instanceName) {
 						// Host CPU load (same for every instance on this host) — carried
 						// on the same channel so the Manage view can show it per row.
 						'loadAvg': memData.loadAvg || null,
+						'loadAvgSupported': memData.loadAvgSupported === true,
 						'cpuCount': memData.cpuCount != null ? memData.cpuCount : null
 					}
 				};				

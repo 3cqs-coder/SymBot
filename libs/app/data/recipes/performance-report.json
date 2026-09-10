@@ -1,0 +1,32 @@
+{
+  "id": "core/performance-report",
+  "version": "1.0",
+  "min_symbot_version": "7.1",
+  "name": "Performance report",
+  "description": "Sends you a scheduled summary of your realized trading performance over a look-back window — deals closed, realized profit, win rate, average result, and best and worst deal — plus a snapshot of your current open positions. Read-only: it reads your closed-deal history, it never places or changes a trade. On the Hub each instance reports its own performance, labeled with the instance name so you can tell them apart.",
+  "author": "core",
+  "categories": [
+    "reporting",
+    "monitoring"
+  ],
+  "icon": "coins",
+  "requires_ai": false,
+  "ai_optional": false,
+  "type": "performance_report",
+  "kind": "cron",
+  "cron": "0 9 * * *",
+  "enabled": false,
+  "settings": {
+    "period_hours": 24,
+    "skip_when_empty": false,
+    "notifications": [
+      {
+        "type": "browser",
+        "target": {},
+        "on": [
+          "always"
+        ]
+      }
+    ]
+  }
+}

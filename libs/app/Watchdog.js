@@ -21,15 +21,17 @@
 //   • A check is `fn(shareData, context) -> finding | finding[] | null`, where a finding is
 //     `{ action, target?, detail? }`. Throwing is caught and ignored (a check must never break boot).
 //
-// Eleven built-in checks are registered at the bottom of this file (route_gating, route_gate_strength,
-// capability_integrity, ai_read_only, capability_drift, auth_admin_present, orphaned_open_deals,
-// duplicate_open_deals_per_pair, deal_missing_orders, over_privileged_user, default_password).
-// Other modules register their own by calling Watchdog.register(...) — currently ai_learning_drift +
-// tool_schema_parity + tool_guide_coverage (AIClient), schedule_handler_coverage + schedule_heartbeat
-// (Scheduler), recipe_file_integrity (ScheduleRecipes), audit_chain_integrity (Audit),
+// Twelve built-in checks are registered at the bottom of this file (route_gating, route_gate_strength,
+// capability_integrity, ai_read_only, guide_present, capability_drift, auth_admin_present,
+// orphaned_open_deals, duplicate_open_deals_per_pair, deal_missing_orders, over_privileged_user,
+// default_password). Other modules register their own by calling Watchdog.register(...) — currently
+// ai_learning_drift + tool_schema_parity + tool_guide_coverage (AIClient), schedule_handler_coverage +
+// schedule_heartbeat (Scheduler), recipe_file_integrity (ScheduleRecipes), audit_chain_integrity (Audit),
 // signal_activity_recognizer (SignalActivity), and config_secret_decryptable + db_index_presence +
-// log_secret_scan + data_dir_writable + ip_filter_spoofable (System) — twenty-four checks in all.
+// log_secret_scan + data_dir_writable + ip_filter_spoofable (System) — twenty-five checks in all.
 
+const fs = require('fs');
+const path = require('path');
 const Authz = require('./Authz.js');
 const RoutePermissions = require('./RoutePermissions.js');
 const AITools = require('./../ai/AITools.js');
@@ -155,6 +157,17 @@ register('ai_read_only', function () {
 		.map(t => (t && t.name) || '')
 		.filter(name => name && name !== 'explore' && String(name).split('_').some(seg => MUTATING_SEGMENTS.has(seg)));
 	return mutating.length ? { action: 'watchdog.mutating_ai_tool', target: String(mutating.length), detail: mutating.join(', ') } : null;
+});
+
+// 3b. In-app guide present — the Help panel serves the shipped docs/README.md at /readme.md (both on an
+// instance and on the Hub). A trimmed deployment (a partial install, or an image built without docs/)
+// would leave the Help button fetching a 404. Warn-only, so it can never affect trading or startup; it
+// just flags that the guide is missing or empty before a user discovers it.
+register('guide_present', function () {
+	const guide = path.join(__dirname, '..', '..', 'docs', 'README.md');
+	let ok = false;
+	try { ok = fs.statSync(guide).size > 0; } catch (e) { ok = false; }
+	return ok ? null : { action: 'watchdog.guide_missing', target: 'docs/README.md', detail: 'the in-app Help guide file is missing or empty; the Help panel would fail to load' };
 });
 
 // 4. Capability drift — an API key must never carry a capability its CURRENT owner can no longer grant.

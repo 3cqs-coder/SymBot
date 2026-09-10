@@ -568,7 +568,9 @@ function renderSystemHealth(d) {
 	const load = d.load_avg;
 	const cores = d.cpu_count;
 
-	if (Array.isArray(load) && load.length >= 1 && cores > 0) {
+	// load_avg_supported is false on platforms that don't report load (Windows), where loadavg() returns
+	// zeros. Treat a missing flag as supported so an instance predating it still shows load on Linux/macOS.
+	if (Array.isArray(load) && load.length >= 1 && cores > 0 && d.load_avg_supported !== false) {
 
 		const load1 = load[0];
 		const loadPct = Math.min(999, Math.round((load1 / cores) * 100));

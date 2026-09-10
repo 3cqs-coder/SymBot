@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const RecipeStateDB = require('../mongodb/RecipeStateSchema');
 
@@ -224,6 +225,25 @@ function compareVersions(a, b) {
 	return 0;
 }
 
+// Deterministic serialization: object keys sorted at every level, so the string depends only on content,
+// never on key order. Small and dependency-free; reused by recipeContentHash below.
+function stableStringify(v) {
+	if (Array.isArray(v)) { return '[' + v.map(stableStringify).join(',') + ']'; }
+	if (v && typeof v === 'object') { return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}'; }
+	return JSON.stringify(v == null ? null : v);
+}
+
+// A stable fingerprint of a recipe's CONTENT, excluding its `version` field. A change to any other part —
+// settings, cron, description, name, notifications — changes the hash, while a pure version bump does not.
+// This is what lets a dev-time check catch the version-hygiene mistake of editing a recipe without bumping
+// its version, which is the change existing installs would otherwise never be prompted to adopt. Pure and
+// reusable (the version-lock test drives it; any future runtime check can too).
+function recipeContentHash(def) {
+	const clone = JSON.parse(JSON.stringify(def || {}));
+	delete clone.version;
+	return crypto.createHash('sha256').update(stableStringify(clone)).digest('hex').slice(0, 16);
+}
+
 async function catalog() {
 
 	const recipes = listShipped();
@@ -329,6 +349,73 @@ async function resetToDefaults(recipeId) {
 }
 
 
+// ── Additive (non-destructive) update ────────────────────────────────────────
+// The counterpart to a full reset: adopt a newer shipped recipe by ADDING only the settings it introduced,
+// at their shipped defaults, while PRESERVING every setting the user may have tuned and their schedule
+// timing. This is what a version bump most often needs — a recipe that simply gained a knob (like the
+// event-loop threshold) should reach existing installs without discarding their thresholds. Pure so it is
+// unit-testable; `patch` is a MERGE patch (only new keys + the refreshed version/meta), so the scheduler's
+// merge mode leaves all existing keys and the cron/label untouched.
+function computeAdditiveMerge(rowSettings, def) {
+
+	def = (def && typeof def === 'object') ? def : {};
+	const cur = (rowSettings && typeof rowSettings === 'object') ? rowSettings : {};
+	const shipped = (def.settings && typeof def.settings === 'object') ? def.settings : {};
+
+	const patch = {};
+	const added = [];
+
+	for (const k of Object.keys(shipped)) {
+		// Skip user-owned wiring / bookkeeping keys (notifications, recipe_*/requires_ai/ai_optional): those
+		// are never "new tunable parameters" to add, and notifications in particular the user owns.
+		if (DIFF_IGNORE_SETTING_KEYS.has(k)) { continue; }
+		if (!Object.prototype.hasOwnProperty.call(cur, k)) { patch[k] = shipped[k]; added.push({ field: k, to: shipped[k] }); }
+	}
+
+	// Refresh provenance/meta so the update clears the "update available" flag and keeps the display current.
+	patch.recipe_id = def.id;
+	patch.recipe_name = def.name;
+	patch.recipe_description = def.description;
+	patch.recipe_version = def.version || '1.0';
+	patch.requires_ai = recipeUsesAI(def);
+	patch.ai_optional = def.ai_optional === true;
+
+	const preserved = Object.keys(cur).filter(k => !DIFF_IGNORE_SETTING_KEYS.has(k));
+
+	return { patch, added, preserved };
+}
+
+// Normalize a row's settings to a plain object whether it is a Mongoose doc or already plain.
+function plainSettings(row) {
+	const s = row && row.settings;
+	if (s && typeof s.toObject === 'function') { return s.toObject(); }
+	return (s && typeof s === 'object') ? s : {};
+}
+
+async function applyRecipeUpdate(recipeId) {
+
+	const def = listShipped().filter(r => r.id === recipeId)[0];
+	if (!def) { return { success: false, error: 'Unknown recipe.' }; }
+
+	const scheduler = shareData && shareData.Scheduler;
+	if (!scheduler || typeof scheduler.update !== 'function') { return { success: false, error: 'Scheduler unavailable' }; }
+
+	const row = await importedRow(recipeId);
+	if (!row) { return { success: false, error: 'This recipe is not currently added, so there is nothing to update.' }; }
+
+	const { patch, added, preserved } = computeAdditiveMerge(plainSettings(row), def);
+
+	// MERGE mode (replaceSettings omitted): the patch adds only the new keys and refreshes the version marker;
+	// every existing setting the user may have tuned survives, and cron/label are omitted so their schedule
+	// timing is untouched.
+	const res = await scheduler.update(row.schedule_id, { settings: patch });
+
+	if (res && res.success) { logger('ScheduleRecipes: updated "' + def.name + '" (' + def.id + ') to v' + (def.version || '1.0') + ' additively; added [' + added.map(a => a.field).join(', ') + '], kept user settings + schedule'); }
+
+	return Object.assign({}, res || {}, { added: added, preserved: preserved, to_version: def.version || '1.0' });
+}
+
+
 // ── Diff-on-update: what would a "Reset to defaults" actually change? ─────────────
 // A shipped-recipe upgrade never auto-applies (the user's row wins), so before someone clicks
 // "Reset to defaults" they deserve to see WHICH schedule fields and WHICH recipe parameters would
@@ -405,6 +492,11 @@ async function updateDiff(recipeId) {
 
 	const { changes } = computeUpdateChanges(row, def);
 
+	// The non-destructive path: which settings an additive update would ADD (new to this install) versus the
+	// existing ones it would PRESERVE. Lets the UI offer "Update (keep my settings)" and show exactly what it
+	// adds, distinct from the full "Reset to defaults" diff above.
+	const { added, preserved } = computeAdditiveMerge(plainSettings(row), def);
+
 	return {
 		success: true,
 		recipe_id: def.id,
@@ -412,9 +504,10 @@ async function updateDiff(recipeId) {
 		update_available: compareVersions(shippedVersion, installedVersion) > 0,
 		from_version: installedVersion,
 		to_version: shippedVersion,
-		changes: changes
+		changes: changes,
+		additive: { added: added, preserved: preserved }
 	};
 }
 
 
-module.exports = { init, listShipped, seed, catalog, addFromLibrary, resetToDefaults, updateDiff, computeUpdateChanges, importedRow, markRemoved, clearRemoved, auditRecipeIntegrity, compareVersions, RECIPES_DIR };
+module.exports = { init, listShipped, seed, catalog, addFromLibrary, resetToDefaults, applyRecipeUpdate, computeAdditiveMerge, updateDiff, computeUpdateChanges, importedRow, markRemoved, clearRemoved, auditRecipeIntegrity, compareVersions, recipeContentHash, RECIPES_DIR };

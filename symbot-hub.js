@@ -44,6 +44,7 @@ const Mailer = require(__dirname + '/libs/app/Mailer.js');
 const Authz = require(__dirname + '/libs/app/Authz.js');
 const AuthMiddleware = require(__dirname + '/libs/app/AuthMiddleware.js');
 const RoutePermissions = require(__dirname + '/libs/app/RoutePermissions.js');
+const Sessions = require(__dirname + '/libs/app/Sessions.js');
 const Watchdog = require(__dirname + '/libs/app/Watchdog.js');
 const HubStore = require(__dirname + '/libs/app/store/HubStore.js');
 const Hub = require(__dirname + '/libs/app/Hub/Hub.js');
@@ -204,6 +205,7 @@ async function startHub() {
 					'Authz': Authz,
 					'AuthMiddleware': AuthMiddleware,
 					'RoutePermissions': RoutePermissions,
+					'Sessions': Sessions,
 					'Watchdog': Watchdog,
 					'HubStore': HubStore,
 					// Present HubStore under the interfaces AuthMiddleware / route guards expect,
@@ -288,6 +290,7 @@ async function startHub() {
 
 		AuthMiddleware.init(shareData);
 		RoutePermissions.init(shareData);
+		Sessions.init(shareData);
 
 		// Start Hub log rotation on the same schedule as SymBot instances.
 		// Cleans YYYY-MM-DD-hub.log files from /logs alongside instance logs.
@@ -501,10 +504,12 @@ async function shutDown() {
 
 			Hub.logger('info', 'All workers have been terminated. Proceeding with shutdown.');
 
-			// Start shutdown timeout after all workers are processed
+			// A fully graceful shutdown (every worker terminated cleanly) exits 0, so a process manager (PM2 /
+			// systemd) records a clean stop rather than a crash. The forced/timed-out paths above keep a
+			// non-zero code to flag that something did not shut down cleanly.
 			setTimeout(() => {
 
-				process.exit(1);
+				process.exit(0);
 
 			}, (shutdownTimeout + 3000));
 

@@ -38,6 +38,7 @@ const AIScheduleHandler = require(__dirname + '/libs/scheduledtasks/AIScheduleHa
 const ErrorWatchdogHandler = require(__dirname + '/libs/scheduledtasks/ErrorWatchdogHandler.js');
 const DrawdownSentinelHandler = require(__dirname + '/libs/scheduledtasks/DrawdownSentinelHandler.js');
 const ResourceSentinelHandler = require(__dirname + '/libs/scheduledtasks/ResourceSentinelHandler.js');
+const PerformanceReportHandler = require(__dirname + '/libs/scheduledtasks/PerformanceReportHandler.js');
 const ScheduleRecipes = require(__dirname + '/libs/app/ScheduleRecipes.js');
 const AIContext = require(__dirname + '/libs/ai/AIContext.js');
 const Scheduler = require(__dirname + '/libs/app/Scheduler.js');
@@ -46,6 +47,7 @@ const Mailer = require(__dirname + '/libs/app/Mailer.js');
 const Authz = require(__dirname + '/libs/app/Authz.js');
 const ApiKeys = require(__dirname + '/libs/app/ApiKeys.js');
 const Users = require(__dirname + '/libs/app/Users.js');
+const Sessions = require(__dirname + '/libs/app/Sessions.js');
 const Audit = require(__dirname + '/libs/app/Audit.js');
 const AuthMiddleware = require(__dirname + '/libs/app/AuthMiddleware.js');
 const RoutePermissions = require(__dirname + '/libs/app/RoutePermissions.js');
@@ -495,6 +497,7 @@ async function init() {
 						'Authz': Authz,
 						'ApiKeys': ApiKeys,
 						'Users': Users,
+						'Sessions': Sessions,
 						'Audit': Audit,
 						'AuthMiddleware': AuthMiddleware,
 						'RoutePermissions': RoutePermissions,
@@ -824,6 +827,7 @@ async function init() {
 			Authz.init(shareData);
 			ApiKeys.init(shareData);
 			Users.init(shareData);
+			Sessions.init(shareData);
 			Audit.init(shareData);
 			AuthMiddleware.init(shareData);
 			RoutePermissions.init(shareData);
@@ -853,6 +857,7 @@ async function init() {
 			ErrorWatchdogHandler.register(Scheduler, shareData);
 			DrawdownSentinelHandler.register(Scheduler, shareData);
 			ResourceSentinelHandler.register(Scheduler, shareData);
+			PerformanceReportHandler.register(Scheduler, shareData);
 			System.registerBackupHandler(Scheduler);
 			await Scheduler.start(shareData);
 			await System.migrateBackupToScheduler();
@@ -1068,7 +1073,7 @@ async function start(args) {
 		Common.logger('Initialization error: ' + e, true);
 		Common.logger('Please verify your configuration files have all required parameters', true);
 
-		shutDown();
+		shutDown(1);   // a failed start is an ERROR — exit non-zero so it can be retried
 		return;
 	}
 
@@ -1086,7 +1091,7 @@ async function start(args) {
 
 			Common.logger('Bot configuration file error: ' + botConfig.data, true);
 
-			shutDown();
+			shutDown(1);   // a bad bot config is an ERROR — exit non-zero
 			return;
 		}
 
@@ -1094,12 +1099,12 @@ async function start(args) {
 	}
 	else {
 
-		shutDown();
+		shutDown(1);   // init did not succeed — exit non-zero
 	}
 }
 
 
-function shutDown() {
+function shutDown(exitCode) {
 
 	// Perform any post shutdown processes here
 
@@ -1107,7 +1112,15 @@ function shutDown() {
 
 		gotSigInt = true;
 
-		Common.logger('Received kill signal. Shutting down gracefully.', true);
+		// A GRACEFUL shutdown must exit 0. The Hub (and any process manager) reads a NON-ZERO exit as a crash:
+		// the Hub's worker-exit handler treats a non-zero code as a crash and can schedule an auto-restart /
+		// count it against the crash cap, so an intentional stop that exited 1 was mislabeled "crashed" and
+		// could race the Hub's own explicit restart. A signal handler passes the signal name (a string) or
+		// nothing → graceful → 0; only an explicit ERROR path (a failed start) passes a numeric code (1), which
+		// is preserved so a genuine startup failure still exits non-zero and can be retried.
+		const code = (typeof exitCode === 'number' && isFinite(exitCode)) ? exitCode : 0;
+
+		Common.logger(code === 0 ? 'Received kill signal. Shutting down gracefully.' : ('Shutting down (exit code ' + code + ').'), true);
 
 		if (appDataConfig != undefined && appDataConfig != null && appDataConfig != '') {
 
@@ -1119,7 +1132,7 @@ function shutDown() {
 		}
 
 		setTimeout(() => {
-							process.exit(1);
+							process.exit(code);
 
 						 }, shutdownTimeout);
 	}

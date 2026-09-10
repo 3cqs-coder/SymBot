@@ -10,6 +10,7 @@ const pathRoot = path.resolve(__dirname, ...Array(2).fill('..'));
 
 const crypto = require('crypto');
 const IpFilter = require('./IpFilter.js');
+const LogWriter = require('./LogWriter.js');
 const Notifications = require('./Notifications.js');
 const ArtifactIndex = require('./ArtifactIndex.js');
 const Convert = require('ansi-to-html');
@@ -92,6 +93,40 @@ async function getConfig(fileName) {
 }
 
 
+// A brief, real synchronous pause (no busy loop) used only on the rare Windows rename-retry path below.
+function sleepSync(ms) {
+	try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(0, ms | 0)); } catch (e) {}
+}
+
+// Errno codes Windows raises when another process (a reader, or antivirus) momentarily holds the target
+// file open during a rename-over-existing. POSIX never fails a rename for this reason.
+const RENAME_RETRY_ERRNOS = [ 'EPERM', 'EACCES', 'EBUSY', 'EEXIST' ];
+
+// Rename `src` over `dest`, retrying briefly on Windows. rename(2) on POSIX atomically replaces an open
+// destination and never fails because a reader has it open, so there it runs exactly once. On Windows the
+// same replace can throw a TRANSIENT lock error when a concurrent reader (for example the Hub reading an
+// instance's app.json) or antivirus is touching the target; those holders release within milliseconds, so a
+// few short, increasing backoffs turn an intermittent failure into success WITHOUT weakening atomicity (the
+// rename itself is still the single atomic publish). A non-transient error (a real ENOENT, a full disk) is
+// re-thrown immediately, and so is the last transient error if every attempt is exhausted. `doRename` and
+// `sleep` are injected so the retry logic is unit-testable without touching the real filesystem.
+function renameWithRetry(doRename, sleep, isWindows, src, dest, attempts) {
+
+	const tries = isWindows ? Math.max(1, attempts || 5) : 1;
+
+	for (let i = 0; i < tries; i++) {
+
+		try { doRename(src, dest); return; }
+		catch (e) {
+
+			const transient = !!(e && RENAME_RETRY_ERRNOS.indexOf(e.code) >= 0);
+			if (i === tries - 1 || !transient) { throw e; }
+			sleep(20 * (i + 1));   // 20, 40, 60, 80 ms — brief and bounded
+		}
+	}
+}
+
+
 async function saveConfig(fileName, data, updated) {
 
 	let err;
@@ -117,7 +152,7 @@ async function saveConfig(fileName, data, updated) {
 		const tmp = target + '.tmp';
 
 		fs.writeFileSync(tmp, JSON.stringify(data, null, 4));
-		fs.renameSync(tmp, target);
+		renameWithRetry(fs.renameSync, sleepSync, process.platform === 'win32', tmp, target, 5);
 
 		success = true;
 	} catch (e) {
@@ -1856,15 +1891,11 @@ async function logger(data, consoleLog) {
 
 	logData = logData.replace(/[\t\r\n]+/g, ' ');
 
-	try {
-		fs.appendFileSync(fileName, logData + '\n', 'utf8');
-	}
-	catch (e) {
-		// The per-instance log directory may not exist yet on the first write (or a fresh
-		// server_id folder) — create it and retry once. mkdir is recursive and idempotent.
-		try { fs.mkdirSync(path.dirname(fileName), { recursive: true }); fs.appendFileSync(fileName, logData + '\n', 'utf8'); }
-		catch (e2) {}
-	}
+	// Non-blocking, ordered, fire-and-forget file write. The logger runs on the trading loop, so it must
+	// never stall it on disk I/O; LogWriter batches lines and writes them off the event loop, in call order,
+	// creating the per-instance log directory on the first write. It flushes anything queued on a graceful
+	// exit, and never throws back into this caller. (See libs/app/LogWriter.js for the durability trade-offs.)
+	LogWriter.append(fileName, logData);
 
 	if (shareData && shareData.WebServer) {
 
@@ -2307,7 +2338,7 @@ function writeRekeyJournal(entry) {
 	try {
 		const tmp = rekeyJournalPath() + '.tmp';
 		fs.writeFileSync(tmp, JSON.stringify(entry));
-		fs.renameSync(tmp, rekeyJournalPath());   // atomic publish
+		renameWithRetry(fs.renameSync, sleepSync, process.platform === 'win32', tmp, rekeyJournalPath(), 5);   // atomic publish (Windows-robust)
 	}
 	catch (e) { logger('Re-key journal write skipped: ' + (e && e.message ? e.message : e)); }   // best-effort — never block a password change
 }
@@ -2889,6 +2920,9 @@ async function getSystemHealth() {
 					'started': started ? started.toISOString() : null,
 					'active_deals': activeDeals,
 					'load_avg': Array.isArray(loadAvg) ? loadAvg.map(l => Math.round(l * 100) / 100) : null,
+					// Whether os.loadavg() actually reports on this platform. Windows always returns zeros, so
+					// without this flag the UI would render a misleading "0%" load; the display shows "—" instead.
+					'load_avg_supported': process.platform !== 'win32',
 					'cpu_count': cpuCount,
 					'app_version': shareData.appData.version || null,
 					'platform': process.platform,
@@ -3872,6 +3906,23 @@ async function setToken() {
 const LEGACY_PBKDF2_ITERATIONS   = 1000;
 const PASSWORD_PBKDF2_ITERATIONS = 600000;
 
+// Key derivation on the libuv thread pool rather than the event loop. In the Hub every instance shares
+// one OS process, so a synchronous derivation during a login would stall the whole process — including
+// the trading loop's timing — and a burst of login attempts would amplify that. Because genPasswordHash /
+// verifyPasswordHash are already async and already awaited by their callers, moving to the async pbkdf2 is
+// a drop-in with the same algorithm and stored format, so every existing hash verifies unchanged.
+function pbkdf2Async(data, salt, iterations) {
+
+	return new Promise((resolve, reject) => {
+
+		crypto.pbkdf2(data, salt, iterations, 64, 'sha256', (err, derived) => {
+
+			if (err) { reject(err); } else { resolve(derived.toString('hex')); }
+		});
+	});
+}
+
+
 async function genPasswordHash(dataObj) {
 
 	let salt = dataObj['salt'];
@@ -3886,7 +3937,7 @@ async function genPasswordHash(dataObj) {
 	// password-set call passes PASSWORD_PBKDF2_ITERATIONS to store a strong hash.
 	const iterations = (dataObj['iterations'] != undefined && Number(dataObj['iterations']) > 0) ? Number(dataObj['iterations']) : LEGACY_PBKDF2_ITERATIONS;
 
-	const hash = crypto.pbkdf2Sync(data, salt, iterations, 64, 'sha256').toString('hex');
+	const hash = await pbkdf2Async(data, salt, iterations);
 
 	let obj = { 'salt': salt, 'hash': hash };
 
@@ -3910,7 +3961,7 @@ async function verifyPasswordHash(dataObj) {
 
 		let hashData;
 
-		try { hashData = crypto.pbkdf2Sync(data, salt, iterations, 64, 'sha256').toString('hex'); }
+		try { hashData = await pbkdf2Async(data, salt, iterations); }
 		catch (e) { continue; }
 
 		if (safeEqual(hash, hashData)) { success = true; break; }
@@ -4186,6 +4237,22 @@ async function verifyLogin(req, res, isHub) {
 		// the owner (blank username) has no userId and resolves to the implicit owner.
 		if (userId) { req.session.userId = userId; }
 		else { delete req.session.userId; }
+
+		// Stamp session metadata for the session-management view (see libs/app/Sessions.js), shared by both
+		// the instance and the Hub since both authenticate through here. The sid is stored so a store whose
+		// all() drops the store key (e.g. connect-mongo) still carries each session's own id for listing and
+		// revoking. Best-effort — a metadata write must never affect whether the login itself succeeds.
+		try {
+
+			req.session.meta = {
+				'sid': req.sessionID,
+				'user': username || '',
+				'ip': ip || '',
+				'ua': userAgent || '',
+				'loginAt': Date.now()
+			};
+		}
+		catch (e) {}
 
 		// Clear this IP's failure record on any successful login.
 		recordLoginSuccess(ip);
@@ -5011,6 +5078,7 @@ module.exports = {
 	stripMongoOperators,
 	stripAnsi,
 	ansiToHtml,
+	renameWithRetry,   // Windows-robust atomic-rename helper (exported for unit testing)
 	withTimeout,
 	// Notification routing catalog/defaults for the config UI (the router itself is used internally
 	// by sendNotification). Pass-throughs so views/routes reach them via the always-present Common.

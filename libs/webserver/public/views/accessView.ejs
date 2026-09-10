@@ -94,6 +94,7 @@
 		<div class="ac-tabs" role="tablist" aria-label="Access Control sections">
 			<button type="button" class="ac-tab is-active" data-actab="keys"  role="tab" aria-selected="true">API Keys</button>
 			<button type="button" class="ac-tab"           data-actab="users" role="tab" aria-selected="false">Users</button>
+			<button type="button" class="ac-tab"           data-actab="sessions" role="tab" aria-selected="false">Sessions</button>
 			<button type="button" class="ac-tab"           data-actab="audit" role="tab" aria-selected="false">Audit Log</button>
 		</div>
 
@@ -121,6 +122,21 @@
 			<table class="ac-table">
 				<thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead>
 				<tbody id="acUsersBody"><tr><td colspan="5" class="ac-empty">Loading…</td></tr></tbody>
+			</table>
+			</div>
+		</div>
+
+		<!-- ── Sessions ─────────────────────────────────────────────────── -->
+		<div class="card ac-panel is-hidden" id="acSessionsSection">
+			<div class="section-title"><span class="icon icon-users"></span> Sessions</div>
+			<div class="section-desc">Devices currently signed in. End a session to sign that device out immediately — handy if you left yourself logged in somewhere, or suspect a session that isn't yours.</div>
+			<button type="button" id="acSessRefresh" class="btn" style="cursor:pointer;">Refresh</button>
+			<button type="button" id="acSessRevokeOthers" class="btn" style="cursor:pointer;">Sign out everywhere else</button>
+			<span id="acSessMsg" style="margin-left:10px; font-size:var(--fs-body);"></span>
+			<div class="ac-tablewrap">
+			<table class="ac-table">
+				<thead><tr><th>Device</th><th>IP</th><th>Signed in</th><th>Last active</th><th></th></tr></thead>
+				<tbody id="acSessBody"><tr><td colspan="5" class="ac-empty">Loading…</td></tr></tbody>
 			</table>
 			</div>
 		</div>
@@ -544,12 +560,71 @@
 	}
 	$('#acAuditRefresh').on('click', loadAudit);
 
+	// ── Sessions ──
+	// A friendly, recognizable device label from a user-agent — "which browser on which OS", never a raw
+	// UA dump. Best-effort; an unknown agent falls back to a short generic label.
+	function deviceLabel(ua) {
+		ua = String(ua || '');
+		if (!ua) { return 'Unknown device'; }
+		var os = /Windows/i.test(ua) ? 'Windows' : /iPhone|iPad|iOS/i.test(ua) ? 'iOS' : /Mac OS X|Macintosh/i.test(ua) ? 'macOS' : /Android/i.test(ua) ? 'Android' : /Linux/i.test(ua) ? 'Linux' : '';
+		var br = /Edg\//i.test(ua) ? 'Edge' : /OPR\/|Opera/i.test(ua) ? 'Opera' : /Chrome\//i.test(ua) ? 'Chrome' : /Firefox\//i.test(ua) ? 'Firefox' : /Safari\//i.test(ua) ? 'Safari' : /curl|Wget|python|node/i.test(ua) ? 'API client' : '';
+		return (br && os) ? (br + ' on ' + os) : (br || os || 'Browser');
+	}
+	function loadSessions() {
+		api('GET', './api/sessions').done(function (r) {
+			if (r && r.supported === false) { $('#acSessBody').html('<tr><td colspan="5" class="ac-empty">Session listing isn\'t available on this session store.</td></tr>'); return; }
+			var rows = (r && r.sessions) || [];
+			if (!rows.length) { $('#acSessBody').html('<tr><td colspan="5" class="ac-empty">No active sessions.</td></tr>'); return; }
+			$('#acSessBody').html(rows.map(function (s) {
+				var who = s.user ? esc(s.user) : 'Owner';
+				var cur = s.current ? ' <span class="ac-pill ok">this device</span>' : '';
+				var action = s.current
+					? '<a href="./logout">Log out</a>'
+					: '<a class="ac-sess-revoke" data-sid="' + esc(s.sid) + '">Revoke</a>';
+				return '<tr><td>' + esc(deviceLabel(s.ua)) + ' <span style="opacity:0.6;">· ' + who + '</span>' + cur + '</td>'
+					+ '<td class="ac-caps" style="white-space:nowrap;">' + esc(fmtIp(s.ip)) + '</td>'
+					+ '<td style="white-space:nowrap;">' + fmt(s.loginAt) + '</td>'
+					+ '<td style="white-space:nowrap;">' + fmt(s.lastSeen) + '</td>'
+					+ '<td class="ac-row-actions">' + action + '</td></tr>';
+			}).join(''));
+		}).fail(function () { $('#acSessBody').html('<tr><td colspan="5" class="ac-empty">You don\'t have permission to view sessions.</td></tr>'); });
+	}
+	$(document).on('click', '.ac-sess-revoke', function () {
+		var sid = $(this).data('sid');
+		acConfirm({
+			content: 'End this session?<br><br>That device is signed out immediately and must log in again.',
+			confirmText: '<div style="color: var(--color-danger);">End session</div>',
+			plain: 'End this session? That device is signed out immediately.',
+			onConfirm: function () {
+				api('POST', './api/sessions/revoke', { sid: sid }).done(function (r) {
+					if (r && r.success) { loadSessions(); }
+					else { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
+				}).fail(function (x) { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+			}
+		});
+	});
+	$('#acSessRefresh').on('click', loadSessions);
+	$('#acSessRevokeOthers').on('click', function () {
+		acConfirm({
+			content: 'Sign out <b>every other</b> session?<br><br>This device stays signed in; all other devices must log in again.',
+			confirmText: '<div style="color: var(--color-danger);">Sign out others</div>',
+			plain: 'Sign out all other sessions? This device stays signed in.',
+			onConfirm: function () {
+				$('#acSessMsg').css('color', '').text('Signing out…');
+				api('POST', './api/sessions/revoke-others', {}).done(function (r) {
+					if (r && r.success) { $('#acSessMsg').css('color', '').text('Signed out ' + (r.revoked || 0) + ' other session' + (r.revoked === 1 ? '' : 's') + '.'); loadSessions(); }
+					else { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ Failed'); }
+				}).fail(function (x) { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+			}
+		});
+	});
+
 	// ── Section tabs ──
 	// Show one panel at a time and load its data on FIRST open only — so the audit log's 200-row
 	// fetch is skipped until the user actually opens that tab. Reuses the existing per-section loaders.
-	var acPanels  = { keys: '#acKeysSection', users: '#acUsersSection', audit: '#acAuditSection' };
-	var acLoaders = { keys: loadKeys, users: loadUsers, audit: loadAudit };
-	var acLoaded  = { keys: false, users: false, audit: false };
+	var acPanels  = { keys: '#acKeysSection', users: '#acUsersSection', sessions: '#acSessionsSection', audit: '#acAuditSection' };
+	var acLoaders = { keys: loadKeys, users: loadUsers, sessions: loadSessions, audit: loadAudit };
+	var acLoaded  = { keys: false, users: false, sessions: false, audit: false };
 
 	function showTab(name) {
 		if (!acPanels[name]) { return; }

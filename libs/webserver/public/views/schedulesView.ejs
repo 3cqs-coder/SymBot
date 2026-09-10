@@ -402,27 +402,26 @@
 		return '<code style="font-size:0.82rem;">'+esc(s)+'</code>';
 	}
 
-	// Build the HTML body for the "what would update change?" dialog from an update-diff response.
+	// Build the dialog body for an additive recipe update. It ADDS only the settings the new version
+	// introduced, at their defaults, and keeps everything the user has — their tuned settings, schedule,
+	// notification destinations and enabled state. (A full "Reset to defaults" is the separate, destructive
+	// option on the card.)
 	function renderRecipeDiff(d, label){
 		var head = 'Update &ldquo;' + esc(label) + '&rdquo; from <b>v' + esc(String(d.from_version||'?')) + '</b> to <b>v' + esc(String(d.to_version||'?')) + '</b>?';
-		var changes = (d && d.changes) || [];
-		if(!changes.length){
-			return head + '<div style="margin-top:8px; opacity:0.8;">No parameter differences to apply — only the version marker advances. Your notification destinations and enabled state are kept.</div>';
+		var added = (d && d.additive && d.additive.added) || [];
+		if(!added.length){
+			return head + '<div style="margin-top:8px; opacity:0.85;">No new settings to add — only the version marker advances. Everything you have is kept: your settings, schedule, notification destinations and enabled state.</div>';
 		}
-		var rows = changes.map(function(c){
-			var scopeTag = c.scope === 'schedule'
-				? '<span style="font-size:0.68rem; padding:0 5px; border-radius:6px; border:1px solid var(--table-border-color, rgba(128,128,128,0.5)); opacity:0.7;">schedule</span> '
-				: '';
+		var rows = added.map(function(c){
 			return '<tr>'
-				+ '<td style="padding:3px 8px 3px 0; vertical-align:top; white-space:nowrap;">'+scopeTag+'<b>'+esc(c.field)+'</b></td>'
-				+ '<td style="padding:3px 6px; vertical-align:top;">'+diffVal(c.from)+'</td>'
-				+ '<td style="padding:3px 6px; vertical-align:top; opacity:0.6;">&rarr;</td>'
+				+ '<td style="padding:3px 10px 3px 0; vertical-align:top; white-space:nowrap;"><b>'+esc(c.field)+'</b></td>'
 				+ '<td style="padding:3px 0 3px 6px; vertical-align:top;">'+diffVal(c.to)+'</td>'
 				+ '</tr>';
 		}).join('');
 		return head
-			+ '<div style="margin-top:8px; font-size:var(--fs-content);">The following would change (your notification destinations and enabled state are kept):</div>'
-			+ '<div style="max-height:300px; overflow:auto; margin-top:6px;"><table style="border-collapse:collapse; font-size:var(--fs-content);"><thead><tr style="opacity:0.6; text-align:left;"><th style="padding-right:8px;">Field</th><th>Current</th><th></th><th>New</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+			+ '<div style="margin-top:8px; font-size:var(--fs-content);">This adds '+added.length+' new setting'+(added.length===1?'':'s')+' at '+(added.length===1?'its default':'their defaults')+'. Nothing you customized is changed — your existing settings, schedule and notifications are kept:</div>'
+			+ '<div style="max-height:300px; overflow:auto; margin-top:6px;"><table style="border-collapse:collapse; font-size:var(--fs-content);"><thead><tr style="opacity:0.6; text-align:left;"><th style="padding-right:10px;">New setting</th><th>Default</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+			+ '<div style="margin-top:8px; opacity:0.65; font-size:0.82rem;">To instead restore ALL shipped defaults (discarding your customizations), use &ldquo;Reset to defaults&rdquo; on the schedule.</div>';
 	}
 	// Group the list so it stays legible as tasks grow: pre-defined RECIPES (imported, managed) vs the
 	// user's own hand-created schedules. Group headers only appear when BOTH groups have items, so a
@@ -845,7 +844,7 @@
 					message: renderRecipeDiff(d, (rs2 && rs2.label) || d.name || 'this recipe'),
 					confirmText: 'Update now',
 					onConfirm: function(){
-						fetch('./api/recipes/'+encodeURIComponent(recipeId2)+'/reset', { method:'POST' }).then(function(r){ return r.json(); }).then(function(r){ if(r && r.success){ refresh(); } else { alert('Update failed: ' + ((r && r.error) || 'unknown')); } }).catch(function(){ alert('Update failed.'); });
+						fetch('./api/recipes/'+encodeURIComponent(recipeId2)+'/update', { method:'POST' }).then(function(r){ return r.json(); }).then(function(r){ if(r && r.success){ refresh(); } else { alert('Update failed: ' + ((r && r.error) || 'unknown')); } }).catch(function(){ alert('Update failed.'); });
 					}
 				});
 			}).catch(function(){ a.textContent = 'View changes'; a.style.pointerEvents = ''; alert('Could not load the changes.'); });

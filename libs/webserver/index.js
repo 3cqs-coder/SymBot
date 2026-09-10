@@ -145,6 +145,10 @@ function initApp() {
 		});
 	}
 
+	// Expose the active session store so the session-management feature (libs/app/Sessions.js) can list and
+	// revoke logged-in sessions through the standard store contract, whichever store is in use.
+	shareData.sessionStore = store;
+
 	const sessionMiddleware = session({
 
 		'secret': sessionSecret,
@@ -181,6 +185,11 @@ function initApp() {
 
 	app.use(sessionMiddleware);
 
+	// Keep each logged-in session's recorded source IP and device current (e.g. a phone moving from Wi-Fi
+	// to mobile data, or a browser update), so the Sessions view reflects where it is used now. Best-effort;
+	// writes only on a real change.
+	app.use((req, res, next) => { if (shareData.Sessions && typeof shareData.Sessions.noteRequestMeta === 'function') { shareData.Sessions.noteRequestMeta(req); } next(); });
+
 	// Compress all HTTP responses
 	app.use(compression({
 
@@ -215,13 +224,16 @@ function initApp() {
 			return;
 		}
 
-		if (shareData.appData.database_error || shareData.appData.system_pause) {
+		// The in-app Help guide (docs/README.md, served at /readme.md) touches no database, so it stays
+		// available even while the system is paused for a backup or sitting in a database-error state — the
+		// same reason the static /js and /css above are served during a pause. Everything else gets the 503.
+		if ((shareData.appData.database_error || shareData.appData.system_pause) && req.path !== '/readme.md') {
 
 			let obj = {
 				'date': new Date(),
 				'error': shareData.appData.database_error || shareData.appData.system_pause
 			};
-		
+
 			res.status(503).send(obj);
 		}
 		else {

@@ -1,9 +1,9 @@
 {
   "id": "core/resource-sentinel",
-  "version": "1.0",
+  "version": "1.1",
   "min_symbot_version": "7.0",
   "name": "Resource sentinel",
-  "description": "Samples host disk, memory and CPU on a schedule and alerts you ONLY when one crosses its warning threshold — quiet when everything is healthy. Uses only built-in system stats (no extra software to install) and works on Linux, macOS and Windows. Memory uses true available memory on Linux and Windows; macOS doesn't expose that to a pure check, so memory is shown there but not alerted on. It reads the HOST machine, so in a Hub (many instances on one machine) enabling it on a single instance covers them all. Read-only: it checks the machine, it never places or changes a trade.",
+  "description": "Samples host disk, memory and CPU, plus this instance's event-loop responsiveness, on a schedule and alerts you ONLY when one crosses its warning threshold — quiet when everything is healthy. Uses only built-in system stats (no extra software to install) and works on Linux, macOS and Windows. Memory uses true available memory on Linux and Windows; macOS doesn't expose that to a pure check, so memory is shown there but not alerted on. Disk, memory and CPU read the HOST machine, so in a Hub (many instances on one machine) enabling it on a single instance covers the host for those. The event-loop check is specific to the instance it runs on, so enable it on each instance you want watched. Read-only: it checks the machine, it never places or changes a trade.",
   "author": "core",
   "categories": [
     "monitoring",
@@ -19,6 +19,7 @@
     "disk_free_pct": 10,
     "mem_free_pct": 10,
     "cpu_busy_pct": 92,
+    "event_loop_lag_ms": 250,
     "notifications": [
       {
         "type": "browser",

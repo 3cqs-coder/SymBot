@@ -423,6 +423,18 @@ function firstDealId(text) {
 	return (m && m[0]) || null;
 }
 
+// A LOOSER deal-id shape than DEAL_ID_RE — it accepts a 4+ digit trailing epoch instead of 6+. A REAL
+// SymBot deal id always carries a 6+ digit epoch, so a token that matches this but NOT DEAL_ID_RE is
+// deal-id-SHAPED yet cannot be a real id (e.g. a fabricated "XYZ_USD-1234567-8901"). The caller uses this,
+// only after firstDealId has already returned null, to fail a bogus explicit id closed with the
+// deterministic "not found" answer instead of spending the model loop on a question it can only refuse.
+const LOOSE_DEAL_ID_RE = /\b[A-Z0-9]{1,12}_[A-Z0-9]{2,10}-[A-Z0-9]{4,12}-\d{4,}\b/g;
+function firstLooseDealId(text) {
+
+	const m = String(text || '').match(LOOSE_DEAL_ID_RE);
+	return (m && m[0]) || null;
+}
+
 // Does a DRAFTED answer read as a financial-advice-style refusal or a "can't access the data"
 // deflection? Small local models lexically overfit on "analysis of <crypto>" and refuse even after the
 // deal tools returned the user's OWN data; the caller uses this signal to trigger a grounded, prefilled
@@ -1061,6 +1073,7 @@ module.exports = {
 	looksLikePushback,
 	resolveContinuation,
 	firstDealId,
+	firstLooseDealId,
 	looksLikeAdviceRefusal,
 	FINANCIAL_ADVICE_NOTE,
 	FINANCIAL_ADVICE_NOTE_GENERIC,

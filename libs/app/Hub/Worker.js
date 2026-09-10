@@ -148,6 +148,9 @@ async function processWorkerTaskMessage(SymBot, message) {
 				'external': memoryUsage.external || 0,
 				'arrayBuffers': memoryUsage.arrayBuffers || 0,
 				'loadAvg': Array.isArray(loadAvg) ? loadAvg.map(l => Math.round(l * 100) / 100) : null,
+				// os.loadavg() returns zeros on Windows; the flag lets the Manage view show "—" rather
+				// than a misleading "0%". Host-level, so it is the same for every worker in this process.
+				'loadAvgSupported': process.platform !== 'win32',
 				'cpuCount': cpuCount
 			}
 		});

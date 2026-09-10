@@ -103,7 +103,9 @@
 								// Host CPU load is identical for every instance sharing this host,
 								// so it's shown ONCE in the header strip rather than repeated on each
 								// row. Capture it from whichever online instance reports it.
-								if (Array.isArray(m.loadAvg) && m.loadAvg.length >= 1 && m.cpuCount > 0) {
+								// Skip platforms that don't report load (Windows sends zeros): a missing flag is
+								// treated as supported so an instance predating it still shows load on Linux/macOS.
+								if (Array.isArray(m.loadAvg) && m.loadAvg.length >= 1 && m.cpuCount > 0 && m.loadAvgSupported !== false) {
 
 									hostLoad = { loadAvg: m.loadAvg, cpuCount: m.cpuCount };
 								}

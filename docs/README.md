@@ -36,6 +36,8 @@ If you take away just two things, make it these. First, always be sure you can f
 
 Second, patience is key. DCA trading rewards discipline over urgency. Deals can take time to close in profit, and that's normal... it's the strategy working, not failing. Resist the urge to overextend, chase, or micromanage. A calm, well-funded operation almost always beats a busy, overstretched one.
 
+This entire guide is built into SymBot. Click the **?** Help button in the top bar, or press the `/` key, to open it and search it without leaving the app.
+
 
 ## Table of Contents
 
@@ -75,6 +77,7 @@ Second, patience is key. DCA trading rewards discipline over urgency. Deals can 
 - [Access Control (Users, API Keys & Audit)](#access-control-users-api-keys--audit)
   - [API keys](#api-keys)
   - [Users](#users)
+  - [Sessions](#sessions)
   - [Audit log](#audit-log)
   - [Watchdog](#watchdog)
 - [API Information](#api-information)
@@ -183,7 +186,7 @@ Mongo Express is also installed as an optional visual admin UI for MongoDB, reac
 
 ### Data persistence and upgrades
 
-SymBot's state is stored in named Docker volumes rather than inside the container image, so it survives container restarts and upgrades. The bundled MongoDB keeps its data in the `mongo-data` volume, and the SymBot container persists your configuration (`config/`, including your encrypted secrets and this instance's identity), the Hub database and runtime state (`data/`), your System backups (`backups/`), uploads, logs, and rollback snapshots. Only the application code is replaced when the image is rebuilt.
+SymBot's state is stored in named Docker volumes rather than inside the container image, so it survives container restarts and upgrades. The bundled MongoDB keeps its data in the `mongo-data` volume, and the SymBot container persists your configuration (`config/`, including your encrypted secrets and this instance's identity), the Hub database and runtime state (`data/`), your System backups (`backups/`), uploads, logs, rollback snapshots, and your login sessions (`sessions/`, which holds the session secret — persisting it means a rebuild doesn't sign a new secret and log everyone out). Only the application code is replaced when the image is rebuilt.
 
 To upgrade a Docker install, update the SymBot files (for example with `git pull`) and rebuild from the `docker` directory:
 
@@ -1628,11 +1631,12 @@ Not every task needs AI, and the list makes that explicit with a badge on each t
 - **no AI** — a plain deterministic check that runs with no AI provider at all.
 - **AI optional** — runs without AI, but offers an Enhance with AI checkbox that adds a short AI-written summary over the same result when a provider is available.
 
-Three recipes ship today, all read-only and needing no AI:
+Four recipes ship today, all read-only and needing no AI:
 
 - **Error sentinel** — scans the logs on a schedule and alerts you only when an error type is *new* or *spiking* versus the previous days; silent when everything is normal.
 - **Drawdown sentinel** — alerts you when an open deal is underwater past a threshold or its safety-order ladder is nearly exhausted; quiet when everything is healthy. This one is AI-optional — tick *Enhance with AI* to append a short written summary.
-- **Resource sentinel** — samples the host machine's disk, memory and CPU on a schedule and alerts you only when one crosses a warning threshold (running low on disk, near out of memory, or CPU-saturated); quiet when everything is healthy. It uses only built-in system stats — nothing extra to install — and works on Linux, macOS and Windows. Memory alerts use true *available* memory on Linux and Windows; macOS does not expose that to a pure check, so there the memory figure is shown but not alerted on. Because it reads the host, in a Hub (several instances on one machine) enabling it on a single instance covers them all.
+- **Resource sentinel** — samples the host machine's disk, memory and CPU, plus the instance's event-loop responsiveness, on a schedule and alerts you only when one crosses a warning threshold (running low on disk, near out of memory, CPU-saturated, or the event loop blocked); quiet when everything is healthy. It uses only built-in system stats — nothing extra to install — and works on Linux, macOS and Windows. Memory alerts use true *available* memory on Linux and Windows; macOS does not expose that to a pure check, so there the memory figure is shown but not alerted on. The event-loop check measures how long the loop was kept waiting, so it catches a stray synchronous call before it can slip the trading loop's timing. Disk, memory and CPU read the host, so in a Hub (several instances on one machine) enabling the sentinel on a single instance covers the host for those; the event-loop check is specific to the instance it runs on, so enable it on each instance you want watched.
+- **Performance report** — sends a scheduled summary of your realized trading performance over a look-back window (default the last 24 hours): deals closed, realized profit, win rate, average result, average duration, and your best and worst deal, followed by a snapshot of your current open positions. Unlike the sentinels it is a digest, not an alert, so it arrives on every run; set *skip when empty* if you would rather it stay quiet on a period where nothing closed. It reads only your closed-deal history and cached figures — no exchange calls on the schedule — so it can never slow the trading loop. Each instance reports its own performance, titled with the instance name, so in a Hub you can tell them apart.
 
 A recipe is just declarative data (a task type plus settings, carrying no account values), so the shipped set can grow over time; a newer version of a recipe never overwrites a task you have already added.
 
@@ -1650,7 +1654,7 @@ Behavior and safeguards:
 - **Survives restarts.** Enabled tasks are re-armed automatically when SymBot boots, so you set them once. You can enable, disable or delete any task from the list at any time.
 - **Prompts are capped** at 2000 characters, and a *Once* schedule can be set at most 60 days into the future.
 
-**One place for scheduled tasks.** Every timed job runs through the same scheduling system: AI analysis tasks, the error-watchdog, drawdown-sentinel and resource-sentinel recipes (which run without AI), and the system backup. Each task is either a one-time run at a chosen moment or a recurring job on a cron expression, and every kind of task shares the same run history, notifications, and reliability behavior described below.
+**One place for scheduled tasks.** Every timed job runs through the same scheduling system: AI analysis tasks, the error-watchdog, drawdown-sentinel, resource-sentinel and performance-report recipes (which run without AI), and the system backup. Each task is either a one-time run at a chosen moment or a recurring job on a cron expression, and every kind of task shares the same run history, notifications, and reliability behavior described below.
 
 **Notifications.** Every scheduled task can tell you when it runs, and all tasks share the same delivery. A notification target is a channel, who to send to, and when to fire — a target can reach one destination or many (several Telegram chats or several email recipients at once), and you choose the conditions: on success, on failure, always, or when a run is missed (a one-time task whose scheduled moment passed while the instance was down and whose catch-up policy is set to skip). The four channels each deliver a little differently:
 
@@ -1761,12 +1765,21 @@ capabilities and is enforced the same way as an API key.
 
 The single operator remains the implicit owner until you add anyone — so nothing changes for a solo setup. Safeguards prevent locking yourself out: the initial owner can't be demoted or disabled, and you can never remove the last active owner. If you ever do lock yourself out, the console recovery commands (`npm start reset password` / `reset users`) restore access — see [Reset or Configure SymBot](#reset-or-configure-symbot).
 
+### Sessions
+
+See every device currently signed in under **Access Control → Sessions**, and end any of them. Each row shows the device (browser and operating system), the source IP, when it signed in, and when it was last active, with your current session marked. The source IP and device are kept **current** — if a session moves networks (a phone switching from Wi-Fi to mobile data) or the browser updates, the row reflects the new value on that session's next request — and **Last active** advances automatically as the session is used. A **Refresh** button re-reads the list in place so you can watch a change appear without leaving the tab. There are two actions:
+
+- **Revoke** ends one session immediately — that device is signed out and must log in again. Useful if you left yourself logged in on a shared or public computer, or notice a session you don't recognize.
+- **Sign out everywhere else** ends every session except the one you're using — a one-click "log out my other devices" after a password change or a lost laptop.
+
+This works identically on a single instance and on the Hub. It reads directly from SymBot's session store, so a revoked session stops working on its very next request — there is nothing to wait for or expire. Every valid sign-in stays on the list for as long as it can be used: a session you keep active never drops off, no matter how long ago it signed in. A session that was already signed in before this view existed is filled in automatically the next time it's used — its device and IP are recorded from that request, though its **Signed in** time shows as “—” because the original login time wasn't captured for it. Both viewing the list and ending a session require the `user.manage` capability, so the page is available to an admin or the owner — the list shows each device's source IP, which a read-only viewer shouldn't see.
+
 ### Audit log
 
 Security-relevant actions are recorded with who, what, when, and from where — viewable and filterable under **Access Control → Audit Log**. What is captured:
 
 - **Authentication** — login, logout, failed login, and IP-blocked or IP-denied attempts.
-- **Access-control changes** — minting, revoking, or re-scoping an API key; creating a user or changing a role or status.
+- **Access-control changes** — minting, revoking, or re-scoping an API key; creating a user or changing a role or status; ending a login session (one, or all others).
 - **Configuration changes** — settings saved, and (separately) a password change.
 - **High-impact operations** — a system backup or restore, a system update or rollback, and, on the Hub, adding, starting, removing, or updating an instance.
 - **Permission denials** — a key or user hitting a route it isn't granted.
@@ -3095,7 +3108,7 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 	3.  Change your `web_server` port to any unused server port such as 3001
 
 - Additional things to consider:
-	- If you are using Telegram for notifications you will likely need to create a new bot since Telegram only allows one connection per account
+	- If you are using Telegram, multiple instances can share one bot token for notifications — sending never conflicts. Telegram only allows a single command connection per bot, though, so if more than one instance needs to respond to interactive commands, create a separate bot for each; for alerts alone, one shared bot is fine
 	- If you are using pm2 or some other process manager, be sure to add the new SymBot instance there
 	- If you are using the same exchange / account credentials this will impact any rate limiting, connections, etc. the exchange imposes for all SymBot instances
 

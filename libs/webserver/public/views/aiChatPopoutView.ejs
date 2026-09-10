@@ -29,7 +29,7 @@
 	%>
 	<base href="<%= basePath %>">
 
-	<link rel="stylesheet" href="css/style.css" />
+	<link rel="stylesheet" href="css/style.css?v=<%- appData.version %>" />
 	<link rel="stylesheet" href="css/vendor/jquery-confirm/jquery-confirm.min.css" />
 	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 </head>
@@ -228,7 +228,7 @@
 			}
 
 			messageBuffer += content;
-			$currentMessageElement.html(DOMPurify.sanitize(marked.parse(messageBuffer, { breaks: true })));
+			$currentMessageElement.html(SymBot.UI.renderMarkdown(messageBuffer));
 
 			scrollToBottom();
 		}
@@ -256,7 +256,7 @@
 				else if (msg.role === 'assistant') {
 
 					const $msg = $('<div>', { class: 'message bot-message' });
-					$msg.html(DOMPurify.sanitize(marked.parse(msg.content, { breaks: true })));
+					$msg.html(SymBot.UI.renderMarkdown(msg.content));
 					$chatBox.append($msg);
 				}
 			});

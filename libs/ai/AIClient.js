@@ -1113,6 +1113,28 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 			if (anaphoraDeal) { dealReportId = anaphoraDeal; isDealReport = true; }
 		}
 
+		// A deal-id-SHAPED token the STRICT detector rejects — a real SymBot deal id always ends in a 6+ digit
+		// epoch, so a shorter-epoch shape like "XYZ_USD-1234567-8901" can NEVER be in the data (firstDealId was
+		// already null above, so any loose match here is provably non-real). Left to the tool loop, the weak
+		// model spends ~30s only to refuse and then appends an uncertainty caveat to that refusal. Answer with
+		// the deterministic "not found" message instead — instant, correct, and no misplaced caveat. Actions
+		// ("close deal <id>") keep their own path.
+		if (!dealReportId && !aiGuardrails.looksLikeActionRequest(message.content)) {
+
+			const looseId = aiGuardrails.firstLooseDealId(message.content);
+
+			if (looseId) {
+
+				const answer = finalizeAnswer(dealNotFoundMessage(looseId), '{}', message.content, knownEntitiesText(roomData.recentEntities), { trusted: true });
+				roomData.messages.push({ role: 'assistant', content: answer, timestamp: Date.now() });
+				conversationHistory.set(room, roomData);
+				shareData.Common.logger('AI deal-id fail-closed: no deal ' + looseId + ' [' + (room || '?') + ']');
+
+				if (stream) { await streamReplay({ room, text: answer, footer, abortSignal, onActivity }); return undefined; }
+				return answer;
+			}
+		}
+
 		// A PAIR-named single-deal request ("tell me about my A8/USD deal", "how's my AAVE deal doing?") carries
 		// a PAIR (or bare base), not an id — so firstDealId is null and it would fall to the model loop, where a
 		// weak model has been seen to FABRICATE the deal's average price and config (observed: an average of
@@ -1269,7 +1291,7 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 		// Whether the conversation is already ON the user's deals/portfolio, so a bare follow-up resolves in
 		// that context. Computed once and reused by the continuation and the ranking branches below.
 		const dealsCtx = recentTopicIsDealsPortfolio(roomData);
-		if (aiGuardrails.looksLikeContinuation(message.content) && dealsCtx) { dealsView = 'breakdown'; }
+		if ((aiGuardrails.looksLikeContinuation(message.content) && dealsCtx) || looksLikeDealsDetailRequest(message.content)) { dealsView = 'breakdown'; }
 		else if (looksLikeDealsStatusQuestion(message.content) || openDealsCountIntent(message.content) || portfolioPnlIntent(message.content)) { dealsView = 'summary'; }
 		else if ((quantSpec = dealsQuantifierIntent(message.content))) { dealsView = 'quantifier'; }
 		// A superlative follow-up ("which is the worst?", "and the best one?") carries no deal noun of its own,
@@ -2802,6 +2824,33 @@ function looksLikeDealsStatusQuestion(text) {
 		|| /\bare\s+(?:my|the|our)\s+(?:open\s+|active\s+)?(?:deals?|positions?)\s+(?:ok|okay|doing|alright|fine|good|bad|healthy)\b/i.test(s);
 }
 
+
+// An explicit request for the DETAILED view of the user's own deals — "tell me more about my deals",
+// "break down my deals", "more detail on my positions", "give me a full breakdown of my portfolio". The
+// bare-continuation matcher (looksLikeContinuation) misses these because they NAME the deals object
+// outright ("… about my deals") rather than being a context-free "tell me more", and its CONTINUATION_RE
+// only allows "the deals", not "my deals". Left to the model loop, a weak local model dumps the raw tool
+// JSON (which the egress guardrails then shred into "the data") or invents a distribution. Route it to the
+// deterministic breakdown render instead — grounded by construction, no model. Requires BOTH a detail
+// phrase AND a deals/positions/portfolio object, and excludes rankings/superlatives (dealRankingIntent's
+// job) and how-to/definitional questions, so ordinary questions are never captured.
+function looksLikeDealsDetailRequest(text) {
+	const s = String(text || '').trim();
+	if (!s || s.split(/\s+/).length > 10) { return false; }
+	if (aiGuardrails.containsDealId(s)) { return false; }
+	if (aiGuardrails.looksLikeHowTo(s) || aiGuardrails.looksLikeDefinitional(s)) { return false; }
+	if (/\b(biggest|worst|best|most|least|closest|furthest|nearest|top|highest|lowest|winning|losing|which|how many)\b/i.test(s)) { return false; }
+
+	const DETAIL = '(?:tell me (?:more|about)|more (?:detail|details|info|information)|break\\s*down|breakdown|expand|elaborate'
+		+ '|(?:full|complete|detailed) (?:breakdown|rundown|overview|detail|details)'
+		+ '|give me (?:a |the |more )?(?:full |detailed |complete )?(?:breakdown|rundown|overview|detail|details)'
+		+ '|details? (?:on|about|of)|rundown)';
+	const OBJ = '(?:my|the|our)\\s+(?:open\\s+|active\\s+)?(?:deals?|positions?|trades?|portfolio|bags)';
+
+	return new RegExp('\\b' + DETAIL + '\\b[^.\\n]{0,20}?\\b' + OBJ + '\\b', 'i').test(s)
+		|| new RegExp('\\b' + OBJ + '\\b[^.\\n]{0,20}?\\b(?:in (?:more |further )?detail|broken down|breakdown|rundown|detailed)\\b', 'i').test(s);
+}
+
 // Deterministic bot count from the real list_bots data — the authoritative total, how many are active, and
 // their names (capped). Never invents. Returns null when the data is unavailable.
 function formatBotsCount(res) {
@@ -3793,6 +3842,12 @@ function buildDealFacts(res) {
 	return L.join('\n');
 }
 
+// The deterministic "no such deal" answer, shared by the deal-report path and the bogus-explicit-id
+// fast-path so both phrase it identically.
+function dealNotFoundMessage(dealId) {
+	return "I couldn't find a deal with id " + dealId + " in your SymBot data. Double-check the id, or ask me to list your open or recent deals.";
+}
+
 // Fetch a deal deterministically and produce its report. Returns the answer string, or null to signal
 // the caller to fall through to the normal tool loop. A missing deal returns a clean "not found" string
 // (a handled answer, NOT null) so a bogus id can never become a hallucinated analysis.
@@ -3805,7 +3860,7 @@ async function answerDealReport({ dealId, roomData, model, question, timezone, n
 	if (!res || res.error) { return null; }
 
 	if (!res.found || !res.deal) {
-		return "I couldn't find a deal with id " + dealId + " in your SymBot data. Double-check the id, or ask me to list your open or recent deals.";
+		return dealNotFoundMessage(dealId);
 	}
 
 	const facts = buildDealFacts(res);

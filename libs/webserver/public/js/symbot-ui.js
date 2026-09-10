@@ -480,6 +480,13 @@ SymBot.UI = {
 
 		const api = {};
 
+		// A hidden (backgrounded) tab should do no polling: refreshes the user cannot see only waste
+		// bandwidth, CPU and battery, and would pile up on return. While hidden the timer keeps ticking
+		// cheaply and simply reschedules; the moment the tab is shown again the view refreshes once right
+		// away (see the visibilitychange handler below) so the data is current when the user looks, never up
+		// to a full interval stale. This lives in the one shared timer, so every auto-refreshing view gets it.
+		function backgrounded() { return (typeof document !== 'undefined') && document.hidden === true; }
+
 		api.stop = function() { if (timerId) { clearTimeout(timerId); timerId = null; } };
 
 		api.schedule = function() {
@@ -492,12 +499,27 @@ SymBot.UI = {
 
 				timerId = setTimeout(function() {
 
-					if (shouldDefer()) { api.schedule(); }
+					if (shouldDefer() || backgrounded()) { api.schedule(); }
 					else { cfg.onReload(); }
 
 				}, ms);
 			}
 		};
+
+		// Refresh right away when the tab returns to the foreground — but only while a refresh cycle is active
+		// (timerId set) and nothing else asks to defer (an open dialog, an in-progress entry). onReload re-arms
+		// the cycle itself, so the pending timer is stopped first to avoid two timers running at once.
+		if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+
+			document.addEventListener('visibilitychange', function() {
+
+				if (!document.hidden && timerId && !shouldDefer()) {
+
+					api.stop();
+					cfg.onReload();
+				}
+			});
+		}
 
 		api.initSelector = function() {
 
@@ -631,11 +653,75 @@ SymBot.UI = {
 	},
 
 	// HTML-escape for building markup from data. (Shared — was duplicated per view.)
-	esc: function(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); },
+	// The single HTML escaper for the client. Escapes &, <, >, " and ' so the result is safe as element
+	// text and inside both double- and single-quoted attribute values. Exposed under two names — esc (short)
+	// and escapeXML (the term the server side uses for the same job) — both pointing at this one definition,
+	// so no caller hand-rolls its own copy and the behavior can never drift between them.
+	esc: function(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); },
+	escapeXML: function(s) { return SymBot.UI.esc(s); },
 
 	// Build the /api/tradingview widget URL for a pair, mapping ccxt exchange ids to TradingView's names.
 	// Single source of truth shared by showTradingView (the modal widget) and the deal chart's
 	// TradingView tab, so the exchange mapping isn't duplicated.
+	// Render assistant / markdown text to safe HTML for insertion with .html(). ONE shared definition so
+	// every chat surface (the main view and the popout) renders identically and is hardened in a single
+	// place. marked turns the markdown into HTML; DOMPurify then removes anything unsafe. Beyond DOMPurify's
+	// defaults — which already drop scripts and reject javascript:/other unsafe link schemes — this forbids
+	// images and other external-resource tags plus inline styles, so untrusted text that reaches an answer
+	// (for example an exchange-supplied string echoed back) can never smuggle in a tracking pixel or CSS
+	// that phones home. Safe formatting (lists, tables, code, emphasis) and safe links are kept. Requires
+	// marked + DOMPurify on the page (present on every chat surface); if DOMPurify were somehow absent it
+	// falls back to plain escaped text rather than ever returning unsanitized HTML.
+	renderMarkdown: function(text, opts) {
+
+		var raw = String(text == null ? '' : text);
+
+		if (typeof DOMPurify === 'undefined') { return SymBot.UI.esc(raw); }
+
+		// breaks:true (default) suits chat, where a single newline is a deliberate line break. A caller rendering
+		// a whole DOCUMENT (the in-app guide) passes { breaks: false } for standard markdown paragraph handling,
+		// so prose that wraps across source lines is not littered with <br>. Wrapped defensively: any parser or
+		// sanitizer error falls back to plain escaped text so content is never silently dropped for a stray doc.
+		var useBreaks = !(opts && opts.breaks === false);
+
+		try {
+
+			var html = (typeof marked !== 'undefined') ? marked.parse(raw, { breaks: useBreaks }) : raw;
+
+			return DOMPurify.sanitize(html, {
+				USE_PROFILES: { html: true },
+				FORBID_TAGS: [ 'img', 'svg', 'math', 'video', 'audio', 'source', 'picture', 'iframe', 'style' ],
+				FORBID_ATTR: [ 'style', 'background', 'srcset' ]
+			});
+		}
+		catch (e) {
+
+			return '<pre>' + SymBot.UI.esc(raw) + '</pre>';
+		}
+	},
+
+	// ── In-app guide (Help panel) shared helpers — pure and DOM-free, so they are unit-tested in Node while the
+	// DOM glue stays in the Help module below. ──
+	// GitHub-compatible heading slugger. A doc's Table-of-Contents links target GitHub-style ids, so these MUST
+	// match GitHub exactly or a link silently fails to jump. Returns a NEW slugger each call (its de-dupe counters
+	// reset per render). Rules: lowercase; strip punctuation (keep word chars, whitespace, hyphens); replace EACH
+	// whitespace character with a hyphen (never collapsing runs, so a removed symbol like "&" that leaves two
+	// spaces yields GitHub's double hyphen, e.g. "Keys & Audit" → "keys--audit"); de-duplicate repeated headings
+	// with -1, -2, … (the first keeps the bare slug), so a doc with several same-named sections still gets unique ids.
+	helpSlugger: function() {
+		var counts = Object.create(null);
+		return function(t) {
+			var base = String(t == null ? '' : t).trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s/g, '-');
+			if (base in counts) { counts[base] += 1; return base + '-' + counts[base]; }
+			counts[base] = 0; return base;
+		};
+	},
+
+	// Regex-safe search-pattern SOURCE for a chunk of query text, treating any run of spaces/hyphens as
+	// interchangeable so "take profit" also matches "take-profit" and vice versa. Escapes regex metacharacters so
+	// a query like "c++" or "a|b" is matched literally rather than throwing. Compile with the flags you need.
+	helpFlexPattern: function(s) { return String(s == null ? '' : s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[-\s]+/g, '[\\s\\-]+'); },
+
 	tradingViewUrl: function(pair, exchange, jquery, script) {
 		var map = { 'coinbasepro': 'COINBASE', 'coinbaseexchange': 'COINBASE', 'coinbaseinternational': 'COINBASE',
 		            'binanceus': 'BINANCEUS', 'gate': 'GATEIO', 'myokx': 'OKX' };
@@ -663,3 +749,273 @@ SymBot.UI = {
 };
 
 window.SymBot = SymBot;
+
+
+// ── In-app Help: the shipped README rendered in a searchable panel ──────────────────────────────────
+// The guide is the SAME docs/README.md the project ships (served at ./readme.md, resolved per-context so it
+// works on both a standalone instance and inside the Hub), rendered client-side by the shared, hardened
+// SymBot.UI.renderMarkdown so it can never drift from the docs and needs no server round-trip to search. A
+// simple client-side find highlights matches, jumps between them, and offers a "Jump to:" bar of the sections
+// a term appears in. It is entirely read-only and off the trading path. Opened via the header Help button or by
+// pressing "/". Handlers are delegated on document so they survive the modal re-injecting its content each open.
+(function () {
+
+	if (typeof document === 'undefined') { return; }
+
+	var loaded = false, baseHTML = '', hits = [], hitIdx = -1;
+
+	// The pure helpers live on SymBot.UI (so they are unit-tested in Node); alias them locally for brevity.
+	// makeSlugger(): a GitHub-compatible heading slugger, deduped per render, so a doc's own Table-of-Contents
+	// links and in-doc anchors resolve inside the panel. flexPattern(): a space/hyphen-flexible, regex-safe
+	// search-pattern source. See the definitions in SymBot.UI for the exact rules.
+	var makeSlugger = SymBot.UI.helpSlugger;
+
+	function esc(s) { return SymBot.UI.esc(s); }
+
+	function shell() {
+		return '' +
+			'<div class="help-sticky">' +
+				'<div class="help-search-row">' +
+					'<span class="help-search-ic"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>' +
+					'<input type="search" id="helpSearch" placeholder="Search the guide\u2026" autocomplete="off" spellcheck="false" aria-label="Search the guide">' +
+					'<span id="helpSearchCount" class="help-search-count" aria-live="polite"></span>' +
+					'<button type="button" id="helpPrev" class="help-nav-btn" title="Previous match (Shift+Enter)" aria-label="Previous match" hidden>\u25B2</button>' +
+					'<button type="button" id="helpNext" class="help-nav-btn" title="Next match (Enter)" aria-label="Next match" hidden>\u25BC</button>' +
+				'</div>' +
+				'<div id="helpMatches" class="help-matches" aria-label="Sections with matches" hidden></div>' +
+			'</div>' +
+			'<div id="helpBody" class="help-body"><p class="muted">Loading\u2026</p></div>';
+	}
+
+	// Focus the search box without letting the browser scroll the panel to reach it (preventScroll),
+	// so opening Help or pressing "/" never jumps the reader away from where they are.
+	function focusSearch() { setTimeout(function () { var s = document.getElementById('helpSearch'); if (s) { try { s.focus({ preventScroll: true }); } catch (e) { s.focus(); } s.select(); } }, 60); }
+
+	// Scroll the guide back to the top (the modal body is the scroll container). Called when the guide
+	// is (re)opened so it always starts at the beginning, never wherever a previous view left it.
+	function scrollTop() { var m = document.getElementById('helpModal'); if (m) { m.scrollTop = 0; } }
+
+	// Scroll a target element (e.g. the heading a TOC link points at) to just BELOW the sticky search/chips
+	// header, so it is never hidden underneath it. The sticky header's height is measured live, so this stays
+	// correct whether or not the section chips are showing. The modal body (#helpModal) is the scroll container.
+	function scrollToEl(el, center) {
+		var modal = document.getElementById('helpModal');
+		if (!modal || !el) { return; }
+		var sticky = modal.querySelector('.help-sticky');
+		var stickyH = sticky ? sticky.offsetHeight : 0;
+		var elTop = (el.getBoundingClientRect().top - modal.getBoundingClientRect().top) + modal.scrollTop;
+		var top;
+		if (center) {
+			// Center the element within the area visible BELOW the sticky header (used for search hits).
+			var visible = modal.clientHeight - stickyH;
+			top = elTop - stickyH - Math.max(0, (visible - el.offsetHeight) / 2);
+		}
+		else {
+			top = elTop - stickyH - 8; // land just below the sticky header (used for TOC / anchor links)
+		}
+		// Jump instantly rather than smooth-scrolling: the guide can be very tall, and a smooth scroll across
+		// that distance is slow and janky. Instant is immediate and always lands clear of the sticky header.
+		modal.scrollTop = Math.max(0, top);
+	}
+
+	function resetSearch() {
+		var count = document.getElementById('helpSearchCount'); if (count) { count.textContent = ''; }
+		var prev = document.getElementById('helpPrev'), next = document.getElementById('helpNext');
+		if (prev) { prev.hidden = true; } if (next) { next.hidden = true; }
+		var m = document.getElementById('helpMatches'); if (m) { m.hidden = true; m.innerHTML = ''; }
+		hits = []; hitIdx = -1;
+	}
+
+	function isHelpOpen() {
+		var body = document.getElementById('helpBody');
+		if (!body || typeof jQuery === 'undefined') { return false; }
+		var dlg = jQuery(body).closest('.ui-dialog');
+		return dlg.length > 0 && dlg.is(':visible');
+	}
+
+	// Help is available only where the header renders its button — i.e. authenticated pages, not the
+	// pre-auth login screen (where ./readme.md is gated and would fail to load anyway).
+	function helpAvailable() { return !!document.getElementById('helpBtn'); }
+
+	function openHelp() {
+
+		if (typeof openModal !== 'function' || !helpAvailable()) { return; }
+
+		// Reuse the app's standard modal. Content is (re)injected on open, so populate #helpBody afterward.
+		openModal('helpView', '#helpModal', 'Guide', shell());
+
+		var body = document.getElementById('helpBody');
+		if (!body) { return; }
+
+		if (loaded) { body.innerHTML = baseHTML; resetSearch(); scrollTop(); focusSearch(); return; }
+
+		fetch('./readme.md', { cache: 'no-store' })
+			.then(function (r) {
+				// A non-OK response is an error payload, NOT the guide — e.g. the 503 the server returns while a
+				// database backup is running. Never render that as markdown; throw so the catch shows a note.
+				if (!r.ok) { throw new Error('guide unavailable (' + r.status + ')'); }
+				return r.text();
+			})
+			.then(function (md) {
+				var host = document.getElementById('helpBody');
+				if (!host) { return; }
+				host.innerHTML = SymBot.UI.renderMarkdown(md, { breaks: false });
+				// marked does not add heading ids; add GitHub-compatible ones (deduped in document order) so the
+				// doc's own in-doc TOC links and anchors jump to the right heading.
+				var slugger = makeSlugger();
+				host.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function (h) { if (!h.id) { h.id = slugger(h.textContent); } });
+				baseHTML = host.innerHTML; // cache with ids in place
+				loaded = true;
+				scrollTop();
+				focusSearch();
+			})
+			.catch(function () {
+				var host = document.getElementById('helpBody');
+				// Leave loaded=false so simply reopening Help retries (e.g. once a backup finishes).
+				if (host) { host.innerHTML = '<p class="muted">The guide is temporarily unavailable — the system may be finishing a backup. Please try again in a moment.</p>'; }
+			});
+	}
+
+	SymBot.UI.openHelp = openHelp;
+
+	function jump(i) {
+		if (!hits.length) { return; }
+		if (hitIdx >= 0 && hits[hitIdx]) { hits[hitIdx].classList.remove('help-hit-active'); }
+		hitIdx = (i + hits.length) % hits.length;
+		hits[hitIdx].classList.add('help-hit-active');
+		scrollToEl(hits[hitIdx], true);
+		var count = document.getElementById('helpSearchCount'); if (count) { count.textContent = (hitIdx + 1) + ' / ' + hits.length; }
+	}
+
+	// The Table of Contents repeats every section title, so a topic search would otherwise match and cycle its
+	// index entry before the real content. Locate the TOC list (the list right after a "Table of Contents"
+	// heading, if the doc has one) so matching can skip it. Returns null when the doc has no such section.
+	function tocListEl(body) {
+		var heads = [].slice.call(body.querySelectorAll('h1,h2,h3,h4'));
+		for (var i = 0; i < heads.length; i++) { if (/^table of contents$/i.test(heads[i].textContent.trim())) { return heads[i].nextElementSibling; } }
+		return null;
+	}
+
+	// Highlight every match of rx (a /g regex) in the guide body, skipping the Table of Contents, and return the
+	// created <mark> elements in document order. Each text node is split once, so highlighting never re-scans a
+	// mark it just created. rx.lastIndex is reset per node because a /g regex otherwise carries its position from
+	// one node to the next and silently drops later matches.
+	function highlightAll(body, rx) {
+		var tocList = tocListEl(body);
+		var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null);
+		var nodes = [], n;
+		while ((n = walker.nextNode())) {
+			if (tocList && tocList.contains(n)) { continue; }
+			if (!n.nodeValue) { continue; }
+			rx.lastIndex = 0;
+			if (rx.test(n.nodeValue)) { nodes.push(n); }
+		}
+		var out = [];
+		nodes.forEach(function (node) {
+			rx.lastIndex = 0; var s = node.nodeValue, frag = document.createDocumentFragment(), last = 0, m;
+			while ((m = rx.exec(s))) {
+				if (m.index > last) { frag.appendChild(document.createTextNode(s.slice(last, m.index))); }
+				var mark = document.createElement('mark'); mark.textContent = m[0]; frag.appendChild(mark); out.push(mark);
+				last = m.index + m[0].length; if (m.index === rx.lastIndex) { rx.lastIndex++; }
+			}
+			if (last < s.length) { frag.appendChild(document.createTextNode(s.slice(last))); }
+			node.parentNode.replaceChild(frag, node);
+		});
+		return out;
+	}
+
+	// Group matches by the section (nearest preceding heading) they fall in, then show a "Jump to:" bar of those
+	// sections RANKED by how many matches each holds (most first) with a per-section count — so a search shows
+	// WHERE a topic is covered and one click jumps to the section that covers it most, not merely the first
+	// passing mention. Returns the ranked list so the caller can land on the best section.
+	function renderSections() {
+		var bar = document.getElementById('helpMatches');
+		var body = document.getElementById('helpBody');
+		if (!bar || !body) { return []; }
+		var heads = [].slice.call(body.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+		var sections = [], byHead = [], hi = 0;
+		hits.forEach(function (mark, idx) {
+			while (hi + 1 < heads.length && (heads[hi + 1].compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING)) { hi++; }
+			var head = heads[hi];
+			if (!head || !(head.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING)) { return; } // hit before the first heading
+			var pos = byHead.indexOf(head);
+			if (pos === -1) { byHead.push(head); sections.push({ name: head.textContent, firstIdx: idx, count: 1 }); }
+			else { sections[pos].count++; }
+		});
+		// Rank by match count (desc); ties keep document order (Array.prototype.sort is stable).
+		var ranked = sections.slice().sort(function (a, b) { return b.count - a.count; });
+		bar.innerHTML = ranked.map(function (c) {
+			return '<button type="button" class="help-chip" data-hit="' + c.firstIdx + '" title="' + esc(c.name) + ' \u2014 ' + c.count + ' match' + (c.count === 1 ? '' : 'es') + '">' + esc(c.name) + ' <span class="help-chip-n">' + c.count + '</span></button>';
+		}).join('');
+		bar.hidden = ranked.length === 0;
+		return ranked;
+	}
+
+	var flexPattern = SymBot.UI.helpFlexPattern;
+
+	function search(q) {
+		var body = document.getElementById('helpBody'); if (!loaded || !body) { return; }
+		body.innerHTML = baseHTML; hits = []; hitIdx = -1; // clear any prior marks
+		var count = document.getElementById('helpSearchCount');
+		var prev = document.getElementById('helpPrev'), next = document.getElementById('helpNext');
+		var showNav = function (on) { if (prev) { prev.hidden = !on; } if (next) { next.hidden = !on; } };
+		var clearChips = function () { var b = document.getElementById('helpMatches'); if (b) { b.hidden = true; b.innerHTML = ''; } };
+		var query = String(q || '').trim();
+		if (!query) { if (count) { count.textContent = ''; } showNav(false); clearChips(); return; }
+
+		// First try the query as an exact phrase (contiguous) — the most precise result.
+		var rx; try { rx = new RegExp(flexPattern(query), 'gi'); } catch (e) { if (count) { count.textContent = ''; } showNav(false); clearChips(); return; }
+		hits = highlightAll(body, rx);
+
+		// If the exact phrase matched nothing but the query is multiple words, fall back to matching ANY of the
+		// words, so a near-miss (different word order, an extra word, a typo in one word) still surfaces the
+		// relevant sections rather than showing nothing.
+		if (!hits.length && /\s/.test(query)) {
+			body.innerHTML = baseHTML;
+			var terms = query.split(/\s+/).filter(Boolean).map(flexPattern);
+			try { rx = new RegExp(terms.join('|'), 'gi'); hits = highlightAll(body, rx); } catch (e) { hits = []; }
+		}
+
+		showNav(hits.length > 0);
+		if (!hits.length) { if (count) { count.textContent = 'no matches'; } clearChips(); return; }
+		var ranked = renderSections();
+		// Land on the most-relevant section's first match, so the reader jumps straight to where the topic is
+		// covered most rather than the first incidental mention earlier in the guide.
+		jump(ranked.length ? ranked[0].firstIdx : 0);
+	}
+
+	// ── Delegated wiring (bound once; survives the modal re-injecting its content) ──
+	document.addEventListener('click', function (e) {
+		var t = e.target;
+		if (t.closest && t.closest('#helpBtn')) { e.preventDefault(); openHelp(); return; }
+		var prev = t.closest && t.closest('#helpPrev'); if (prev) { jump(hitIdx - 1); return; }
+		var next = t.closest && t.closest('#helpNext'); if (next) { jump(hitIdx + 1); return; }
+		var chip = t.closest && t.closest('#helpMatches [data-hit]'); if (chip) { jump(parseInt(chip.getAttribute('data-hit'), 10)); return; }
+		// Keep a TOC / anchor click scrolling WITHIN the panel instead of navigating the page URL.
+		var a = t.closest && t.closest('#helpBody a[href^="#"]');
+		if (a) {
+			var id = decodeURIComponent(a.getAttribute('href').slice(1));
+			var body = document.getElementById('helpBody');
+			var target = id && document.getElementById(id);
+			if (body && target && body.contains(target)) { e.preventDefault(); scrollToEl(target); }
+		}
+	});
+
+	var searchTimer = null;
+	document.addEventListener('input', function (e) {
+		if (!e.target || e.target.id !== 'helpSearch') { return; }
+		clearTimeout(searchTimer); var v = e.target.value; searchTimer = setTimeout(function () { search(v); }, 140);
+	});
+	document.addEventListener('keydown', function (e) {
+		if (e.target && e.target.id === 'helpSearch' && e.key === 'Enter') { e.preventDefault(); if (hits.length) { jump(hitIdx + (e.shiftKey ? -1 : 1)); } return; }
+		// Press "/" (when not typing in a field) to open Help and start searching — the common docs shortcut.
+		if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || !helpAvailable()) { return; }
+		var el = document.activeElement, tag = el && el.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el && el.isContentEditable)) { return; }
+		if (isHelpOpen()) { e.preventDefault(); focusSearch(); return; }
+		// If some OTHER modal is open, leave "/" to normal typing rather than stealing it.
+		if (typeof jQuery !== 'undefined' && jQuery('.ui-dialog:visible').length > 0) { return; }
+		e.preventDefault(); openHelp();
+	});
+
+})();
