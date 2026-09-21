@@ -2109,12 +2109,12 @@ function resolveDataFilePath(type, fileName, isHub, serverId) {
 		if (serverId) {
 			const sid = String(serverId);
 			if (sid !== path.basename(sid) || sid === '.' || sid === '..') { return null; }   // traversal guard (server_id)
-			const p = pathRoot + '/data/instances/' + sid + '/' + type + '/' + fileName;
+			const p = path.join(pathRoot, 'data', 'instances', sid, type, fileName);
 			try { if (fs.lstatSync(p).isFile()) { return p; } } catch (e) {}   // lstat: a symlink is not a regular file → refused
 			return null;
 		}
-		for (const dir of instanceDataDirsAll(type).concat([ pathRoot + '/' + type ])) {
-			const p = dir + '/' + fileName;
+		for (const dir of instanceDataDirsAll(type).concat([ path.join(pathRoot, type) ])) {
+			const p = path.join(dir, fileName);
 			try { if (fs.lstatSync(p).isFile()) { return p; } } catch (e) {}
 		}
 		return null;

@@ -70,10 +70,20 @@ function SqliteDriver(opts) {
 		// Durability + concurrency pragmas. WAL: readers don't block the writer and a crash is
 		// recoverable. FULL: fsync on commit — safe across power loss. busy_timeout: wait on a
 		// lock rather than error. foreign_keys: enforce referential integrity.
-		d.exec('PRAGMA journal_mode = WAL;');
-		d.exec('PRAGMA synchronous = FULL;');
-		d.exec('PRAGMA busy_timeout = 5000;');
-		d.exec('PRAGMA foreign_keys = ON;');
+		try {
+			d.exec('PRAGMA journal_mode = WAL;');
+			d.exec('PRAGMA synchronous = FULL;');
+			d.exec('PRAGMA busy_timeout = 5000;');
+			d.exec('PRAGMA foreign_keys = ON;');
+		}
+		catch (e) {
+			// A bad file (e.g. "file is not a database") throws on the first pragma. Close the handle before
+			// rethrowing: on Windows a still-open handle holds the file and would block the caller's recovery
+			// from renaming the damaged file aside (POSIX allows renaming an open file, so the leak was invisible
+			// there). The caller's open() catches this and enters recovery.
+			try { d.close(); } catch (e2) {}
+			throw e;
+		}
 
 		return d;
 	}
@@ -133,18 +143,25 @@ function SqliteDriver(opts) {
 		[ '-wal', '-shm' ].forEach(ext => { try { if (fs.existsSync(dbPath + ext)) { fs.renameSync(dbPath + ext, corruptPath + ext); } } catch (e) {} });
 
 		// 2. Salvage the damaged copy.
+		let src = null;
 		try {
 			if (fs.existsSync(corruptPath)) {
-				const src = new DatabaseSync(corruptPath);
+				src = new DatabaseSync(corruptPath);
 				src.exec("VACUUM INTO '" + dbPath.replace(/'/g, "''") + "';");
 				src.close();
+				src = null;
 				const d = openHardened(dbPath);
 				if (isHealthy(d)) { db = d; log('SALVAGED database via VACUUM INTO'); startCheckpointTimer(); return db; }
 				try { d.close(); } catch (e) {}
 				try { fs.unlinkSync(dbPath); } catch (e) {}
 			}
 		}
-		catch (e) { log('salvage failed: ' + e.message); try { fs.unlinkSync(dbPath); } catch (e2) {} }
+		catch (e) {
+			// If VACUUM INTO threw before src was closed, close it now — otherwise (on Windows) the open handle
+			// would keep holding the damaged file. Then drop any partial output before falling through to restore.
+			if (src) { try { src.close(); } catch (e2) {} }
+			log('salvage failed: ' + e.message); try { fs.unlinkSync(dbPath); } catch (e2) {}
+		}
 
 		// 3. Restore the newest GOOD backup — try each snapshot newest→oldest, not just the single newest, so a
 		// truncated newest snapshot (e.g. a crash mid VACUUM INTO) can't force a clean start while older, intact
