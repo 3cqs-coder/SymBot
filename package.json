@@ -5,8 +5,8 @@
   "main": "symbot.js",
   "scripts": {
     "start": "node symbot.js",
-    "check": "node scripts/precheck.js",
-    "test": "node scripts/run-tests.js"
+    "check": "node libs/test/precheck.js",
+    "test": "node libs/test/run-tests.js"
   },
   "author": "3CQS",
   "license": "CC BY-NC-SA 4.0",

@@ -3,3 +3,7 @@ node_modules
 *.log
 .vscode
 
+# No lockfile: dependencies install from the version ranges in package.json (npm install), so a
+# locally generated package-lock.json must never be committed.
+package-lock.json
+

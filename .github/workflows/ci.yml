@@ -6,9 +6,9 @@
 # operating systems and both ends of the supported Node range, which is the cheap way to catch a
 # path-separator, line-ending, or Node-version regression before it reaches anyone.
 #
-# Requires the test files and helper scripts to be present in the repository (libs/test/, scripts/run-tests.js
-# and scripts/precheck.js). There is no committed package-lock.json, so dependencies install from the ranges
-# in package.json with `npm install` rather than `npm ci`.
+# Requires the test suite and its runner scripts to be present in the repository (libs/test/, including
+# run-tests.js and precheck.js at its top level). There is no committed package-lock.json, so dependencies
+# install from the ranges in package.json with `npm install` rather than `npm ci`.
 
 name: CI
 

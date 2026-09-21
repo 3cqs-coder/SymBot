@@ -1,7 +1,10 @@
-# Build-context exclusions (BuildKit reads this <Dockerfile>.dockerignore; the classic builder reads the
-# context-root .dockerignore, which is kept in sync with this file). The build context is the project
-# root (compose sets `context: ..`). Keep the image to CODE plus the shipped config TEMPLATES only —
-# never a developer's runtime state or real secrets.
+# Build-context exclusions. This is the ONLY Docker ignore file, and it lives with the Dockerfile under
+# docker/ (all Docker files stay in docker/, never in the project root). BuildKit — the default builder, and
+# what the compose build uses — reads this `<Dockerfile>.dockerignore` automatically: compose sets
+# `context: ..` (the project root) with `dockerfile: ./docker/Dockerfile`, so BuildKit pairs this file with
+# that Dockerfile. (The deprecated non-BuildKit builder reads only a context-root `.dockerignore`, which we
+# deliberately do not keep — build with BuildKit, the default since Docker 23.) Keep the image to CODE plus
+# the shipped config TEMPLATES only — never a developer's runtime state or real secrets.
 
 .git/
 .vscode/
@@ -41,13 +44,20 @@ config/*real*.json
 config/*REAL*.json
 
 # Dev-only tooling and tests the runtime never needs (and which are not part of the deployed project).
-# scripts/ is intentionally KEPT (identical to the context-root .dockerignore): run-tests.js exits
-# gracefully when libs/test/ is absent and precheck.js syntax-checks the shipped libs/, so the package.json
-# check/test scripts behave in the image instead of crashing on a missing file under either builder.
+# The test corpus lives under libs/test/, but its two runner scripts (run-tests.js, precheck.js) sit at the TOP
+# of libs/test/ and are intentionally KEPT: run-tests.js exits gracefully when the corpus is absent and
+# precheck.js syntax-checks the shipped libs/, so the package.json check/test scripts behave in the image
+# instead of crashing on a missing file. Exclude the test SUBDIRECTORIES (the corpus) rather than all of
+# libs/test/, which would take the runners with it.
 .githooks/
-libs/test/
+libs/test/ai/
+libs/test/app/
+libs/test/queries/
+libs/test/scheduledtasks/
+libs/test/strategies/
+libs/test/webserver/
 
-# The local-only working backlog is never shipped (kept in sync with the context-root .dockerignore).
+# The local-only working backlog is never shipped.
 symbot-backlog.md
 
 # Editor / OS cruft that must never ship in the image.
