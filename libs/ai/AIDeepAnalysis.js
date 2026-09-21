@@ -32,9 +32,15 @@ const DEFAULTS = {
 };
 
 
+// The ONE shared tolerant JSON extractor (handles code fences, surrounding prose, and trailing commas —
+// all common in small-model output). Reused here so the deep-analysis planner/gap parsers recover the same
+// malformed replies every other AI caller does, instead of a weaker local copy that drops them.
+const parseModelJson = require('./AIGuardrails').parseModelJson;
+
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
-// Strip a ```json … ``` fence a small model often wraps JSON in.
+// Strip a ```json … ``` fence a small model often wraps JSON in. Retained (and still exported) for callers
+// that want just the fence stripped; the JSON parsers below use the shared parseModelJson instead.
 function stripFence(s) {
 	return String(s == null ? '' : s).replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim();
 }
@@ -46,8 +52,8 @@ function parsePlan(raw, task) {
 
 	const fallback = [ String(task == null ? '' : task).trim() ].filter(Boolean);
 
-	let obj = raw;
-	if (typeof raw !== 'object' || raw === null) { try { obj = JSON.parse(stripFence(raw)); } catch (e) { return fallback; } }
+	const obj = (typeof raw === 'object' && raw !== null) ? raw : parseModelJson(raw);
+	if (!obj) { return fallback; }
 
 	const subs = (obj && Array.isArray(obj.subquestions)) ? obj.subquestions : [];
 	const seen = new Set();
@@ -66,8 +72,7 @@ function parsePlan(raw, task) {
 // unusable, yields [] so the run stays bounded. Returns trimmed, non-empty follow-ups.
 function parseGap(raw) {
 
-	let obj = raw;
-	if (typeof raw !== 'object' || raw === null) { try { obj = JSON.parse(stripFence(raw)); } catch (e) { return []; } }
+	const obj = (typeof raw === 'object' && raw !== null) ? raw : parseModelJson(raw);
 
 	// Fail-closed: only continue on an EXPLICIT done:false. Anything else — done:true, done absent, or a
 	// malformed object — ends the run so it can never balloon on an ambiguous supervisor reply.

@@ -1,6 +1,7 @@
 'use strict';
 
 const { sendErr, redirectNotFound, denyUnauthorized, capGuard } = require(__dirname + '/../routeUtils.js');
+const SharedRoutes = require(__dirname + '/../sharedRoutes.js');   // routes registered identically on instance + Hub
 
 // Shared Signal Bot alert generator — the SAME pure module the single-instance editor uses, so the
 // Hub's native bot editor produces identical copy-paste webhook cards (one source of truth). It needs
@@ -122,51 +123,24 @@ function initRoutes(router) {
 	});
 
 
-	// The user guide for the in-app Help viewer — the SAME shipped docs/README.md the instance serves, so the
-	// Hub and every instance show one identical, always-current guide. Public documentation, but served only to
-	// a logged-in session, and rendered client-side by the vendored markdown library (see symbot-ui.js).
-	router.get('/readme.md', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		if (!authed(req)) { denyUnauthorized(req, res); return; }
-
-		res.type('text/markdown; charset=utf-8');
-
-		res.sendFile(path.join(__dirname, '..', '..', '..', 'docs', 'README.md'), (err) => {
-
-			if (err && !res.headersSent) { res.status(404).type('text').send('The guide is unavailable.'); }
-		});
+	// Routes shared verbatim with the instance — the in-app Help guide (docs/README.md) plus session
+	// view/revoke — registered from one module so the two surfaces can never drift (see
+	// libs/webserver/sharedRoutes.js). The Hub's guide accepts an API principal as authenticated too.
+	SharedRoutes.register(router, {
+		cap: cap,
+		shareData: shareData,
+		sendErr: sendErr,
+		denyUnauthorized: denyUnauthorized,
+		isAuthed: authed,
+		isHub: true,
+		readmeFile: path.join(__dirname, '..', '..', '..', 'docs', 'README.md')
 	});
 
 
-	router.get('/login', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		res.render( 'loginView', { 'isHub': true, 'appData': shareData.appData } );
-	});
+	// (/login GET+POST are registered by SharedRoutes above, identically to the instance.)
 
 
-	router.post('/login', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		shareData.Common.verifyLogin(req, res, true);
-	});
-
-
-	router.get('/logout', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		// Audit the logout before the session is torn down, so the actor still resolves.
-		shareData.Common.auditEvent(req, 'auth.logout', '', '');
-
-		req.session.destroy((err) => {});
-
-		res.redirect('/login');
-	});
+	// (/logout is registered by SharedRoutes, identically to the instance.)
 
 
 	router.get('/manage', cap('settings.write'), async (req, res) => {
@@ -319,122 +293,10 @@ function initRoutes(router) {
 		else { denyUnauthorized(req, res); }
 	});
 
-	router.get('/api/keys', cap('apikey.read'), (req, res) => {
-		try { res.status(200).json({ 'success': true, 'keys': shareData.HubStore.listKeys() }); }
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/keys', cap('apikey.create'), (req, res) => {
-		try {
-			const b = req.body || {};
-			const r = shareData.HubStore.createKey({ name: b.name, capabilities: Array.isArray(b.capabilities) ? b.capabilities : [], signing: b.signing, expiresAt: b.expires_at, ownerUserId: req.principal && req.principal.id, ownerCapabilities: (req.principal && req.principal.capabilities) || [] });
-			if (r.success) { shareData.Common.auditEvent(req, 'apikey.create', r.key.prefix, r.key.name); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/keys/:id/status', cap('apikey.revoke'), (req, res) => {
-		try {
-			const st = (req.body && req.body.status) || 'revoked';
-			const r = shareData.HubStore.setKeyStatus(req.params.id, st);
-			if (r.success) { shareData.Common.auditEvent(req, st === 'revoked' ? 'apikey.revoke' : 'apikey.status', req.params.id, st); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/keys/:id/rotate', cap('apikey.create'), (req, res) => {
-		try {
-			const r = shareData.HubStore.rotateKey(req.params.id, { graceHours: req.body && req.body.grace_hours });
-			if (r.success) { shareData.Common.auditEvent(req, 'apikey.rotate', req.params.id, 'grace ' + r.grace_hours + 'h → ' + (r.key && r.key.prefix)); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.get('/api/users', cap('user.read'), (req, res) => {
-		try { res.status(200).json({ 'success': true, 'users': shareData.HubStore.listUsers() }); }
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/users', cap('user.invite'), (req, res) => {
-		try {
-			const b = req.body || {};
-			// Bound role/grants to the creator's authority (see the instance route) so a non-owner Hub user
-			// cannot mint an owner or grant capabilities they lack. Owner ('*') is unaffected.
-			const creatorCaps = (req.principal && Array.isArray(req.principal.capabilities))
-				? req.principal.capabilities
-				: ((req.session && req.session.loggedIn && !req.session.userId) ? [ '*' ] : []);
-			const scoped = shareData.Authz.scopeNewUser(creatorCaps, { role: b.role, grants: b.grants });
-			if (scoped.exceeded) { return res.status(403).json({ success: false, error: 'You cannot create a user more privileged than your own account.' }); }
-			const r = shareData.HubStore.createUser({ username: b.username, password: b.password, role: scoped.role, grants: scoped.grants });
-			if (r.success) { shareData.Common.auditEvent(req, 'user.create', r.user.username, r.user.role); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/users/:id/role', cap('user.manage'), (req, res) => {
-		try {
-			const r = shareData.HubStore.setUserRole(req.params.id, (req.body && req.body.role));
-			if (r.success) { shareData.Common.auditEvent(req, 'user.role', req.params.id, (req.body && req.body.role)); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/users/:id/status', cap('user.manage'), (req, res) => {
-		try {
-			const st = (req.body && req.body.status) || 'active';
-			const r = shareData.HubStore.setUserStatus(req.params.id, st);
-			if (r.success) { shareData.Common.auditEvent(req, 'user.status', req.params.id, st); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	// ── Logged-in sessions: view + revoke ────────────────────────────────────
-	// Same shared, store-agnostic Sessions module (libs/app/Sessions.js) and capability (user.manage for
-	// both view and revoke) as the instance, so the Sessions tab in the shared accessView works identically
-	// on the Hub. View is user.manage, not user.read, because the list exposes each device's source IP.
-	router.get('/api/sessions', cap('user.manage'), async (req, res) => {
-		try {
-			const r = await shareData.Sessions.list(req.sessionID);
-			res.status(200).json({ 'success': true, 'supported': r.supported, 'current': req.sessionID, 'sessions': r.sessions });
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/sessions/revoke', cap('user.manage'), async (req, res) => {
-		try {
-			const sid = (req.body && req.body.sid) || '';
-			if (!sid) { return res.status(400).json({ success: false, error: 'A session id is required.' }); }
-			if (sid === req.sessionID) { return res.status(400).json({ success: false, error: 'That is your current session — use Log out.', self: true }); }
-			const ok = await shareData.Sessions.revoke(sid);
-			if (ok) { shareData.Common.auditEvent(req, 'session.revoke', String(sid).slice(0, 12), 'ended one session'); }
-			res.status(200).json({ 'success': ok });
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/sessions/revoke-others', cap('user.manage'), async (req, res) => {
-		try {
-			const n = await shareData.Sessions.revokeAllExcept(req.sessionID);
-			shareData.Common.auditEvent(req, 'session.revoke_others', String(n), 'signed out all other sessions');
-			res.status(200).json({ 'success': true, 'revoked': n });
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.get('/api/audit', cap('audit.read'), (req, res) => {
-		try { res.status(200).json({ 'success': true, 'entries': shareData.HubStore.listAudit({ action: req.query.action, actor: req.query.actor, limit: req.query.limit }) }); }
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.get('/api/authz/capabilities', cap('apikey.read'), (req, res) => {
-		res.status(200).json({ 'success': true, 'capabilities': shareData.Authz.CAPABILITIES, 'roles': shareData.Authz.ROLE_NAMES });
-	});
+	// The API-key CRUD (list/create/rotate/set status), user management (list/create/set role/set status),
+	// the session view/revoke routes, the audit log, and the capability catalog are all registered by
+	// SharedRoutes above, identically to the instance. They run on the Hub's SQLite-backed store through the
+	// ApiKeys/Users/Audit adapters wired in symbot-hub.js, so the two surfaces can never drift.
 
 
 	router.post('/config', cap('settings.write'), (req, res) => {

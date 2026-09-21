@@ -123,11 +123,19 @@
 			function flash() {
 
 				var $b = $(btn);
-				var orig = $b.text();
 
+				// Guard re-entry and capture the TRUE label only once (persisted on the element). Reading the live
+				// text each time meant a second click inside the 1200ms window captured "Copied" as the label to
+				// restore, leaving the button stuck on "Copied" until the next re-render.
+				if ($b.data('flashing')) { return; }
+
+				var orig = $b.data('flashLabel');
+				if (orig === undefined) { orig = $b.text(); $b.data('flashLabel', orig); }
+
+				$b.data('flashing', true);
 				$b.text('Copied');
 
-				setTimeout(function() { $b.text(orig); }, 1200);
+				setTimeout(function() { $b.text(orig); $b.removeData('flashing'); }, 1200);
 			}
 
 			if (navigator.clipboard && navigator.clipboard.writeText) {

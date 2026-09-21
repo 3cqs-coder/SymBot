@@ -30,6 +30,14 @@ const TEXT = (() => { try { return require('./data/refusals.json'); } catch (e) 
 // A SymBot deal id looks like  PAIR_QUOTE-XXXXXXX-1723456789  (base_quote - short alnum - epoch).
 const DEAL_ID_RE = /\b[A-Z0-9]{1,12}_[A-Z0-9]{2,10}-[A-Z0-9]{4,12}-\d{6,}\b/g;
 
+// A bare integer presented AS a deal identifier — "Deal ID: 123456", "deal id 123456", "deal #123456". A REAL
+// SymBot deal id ALWAYS has the pair_-hash-epoch shape above, never a plain integer, so a weak model that emits
+// a numeric "deal id" is fabricating one. This is label-gated (requires the "deal id" / "deal #" label and a
+// 4+ digit number) so ordinary numbers, prices, and list ordinals ("your 1st deal") are never captured. The
+// captured integer is treated as a deal-id entity by extractEntities so the same fabricated-id fail-closed path
+// that handles a fake full-format id also catches a fake numeric one.
+const LABELED_INT_DEAL_ID_RE = /\bdeal\s*(?:id\b[\s:#=-]*|#\s*)(\d{4,})/gi;
+
 // Does the text contain a SymBot deal id? A NON-global test, because DEAL_ID_RE carries the /g flag, which
 // makes `.test()` stateful (it advances lastIndex) and so unsafe to call repeatedly. Callers that just need
 // "is a specific deal referenced here?" use this so the magic pattern lives in one place instead of being
@@ -409,9 +417,17 @@ const SPOTLIGHT_SYSTEM_NOTE = readText('guardrail-trust-boundary.txt');
 function extractEntities(text) {
 
 	const s = String(text || '');
-	const dealIds = Array.from(new Set((s.match(DEAL_ID_RE) || [])));
+	const dealIds = (s.match(DEAL_ID_RE) || []).slice();
+
+	// Also treat a bare integer labeled as a deal id ("Deal ID: 123456") as a deal-id entity — it can never be
+	// a real id, so verifyGroundedEntities will always find it absent from the tool results and the caller fails
+	// it closed. exec() over the /g regex; reset lastIndex first so no stale state leaks in.
+	LABELED_INT_DEAL_ID_RE.lastIndex = 0;
+	let m;
+	while ((m = LABELED_INT_DEAL_ID_RE.exec(s)) !== null) { if (m[1]) { dealIds.push(m[1]); } }
+
 	const pairs = Array.from(new Set((s.match(PAIR_RE) || [])));
-	return { dealIds, pairs };
+	return { dealIds: Array.from(new Set(dealIds)), pairs };
 }
 
 // The first full deal id in a string, or null. Used to reframe a deal-analysis question and to build
@@ -521,19 +537,42 @@ function looksLikePrediction(text) {
 // ranking, the weak model relabels the top bot with the made-up name and reports its figures. So bot
 // names must be grounded against real data, never treated as grounded merely because the user typed them.
 // This pulls the bot the user explicitly named out of a question ("how is my bot named X doing", "how is
-// my X bot performing") so the caller can check it against the actual bot list and fail closed if absent.
-// Deliberately narrow: it fires only on an EXPLICIT "bot named/called X" or "my X bot" construct, and the
-// caller's real-name check (substring, either direction) absorbs multi-word names captured as one token.
+// my X bot performing", "how is my TurboBot doing") so the caller can check it against the actual bot list
+// and fail closed if absent. Deliberately narrow: it fires only on an EXPLICIT "bot named/called X", a
+// "my X bot" construct, or a name that itself EMBEDS "bot" (TurboBot, GridBot) — never on a bare coin/pair
+// ("how is my BTC doing"), which carries no "bot" token and must stay on the deal path. The caller's
+// real-name check (substring, either direction) absorbs multi-word names captured as one token.
 const NAMED_BOT_RES = [
 	/\bbots?\s+(?:named|called)\s+["']?([A-Za-z0-9][\w.-]{1,30})["']?/i,
 	/\bhow\s+(?:is|are|'s)\s+(?:my|the)\s+["']?([A-Za-z0-9][\w.-]{2,30})["']?\s+bot\b/i,
-	/\b(?:my|the)\s+["']?([A-Za-z0-9][\w.-]{2,30})["']?\s+bot\s+(?:doing|performing|going|profit)/i,
+	/\b(?:my|the)\s+["']?([A-Za-z0-9][\w.-]{2,30})["']?\s+bot\s+(?:doing|performing|going|profit|do|did|does|make[s]?|made|trade[ds]?|traded|earn(?:ed|s)?|perform(?:ed|s)?|run(?:ning)?)/i,
+	// A single-token name that EMBEDS "bot" (TurboBot, GridBot, MyBot99) asked about as "my <name> …". The
+	// name must literally contain "bot", so a coin/pair ("my BTC", "my PEPE2000") never matches and is left
+	// to the deal path. A trailing status verb is optional so "how is my TurboBot?" is caught too.
+	/\bhow\s+(?:is|are|'s|s)\s+(?:my|the)\s+["']?([A-Za-z0-9][A-Za-z0-9_.-]*bot[A-Za-z0-9_.-]*)["']?(?:\s+(?:doing|performing|going|getting\s+on|looking|profit))?\b/i,
+	/\b(?:my|the)\s+["']?([A-Za-z0-9][A-Za-z0-9_.-]*bot[A-Za-z0-9_.-]*)["']?\s+(?:doing|performing|going|profit)\b/i,
 ];
+// Generic descriptors / superlatives / bot-TYPE words that appear before "bot" in a RANKING or generic
+// reference ("my best bot", "my main bot", "my trading bot", "which of my dca bots …") — these are NOT bot
+// names. Capturing one would make the fail-closed guard wrongly reject a legitimate ranking question with
+// "You don't have a bot named 'best'." A genuinely invented name (Kraken, TurboBot) is not in this set, so
+// it is still caught. Compared case-insensitively against the captured token only.
+const BOT_SUBJECT_STOPWORDS = new Set([
+	'best', 'worst', 'top', 'biggest', 'smallest', 'main', 'primary', 'secondary', 'only', 'first', 'last',
+	'next', 'new', 'old', 'current', 'active', 'running', 'paused', 'favorite', 'favourite', 'good', 'bad',
+	'other', 'another', 'same', 'trading', 'crypto', 'dca', 'signal', 'real', 'paper', 'sandbox', 'test',
+	'live', 'profitable', 'losing', 'winning', 'busiest', 'newest', 'oldest'
+]);
 function extractNamedBotSubject(text) {
 	const s = String(text || '');
 	for (const re of NAMED_BOT_RES) {
 		const m = re.exec(s);
-		if (m && m[1]) { return m[1].trim(); }
+		if (m && m[1]) {
+			const name = m[1].trim();
+			// Skip a generic descriptor captured as if it were a name; keep scanning in case a later pattern
+			// captures a real name, and fall through to '' (no named bot → normal routing, not a fail-closed).
+			if (!BOT_SUBJECT_STOPWORDS.has(name.toLowerCase())) { return name; }
+		}
 	}
 	return '';
 }
@@ -913,6 +952,15 @@ function looksLikePushback(text) {
 
 const FINANCIAL_ADVICE_NOTE = TEXT.financialAdviceNote || '';
 
+// Grounding / fail-closed lines shown by AIClient. Sourced from refusals.json ("grounding") so the wording is
+// tunable in one place, but each keeps a real inline fallback here — the two that REPLACE an answer
+// (ungrounded_fallback, grounding_abstention) must never degrade to an empty string if the key is missing, so
+// their fallback is the full safety text rather than ''.
+const GROUNDING = (TEXT && TEXT.grounding) || {};
+const GROUNDING_FIGURE_CAVEAT = GROUNDING.figure_caveat || '\n\n_⚠️ Some figures or details above may not be fully supported by the data — please double-check._';
+const GROUNDING_UNGROUNDED_FALLBACK = GROUNDING.ungrounded_fallback || "I don't have a verified match for that in your live data, so I won't guess at a deal identifier. Ask me to list your open deals (or name the pair) and I'll pull the exact figures.";
+const GROUNDING_ABSTENTION = GROUNDING.grounding_abstention || "I couldn't pull that from your live SymBot data just now, so I won't guess at it. Please ask again in a moment, or check it directly in SymBot (for example the Logs view for errors, or Active Deals for your positions).";
+
 // A data-free variant of the advice disclaimer, for a general/concept answer that tripped the
 // directive check but carries NO account figures — appending "figures above are from your own SymBot
 // data" there would be false. Falls back to the full note if the generic one is not present.
@@ -1074,9 +1122,13 @@ module.exports = {
 	resolveContinuation,
 	firstDealId,
 	firstLooseDealId,
+	LOOSE_DEAL_ID_RE,
 	looksLikeAdviceRefusal,
 	FINANCIAL_ADVICE_NOTE,
 	FINANCIAL_ADVICE_NOTE_GENERIC,
+	GROUNDING_FIGURE_CAVEAT,
+	GROUNDING_UNGROUNDED_FALLBACK,
+	GROUNDING_ABSTENTION,
 	ADVICE_SYSTEM_NOTE,
 	PROVENANCE_SYSTEM_NOTE,
 	resolveAnaphora,

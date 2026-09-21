@@ -153,11 +153,57 @@ SymBot.UI = {
 		// paused/error. Both use the same sized slot so the column reads as one
 		// coherent system. Colors are theme-aware via CSS (see style.css) so they
 		// stay legible and un-harsh in light mode — the old emoji couldn't be tuned.
+		// role="img" + aria-label gives the indicator a reliable accessible NAME (the health label, e.g.
+		// "In profit (5%)"). Without it the state is conveyed only by color plus a <td title>, which screen
+		// readers announce inconsistently and colorblind users cannot distinguish among the running states.
 		const inner = (h.type === 'glyph')
-			? '<span class="deal-health-glyph ' + h.cls + '"></span>'
-			: '<span class="deal-health-dot ' + h.cls + '"></span>';
+			? '<span class="deal-health-glyph ' + h.cls + '" role="img" aria-label="' + title + '"></span>'
+			: '<span class="deal-health-dot ' + h.cls + '" role="img" aria-label="' + title + '"></span>';
 
 		return '<td class="deal-health-cell" data-health-rank="' + h.rank + '" title="' + title + '"><span class="deal-health">' + inner + '</span></td>';
+	},
+
+
+	// Give each form control inside `root` an accessible NAME derived from its ROW's caption cell, for the
+	// table-style forms (first <td> = caption text, second <td> = the control) that otherwise rely on a
+	// visual-only caption a screen reader cannot associate. ONE reusable pass instead of an aria-label
+	// repeated on every field, so it also covers any field added later. Idempotent and non-destructive: it
+	// skips hidden inputs and any control that already has an accessible name (aria-label/aria-labelledby or
+	// an associated <label for>), and only sets a name when a caption is actually found.
+	autoLabelFormFields: function(root) {
+
+		if (!root || typeof root.querySelectorAll !== 'function') { return; }
+
+		var controls = root.querySelectorAll('input[id], select[id], textarea[id]');
+
+		for (var i = 0; i < controls.length; i++) {
+
+			var el = controls[i];
+
+			if (el.type === 'hidden') { continue; }
+			if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) { continue; }
+
+			var hasLabel = false;
+			try { hasLabel = !!root.querySelector('label[for="' + ((window.CSS && CSS.escape) ? CSS.escape(el.id) : el.id) + '"]'); } catch (e) {}
+			if (hasLabel) { continue; }
+
+			var row = el.closest('tr');
+			if (!row) { continue; }
+
+			var cell = row.querySelector('td');
+			if (!cell || cell.contains(el)) { continue; }   // need a caption cell distinct from the control's cell
+
+			// The caption is the leading text of the cell, up to the first element (a tooltip/help span).
+			var caption = '';
+			for (var n = 0; n < cell.childNodes.length; n++) {
+				var node = cell.childNodes[n];
+				if (node.nodeType === 3) { caption += node.textContent; }
+				else { break; }
+			}
+			caption = caption.replace(/[\s:*]+$/, '').trim();
+
+			if (caption) { el.setAttribute('aria-label', caption); }
+		}
 	},
 
 
@@ -660,6 +706,39 @@ SymBot.UI = {
 	esc: function(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); },
 	escapeXML: function(s) { return SymBot.UI.esc(s); },
 
+	// The deal action pills, defined ONCE here so the Active Deals view and the Hub Deals view render the
+	// exact same markup instead of each carrying its own copy (they had drifted). Each pill is a
+	// role="button" tabindex="0" span with an aria-label/title, so it is keyboard-operable (Enter/Space are
+	// bridged to a click above) and named for screen readers. A view picks the keys it uses by name
+	// (`SymBot.UI.actionButtons()['cancel'].button`, etc.); extra keys it does not render are harmless.
+	actionButtons: function() {
+		var pill = function(cls, icon, label) {
+			return '<span class="pill-btn' + (cls ? ' ' + cls : '') + '" role="button" tabindex="0" aria-label="' + label + '" title="' + label + '">'
+				+ '<span class="icon ' + icon + '" style="width:13px;height:13px;pointer-events:none;"></span></span>';
+		};
+		return {
+			'add':    { button: pill('',            'icon-add',    'Add funds to deal'), tooltip: 'Add funds to deal' },
+			'ai':     { button: pill('',            'icon-ai',     'AI Analyze deal'),   tooltip: 'AI Analyze deal' },
+			'cancel': { button: pill('pill-danger', 'icon-cancel', 'Cancel deal'),       tooltip: 'Cancel deal' },
+			'edit':   { button: pill('',            'icon-edit',   'Edit deal'),         tooltip: 'Edit deal' },
+			'panic':  { button: pill('',            'icon-close',  'Close deal'),        tooltip: 'Close deal' },
+			'pause':  { button: pill('pill-warn',   'icon-pause',  'Pause deal'),        tooltip: 'Pause deal' },
+			'resume': { button: pill('pill-warn',   'icon-resume', 'Resume deal'),       tooltip: 'Resume deal' },
+			'stop':   { button: pill('pill-danger', 'icon-stop',   'Stop bot'),          tooltip: 'Stop bot' }
+		};
+	},
+
+	// The translucent row-background tint for a deal row, single-sourced so the Active Deals view and the Hub
+	// Deals view can never drift on it (the Hub previously lacked the data-error tint entirely). A confirmed
+	// data/tracker error wins over a system pause. Both tints are translucent so they layer over the themed
+	// row and stay readable in light AND dark mode. Returns '' for a normal row.
+	dealRowBackground: function(opts) {
+		opts = opts || {};
+		if (opts.hasDataError) { return 'rgba(183,130,37,0.28)'; }   // amber — data/tracker error
+		if (opts.isSystemPaused) { return 'rgba(255,140,0,0.22)'; }  // orange — system-paused
+		return '';
+	},
+
 	// Build the /api/tradingview widget URL for a pair, mapping ccxt exchange ids to TradingView's names.
 	// Single source of truth shared by showTradingView (the modal widget) and the deal chart's
 	// TradingView tab, so the exchange mapping isn't duplicated.
@@ -672,9 +751,42 @@ SymBot.UI = {
 	// that phones home. Safe formatting (lists, tables, code, emphasis) and safe links are kept. Requires
 	// marked + DOMPurify on the page (present on every chat surface); if DOMPurify were somehow absent it
 	// falls back to plain escaped text rather than ever returning unsanitized HTML.
+	// Convert the LaTeX math a model sometimes emits into readable plain text, BEFORE markdown parsing.
+	// The chat renders markdown, not LaTeX, so raw \text{...}, \frac{...}{...} and \[ ... \] delimiters would
+	// otherwise show through as literal backslash commands. This strips the math delimiters and rewrites the
+	// handful of common commands to plain equivalents, so a formula reads as ordinary text. Pure and DOM-free
+	// (unit-tested). Single "$" is left untouched so currency amounts are never disturbed.
+	plainifyMath: function(text) {
+
+		var t = String(text == null ? '' : text);
+
+		// Display / inline math delimiters: \[ \] \( \) and $$ … $$ — drop the delimiters, keep the contents.
+		t = t.replace(/\\[\[\]()]/g, ' ');
+		t = t.replace(/\$\$/g, ' ');
+
+		// \text{X} -> X  (do this before \frac so a fraction built from \text parts reads cleanly).
+		t = t.replace(/\\(?:text|mathrm|mathbf|operatorname)\s*\{([^{}]*)\}/g, '$1');
+
+		// \frac{A}{B} -> (A) / (B). Repeat a few times so a fraction nested inside another resolves inside-out.
+		var frac = /\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g;
+		for (var i = 0; i < 4; i++) { if (!frac.test(t)) { break; } frac.lastIndex = 0; t = t.replace(frac, '($1) / ($2)'); }
+
+		// Common operators and spacing macros to readable symbols / spaces.
+		t = t.replace(/\\times/g, '×').replace(/\\cdot/g, '·').replace(/\\div/g, '÷');
+		t = t.replace(/\\approx/g, '≈').replace(/\\leq/g, '≤').replace(/\\geq/g, '≥').replace(/\\neq/g, '≠');
+		t = t.replace(/\\left|\\right/g, '');
+		t = t.replace(/\\[,;!:]/g, ' ');
+
+		return t;
+	},
+
 	renderMarkdown: function(text, opts) {
 
 		var raw = String(text == null ? '' : text);
+
+		// Normalize any LaTeX math to plain text for chat (the default). The one document caller — the in-app
+		// guide — passes plainMath:false, so the shipped README is never touched by this transform.
+		if (!(opts && opts.plainMath === false)) { raw = SymBot.UI.plainifyMath(raw); }
 
 		if (typeof DOMPurify === 'undefined') { return SymBot.UI.esc(raw); }
 
@@ -859,7 +971,7 @@ window.SymBot = SymBot;
 			.then(function (md) {
 				var host = document.getElementById('helpBody');
 				if (!host) { return; }
-				host.innerHTML = SymBot.UI.renderMarkdown(md, { breaks: false });
+				host.innerHTML = SymBot.UI.renderMarkdown(md, { breaks: false, plainMath: false });
 				// marked does not add heading ids; add GitHub-compatible ones (deduped in document order) so the
 				// doc's own in-doc TOC links and anchors jump to the right heading.
 				var slugger = makeSlugger();
@@ -1018,4 +1130,50 @@ window.SymBot = SymBot;
 		e.preventDefault(); openHelp();
 	});
 
+})();
+
+
+// Keyboard activation for icon controls that are a <span>/<div role="button" tabindex="0"> rather than a real
+// <button>, so Enter and Space would not activate them on their own. This synthesizes their click, making the
+// header icons (theme toggle, AI chat, notifications, Help), the per-deal action pills, and the deals-view
+// icon buttons (column picker, CSV) all operable from the keyboard, not just the mouse. One handler covers
+// every such control by class. Native <a>/<button>/<input> already handle Enter/Space themselves, so they are
+// skipped to avoid a double activation.
+(function () {
+	if (typeof document === 'undefined') { return; }
+	var SELECTOR = '.headerIconBtn, .pill-btn, .viewIconBtn, .ai-popout-btn, #tradingViewSettings';
+	document.addEventListener('keydown', function (e) {
+		if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') { return; }
+		var el = (e.target && e.target.closest) ? e.target.closest(SELECTOR) : null;
+		if (!el) { return; }
+		var tag = el.tagName;
+		if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') { return; }
+		e.preventDefault();
+		el.click();
+	});
+})();
+
+
+// Accessibility: the app styles section and card titles as <div> (e.g. .section-title, .hub-dash-card-title),
+// so a screen-reader user has no headings to navigate the page by. Expose them as ARIA headings WITHOUT
+// changing the markup or layout — section titles at level 2, card titles at level 3 — in one shared pass over
+// every view (this script loads on all of them), instead of editing each view's markup. Idempotent: it skips
+// anything that is already a real heading or already carries a role.
+(function () {
+	if (typeof document === 'undefined') { return; }
+
+	function promote(selector, level) {
+		var els = document.querySelectorAll(selector);
+		for (var i = 0; i < els.length; i++) {
+			var el = els[i];
+			if (el.getAttribute('role') || /^H[1-6]$/.test(el.tagName)) { continue; }
+			el.setAttribute('role', 'heading');
+			el.setAttribute('aria-level', String(level));
+		}
+	}
+
+	function run() { promote('.section-title', 2); promote('.hub-dash-card-title', 3); }
+
+	if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', run); }
+	else { run(); }
 })();

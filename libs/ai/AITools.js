@@ -1625,11 +1625,30 @@ function selectTools(query) {
 
 	let selected = CORE_TOOLS.filter(n => TOOL_MAP[n]).concat(nonCore);
 
-	// Expose the explore sub-agent only when it is enabled, and always keep it (appended, never trimmed)
-	// so the model can reach for deep research when needed.
-	if (exploreEnabled() && selected.indexOf('explore') < 0 && TOOL_MAP['explore']) { selected = selected.concat('explore'); }
+	// Expose the explore sub-agent only when it is enabled AND the query actually looks like deep research.
+	// explore runs a nested, multi-step tool loop that can take a long time; a weak model handed it on EVERY
+	// turn reaches for it on ordinary lookups ("how many deals?") and turns a 2-second answer into a long
+	// nested run. Advertising it only for investigation-shaped questions keeps the common path fast while still
+	// giving the model the deep-research tool when a question warrants it (including deal-failure diagnosis).
+	if (exploreEnabled() && looksLikeResearchQuery(q) && selected.indexOf('explore') < 0 && TOOL_MAP['explore']) { selected = selected.concat('explore'); }
 
 	return selected;
+}
+
+// Whether a query looks like a genuine DEEP-RESEARCH / investigation ask — the only kind that warrants the
+// explore sub-agent. Matches an explicit research verb (investigate, dig into, root-cause), a diagnosis ask
+// (why did … fail, what went wrong, what's going on with), or a broad "across everything" scope. An ordinary
+// count / status / how-to / concept question does not match, so it stays on the fast direct-tool path. Kept
+// deliberately inclusive of failure/diagnosis phrasings, because deal-failure and log diagnosis is a primary
+// use of explore and must not be starved of it.
+const RESEARCH_QUERY_RE = new RegExp(
+	'\\b(?:investigate|research|deep[\\s-]?dive|dig (?:in|into)|look into|get to the bottom|root[\\s-]?cause'
+	+ '|diagnos(?:e|is)|troubleshoot|figure out (?:what|why|how)|what(?:\'s| is| has been) (?:going on|happening|causing)'
+	+ '|what went wrong|why (?:did|do|does|are|is|has|have|were|isn\'t|aren\'t|won\'t|hasn\'t)'
+	+ '|comprehensive(?:ly)?|thorough(?:ly)?'
+	+ '|across (?:all|everything|every))\\b', 'i');
+function looksLikeResearchQuery(q) {
+	return RESEARCH_QUERY_RE.test(String(q || ''));
 }
 
 
@@ -1711,12 +1730,20 @@ async function execute(name, args, ctx) {
 		let payload = result;
 
 		// Size guard: if the serialized result is too large, note the truncation
-		// so the model asks a narrower question rather than getting silent garbage.
-		let json = JSON.stringify(result);
+		// so the MODEL asks a narrower question rather than getting silent garbage.
+		// Skipped for deterministic in-code renderers (ctx.deterministic): they parse the
+		// structured object field-by-field and never feed the raw JSON to the model, so
+		// truncating their result only breaks the render — e.g. get_open_deals_status for a
+		// user with many open deals exceeds the cap, and the truncated {note, partial} object
+		// silently defeats the open-deals shortcut, forcing a false "data unavailable" abstention.
+		if (!(ctx && ctx.deterministic)) {
 
-		if (json && json.length > MAX_RESULT_CHARS) {
+			let json = JSON.stringify(result);
 
-			payload = { note: 'Result truncated — it was too large. Ask a narrower question (e.g. a specific deal or pair).', partial: json.slice(0, MAX_RESULT_CHARS) };
+			if (json && json.length > MAX_RESULT_CHARS) {
+
+				payload = { note: 'Result truncated — it was too large. Ask a narrower question (e.g. a specific deal or pair).', partial: json.slice(0, MAX_RESULT_CHARS) };
+			}
 		}
 
 		return payload;

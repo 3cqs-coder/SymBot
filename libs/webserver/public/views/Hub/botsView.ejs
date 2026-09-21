@@ -40,7 +40,7 @@
 
 		const action  = enable ? 'bot_enable' : 'bot_disable';
 		const btnText = enable ? 'Enable' : 'Disable';
-		const btnColor = enable ? '#4aa602' : '#d80f08';
+		const btnColor = enable ? 'var(--color-success)' : 'var(--color-danger)';
 
 		if (confirmWaiting) return;
 
@@ -100,7 +100,7 @@
 				},
 				cancel: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #000000;">Cancel</div>',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
 					action: function() {
 
 						confirmWaiting = false;
@@ -119,8 +119,8 @@
 			boxWidth: '50%',
 			useBootstrap: false,
 			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' +
-				'<b style="color: #d80f08;">Delete ' + SymBot.UI.esc(botName) + '?</b><br><br>' +
-				'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
+				'<b style="color: var(--color-danger);">Delete ' + SymBot.UI.esc(botName) + '?</b><br><br>' +
+				'<div style="font-size: var(--fs-body); padding: 8px; background: var(--color-danger-soft); border-left: 3px solid var(--color-danger); border-radius: 2px;">' +
 				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or canceled first.' +
 				'</div><br>' +
 				'Type the bot name to confirm:<br>' +
@@ -129,7 +129,7 @@
 			buttons: {
 				confirm: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #d80f08;">Delete Bot</div>',
+					text: '<div style="color: var(--color-danger);">Delete Bot</div>',
 					action: function() {
 
 						const typed = this.$content.find('#deleteBotConfirmName').val().trim();
@@ -145,7 +145,7 @@
 				},
 				cancel: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #000000;">Cancel</div>',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
 					action: function() { setReloadTimeout(); }
 				}
 			},
@@ -269,10 +269,10 @@
 				'<td>' + maxFunds + '</td>' +
 				'<td>' + startCondition + '</td>' +
 				'<td>' + (sandBox ? 'Yes' : 'No') + '</td>' +
-				'<td><input id="toggle' + botId + '" type=checkbox ' + checkedAttr + ' disabled></td>' +
+				'<td><input id="toggle' + botId + '" type=checkbox ' + checkedAttr + ' disabled aria-label="Bot enabled state (managed on the instance)"></td>' +
 				'<td style="text-align:center;">' +
 				'<div class="pill-group">' +
-					'<span class="pill-btn pill-danger" title="Delete Bot" data-action="delete">&#10005;</span>' +
+					'<span class="pill-btn pill-danger" role="button" tabindex="0" aria-label="Delete bot" title="Delete bot" data-action="delete">&#10005;</span>' +
 				'</div>' +
 			'</td>' +
 				'</tr>'
@@ -435,7 +435,7 @@ $(document).ready(function() {
 
 				<span class="viewSettings">
 					<select id="hubRefreshInterval" class="form-field" style="width: auto; cursor: pointer;" title="Refresh interval"></select>
-					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
+					<span id="botDealSelectorShow" class="viewIconBtn" role="button" tabindex="0" aria-label="Choose columns" title="Choose columns"><span class="icon icon-columns" style="width:13px;height:13px;pointer-events:none;"></span></span>
 				</span>
 			</div>
 

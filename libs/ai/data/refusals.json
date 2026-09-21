@@ -32,5 +32,11 @@
       "I can't predict future returns — no one can say what your deals will make by then, and I won't guess at a number. What I can show you is what you've actually made so far: your realized profit, unrealized P/L, and win rate. Want any of those?",
       "That's a forecast I'm not able to make — future profit depends on the market, and I won't put a number on it. I can pull up your real figures instead (realized P/L, current unrealized P/L, or how a position sits versus its take-profit). Which would help?"
     ]
+  },
+  "grounding": {
+    "_comment": "Grounding/fail-closed lines shown by AIClient. Loaded via AIGuardrails with the SAME text kept as an inline fallback in code, so tuning the wording here is honored but a missing key can never blank a safety line.",
+    "figure_caveat": "\n\n_⚠️ Some figures or details above may not be fully supported by the data — please double-check._",
+    "ungrounded_fallback": "I don't have a verified match for that in your live data, so I won't guess at a deal identifier. Ask me to list your open deals (or name the pair) and I'll pull the exact figures.",
+    "grounding_abstention": "I couldn't pull that from your live SymBot data just now, so I won't guess at it. Please ask again in a moment, or check it directly in SymBot (for example the Logs view for errors, or Active Deals for your positions)."
   }
 }

@@ -106,6 +106,11 @@ function extractPassage(text, query) {
 
 	if (!text || text.length <= SMALL_DOC_LIMIT) return text;
 
+	// Defensive hard cap so a very large input can never make the sliding-window scan below stall the event
+	// loop (the attachment-ingestion path already caps stored text; this guards any other caller). The passage
+	// is returned from within this bound, which is far larger than any passage the assistant uses.
+	if (text.length > 2000000) { text = text.slice(0, 2000000); }
+
 	// Tokenize query into meaningful keywords
 	const stopWords = new Set(['the','a','an','is','are','was','were','be','been',
 		'have','has','had','do','does','did','will','would','could','should',
@@ -333,6 +338,12 @@ function summarizeToolResult(result) {
 
 
 const FAITHFULNESS_TIMEOUT_MS = 15000;
+// Upper bound for a SINGLE non-streaming completion (completePrompt). The Ollama SDK sets no default HTTP
+// timeout, so without this a stalled provider would hang the caller forever, past the turn's idle/hard
+// ceiling (which can only abort BETWEEN tool rounds, not during an in-flight call). Generous enough for a
+// slow local model on a large prompt; on timeout completePrompt returns '' (its documented "any failure"
+// contract), so every caller degrades gracefully instead of hanging.
+const COMPLETE_PROMPT_TIMEOUT_MS = 120000;
 
 // Race a promise against a timeout that resolves (never rejects) to '' — a hung
 // judge model can never stall the chat. The timer is unref'd so it can't hold the
@@ -347,7 +358,7 @@ function withTimeout(promise, ms) {
 // Subtle one-line caveat appended when an answer carries figures the data does not clearly support.
 // Shared by the faithfulness judge (verify path) and the free deterministic number check (default
 // path) so the wording is identical however it was triggered.
-const FIGURE_CAVEAT = '\n\n_⚠️ Some figures or details above may not be fully supported by the data — please double-check._';
+const FIGURE_CAVEAT = aiGuardrails.GROUNDING_FIGURE_CAVEAT;
 
 // An EXCLUSION clause ("…besides my worst", "…not counting stale deals") that a plain deterministic render
 // cannot honor. Used BOTH at the dispatch level (to skip the open-deals renders) and inside the per-bot
@@ -357,13 +368,13 @@ const EXCLUSION_CLAUSE_RE = /\b(?:besides|except(?:ing|\s+for)?|other than|aside
 
 // Shown in place of an answer that cites a fabricated deal id but has NO grounded tool data behind it —
 // so an invented identifier is never presented as real. Honest and safe; invites the grounded path.
-const UNGROUNDED_FALLBACK = "I don't have a verified match for that in your live data, so I won't guess at a deal identifier. Ask me to list your open deals (or name the pair) and I'll pull the exact figures.";
+const UNGROUNDED_FALLBACK = aiGuardrails.GROUNDING_UNGROUNDED_FALLBACK;
 
 // Fail-closed grounding: shown when a question about the user's OWN data/operations was answered without
 // consulting any tool (so the model would be speaking from its own head, not the live data). Replacing the
 // model's ungrounded text with this fixed line is the structural guarantee that account/operational answers
 // are never fabricated — an 8B model that cannot see the data must abstain, not invent a plausible report.
-const GROUNDING_ABSTENTION = "I couldn't pull that from your live SymBot data just now, so I won't guess at it. Please ask again in a moment, or check it directly in SymBot (for example the Logs view for errors, or Active Deals for your positions).";
+const GROUNDING_ABSTENTION = aiGuardrails.GROUNDING_ABSTENTION;
 
 // How many DISTINCT trading pairs, all absent from this turn's tool data, turn a "soft" off-result-pair caveat
 // into a hard fail-closed replacement. One or two can be a legitimate example/comparison; three-plus absent
@@ -388,6 +399,34 @@ async function faithfulnessNote(answer, sources, model) {
 
 	try {
 
+		// FIGURE-GROUNDING FIRST — free, deterministic, no model call. Every footer this function can emit
+		// vouches specifically for FIGURES, and the cheap number-grounding check settles the common cases
+		// WITHOUT paying for the heavyweight judge model (which, being a different/larger model than the one
+		// that answered, also forces a costly Ollama model swap on the hot path):
+		//   • no significant figures    → nothing for a figure note to speak to → stay silent, skip the judge.
+		//   • figures, all grounded      → every figure appears in the tool data → deterministic "checked" tick,
+		//     skip the judge. This tick is independent of the answering model (a genuine second source), so it
+		//     is honest ASSURANCE even when no distinct judge model is configured — stronger than a weak
+		//     self-judge that can rubber-stamp its own output.
+		//   • figures, some ungrounded   → genuinely ambiguous → THIS is the only case that warrants the
+		//     semantic judge's cost, for a second opinion on whether the un-matched figure is a real problem.
+		// The deterministic figure caveat is ALSO added independently in finalizeAnswer, so an ungrounded
+		// figure is caveated even if the judge call below fails — this gate only decides whether to spend the
+		// extra model round-trip, never whether a fabrication is caught.
+		let numbersChecked = 0, ungrounded = 0;
+		try {
+			const chk = analysisGuard.checkNumbers(answer || '', sources || '');
+			numbersChecked = chk ? chk.numbersChecked : 0;
+			ungrounded = (chk && Array.isArray(chk.ungrounded)) ? chk.ungrounded.length : 0;
+		}
+		catch (e) { numbersChecked = -1; /* scan failed → fall through and let the judge decide */ }
+
+		if (numbersChecked === 0) { return ''; }                                  // no figures → no note, no judge
+		if (numbersChecked > 0 && ungrounded === 0) {                             // all figures grounded → fast tick
+			return '\n\n_✓ Figures checked against your data._';
+		}
+
+		// Ungrounded figure(s) present (or the deterministic scan errored) — spend the semantic judge here.
 		const genCfg = (shareData.appData && shareData.appData.ai && shareData.appData.ai.generation) || {};
 
 		// Prefer the configured (stronger) analysis model as the judge — a weak judge
@@ -409,52 +448,15 @@ async function faithfulnessNote(answer, sources, model) {
 		if (result) { shareData.Common.logger('AI faithfulness (' + judgeModel + '): ' + JSON.stringify(result)); }
 
 		// A subtle one-line indicator, only when the check actually ran (result is
-		// null on any failure/timeout, and then nothing is shown — no false tick).
+		// null on any failure/timeout — then fall through to the deterministic caveat below, never a false tick).
 		if (result) {
 
-			// Every footer below vouches specifically for FIGURES. When the answer carries no significant
-			// figures at all — a concept explanation, a definition, a plain conversational reply that merely
-			// shared the tool path — there is nothing for a figure-grounding note to speak to, and a
-			// "figures checked / some figures only partly confirmed" line is misleading. Stay silent in that
-			// case, for every grade (the 'low' branch below already does this for the caveat). Fail safe: if
-			// the number scan itself errors, fall through to the normal grade-based logic.
-			try {
-
-				if (analysisGuard.checkNumbers(answer || '', sources || '').numbersChecked === 0) {
-
-					return '';
-				}
-			}
-			catch (e) { /* fall through to grade-based logic */ }
-
-			// A poorly-grounded answer earns the caveat — but the caveat is specifically about FIGURES.
-			// A 'low' grade can also come from non-numeric general-knowledge sentences that legitimately
-			// share an answer with grounded data (a concept explanation alongside a real figure, in a
-			// mixed question). Only surface the caveat when a number in the answer is actually absent from
-			// the sources; if the deterministic figure check finds none, the low score is driven by
-			// general content, not a data-grounding problem, so stay quiet. The check fails safe: any error
-			// keeps the warning.
-			if (result.overall === 'low') {
-
-				try {
-
-					const chk = analysisGuard.checkNumbers(answer || '', sources || '');
-
-					if (chk && Array.isArray(chk.ungrounded) && chk.ungrounded.length === 0) {
-
-						return '';
-					}
-				}
-				catch (e) { /* fall through to the safe warning */ }
-
-				return FIGURE_CAVEAT;
-			}
+			// We only reach the judge when a figure was ungrounded, so a 'low' grade confirms the data-grounding
+			// problem: caveat it.
+			if (result.overall === 'low') { return FIGURE_CAVEAT; }
 
 			// Beyond a caveat, a self-judge stays silent: no positive tick (see selfJudge above).
-			if (selfJudge) {
-
-				return '';
-			}
+			if (selfJudge) { return ''; }
 
 			if (result.overall === 'medium') {
 
@@ -464,7 +466,9 @@ async function faithfulnessNote(answer, sources, model) {
 			return '\n\n_✓ Figures checked against your data._';
 		}
 
-		return '';
+		// Judge failed/timed out but the deterministic scan DID find an ungrounded figure — caveat it (this is
+		// idempotent with finalizeAnswer's own figure check, which guards against a duplicate caveat).
+		return ungrounded > 0 ? FIGURE_CAVEAT : '';
 	}
 	catch (e) {
 
@@ -529,7 +533,7 @@ function relayLearningToHub(pattern) {
 
 	try {
 
-		const port = shareData && shareData.parent_port;
+		const port = shareData && shareData.Common && shareData.Common.getParentPort();
 		if (!port || typeof port.postMessage !== 'function') { return; }
 
 		port.postMessage({ type: WORKER_TO_HUB.LEARNING, payload: pattern });
@@ -545,7 +549,7 @@ function relayToolsToHub() {
 
 	try {
 
-		const port = shareData && shareData.parent_port;
+		const port = shareData && shareData.Common && shareData.Common.getParentPort();
 		if (!port || typeof port.postMessage !== 'function') { return; }
 
 		const names = (aiTools.TOOLS || []).map(t => t.name);
@@ -642,7 +646,11 @@ async function completePrompt(messages, model, options) {
 
 	try {
 
-		const result = await adapter.createNonStream(aiClient, useModel, messages, undefined, options);
+		// Bound the call so a stalled provider can't hang the caller forever (withTimeout RESOLVES '' on
+		// timeout — see above). The '' sentinel is distinguishable from a real result object.
+		const result = await withTimeout(adapter.createNonStream(aiClient, useModel, messages, undefined, options), COMPLETE_PROMPT_TIMEOUT_MS);
+
+		if (result === '') { return ''; }   // timed out → graceful empty (matches the "any failure" contract)
 
 		return (adapter.extractNonStreamContent(result) || '');
 	}
@@ -656,7 +664,9 @@ async function completePrompt(messages, model, options) {
 		// caller's own handler.
 		if (options) {
 
-			const result = await adapter.createNonStream(aiClient, useModel, messages, undefined, undefined);
+			const result = await withTimeout(adapter.createNonStream(aiClient, useModel, messages, undefined, undefined), COMPLETE_PROMPT_TIMEOUT_MS);
+
+			if (result === '') { return ''; }
 
 			return (adapter.extractNonStreamContent(result) || '');
 		}
@@ -1044,12 +1054,12 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 			const lr = roomData.lastRender;
 			let res = null, body = null;
 			if (lr.kind === 'deals') {
-				res = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone });
-				if (res && res.success !== false) { body = lr.view === 'breakdown' ? formatOpenDealsBreakdown(res) : (lr.view === 'ranking' ? formatDealRanking(res, lr.rankKind) : formatOpenDealsSummary(res)); }
+				res = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone, deterministic: true });
+				if (renderableResult(res)) { body = lr.view === 'breakdown' ? formatOpenDealsBreakdown(res) : (lr.view === 'ranking' ? formatDealRanking(res, lr.rankKind) : formatOpenDealsSummary(res)); }
 			}
 			else if (lr.kind === 'bots') {
-				res = await aiTools.execute('list_bots', {}, { onActivity, timezone: message.timezone });
-				if (res && res.success !== false) { body = formatBotsCount(res); }
+				res = await aiTools.execute('list_bots', {}, { onActivity, timezone: message.timezone, deterministic: true });
+				if (renderableResult(res)) { body = formatBotsCount(res); }
 			}
 			if (body) {
 				const answer = finalizeAnswer("I've re-checked this against your live data — it's still accurate:\n\n" + body, JSON.stringify(res), message.content, knownEntitiesText(roomData.recentEntities), { trusted: true });
@@ -1168,7 +1178,7 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 					// A specifically-named coin/pair the user does NOT hold. Fail closed FAST with the real open
 					// list, instead of the model loop spinning ~2 minutes on an unresolvable reference (and risking
 					// naming the wrong deal). Grounded, instant, and honest.
-					const od = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone });
+					const od = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone, deterministic: true });
 					const openPairs = (od && Array.isArray(od.closest_to_take_profit)) ? Array.from(new Set(od.closest_to_take_profit.map(d => d.pair).filter(Boolean))) : [];
 					const body = "You don't have an open " + named + " deal right now."
 						+ (openPairs.length ? ' Your open deals are: ' + openPairs.slice(0, 40).join(', ') + '.' : '');
@@ -1202,7 +1212,7 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 						if (!r || r.match_count === 0) { missing.push(t); }
 					}
 					if (missing.length) {
-						const od = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone });
+						const od = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone, deterministic: true });
 						const openPairs = (od && Array.isArray(od.closest_to_take_profit)) ? Array.from(new Set(od.closest_to_take_profit.map(d => d.pair).filter(Boolean))) : [];
 						const body = "You don't have an open " + missing.join(' or ') + ' deal, so I can\'t compare ' + (missing.length > 1 ? 'those' : 'that') + '.'
 							+ (openPairs.length ? ' Your open deals are: ' + openPairs.slice(0, 40).join(', ') + '.' : '');
@@ -1291,9 +1301,25 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 		// Whether the conversation is already ON the user's deals/portfolio, so a bare follow-up resolves in
 		// that context. Computed once and reused by the continuation and the ranking branches below.
 		const dealsCtx = recentTopicIsDealsPortfolio(roomData);
+		const lrPrev = roomData.lastRender;
 		if ((aiGuardrails.looksLikeContinuation(message.content) && dealsCtx) || looksLikeDealsDetailRequest(message.content)) { dealsView = 'breakdown'; }
-		else if (looksLikeDealsStatusQuestion(message.content) || openDealsCountIntent(message.content) || portfolioPnlIntent(message.content)) { dealsView = 'summary'; }
+		// A BARE count follow-up after a profit-state answer — "how many exactly?", "and how many?" — carries no
+		// side word of its own. Resolve the side ("in profit" / "underwater") from the previous quantifier
+		// render, so it lands on the instant subset-count render instead of a ~8s model round-trip. Only when
+		// the last render recorded a side and the topic is still deals, so an out-of-context "how many?" is
+		// never mis-answered. Checked before the intents below because on its own it matches none of them.
+		else if (lrPrev && lrPrev.kind === 'deals' && lrPrev.side && dealsCtx
+			&& /^\s*(?:and\s+|so\s+|ok(?:ay)?\s+|then\s+|but\s+)?(?:exactly\s+)?how many(?:\s+exactly)?(?:\s+(?:is|are|are\s+there|do\s+i\s+have|then|now))?\s*\??\s*$/i.test(message.content)) {
+			quantSpec = { kind: 'count', side: lrPrev.side };
+			dealsView = 'quantifier';
+		}
+		// The quantifier (yes/no, all/any, compare, and a plain SUBSET COUNT like "how many are in profit?") is
+		// checked BEFORE the generic summary: a subset count also satisfies openDealsCountIntent, but the
+		// quantifier render answers it directly ("1 of your 15 open deals is in profit") instead of echoing the
+		// full summary. It is conservative (returns null for a bare total count), so a pure "how many open deals?"
+		// still falls through to the summary below.
 		else if ((quantSpec = dealsQuantifierIntent(message.content))) { dealsView = 'quantifier'; }
+		else if (looksLikeDealsStatusQuestion(message.content) || openDealsCountIntent(message.content) || portfolioPnlIntent(message.content)) { dealsView = 'summary'; }
 		// A superlative follow-up ("which is the worst?", "and the best one?") carries no deal noun of its own,
 		// so tell dealRankingIntent to assume the deals context when the topic is already deals — otherwise it
 		// falls to the model, which mis-picks (e.g. naming a least-bad deal as the worst).
@@ -1301,10 +1327,14 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 	}
 	if (dealsView) {
 
+		// Captured outside the try so the abstention below can report WHY the render could not be produced
+		// (the tool's own error/note — timeout, unavailable, or a null count) instead of a blank "unavailable".
+		let res = null;
+
 		try {
 
-			const res = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone });
-			let body = (res && res.success !== false)
+			res = await aiTools.execute('get_open_deals_status', {}, { onActivity, timezone: message.timezone, deterministic: true });
+			let body = (renderableResult(res))
 				? (dealsView === 'quantifier' ? formatDealsQuantifier(res, quantSpec)
 					: dealsView === 'breakdown' ? formatOpenDealsBreakdown(res)
 					: dealsView === 'ranking' ? formatDealRanking(res, rankKind)
@@ -1318,7 +1348,9 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 				body = await appendConceptForCompound(body, message.content, model);
 				return await emitRender(body, res, {
 					log: 'AI deals shortcut (' + dealsView + '): rendered open deals deterministically [' + (room || '?') + ']',
-					lastRender: { kind: 'deals', view: dealsView, rankKind: rankKind },
+					// Record the profit-state SIDE of a quantifier answer so a later bare "how many exactly?"
+					// follow-up can resolve to the same side without a model round-trip (see lrPrev above).
+					lastRender: { kind: 'deals', view: dealsView, rankKind: rankKind, side: (quantSpec && quantSpec.side) || null },
 					tool: 'get_open_deals_status'
 				});
 			}
@@ -1326,6 +1358,61 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 		catch (e) {
 
 			shareData.Common.logger('AI deals shortcut failed, falling back: ' + ((e && e.message) ? e.message : e));
+		}
+
+		// A deterministic deals answer was CHOSEN (this is a grounded portfolio / deals-status question) but could
+		// NOT be produced — get_open_deals_status returned unavailable/errored, or the count was null (e.g. a
+		// transient data-layer hiccup while the trading loop is busy). Do NOT fall through to the free-form model
+		// loop below: with a weak local model it fabricates deal IDs and P/L there, which the egress funnel then
+		// only WARNS about (the exact production failure). Abstain honestly instead — the same fail-closed stance
+		// the tool loop takes when it cannot ground a data question.
+		const dealsAbst = finalizeAnswer(GROUNDING_ABSTENTION, '', message.content, knownEntitiesText(roomData.recentEntities));
+		roomData.messages.push({ role: 'assistant', content: dealsAbst, timestamp: Date.now() });
+		conversationHistory.set(room, roomData);
+		// Name the concrete reason so a persistent (not transient) failure is diagnosable from the logs: the
+		// tool surfaces a timeout, an unavailable failGuard result, or a data-layer error all via res.error.
+		const abstWhy = !res ? 'no tool result'
+			: res.error ? String(res.error)
+			: (res.available === false) ? ('unavailable' + (res.note ? ' — ' + res.note : ''))
+			: (res.success === false) ? ('data error' + (res.error ? ' — ' + res.error : ''))
+			: 'render produced no body (null count/empty)';
+		shareData.Common.logger('AI deals shortcut: live deal data unavailable (' + abstWhy + ') — abstaining rather than falling through to the model [' + (room || '?') + ']');
+		if (stream) { await streamReplay({ room, text: dealsAbst, footer, abortSignal, onActivity }); return undefined; }
+		return dealsAbst;
+	}
+
+	// Deterministic FAKE-BOT fail-closed — when the user explicitly names a bot that does not exist, say so
+	// with the real bot list instead of letting the model play along ("to report on your TurboBot I'll check
+	// its deals…"), a subtle acceptance of a nonexistent entity. This runs BEFORE the free-form lane on
+	// purpose: a bot-named question with no other data signal ("how is my TurboBot doing?") routes there
+	// tool-less, where finalizeAnswer's bot grounding has no source to check against and the guard never fires.
+	// Excludes how-to / definitional / action phrasings ("how do I create a bot named X"), which are legitimate.
+	if (toolsCfg.enabled && purpose === 'chat' && message.content && !reset && !dealsView
+		&& (!message.attachments || message.attachments.length === 0)
+		&& !aiGuardrails.looksLikeHowTo(message.content)
+		&& !aiGuardrails.looksLikeDefinitional(message.content)
+		&& !aiGuardrails.looksLikeActionRequest(message.content)) {
+
+		const namedBot = aiGuardrails.extractNamedBotSubject(message.content);
+		if (namedBot) {
+			try {
+				const res = await aiTools.execute('list_bots', {}, { onActivity, timezone: message.timezone, deterministic: true });
+				if (renderableResult(res) && Array.isArray(res.bots)) {
+					const realBots = res.bots.map(b => b && b.botName).filter(Boolean);
+					const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+					const n = norm(namedBot);
+					const known = realBots.some((b) => { const bn = norm(b); return bn === n || bn.includes(n) || n.includes(bn); });
+					if (realBots.length && !known) {
+						const body = 'You don\'t have a bot named "' + namedBot + '". Your bots are: '
+							+ realBots.slice(0, 12).join(', ') + '. Ask me about any of those and I\'ll pull its performance.';
+						return await emitRender(body, res, {
+							log: 'AI bot fail-closed: no bot named ' + namedBot + ' [' + (room || '?') + ']',
+							tool: 'list_bots'
+						});
+					}
+				}
+			}
+			catch (e) { /* best-effort; fall through to the normal path unchanged */ }
 		}
 	}
 
@@ -1337,8 +1424,8 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 		&& (botsCountIntent(message.content) || botsListIntent(message.content))) {
 
 		try {
-			const res = await aiTools.execute('list_bots', {}, { onActivity, timezone: message.timezone });
-			const body = (res && res.success !== false) ? formatBotsCount(res) : null;
+			const res = await aiTools.execute('list_bots', {}, { onActivity, timezone: message.timezone, deterministic: true });
+			const body = (renderableResult(res)) ? formatBotsCount(res) : null;
 			if (body) {
 				return await emitRender(body, res, {
 					log: 'AI bots-count shortcut: rendered bot list deterministically [' + (room || '?') + ']',
@@ -1365,8 +1452,8 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 	if (configSpec) {
 
 		try {
-			const res = await aiTools.execute('list_bots', {}, { onActivity, timezone: message.timezone });
-			const body = (res && res.success !== false) ? formatBotConfig(res, configSpec) : null;
+			const res = await aiTools.execute('list_bots', {}, { onActivity, timezone: message.timezone, deterministic: true });
+			const body = (renderableResult(res)) ? formatBotConfig(res, configSpec) : null;
 			if (body) {
 				return await emitRender(body, res, { log: 'AI bot-config shortcut (' + configSpec.field + '): rendered deterministically [' + (room || '?') + ']', tool: 'list_bots' });
 			}
@@ -1387,8 +1474,8 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 	if (perBotSpec) {
 
 		try {
-			const res = await aiTools.execute('list_open_deals', { limit: 50 }, { onActivity, timezone: message.timezone });
-			const body = (res && res.success !== false) ? formatPerBotDeals(res, perBotSpec) : null;
+			const res = await aiTools.execute('list_open_deals', { limit: 50 }, { onActivity, timezone: message.timezone, deterministic: true });
+			const body = (renderableResult(res)) ? formatPerBotDeals(res, perBotSpec) : null;
 			if (body) {
 				return await emitRender(body, res, { log: 'AI per-bot-deals shortcut (' + (perBotSpec.most ? 'most' : 'each') + '): rendered deterministically [' + (room || '?') + ']', tool: 'list_open_deals' });
 			}
@@ -1420,8 +1507,8 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 			const tz = shareData.Common.normalizeTimeZone(message.timezone) || null;
 			const resolved = resolveErrorDates(errorsIntent.offsets, tz);
 			const dates = resolved.map(r => r.date);
-			const res = await aiTools.execute('summarize_recent_errors', { dates }, { onActivity, timezone: message.timezone });
-			const body = (res && res.success !== false) ? formatRecentErrors(res, errorPeriodLabel(errorsIntent, resolved)) : null;
+			const res = await aiTools.execute('summarize_recent_errors', { dates }, { onActivity, timezone: message.timezone, deterministic: true });
+			const body = (renderableResult(res)) ? formatRecentErrors(res, errorPeriodLabel(errorsIntent, resolved)) : null;
 
 			if (body) {
 				return await emitRender(body, res, { log: 'AI errors shortcut: rendered recent errors deterministically (' + dates.join(',') + ') [' + (room || '?') + ']', tool: 'summarize_recent_errors' });
@@ -1443,8 +1530,8 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 		&& recentCompletedIntent(message.content)) {
 
 		try {
-			const res = await aiTools.execute('list_recent_completed_deals', {}, { onActivity, timezone: message.timezone });
-			const body = (res && res.success !== false) ? formatRecentCompleted(res) : null;
+			const res = await aiTools.execute('list_recent_completed_deals', {}, { onActivity, timezone: message.timezone, deterministic: true });
+			const body = (renderableResult(res)) ? formatRecentCompleted(res) : null;
 			if (body) {
 				return await emitRender(body, res, { log: 'AI recent-completed shortcut: rendered deterministically [' + (room || '?') + ']', tool: 'list_recent_completed_deals' });
 			}
@@ -1460,8 +1547,8 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 		&& portfolioFundsIntent(message.content)) {
 
 		try {
-			const res = await aiTools.execute('get_portfolio_summary', {}, { onActivity, timezone: message.timezone });
-			const body = (res && res.success !== false) ? formatPortfolioFunds(res) : null;
+			const res = await aiTools.execute('get_portfolio_summary', {}, { onActivity, timezone: message.timezone, deterministic: true });
+			const body = (renderableResult(res)) ? formatPortfolioFunds(res) : null;
 			if (body) {
 				return await emitRender(body, res, { log: 'AI portfolio-funds shortcut: rendered deterministically [' + (room || '?') + ']', tool: 'get_portfolio_summary' });
 			}
@@ -1755,8 +1842,11 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 			}
 			// Retrieved SymBot data goes outermost so it leads the message — wrapped in a spotlight block
 			// (random unforgeable delimiters) so the model can tell this fetched data from its instructions.
+			// spotlight() returns { wrapped, note, tag }; use the framing note plus the wrapped body (the same
+			// shape as the uploaded-file path above), never the object itself.
 			if (m.role === 'user' && index === lastUserIndex && dealContext) {
-				content = aiGuardrails.spotlight(dealContext, 'SYMBOT_DATA') + '\n\n---\n\n' + content;
+				const spot = aiGuardrails.spotlight(dealContext, 'SYMBOT_DATA');
+				content = spot.note + '\n' + spot.wrapped + '\n\n---\n\n' + content;
 			}
 			return { role: m.role, content };
 		})
@@ -1764,11 +1854,16 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 
 	try {
 
-		if (stream && purpose === 'chat') {
+		if (stream) {
 
-			// Egress funnel for the router (non-tool) chat path. A default install has AI Tools OFF,
-			// so ordinary chat runs here — and previously the model's output streamed to the user
-			// unvetted (no egress sanitize, no system-prompt-leak backstop, no fabricated-list backstop).
+			// Egress funnel for EVERY streamed reply. A default install has AI Tools OFF, so ordinary chat runs
+			// here — and a streamed reply previously reached the user unvetted (no egress sanitize, no deal-id
+			// redaction, no financial-advice disclaimer, no system-prompt-leak backstop, no fabricated-list
+			// backstop; only a log-only advisory check ran). Every streamed purpose is now buffered and funneled
+			// the same way, so finalizeAnswer gates every exit unconditionally — the condition is deliberately
+			// purpose-agnostic so a future streaming purpose cannot silently bypass the egress guard (the
+			// analysis-specific advisory below stays keyed on `purpose`). dealContext is built with `purpose`,
+			// so it is the correct grounding source for analysis too.
 			// Buffer the whole answer (stream:false emits nothing), run it through the same finalizeAnswer
 			// funnel the tool path uses, then replay it progressively so the reveal still looks streamed.
 			// dealContext is the injected SymBot data, so it is the grounding source. Read-only: nothing
@@ -1813,12 +1908,11 @@ const streamChatResponse = async ({ room, model, message, abortSignal, reset, st
 			});
 		}
 
-		// Advisory grounding check on the streamed deal analysis (the path the UI
-		// uses). Log-only — it never alters the reply, it just surfaces drift: a
-		// reply that dropped its Hold / Add Funds recommendation or cited a figure
-		// absent from the analysis prompt. The footer is stripped first so the model
-		// name is not mistaken for an ungrounded figure. The non-streaming API path
-		// runs its own gated guard, so this is scoped to the streaming path.
+		// Advisory grounding check on the streamed deal analysis. The egress funnel (finalizeAnswer, applied in
+		// the buffered branch above for analysis too) already sanitizes and redacts; this is a COMPLEMENTARY
+		// log-only signal that never alters the reply — it surfaces a reply that dropped its Hold / Add Funds
+		// recommendation, or cited a figure absent from the analysis prompt. The footer is stripped first so the
+		// model name is not mistaken for an ungrounded figure.
 		if (purpose === 'analysis' && stream && typeof fullResponse === 'string' && fullResponse.trim() !== '') {
 
 			try {
@@ -2431,6 +2525,23 @@ function finalizeAnswer(answer, sourcesText, questionText, knownText, opts) {
 	}
 	catch (e) { /* advisory only */ }
 
+	// Fabricated LOOSE deal id — the underscore deal-id shape with a SHORT (4-5 digit) trailing epoch
+	// ("XYZ_USD-9F2K1-4823"). A real deal id always carries a 6+ digit epoch, so the strict entity check
+	// above never sees this, yet a weak model has been observed to invent it. Redact any loose id absent
+	// from this turn's tool results — an underscore id token is never a legitimate example, so redaction is
+	// safe, and a real id is present in the sources and left intact.
+	try {
+		if (typeof out === 'string' && out) {
+			const looseIds = Array.from(new Set(out.match(aiGuardrails.LOOSE_DEAL_ID_RE) || []))
+				.filter(id => !sourcesText || sourcesText.indexOf(id) === -1);
+			if (looseIds.length) {
+				for (const id of looseIds) { out = out.split(id).join('[unverified id]'); }
+				if (out.indexOf(FIGURE_CAVEAT.trim()) === -1) { out += FIGURE_CAVEAT; }
+			}
+		}
+	}
+	catch (e) { /* advisory only */ }
+
 	// Bot-subject grounding. A bot NAME the user supplies is treated as grounded by the entity check above
 	// (questionText is in its grounding set), which is right for deal ids and pairs — but a bot name the user
 	// invents is a fabrication trap: handed the full bot ranking, the weak model relabels the top bot with the
@@ -2519,6 +2630,44 @@ function finalizeAnswer(answer, sourcesText, questionText, knownText, opts) {
 	}
 	catch (e) { /* advisory only — never block the answer */ }
 
+	// FAIL-CLOSED for account-DATA questions. By this point every grounding/axiom stage above has run and marked
+	// any unsupported content (a redacted "[unverified id]", a pair or figure absent from the tool results). The
+	// stages above only CAVEAT most of these — they ship the answer under a "⚠️ may not be fully supported" note.
+	// For a question that REQUIRES live data to answer honestly (requiresGrounding — deals, P/L, balances, a
+	// specific deal/pair; NOT concept / definitional / how-to, which keep the softer caveat), shipping a
+	// materially-unsupported answer under a caveat IS the production fabrication (a weak model states real totals
+	// then invents the specifics). So abstain instead. Scoped tightly to avoid suppressing a good answer:
+	//   • only when the question requires grounding AND we actually had tool data (sourcesText) to check against,
+	//   • trusted deterministic renders are exempt (grounded by construction),
+	//   • and only on MATERIAL fabrication that the stages above merely CAVEAT: a redacted fabricated identifier
+	//     ("[unverified id]"), or two-or-more significant figures absent from the data (or every significant
+	//     figure in a short answer). A single derived/rounded figure — which can be a correct computation off the
+	//     real values — keeps the caveat rather than triggering an abstention. Trading PAIRS are deliberately NOT
+	//     a trigger here: they are already fully handled above (a lone off-result pair is a legitimate example
+	//     kept under a soft caveat; an invented ENUMERATION is replaced wholesale before this point).
+	try {
+		if (!(opts && opts.trusted) && typeof out === 'string' && out
+			&& sourcesText && String(sourcesText).trim() !== ''
+			&& aiGuardrails.requiresGrounding(questionText || '')) {
+
+			const redactedId = out.indexOf('[unverified id]') !== -1;
+
+			let ungroundedFigs = 0, figsChecked = 0;
+			try { const c = analysisGuard.checkNumbers(out, sourcesText); ungroundedFigs = c.ungrounded.length; figsChecked = c.numbersChecked; }
+			catch (e) { /* advisory */ }
+			const materialFigureFabrication = ungroundedFigs >= 2 || (ungroundedFigs >= 1 && ungroundedFigs === figsChecked);
+
+			if (redactedId || materialFigureFabrication) {
+				if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') {
+					shareData.Common.logger('AI grounding: fail-closed abstention — materially unsupported data answer (id=' + redactedId
+						+ ' figs=' + ungroundedFigs + '/' + figsChecked + ') [q="' + String(questionText || '').slice(0, 60) + '"]');
+				}
+				return aiGuardrails.sanitizeEgress(GROUNDING_ABSTENTION);
+			}
+		}
+	}
+	catch (e) { /* advisory — never block on the fail-closed gate itself */ }
+
 	// Safety reconciliation: a positive "checked" tick and the uncertainty caveat must never coexist in one
 	// answer. If some combination of paths produced both, the WARNING wins — false assurance is worse than an
 	// extra note of caution — so any positive tick line is stripped, leaving only the caveat.
@@ -2582,8 +2731,9 @@ async function reGroundIfNeeded(convo, model, answer, sourcesText) {
 		const bad = badIds.concat(badPairs).join(', ');
 		const msgs = convo.concat([ { role: 'user', content: 'Your previous answer referenced ' + bad + ', which do NOT appear in any tool result from this turn. Re-answer using ONLY deal ids, pairs and figures that appear verbatim in the tool results above; do not mention ' + bad + ' or anything a tool did not return. If you cannot identify it from the tool results, say so plainly.' } ]);
 
-		const res = await adapter.createNonStream(aiClient, model, msgs, undefined, undefined);
-		const out = (adapter.extractNonStreamContent(res) || '').trim();
+		// Bounded so a stalled provider can't hang the re-ground retry (resolves '' on timeout → keep original).
+		const res = await withTimeout(adapter.createNonStream(aiClient, model, msgs, undefined, undefined), COMPLETE_PROMPT_TIMEOUT_MS);
+		const out = res === '' ? '' : (adapter.extractNonStreamContent(res) || '').trim();
 
 		if (out) {
 			if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') { shareData.Common.logger('AI grounding: re-grounded answer after ungrounded entities: ' + bad); }
@@ -2813,11 +2963,14 @@ function looksLikeDealsStatusQuestion(text) {
 	if (aiGuardrails.containsDealId(s)) { return false; }
 	if (/\b(biggest|worst|best|most|least|closest|furthest|nearest|top|highest|lowest|winning|losing|which)\b/i.test(s)) { return false; }
 	if (aiGuardrails.looksLikeHowTo(s) || aiGuardrails.looksLikeDefinitional(s)) { return false; }
-	// The "are/is/'s" after "how" is OPTIONAL so BOTH word orders match: "how ARE my deals doing" and the
+	// The "are/is" after "how" is OPTIONAL so BOTH word orders match: "how ARE my deals doing" and the
 	// equally common "how my deals ARE doing" (where the verb trails the noun). Without this, the second form
 	// fell through to the model — which then answered a simple status question in prose under an uncertainty
-	// caveat. The how-to / definitional / ranking guards above still exclude "how do my deals work" etc.
-	return /\bhow\s+(?:are\s+|is\s+|'?s\s+)?(?:my|the|our)\s+(?:open\s+|active\s+)?(?:deals?|positions?|trades?|portfolio|bags)\b/i.test(s)
+	// caveat. The contraction attaches to "how" itself — `how(?:'?s)?` — so "how's my deals" and the
+	// apostrophe-less "hows my deals" (a very common typed form) match too; the earlier `how\s+…'?s` form
+	// required a space right after "how" and so silently missed both, routing them to the fabricating model.
+	// The how-to / definitional / ranking guards above still exclude "how do my deals work" etc.
+	return /\bhow(?:'?s)?\s+(?:are\s+|is\s+)?(?:my|the|our)\s+(?:open\s+|active\s+)?(?:deals?|positions?|trades?|portfolio|bags)\b/i.test(s)
 		|| /\b(?:status|state|health|overview|summary|recap|rundown)\s+of\s+(?:my|the|our)\s+(?:open\s+|active\s+)?(?:deals?|positions?|portfolio)\b/i.test(s)
 		// A trailing status verb, allowing an intervening "are/is" ("my deals are doing", "positions look").
 		|| /\b(?:my|the|our)\s+(?:open\s+|active\s+)?(?:deals?|positions?|portfolio)\s+(?:are\s+|is\s+)?(?:doing|going|looking|performing|status|overall|right now|today|at the moment)\b/i.test(s)
@@ -2887,13 +3040,15 @@ function formatPerBotDeals(res, spec) {
 	// the per-bot counts could undercount — disclose it in every branch rather than only the breakdown.
 	const capNote = res.by_bot_capped ? ' (Counted from the first 100 open deals, so this may undercount.)' : '';
 	if (spec && spec.most) {
-		const top = rows[0].count;
-		const leaders = rows.filter(r => r.count === top);
+		// Compute the max defensively rather than trusting rows[0] to be the highest — the "busiest bot"
+		// answer must not depend on the tool happening to return by_bot pre-sorted.
+		const top = Math.max(...rows.map(r => Number(r.count) || 0));
+		const leaders = rows.filter(r => (Number(r.count) || 0) === top);
 		if (leaders.length > 1) {
 			return 'Your bots are tied for the most open deals: ' + leaders.map(r => r.botName).join(', ')
 				+ ' each have ' + top + ' of your ' + total + ' open deals.' + capNote;
 		}
-		return 'The bot with the most open deals is ' + rows[0].botName + ' with ' + top
+		return 'The bot with the most open deals is ' + leaders[0].botName + ' with ' + top
 			+ ' of your ' + total + ' open deals.' + capNote;
 	}
 	const lines = rows.map(r => '• ' + r.botName + ': ' + r.count + (r.count === 1 ? ' open deal' : ' open deals'));
@@ -2983,6 +3138,19 @@ function formatBotConfig(res, spec) {
 	return 'Your ' + spec.label + ' differs by bot:\n\n' + vals.map(x => '• ' + x.name + ': ' + x.v).join('\n');
 }
 
+// Is a tool result usable as the source for a DETERMINISTIC render? A result is renderable only when the tool
+// actually succeeded AND the data is available. `success !== false` catches an explicit failure; `available
+// !== false` catches the failGuard "unavailable" shape (`{ available:false, note:"…NOT a real zero…" }`) a
+// tool returns when its query failed or its accessor is absent — notably on the Hub, which has no trading
+// connection, so the deal/balance accessors are absent there. Gating every shortcut through this one
+// predicate means an unavailable result deterministically FALLS THROUGH to the model path (which honestly
+// says "unavailable") instead of a formatter ever rendering an unavailable-shape object as if it were data.
+// The individual formatters already null-guard on their own fields, so this is defense in depth — and it
+// keeps Hub and instance behavior correct for any future formatter that forgets to.
+function renderableResult(res) {
+	return !!(res && res.success !== false && res.available !== false);
+}
+
 // Deterministic one-line portfolio summary from the real open-deals data. Never invents figures; if the total
 // P/L cannot be a single figure (deals span multiple quote currencies) it reports the per-currency totals
 // rather than summing them. Returns null when the data is unavailable.
@@ -3038,6 +3206,11 @@ function dealsQuantifierIntent(text) {
 	if (!side) { return null; }
 	if (/\b(all|every|each|entirely|every single)\b/i.test(s)) { return { kind: 'all', side: side }; }
 	if (/\b(any|some|at least one|a single)\b/i.test(s)) { return { kind: 'any', side: side }; }
+	// A plain SUBSET COUNT — "how many are in profit / underwater right now?" — no all/any/every quantifier,
+	// just a count of one side. Route it to the focused count render, which LEADS with the subset number
+	// ("1 of your 15 open deals is in profit") instead of echoing the whole open-deals summary. The summary
+	// already contains the figure, so this is a clarity/directness win, not a correctness one.
+	if (/\bhow many\b|\bnumber of\b|\bcount of\b/i.test(s)) { return { kind: 'count', side: side }; }
 	return null;
 }
 
@@ -3060,6 +3233,12 @@ function formatDealsQuantifier(res, spec) {
 		return 'You are flat overall right now — unrealized P/L is 0.';
 	}
 	if (inP == null || under == null) { return null; }
+	if (spec.kind === 'count') {
+		const n = spec.side === 'profit' ? inP : under;
+		const label = spec.side === 'profit' ? 'in profit' : 'underwater';
+		if (n === 0) { return 'None of your ' + total + ' open deals are ' + label + ' right now' + staleNote + '.'; }
+		return n + ' of your ' + total + ' open deal' + (total === 1 ? '' : 's') + ' ' + (n === 1 ? 'is' : 'are') + ' ' + label + ' right now' + staleNote + '.';
+	}
 	if (spec.kind === 'compare') {
 		if (inP > under) { return 'You have more winning deals: ' + inP + ' in profit vs ' + under + ' underwater' + staleNote + '.'; }
 		if (under > inP) { return 'You have more losing deals: ' + under + ' underwater vs ' + inP + ' in profit' + staleNote + '.'; }
@@ -3497,7 +3676,7 @@ async function runTimeSearch(tw, timezone, onActivity) {
 
 	if (tw.mode !== 'band') {
 		const r = await exec({ from: tw.from.toISOString(), to: tw.to.toISOString() });
-		return (r && r.success !== false) ? r : null;
+		return renderableResult(r) ? r : null;
 	}
 
 	const tz = shareData.Common.normalizeTimeZone(timezone) || null;
@@ -3514,7 +3693,7 @@ async function runTimeSearch(tw, timezone, onActivity) {
 	}
 	if (!windows.length) { return { success: true, events: [], event_count: 0 }; }
 	const r = await exec({ windows });                                       // ONE scan over the whole span
-	return (r && r.success !== false) ? r : null;
+	return renderableResult(r) ? r : null;
 }
 
 // A RANKING question over the user's open deals ("which is losing the most?", "biggest winner?", "closest to
@@ -3659,7 +3838,7 @@ function dealRankingIntent(text, opts) {
 	const aboutDeals = assumeDeals || /\b(deals?|positions?|trades?|\bone\b|bags?|profit(?:able)?|loss(?:es)?|losing|winning|winner|loser|underwater|take[- ]?profit|performer|performing|\bgain(?:s|er)?\b|in the red)\b/i.test(s);
 	if (!aboutDeals) { return null; }
 	// A LIST / top-N phrasing ("top 5 …", "list my …", "which deals are …", plural winners/losers) wants a
-	// ranked list, not a single pick. The requested N is captured so the render can honour "top 3" / "top 10".
+	// ranked list, not a single pick. The requested N is captured so the render can honor "top 3" / "top 10".
 	const listM = s.match(/\btop\s+(\d{1,2})\b/i) || s.match(/\b(\d{1,2})\s+(?:most|biggest|best|worst|top)\b/i);
 	// A LIST is wanted only on an EXPLICIT multiplicity signal — a top-N count, a "list/show me … deals"
 	// request, or a plural "most profitable deals". A singular "which … is closest/my biggest winner" stays
@@ -3859,6 +4038,12 @@ async function answerDealReport({ dealId, roomData, model, question, timezone, n
 
 	if (!res || res.error) { return null; }
 
+	// On the Hub (no trading connection) the deal tool returns {available:false} — that means "cannot look
+	// it up here", NOT "this deal does not exist". Fall through to the model/tool loop (which abstains
+	// honestly) instead of asserting a false "deal not found". Every other shortcut gates on renderableResult;
+	// this one bypasses it, so guard the unavailable shape explicitly.
+	if (res.available === false) { return null; }
+
 	if (!res.found || !res.deal) {
 		return dealNotFoundMessage(dealId);
 	}
@@ -3997,6 +4182,7 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 	const correctiveOn = getToolsConfig().corrective;
 	let corrected = false;
 	let anyStrong = false;   // did ANY tool result this loop come back with real data?
+	let anyAvailable = false;   // did ANY tool result come back AVAILABLE (could answer at all, even an honest zero)?
 	let narrationNudged = false;   // guards the one-shot "you described a tool call but didn't make it" nudge
 
 	// Fail-closed grounding gate. A question about the user's OWN data/operations (deals, P/L, errors, logs,
@@ -4054,7 +4240,13 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 			// Stable across rounds (computed once, above) so the model reuses the cached prompt prefix instead
 			// of re-prefilling ~10k tokens every round. reconcileToolArgs (below) is the deterministic id
 			// backstop for identifiers discovered mid-loop, so dropping the per-round schema mutation is safe.
-			({ assistantMessage, toolCalls } = await adapter.chatWithTools(aiClient, model, clampConversation(convo, convoBudget), stableSchemas));
+			// Bound each tool-calling round: the Ollama SDK has no default HTTP timeout, and the turn's
+			// idle/hard abort can only be observed BETWEEN rounds — so a provider that stalls mid-generation
+			// would hang the whole turn forever. On timeout this REJECTS, and the catch below degrades
+			// gracefully (fall back to the router on the first round, else compose from results already gathered).
+			({ assistantMessage, toolCalls } = await shareData.Common.withTimeout(
+				adapter.chatWithTools(aiClient, model, clampConversation(convo, convoBudget), stableSchemas),
+				COMPLETE_PROMPT_TIMEOUT_MS, { message: 'tool-calling round timed out', timedOut: true }));
 		}
 		catch (err) {
 
@@ -4154,15 +4346,18 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 			if (nudge) { convo.pop(); convo.push({ role: 'user', content: nudge }); continue; }
 
 			// FAIL-CLOSED GROUNDING. A data question about the user's own account/operations that reached this
-			// point with NO tool executed was about to be answered from the model's own head — the production
-			// fabrication path. Force ONE grounding attempt; if the model still won't call a tool, abstain with
-			// a fixed line instead of shipping the invented answer. (A tool that ran and returned an honest zero
-			// sets used.length>0, so a truthful "no errors found" is never suppressed.)
-			if (mustGround && used.length === 0) {
-				// A concrete data QUESTION gets one nudge to actually call the tool. A bare data CONTINUATION
-				// ("tell me more") does NOT — the nudge rarely helps a vague follow-up and the extra model round
-				// is what timed the turn out in production; abstain immediately instead (fast and safe).
-				if (!dataContinuation && !groundNudged && iter < maxIterations - 1) {
+			// point was about to be answered from the model's own head — the production fabrication path. This
+			// fires in two cases: NO tool executed at all, or every tool that ran was unavailable (available:false
+			// — the Hub, which has no trading data source). Force ONE grounding attempt only when no tool has run
+			// yet; if the model still won't (or can't) get real data, abstain with a fixed line instead of
+			// shipping an invented answer. (A tool that ran and returned an honest zero sets anyAvailable=true, so
+			// a truthful "no errors found" is never suppressed.)
+			if (mustGround && (used.length === 0 || !anyAvailable)) {
+				// A concrete data QUESTION with NO tool run yet gets one nudge to actually call the tool. A bare
+				// data CONTINUATION ("tell me more") does NOT — the nudge rarely helps a vague follow-up and the
+				// extra model round is what timed the turn out in production. When tools DID run but were all
+				// unavailable (the Hub case), nudging cannot help either, so skip straight to abstention.
+				if (used.length === 0 && !dataContinuation && !groundNudged && iter < maxIterations - 1) {
 					groundNudged = true;
 					convo.pop();   // drop the ungrounded draft so the retry isn't anchored to it
 					convo.push({ role: 'user', content: 'Do not answer from memory or make up figures. Call the appropriate tool now to fetch the actual data for this question, then answer only from what it returns.' });
@@ -4170,7 +4365,8 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 				}
 				const abst = finalizeAnswer(GROUNDING_ABSTENTION, '', question, knownEntitiesText(recentEntities));
 				if (stream) { await streamReplay({ room, text: abst, footer, abortSignal, onActivity }); }
-				shareData.Common.logger('AI tools (' + aiProvider + '): fail-closed abstention — data question answered with no tool consulted [' + (room || '?') + ']');
+				shareData.Common.logger('AI tools (' + aiProvider + '): fail-closed abstention — '
+					+ (used.length === 0 ? 'data question answered with no tool consulted' : 'all tools unavailable (e.g. Hub with no trading data)') + ' [' + (room || '?') + ']');
 				return abst;
 			}
 
@@ -4234,6 +4430,12 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 
 			if (!(e.result && typeof e.result === 'object' && 'error' in e.result)) { allErrored = false; }
 			if (!weakResult(e.result)) { anyStrong = true; }   // any real data means no corrective needed
+			// Was the tool able to answer AT ALL this run? A result is "available" unless it explicitly reported
+			// available:false (the failGuard "unavailable" shape a tool returns when its data source is absent —
+			// notably on the Hub, which has no trading connection/exchange creds). An honest empty result
+			// (available:true, count:0) IS available. This distinguishes "we have no way to know" (abstain) from
+			// "we checked and the answer is zero" (report it truthfully).
+			if (!(e.result && typeof e.result === 'object' && e.result.available === false)) { anyAvailable = true; }
 		}
 
 		onActivity?.();
@@ -4266,7 +4468,9 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 	const finalAnswerFrom = async (msgs) => {
 		try {
 			// Same eviction guard on the tool-free composition, and pass the configured window when set.
-			const res = await adapter.createNonStream(aiClient, model, clampConversation(msgs, convoBudget), undefined, finalNumCtx > 0 ? { num_ctx: finalNumCtx } : undefined);
+			// Bounded so a stalled provider can't hang the final compose (withTimeout resolves '' on timeout).
+			const res = await withTimeout(adapter.createNonStream(aiClient, model, clampConversation(msgs, convoBudget), undefined, finalNumCtx > 0 ? { num_ctx: finalNumCtx } : undefined), COMPLETE_PROMPT_TIMEOUT_MS);
+			if (res === '') { return ''; }
 			return (adapter.extractNonStreamContent(res) || '').trim();
 		}
 		catch (e) { return ''; }
@@ -4274,12 +4478,17 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 
 	try {
 
-		// FAIL-CLOSED GROUNDING (post-loop): the loop ended (cap / thrash / recovery) without ever executing a
-		// tool for a question about the user's own data — do not let the tool-free composition invent it. Abstain.
-		if (mustGround && used.length === 0) {
+		// FAIL-CLOSED GROUNDING (post-loop): abstain rather than let the tool-free composition invent data when
+		// either (a) the loop ended without ever executing a tool for a question about the user's own data, or
+		// (b) every tool that DID run came back unavailable (available:false) — the Hub case, where the deal/
+		// balance data sources are absent. In (b) the model would otherwise compose from "NOT a real zero"
+		// payloads and can ship a fabricated count ("you have 0 open deals") that no downstream entity/number
+		// check catches. An honest zero from an AVAILABLE tool sets anyAvailable=true and is reported normally.
+		if (mustGround && (used.length === 0 || !anyAvailable)) {
 			const abst = finalizeAnswer(GROUNDING_ABSTENTION, '', question, knownEntitiesText(recentEntities));
 			if (stream) { await streamReplay({ room, text: abst, footer, abortSignal, onActivity }); }
-			shareData.Common.logger('AI tools (' + aiProvider + ', capped): fail-closed abstention — data question, no tool consulted [' + (room || '?') + ']');
+			shareData.Common.logger('AI tools (' + aiProvider + ', capped): fail-closed abstention — '
+				+ (used.length === 0 ? 'data question, no tool consulted' : 'all tools unavailable (e.g. Hub with no trading data)') + ' [' + (room || '?') + ']');
 			return abst;
 		}
 
@@ -4468,7 +4677,11 @@ const streamChatResponseWithTimeout = async ({ room, model, message, reset, stre
 
 		clearTimeout(idleTimeout);
 		clearTimeout(hardTimeout);
-		activeGenerations.delete(room);
+		// Delete ONLY if this generation's controller is still the registered one. If a second generation for
+		// the same room started and overwrote it, this (older) generation finishing must not remove the newer
+		// one's controller — that would orphan the running generation from the stop button / disconnect abort.
+		// Mirrors the Hub poll cache's "clear only if it's still mine" guard.
+		if (activeGenerations.get(room) === abortController) { activeGenerations.delete(room); }
 	}
 };
 
@@ -5349,6 +5562,23 @@ async function deepSynthesizeLLM(task, evidence) {
 			if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') {
 				shareData.Common.logger('AI deep analysis: synthesis introduced ' + chk.ungrounded.length
 					+ ' figure(s) not in the findings (' + chk.ungrounded.slice(0, 8).join(', ')
+					+ ') — falling back to the grounded findings digest');
+			}
+			return '';
+		}
+	}
+	catch (e) {}
+
+	// The number check above catches invented FIGURES, but not invented ENTITIES (a deal id or trading pair the
+	// synthesis conjured that is not in the findings). Those would launder past finalizeAnswer, which verifies
+	// the final answer against this report — so a fabricated pair here becomes "grounded" downstream. Verify the
+	// report's entities against the evidence too, and discard to the grounded digest on any unverified id/pair.
+	try {
+		const ent = aiGuardrails.verifyGroundedEntities(out, evidence);
+		if (ent && ent.anyUnverified) {
+			if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') {
+				shareData.Common.logger('AI deep analysis: synthesis introduced entities not in the findings (ids: '
+					+ ent.unverifiedDealIds.slice(0, 5).join(', ') + '; pairs: ' + ent.unverifiedPairs.slice(0, 5).join(', ')
 					+ ') — falling back to the grounded findings digest');
 			}
 			return '';

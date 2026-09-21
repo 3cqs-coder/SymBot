@@ -310,7 +310,7 @@
 		wanted.forEach(function (w) { if (lowerMap[w]) { offer.push(lowerMap[w]); } });
 		if (!offer.length) { offer = (timeframes || []).slice(0, 8); }
 
-		var sel = jQuery('<select class="sbdc-tf-select" title="Interval" style="padding:3px 8px;font-family:inherit;font-size:12px;"></select>');
+		var sel = jQuery('<select class="sbdc-tf-select" title="Interval" style="padding:3px 8px;font-family:inherit;font-size:1rem;"></select>');
 		offer.forEach(function (tf) {
 			var opt = jQuery('<option></option>').attr('value', tf).text(tf);
 			if (String(tf).toLowerCase() === String(active || '').toLowerCase()) { opt.attr('selected', 'selected'); }
@@ -524,14 +524,24 @@
 		var w = window.open('', 'sbdc_' + (deal.pair || '').replace(/[^a-z0-9]/gi, ''), 'width=1040,height=680');
 		if (!w) { return; }
 		var origin = window.location.origin;
+		// Derive the app base path from THIS window, mirroring partialsHeaderView's setBasePath: under the Hub
+		// reverse proxy the instance is served beneath /instance/<id>/, so the popout's relative
+		// ./api/markets/ohlcv fetch must resolve there, not at the Hub root. Standalone, this is just '/'.
+		var basePath = '/';
+		try {
+			var segs = window.location.pathname.split('/').filter(function (s) { return s; });
+			if (segs.length >= 2 && segs[0] === 'instance') { basePath = '/instance/' + segs[1] + '/'; }
+		} catch (e) {}
 		var dark   = resolveTheme() === 'dark';
-		// The popped window's base is about:blank, so set an explicit <base> at our origin — otherwise the
-		// /js and /css tags and the relative ./api/markets/ohlcv fetch can't resolve. JSON.stringify does
-		// not escape '<', so neutralize it (and the JS line separators) before embedding in a <script>.
+		// The popped window's base is about:blank, so set an explicit <base> at our origin + base path —
+		// otherwise the relative ./api/markets/ohlcv fetch can't resolve (and, under the Hub, must carry the
+		// /instance/<id>/ prefix). The absolute /js and /css asset tags below ignore <base> and the Hub serves
+		// them at root, so they stay absolute. JSON.stringify does not escape '<', so neutralize it (and the JS
+		// line separators) before embedding in a <script>.
 		var payload = JSON.stringify({ deal: deal, timeframe: timeframe || '1h', theme: resolveTheme() })
 			.replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 		w.document.write(
-			'<!doctype html><html><head><meta charset="utf-8"><base href="' + origin + '/">' +
+			'<!doctype html><html><head><meta charset="utf-8"><base href="' + origin + basePath + '">' +
 			'<title>Chart · ' + esc(deal.pair) + '</title>' +
 			'<link rel="stylesheet" href="' + origin + '/css/style.css">' +
 			'<style>html,body{margin:0;height:100%;} #c{position:absolute;inset:0;background:' + (dark ? '#151b21' : '#fff') + ';}</style>' +

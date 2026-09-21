@@ -12,7 +12,7 @@
 %>
 <% if ((typeof isHub !== 'undefined' && isHub) && (typeof instancesMap !== 'undefined' && instancesMap && instancesMap.length)) { %>
 	<div style="margin: 0 0 18px 0;">
-		<div style="font-weight: 600; margin-bottom: 4px;">Instances in this list</div>
+		<div style="font-weight: var(--fw-medium); margin-bottom: 4px;">Instances in this list</div>
 		<div style="font-size: var(--fs-body); opacity: 0.7; max-width: 680px;">Each downloaded file is prefixed with its instance name, and off-site (SFTP) backups live in a per-instance <code>&lt;server_id&gt;</code> folder — this legend maps those IDs to their instances.</div>
 		<div class="data-tablewrap">
 			<table class="data-table">

@@ -81,7 +81,11 @@ async function start(enabled, apiKey) {
 		'transports': ['websocket', 'polling'],
 		'path': '/stream/v1/signals',
 		'reconnection': true,
-		'reconnectionDelay': 10000
+		'reconnectionDelay': 10000,
+		// socket.io clamps the backoff to reconnectionDelayMax (default 5000), so without raising it the intended
+		// 10s base delay was silently capped at ~5s. Set the max so the configured delay actually takes effect
+		// (jitter still applies, so reconnects never stampede).
+		'reconnectionDelayMax': 20000
 	});
 
 	socketGlobal = socket;
@@ -224,7 +228,12 @@ async function stop(socket) {
 	if (socket != undefined && socket != null && socket != '' && socket) {
 
 		try {
+				// Tear the socket down fully, not just disconnect it: remove its listeners and close it so a
+				// repeated enable/disable or config reload can't accumulate orphaned sockets and their listener
+				// sets. disconnect() halts reconnection; removeAllListeners() + close() release the rest.
 				socket.disconnect();
+				if (typeof socket.removeAllListeners === 'function') { socket.removeAllListeners(); }
+				if (typeof socket.close === 'function') { socket.close(); }
 		}
 		catch(e) {
 		}
@@ -311,13 +320,13 @@ async function processSignal(data) {
 				const config = bot.config;
 				const pairs = config.pair;
 
-				// Check if signal was already logged for a particular bot
-				const signalDataDb = await getSignalDb({ 'bot_id': botId, 'signal_id': signalId });
+				// Atomic dedup: the (bot_id, signal_id) unique index makes the insert the gate, so two
+				// near-simultaneous copies of the same signal (live event + history replay on reconnect) can
+				// never both start a deal — even on a bot that allows more than one deal per pair. updateDb
+				// returns false when this signal was already recorded for the bot.
+				const isNewSignal = await updateDb(botId, data);
 
-				updateDb(botId, data);
-
-				// Only start if signal has not been seen before
-				if (signalDataDb.length != 0) {
+				if (!isNewSignal) {
 
 					continue;
 				}
@@ -350,7 +359,13 @@ async function processSignal(data) {
 
 						if (!signalValid) {
 
-							return;
+							// Skip only THIS bot, not the whole signal. A single 3CQS BOT_START matches every
+							// active bot subscribed to that condition on the pair (the startConditions query is
+							// array-contains), and each bot carries its own extra sub-conditions. A `return` here
+							// aborted processSignal entirely, so one earlier bot failing its filter silently
+							// suppressed the deal start for every later-matched bot — an order-dependent missed
+							// entry. Mirror the dedup skip above and continue to the next matched bot.
+							continue;
 						}
 					}
 				}
@@ -373,12 +388,16 @@ async function processSignal(data) {
 
 				let body = { 'apiToken': apiToken, 'pair': pairUse, 'signalId': signalId };
 
-				// Start deal
+				// Start deal. The loopback start_deal blocks up to ~30s polling for the deal to appear (through
+				// the serial deal-start queue). Give this fetch a longer timeout than that window so a backed-up
+				// queue does not abort at the default 15s and report a false "start failed" while the deal is in
+				// fact opening server-side. No retry here, so a longer timeout cannot cause a double start.
 				let res = await shareData.Common.fetchURL({
 															'url': baseUrl + '/webhook/api/bots/' + botId + '/start_deal',
 															'method': 'post',
 															'headers': headers,
-															'body': body
+															'body': body,
+															'timeoutMs': 35000
 														 });
 
 				if (res.success) {
@@ -428,7 +447,10 @@ async function processSignal(data) {
 	}
 
 
-	if (signal == 'BOT_STOP') {
+	// Freshness guard (mirrors BOT_START): every reconnect replays up to 100 historical signals, so a stale
+	// BOT_STOP from days ago must not re-fire against whatever is active NOW — that could mark a freshly-opened
+	// deal as its bot's last one and suppress the next auto-restart. Only act on a recent stop.
+	if (signal == 'BOT_STOP' && diffSec < (60 * maxMins)) {
 
 		let query = {
 						'status': 0,
@@ -531,6 +553,13 @@ function compareCondition(rawA, operator, rawB) {
 }
 
 
+// Record a signal for a bot. Returns TRUE when this is the FIRST time we have recorded (bot_id, signal_id) —
+// i.e. proceed to act on it — and FALSE when it was already recorded (a duplicate, so skip). The bot_id+signal_id
+// unique index makes the INSERT itself the atomic dedup gate: two near-simultaneous copies of one signal (the
+// live event plus its history replay on reconnect) race to insert, and exactly one wins (returns true) while the
+// other gets an 11000 duplicate-key error (returns false). Any OTHER save error returns true — fail toward
+// PROCESSING the signal rather than silently dropping a real one (matching the prior behavior, where a read
+// error left the caller to proceed).
 async function updateDb(botId, data) {
 
 	const signal = new Signals({
@@ -542,35 +571,18 @@ async function updateDb(botId, data) {
 									'signal_data': data
 							  });
 
-	await signal.save()
-			.catch(err => {
-							if (err.code === 11000) {
-
-								// Duplicate entry
-							}
-						  });
-}
-
-
-async function getSignalDb(query) {
-
-	if (query == undefined || query == null) {
-
-		query = {};
-	}
-
 	try {
 
-		const data = await Signals.find(query);
-
-		return data;
+		await signal.save();
+		return true;   // first time this (bot, signal) was recorded → act on it
 	}
-	catch (e) {
+	catch (err) {
 
+		if (err && err.code === 11000) { return false; }   // duplicate → already seen, skip
+		return true;   // any other error: proceed rather than drop a real signal
 	}
-	
-	return [];
-};
+}
+
 
 
 async function sendNotification(msg, logMsg) {
@@ -603,6 +615,10 @@ module.exports = {
 
 	start,
 	stop,
+
+	// Exposed for unit testing the multi-bot BOT_START loop (a per-bot sub-condition failure must skip only
+	// that bot, not abort the whole signal). Production drives it internally from the socket 'message' handler.
+	processSignal,
 
 	init: function(obj) {
 

@@ -37,17 +37,17 @@ For the WebSocket API, pass the key as the `api-key` handshake header (see
 
 The Signal Bot webhook (`/webhook/api/signal/:botId`) authenticates with a token sent as
 `apiToken` in the JSON body (the body is used because senders such as TradingView cannot set
-custom headers). That token can be **either**:
+custom headers). That token can be either:
 
-- a **scoped API key** (Access Control → API Keys) with the **`deal.create`** capability —
+- a scoped API key (Access Control → API Keys) with the `deal.create` capability —
   recommended, since it can be revoked or rotated on its own; or
-- the legacy **Webhook API Token** from **Configuration → Webhook API Token** (deprecated, kept
+- the legacy Webhook API Token from Configuration → Webhook API Token (deprecated, kept
   for backward compatibility).
 
 A header-capable sender may instead pass the same value as an `api-token`/`api-key` header. See
 [signal-bot/](signal-bot/).
 
-Because the webhook changes money, it accepts an optional **`Idempotency-Key`** header (or a
+Because the webhook changes money, it accepts an optional `Idempotency-Key` header (or a
 `signal_id` / `idempotency_key` body field) so a retried signal is ignored rather than opening or
 funding a deal twice — see [signal-bot/](signal-bot/). The read-only WebSocket API has no
 state-changing actions, so idempotency does not apply there.

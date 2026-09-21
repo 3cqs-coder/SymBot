@@ -137,6 +137,44 @@ async function scheduleHandlerCoverageCheck() {
 }
 
 
+// Integrity check (Watchdog): every SHIPPED recipe's `type` must map to a registered handler AT BOOT.
+// The dev-time recipe/handler coverage test registers handlers itself, so it proves the handler FILES
+// declare their types — but not that boot actually wires each one. A shipped recipe whose handler was
+// never registered at boot seeds a disabled schedule that can never run once a user enables it, with no
+// other signal until they try. This catches a forgotten boot wiring proactively. Sync; returns a
+// finding or null. Reads handlers at check time, so it sees the full registered set.
+function shippedRecipeHandlerCoverageCheck() {
+
+	const recipes = (shareData && shareData.ScheduleRecipes && typeof shareData.ScheduleRecipes.listShipped === 'function')
+		? shareData.ScheduleRecipes.listShipped()
+		: null;
+
+	if (!recipes) { return null; }   // recipe library unavailable at check time — skip rather than raise a false alarm
+
+	const registered = new Set(handlers.keys());
+	const missing = [];
+	const seen = new Set();
+
+	for (const r of recipes) {
+
+		const type = r && r.type;
+		if (!type || seen.has(type)) { continue; }
+		seen.add(type);
+		if (!registered.has(type)) { missing.push(type); }
+	}
+
+	if (missing.length) {
+		return {
+			action: 'watchdog.shipped_recipe_no_handler',
+			target: String(missing.length),
+			detail: 'shipped recipe type(s) have no registered handler, so the recipe can never run once enabled — a handler was likely not wired at boot: ' + missing.sort().join(', ')
+		};
+	}
+
+	return null;
+}
+
+
 // ── Schedule heartbeat (Watchdog): is every enabled schedule actually primed to fire? ────────
 // A DB schedule is armed under its own schedule_id (see armUser). An ENABLED schedule that is NOT in
 // the armed set will never fire — the classic silent failure, most often an enabled cron whose cron
@@ -284,6 +322,11 @@ async function recordBackupSftpResult(ok) {
 
 // Arm a one-off timer, chunking delays longer than setTimeout can hold.
 function armOnce(jobId, origin, runAtMs, onFire) {
+
+	// A corrupt/legacy run_at yields NaN here; setTimeout(fn, NaN) coerces to 0 and would fire the handler
+	// IMMEDIATELY (and again on every restart). validate() guards new rows, but a directly-edited or legacy
+	// DB row can reach this — so skip a non-finite run time rather than fire a "once" job at the wrong moment.
+	if (!isFinite(runAtMs)) { return; }
 
 	const delay = runAtMs - Date.now();
 
@@ -1317,6 +1360,9 @@ async function start(obj) {
 	// here, after all handlers are registered by boot, so the check sees the full handler set.
 	if (shareData.Watchdog && typeof shareData.Watchdog.register === 'function') {
 		shareData.Watchdog.register('schedule_handler_coverage', scheduleHandlerCoverageCheck);
+		// Companion to the above: flag a SHIPPED recipe whose type has no handler wired at boot, so the
+		// gap is caught before any user enables the recipe (not only once a DB row of that type exists).
+		shareData.Watchdog.register('shipped_recipe_handler_coverage', shippedRecipeHandlerCoverageCheck);
 		// Heartbeat: flag enabled schedules that aren't primed to fire (e.g. an invalid cron that was
 		// skipped at arm time). Registered here (before the arming loop below); the check itself RUNS
 		// later, during the boot Watchdog pass after start() returns, so it sees the fully-armed state.

@@ -42,8 +42,10 @@ function createLogWriter(fsImpl) {
 		return q;
 	}
 
-	// Cost of one queued line in bytes: the text plus the newline it will be written with.
-	function cost(s) { return s.length + 1; }
+	// Cost of one queued line in BYTES: the UTF-8 size of the text plus the one newline it is written with.
+	// Byte-accurate (not string length) so the ceiling above means what it says even for multibyte content,
+	// and so it matches the byte total subtracted on drain. Buffer.byteLength is a fast native length scan.
+	function cost(s) { return Buffer.byteLength(s, 'utf8') + 1; }
 
 	// Drop the oldest line from whichever queue holds the most, to pull memory back under the ceiling.
 	function dropOldest() {
@@ -100,7 +102,7 @@ function createLogWriter(fsImpl) {
 		const batch = q.pending;
 		q.pending = [];
 		const buf = batch.join('\n') + '\n';
-		pendingBytes -= buf.length;          // these bytes left `pending`; they now live in `inflight`
+		pendingBytes -= Buffer.byteLength(buf, 'utf8');   // these bytes left `pending`; they now live in `inflight` (byte-accurate, matches cost())
 		q.inflight = buf;                    // kept until the write confirms, so flushSync can re-flush it on a forced exit
 
 		writeBatch(fileName, buf, () => {

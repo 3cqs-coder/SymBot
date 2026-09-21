@@ -9,7 +9,7 @@ const { WORKER_TO_HUB } = require(__dirname + '/Hub/MessageTypes.js');
 //   'own'   — this process has its own SMTP configured (enabled + host); it builds a local
 //             transport and sends directly. Used by a standalone instance, by an instance
 //             that overrides the Hub, and by the Hub itself (whose SMTP lives in hub.json).
-//   'relay' — no own SMTP, but the process is a Hub worker (shareData.parent_port is set);
+//   'relay' — no own SMTP, but the process is a Hub worker (Common.getParentPort() is set);
 //             email is handed to the Hub over the existing worker channel and the Hub sends
 //             it through its shared mailer. This keeps the UX simple:
 //             set SMTP once on the Hub and every instance inherits it, with the instance's
@@ -99,7 +99,7 @@ async function configure() {
 	transport = own ? buildTransport({ host: m.host, port: m.port, secure: m.secure, user: m.user, pass }) : null;
 
 	if (own && transport) { mode = 'own'; }
-	else if (shareData && shareData.parent_port) { mode = 'relay'; }
+	else if (shareData && shareData.Common && shareData.Common.getParentPort()) { mode = 'relay'; }
 	else { mode = 'none'; }
 
 	log('mode ' + mode + (mode === 'own' ? ' (host ' + cfg.host + ')' : (mode === 'relay' ? ' (via Hub)' : '')));
@@ -128,7 +128,7 @@ function send(msg) {
 
 		if (mode === 'relay') {
 
-			const port = shareData && shareData.parent_port;
+			const port = shareData && shareData.Common && shareData.Common.getParentPort();
 
 			if (!port || typeof port.postMessage !== 'function') { log('relay skipped — no Hub channel'); return { sent: false }; }
 

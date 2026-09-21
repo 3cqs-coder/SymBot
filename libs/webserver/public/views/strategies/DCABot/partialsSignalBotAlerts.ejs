@@ -48,7 +48,7 @@
 	</div>
 
 	<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-		<b style="font-size: 1.25rem;">Signal Bot</b>
+		<b style="font-size: var(--fs-section);">Signal Bot</b>
 		<label style="cursor: pointer; user-select: none;">
 			<input type="checkbox" id="signalBotMode" <%- _isSignalBot ? 'checked' : '' %>>
 			Signal Bot mode
@@ -141,16 +141,16 @@
 			 data-json-single="<%= cmd.json_single %>"
 			 style="border: 1px solid rgba(128,128,128,0.3); border-left: 4px solid <%= _c.border %>; background: <%= _c.bg %>; border-radius: 6px; padding: 14px 16px; margin-bottom: 14px;">
 
-			<div style="font-weight: 600; font-size: 1.05rem; margin-bottom: 8px;"><%= cmd.label %></div>
+			<div style="font-weight: var(--fw-medium); font-size: var(--fs-body); margin-bottom: 8px;"><%= cmd.label %></div>
 
 			<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
 				<input type="text" class="form-field signal-alert-url" readonly value="<%= cmd.path %>"
-					   style="flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); font-size: 1rem;">
+					   style="flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); font-size: var(--fs-body);">
 				<button type="button" class="btn signal-copy" data-copy="url">Copy URL</button>
 			</div>
 
 			<textarea class="form-field signal-alert-body" readonly rows="4"
-					  style="width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 1rem; resize: vertical;"><%= cmd.json_multi %></textarea>
+					  style="width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: var(--fs-body); resize: vertical;"><%= cmd.json_multi %></textarea>
 			<div style="text-align: right; margin-top: 8px;">
 				<button type="button" class="btn signal-copy" data-copy="body">Copy message</button>
 			</div>
@@ -178,9 +178,9 @@
 <%# The token is emitted for the optional "Fill in my token" toggle only; it is
     kept out of the alert bodies until the user asks for it. %>
 <% if (_apiToken !== '') { %>
-<script>window.__signalBotToken = <%- JSON.stringify(_apiToken) %>;</script>
+<script>window.__signalBotToken = <%- JSON.stringify(_apiToken).replace(/</g, '\\u003c') %>;</script>
 <% } %>
 <% if (_urlPrefix) { %>
-<script>window.__signalBotUrlPrefix = <%- JSON.stringify(_urlPrefix) %>;</script>
+<script>window.__signalBotUrlPrefix = <%- JSON.stringify(_urlPrefix).replace(/</g, '\\u003c') %>;</script>
 <% } %>
 <script src="/js/symbot-signal-bot.js"></script>

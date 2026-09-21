@@ -65,9 +65,9 @@ $.confirm({
 		<br><br>
 		<input type="checkbox" id="includeChatsBackup" class="form-field" style="width: 20px;" /> <b>Include AI chats</b>
 		<br>
-		<input type="checkbox" id="includeSchedulesBackup" class="form-field" style="width: 20px;" /> <b>Include schedules</b> <span style="color: #888;">(includes stored backup/SFTP credentials)</span>
+		<input type="checkbox" id="includeSchedulesBackup" class="form-field" style="width: 20px;" /> <b>Include schedules</b> <span style="color: var(--label-color);">(includes stored backup/SFTP credentials)</span>
 		<br>
-		<input type="checkbox" id="includeConfigBackup" class="form-field" style="width: 20px;" /> <b>Include configuration</b> <span style="color: #888;">(app settings + exchange keys; makes the backup portable but it then carries your keys &mdash; keep it safe, and it only opens on a server using the same app password)</span>
+		<input type="checkbox" id="includeConfigBackup" class="form-field" style="width: 20px;" /> <b>Include configuration</b> <span style="color: var(--label-color);">(app settings + exchange keys; makes the backup portable but it then carries your keys &mdash; keep it safe, and it only opens on a server using the same app password)</span>
 
 		<br><br>
 
@@ -108,7 +108,7 @@ $.confirm({
 		  },
 		  cancel: {
 			  btnClass: 'btn-default',
-			  text: '<div style="color: #000000;">Cancel</div>',
+			  text: '<div style="color: var(--color-neutral);">Cancel</div>',
 			  action: function() {},
 		},
 	},
@@ -164,9 +164,9 @@ $.confirm({
 		<br>
 		<input id="convertData" name="convertData" type=checkbox class="form-field"> &nbsp; <b>Convert all bots and deals to sandbox mode</b>
 		<br>
-		<input id="restoreSchedules" name="restoreSchedules" type=checkbox class="form-field"> &nbsp; <b>Restore schedules</b> <span style="color: #888;">(overwrites this instance's schedules &amp; backup settings)</span>
+		<input id="restoreSchedules" name="restoreSchedules" type=checkbox class="form-field"> &nbsp; <b>Restore schedules</b> <span style="color: var(--label-color);">(overwrites this instance's schedules &amp; backup settings)</span>
 		<br>
-		<input id="restoreConfig" name="restoreConfig" type=checkbox class="form-field"> &nbsp; <b>Restore configuration</b> <span style="color: #888;">(only if the backup includes it; overwrites this server's settings, exchange keys &amp; app password with the backup's &mdash; sign in afterward with the source server's app password)</span>
+		<input id="restoreConfig" name="restoreConfig" type=checkbox class="form-field"> &nbsp; <b>Restore configuration</b> <span style="color: var(--label-color);">(only if the backup includes it; overwrites this server's settings, exchange keys &amp; app password with the backup's &mdash; sign in afterward with the source server's app password)</span>
 	</form>
 
 	<br><br>
@@ -204,7 +204,7 @@ $.confirm({
 		  },
 		  cancel: {
 			  btnClass: 'btn-default',
-			  text: '<div style="color: #000000;">Cancel</div>',
+			  text: '<div style="color: var(--color-neutral);">Cancel</div>',
 			  action: function() {},
 		},
 	},
@@ -251,7 +251,7 @@ function loadRollbacks() {
 
 			if (!data.data || data.data.length === 0) {
 
-				$list.append('<div style="font-size: 1.1rem; color: #888;">No rollback snapshots available. Snapshots are created automatically before each update.</div>');
+				$list.append('<div style="font-size: var(--fs-subhead); color: var(--label-color);">No rollback snapshots available. Snapshots are created automatically before each update.</div>');
 				return;
 			}
 
@@ -260,7 +260,7 @@ function loadRollbacks() {
 				const date = snap.date ? dateConvertLocal(snap.date) : 'Unknown date';
 				$list.append(
 					'<div style="display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--table-border-color);">' +
-					'<span style="font-size: 1.1rem; flex: 1;">v' + snap.version + ' &mdash; ' + date + '</span>' +
+					'<span style="font-size: var(--fs-subhead); flex: 1;">v' + snap.version + ' &mdash; ' + date + '</span>' +
 					'<a href="javascript:void(0);" onclick="rollbackSystem(' + JSON.stringify(snap.snapshotName) + ');" style="color: var(--color-danger); font-size: var(--fs-body);">Rollback</a>' +
 					'</div>'
 				);
@@ -279,7 +279,7 @@ function rollbackSystem(snapshotName) {
 	// Shared checkbox-confirm scaffold (SymBot.UI.confirmWithCheckbox).
 	SymBot.UI.confirmWithCheckbox({
 		content: 'Rollback to ' + snapshotName + '?<br><br>' +
-			'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+			'<div style="font-size: var(--fs-body); padding: 8px; background: var(--color-warning-soft); border-left: 3px solid var(--color-warning); border-radius: 2px;">' +
 			'<b>Note:</b> Rollback restores code files only. The database is not affected. ' +
 			'If the update introduced database schema changes, rolling back the code may cause compatibility issues. ' +
 			'Review the logs after restart to confirm everything is working.</div>',
@@ -330,12 +330,12 @@ function showRollbacks() {
 		boxWidth: '60%',
 		useBootstrap: false,
 		content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Rollback System<br><br>' +
-			'<div id="rollback-list" style="font-size: 1.1rem; min-height: 40px;">Loading...</div>' +
+			'<div id="rollback-list" style="font-size: var(--fs-subhead); min-height: 40px;">Loading...</div>' +
 			'</div>',
 		buttons: {
 			close: {
 				btnClass: 'btn-default',
-				text: '<div style="color: #000000;">Close</div>',
+				text: '<div style="color: var(--color-neutral);">Close</div>',
 				action: function() {}
 			}
 		},

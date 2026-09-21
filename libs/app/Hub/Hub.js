@@ -6,20 +6,9 @@ const net = require('net');
 const ccxt = require('ccxt');
 const { parseStringPromise } = require('xml2js');
 const { HUB_TO_WORKER, WORKER_TO_HUB } = require(__dirname + '/MessageTypes.js');
+const LogWriter = require(__dirname + '/../LogWriter.js');   // shared, batched, off-event-loop log appender
 
 let shareData;
-
-// Ordered async log-append queue. The Hub relays every log line from every worker; writing each
-// with fs.appendFileSync would block the Hub's main event loop per line (and per instance). This
-// chains async appends so writes never block the loop yet still land in order. A failed append is
-// swallowed (logging must never crash the Hub).
-let _logAppendChain = Promise.resolve();
-function queueLogAppend(file, line) {
-	_logAppendChain = _logAppendChain.then(() => new Promise((resolve) => {
-		fs.appendFile(file, line, 'utf8', () => resolve());
-	}));
-	return _logAppendChain;
-}
 
 
 async function validateConfig(configsArr, isNew) {
@@ -703,7 +692,6 @@ async function routeUpdateInstances(req, res) {
 	let updatedAppConfigs = {};
 	let workersRestart = [];
 
-	let workerTerminate = false;
 	let success = true;
 	let message = 'Success!';
 
@@ -794,6 +782,12 @@ async function routeUpdateInstances(req, res) {
 					let portUpdated = false;
 					let mongoDbUrlUpdated = false;
 
+					// Per-iteration: whether THIS instance was just terminated (because it is now disabled). Must be
+					// loop-local — a function-scoped flag stayed true once any earlier instance in the batch was
+					// disabled, which then suppressed the restart of every later enabled+edited instance, leaving it
+					// trading on stale config (and unreachable through the Hub proxy if its port changed).
+					let workerTerminate = false;
+
 					const appDataOrig = await shareData.Common.getConfig(updatedConfig.app_config);
 					let appConfig = appDataOrig;
 
@@ -814,7 +808,14 @@ async function routeUpdateInstances(req, res) {
 						}
 					}
 
-					if (!updatedConfig['overrides']['server_id'] && updatedConfig['mongo_db_url'] && (updatedConfig.mongo_db_url != updatedConfig['mongo_db_url'])) {
+					// Detect a Mongo URL change for a non-override instance. Guard the overrides deref (a payload
+					// without an `overrides` key would otherwise throw a TypeError and abort the whole batch), and
+					// compare against the STORED value — the previous comparison was the field against itself, so it
+					// was always false and this branch was dead (the change was still caught by the next block).
+					const overrideServerId = updatedConfig.overrides && updatedConfig.overrides.server_id;
+					const prevMongoDbUrl   = (appConfig && appConfig.data) ? appConfig.data.mongo_db_url : undefined;
+
+					if (!overrideServerId && updatedConfig['mongo_db_url'] && (prevMongoDbUrl != updatedConfig['mongo_db_url'])) {
 
 						mongoDbUrlUpdated = true;
 					}
@@ -1253,6 +1254,14 @@ async function terminateInstance(instanceId) {
 
 	try {
 
+		// Cancel any pending crash-restart for this instance UNCONDITIONALLY, before anything else. A worker
+		// that crashed and is waiting out its restart backoff has no live entry in workerMap, so the live-worker
+		// suppress path below would miss it and the scheduled timer could resurrect an instance the operator is
+		// now stopping, disabling, or deleting. This is keyed by instanceId and is a no-op when nothing is pending.
+		if (shareData.HubMain && typeof shareData.HubMain.cancelScheduledRestart === 'function') {
+			shareData.HubMain.cancelScheduledRestart(instanceId);
+		}
+
 		const instanceResult = await getInstance(instanceId);
 
 		// Clear the cached reverse proxy so the next request gets a fresh connection. The proxy maps are
@@ -1270,6 +1279,14 @@ async function terminateInstance(instanceId) {
 
 			if (worker) {
 
+			// This exit is INTENTIONAL (stop / delete / config-update restart). Tell the crash supervisor to
+			// suppress its auto-restart for this worker, so a forced termination (when the worker doesn't
+			// acknowledge shutdown in time and exits non-zero) is never mistaken for a crash and resurrected.
+			if (shareData.HubMain && typeof shareData.HubMain.suppressWorkerRestart === 'function') {
+				shareData.HubMain.suppressWorkerRestart(workerId);
+			}
+
+
 			// Wait until shutdown_received is received from worker and delay has passed.
 			// A per-instance timeout prevents an indefinite hang if the worker is
 			// already dead or crashes before it can acknowledge the shutdown request.
@@ -1281,7 +1298,13 @@ async function terminateInstance(instanceId) {
 
 				const onShutdownReceived = async (message) => {
 
+					// Use on() + explicit off() rather than once(): a live worker emits other messages
+					// (log batches, memory polls, dashboard replies) that could arrive before the ACK, and
+					// once() would be consumed by the first of ANY type and miss the real SHUTDOWN_RECEIVED,
+					// stalling the restart until the full force-terminate timeout.
 					if (message.type !== WORKER_TO_HUB.SHUTDOWN_RECEIVED) return;
+
+					worker.off('message', onShutdownReceived);
 
 					// Message received — cancel the safety timeout
 					clearTimeout(terminateTimeout);
@@ -1306,7 +1329,7 @@ async function terminateInstance(instanceId) {
 					}
 				};
 
-				// Use once so the listener is removed automatically after the first message
+				// Match on the ACK type explicitly (see the handler) and detach with off() once matched
 				worker.once('message', onShutdownReceived);
 
 				// Safety timeout — resolves (not rejects) so one unresponsive worker
@@ -1429,6 +1452,15 @@ async function routeRemoveInstance(req, res) {
 			}
 			else {
 
+				// Cancel any pending crash-restart UNCONDITIONALLY before removing the instance. If the
+				// instance crashed and is mid-backoff there is no live worker, so terminateInstance (which
+				// normally does this) is skipped below — without this the scheduled restart timer could fire
+				// during the saveConfig here, read the pre-delete config, and resurrect an instance the operator
+				// just removed. No-op when nothing is pending.
+				if (shareData.HubMain && typeof shareData.HubMain.cancelScheduledRestart === 'function') {
+					shareData.HubMain.cancelScheduledRestart(instanceId);
+				}
+
 				// Shut down the worker first if it is running
 				const { success: running, worker } = await getInstance(instanceId);
 
@@ -1446,6 +1478,13 @@ async function routeRemoveInstance(req, res) {
 				hubDataNew.instances = updatedInstances;
 
 				await shareData.Common.saveConfig(shareData.appData.hub_config, hubDataNew);
+
+				// Refresh the reverse-proxy port allowlist so the removed instance's port no longer maps to a
+				// (now dead) worker — mirrors routeAddInstance/routeUpdateInstances. Without this the stale port
+				// lingered in web_server_ports until the next add/update or Hub restart, so a request to the
+				// removed instance's /instance/<port> URL built a proxy to a dead port and returned a 500.
+				const validate = await validateConfig(updatedInstances);
+				if (validate.success) { await setProxyPorts(validate.configs['web_server_ports']); }
 
 				logger('info', `Instance ${instanceConfig.name} removed from Hub.`);
 
@@ -1724,8 +1763,10 @@ async function logger(type, msg) {
 		const dateStr = dateNow.substring(0, 10);
 		const logFile = shareData.Common.logFilePath(dateStr);
 
-		// Async, order-preserving append — never blocks the Hub's main event loop (see queueLogAppend).
-		queueLogAppend(logFile, logDataFile + '\n');
+		// Non-blocking, ordered, fire-and-forget append via the shared LogWriter (the same batched writer the
+		// instance logger uses), so the Hub and instance can't drift and the Hub gains LogWriter's batching,
+		// first-write mkdir retry, and graceful-exit flush. LogWriter adds the line separator, so pass no '\n'.
+		LogWriter.append(logFile, logDataFile);
 	}
 	catch (e) {}
 
@@ -1802,6 +1843,40 @@ async function performBotAction(instanceId, action, botId, data) {
 }
 
 
+// The quote currency of a pair (the asset profit is denominated in), e.g. BTC/USDT -> USDT.
+// Delegates to the ONE canonical helper in Common so the Hub dashboard buckets exactly the way the
+// instance dashboard KPIs and trading journal do, and can never diverge; the inline is a pre-init
+// fallback (shareData.Common may not be wired yet) matching the canonical behavior.
+function quoteCurrencyOf(pair) {
+
+	if (shareData && shareData.Common && typeof shareData.Common.quoteCurrency === 'function') {
+
+		return shareData.Common.quoteCurrency(pair);
+	}
+
+	if (typeof pair !== 'string') { return 'UNKNOWN'; }
+
+	const sep = pair.indexOf('/') >= 0 ? '/' : (pair.indexOf('_') >= 0 ? '_' : null);
+
+	if (sep == null) { return 'UNKNOWN'; }
+
+	const parts = pair.split(sep);
+
+	return (parts.length >= 2 && parts[1]) ? parts[1].toUpperCase() : 'UNKNOWN';
+}
+
+// Present a per-currency profit bucket the way the instance portfolio layer does: a single scalar total ONLY
+// when every open deal shares one quote currency (summing USDT and BTC profits into one number is meaningless),
+// otherwise profit:null with the per-currency breakdown. Values are rounded to 2dp. Pure — unit-tested.
+function summarizeProfit(byCur) {
+	const rounded = {};
+	for (const c of Object.keys(byCur || {})) { rounded[c] = Math.round(((byCur[c] || 0) + Number.EPSILON) * 100) / 100; }
+	const curs = Object.keys(rounded);
+	if (curs.length <= 1) { return { profit: curs.length ? rounded[curs[0]] : 0, profit_currency: curs[0] || null, profit_by_currency: rounded }; }
+	return { profit: null, profit_currency: null, profit_by_currency: rounded };
+}
+
+
 async function getDashboardData() {
 
 	const [instancesDeals, instancesBots] = await Promise.all([
@@ -1818,7 +1893,7 @@ async function getDashboardData() {
 
 		if (!instanceMap[name]) {
 
-			instanceMap[name] = { name, instanceId: instance.instanceId, deals: 0, bots: 0, profit: 0, portfolio };
+			instanceMap[name] = { name, instanceId: instance.instanceId, deals: 0, bots: 0, profitByCur: {}, portfolio };
 		}
 
 		const deals = instance.deals || [];
@@ -1828,7 +1903,11 @@ async function getDashboardData() {
 		for (const deal of deals) {
 
 			const p = parseFloat(deal?.info?.profit ?? 0);
-			if (!isNaN(p)) instanceMap[name].profit += p;
+			if (!isNaN(p)) {
+				// Bucket profit by the deal's quote currency, never a naive cross-currency sum.
+				const cur = quoteCurrencyOf(deal && deal.pair);
+				instanceMap[name].profitByCur[cur] = (instanceMap[name].profitByCur[cur] || 0) + p;
+			}
 		}
 	}
 
@@ -1838,7 +1917,7 @@ async function getDashboardData() {
 
 		if (!instanceMap[name]) {
 
-			instanceMap[name] = { name, instanceId: instance.instanceId, deals: 0, bots: 0, profit: 0, portfolio: null };
+			instanceMap[name] = { name, instanceId: instance.instanceId, deals: 0, bots: 0, profitByCur: {}, portfolio: null };
 		}
 
 		instanceMap[name].bots += (instance.bots || []).length;
@@ -1857,15 +1936,26 @@ async function getDashboardData() {
 	}
 	catch (e) {}
 
-	const totals = instances.reduce((acc, inst) => {
+	// Finalize each instance's profit into a scalar (single currency) or a per-currency breakdown, and bucket the
+	// fleet totals the same way — so a multi-currency instance or fleet never shows a meaningless mixed sum.
+	const totalsByCur = {};
+	for (const inst of instances) {
+		const s = summarizeProfit(inst.profitByCur);
+		inst.profit = s.profit;
+		inst.profit_currency = s.profit_currency;
+		inst.profit_by_currency = s.profit_by_currency;
+		delete inst.profitByCur;
+		for (const c of Object.keys(s.profit_by_currency)) { totalsByCur[c] = (totalsByCur[c] || 0) + s.profit_by_currency[c]; }
+	}
 
-		acc.deals  += inst.deals;
-		acc.bots   += inst.bots;
-		acc.profit += inst.profit;
-
-		return acc;
-
-	}, { deals: 0, bots: 0, profit: 0 });
+	const totalProfit = summarizeProfit(totalsByCur);
+	const totals = {
+		deals: instances.reduce((n, i) => n + i.deals, 0),
+		bots: instances.reduce((n, i) => n + i.bots, 0),
+		profit: totalProfit.profit,
+		profit_currency: totalProfit.profit_currency,
+		profit_by_currency: totalProfit.profit_by_currency
+	};
 
 	return { instances, totals };
 }
@@ -1959,6 +2049,8 @@ module.exports = {
 	invalidatePollCache,
 	getInstance,
 	getDashboardData,
+	summarizeProfit,
+	quoteCurrencyOf,
 	getCreateBotData,
 	getBotEditData,
 	performBotAction,

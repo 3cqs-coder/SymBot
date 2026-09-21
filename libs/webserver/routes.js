@@ -2,6 +2,7 @@
 
 const path = require('path');
 const { sendErr, redirectNotFound, denyUnauthorized, capGuard } = require(__dirname + '/routeUtils.js');
+const SharedRoutes = require(__dirname + '/sharedRoutes.js');   // routes registered identically on instance + Hub
 const aiMemory = require(__dirname + '/../ai/AIMemory.js');
 const aiToolsRegistry = require(__dirname + '/../ai/AITools.js');
 const learningAgg = require(__dirname + '/learningAggregation.js');   // shared with the Hub webserver
@@ -25,7 +26,17 @@ const idempotencySeen = new Map();   // (path|key) -> expiry ms
 function webhookIdempotency(reqPath, body, headers) {
 
 	const raw = (headers && headers['idempotency-key']) || (body && (body.idempotency_key || body.signal_id)) || '';
-	const key = String(raw).trim();
+	// Only a string or number is a valid key. An object/array body value would stringify to "[object Object]"
+	// (or similar), collapsing distinct signals onto one dedupe key so the second is wrongly dropped as a
+	// duplicate. Ignore non-primitive values → treated as "no key" (no dedupe) rather than a colliding one.
+	const key = (typeof raw === 'string' || typeof raw === 'number') ? String(raw).trim() : '';
+
+	// Fold the ACTION into the dedupe key. The multiplexed dispatcher (/api/signal/:botId and its /webhook form)
+	// reads the action from the BODY, so the path is identical for entry/close/panic on one bot. Without the
+	// action, an "entry" and a later "close" that (naturally) share the same signal_id collide and the close is
+	// silently dropped — the position never closes. Including the action keeps same-action retries deduped while
+	// letting distinct actions through. Per-action endpoints have distinct paths already, so this only helps.
+	const action = (body && typeof body.action === 'string') ? body.action.trim().toLowerCase() : '';
 
 	let result = { key: null, duplicate: false };
 
@@ -33,9 +44,24 @@ function webhookIdempotency(reqPath, body, headers) {
 
 		const now = Date.now();
 
-		if (idempotencySeen.size > 5000) { for (const [ k, exp ] of idempotencySeen) { if (exp <= now) { idempotencySeen.delete(k); } } }
+		if (idempotencySeen.size > 5000) {
 
-		const composite = String(reqPath) + '|' + key;
+			// First drop expired entries. Then, if a burst of more than 5000 DISTINCT still-live keys within the
+			// TTL keeps the map over the cap, evict the oldest entries so the bound is HARD, not just a sweep
+			// trigger. The TTL is constant, so Map insertion order is also expiry order — the front entries are the
+			// oldest and soonest to expire. Idempotency is best-effort dedup, so at worst one very old retry slips
+			// through; that is far better than unbounded growth.
+			for (const [ k, exp ] of idempotencySeen) { if (exp <= now) { idempotencySeen.delete(k); } }
+
+			if (idempotencySeen.size > 5000) {
+
+				let excess = idempotencySeen.size - 5000;
+
+				for (const k of idempotencySeen.keys()) { idempotencySeen.delete(k); if (--excess <= 0) { break; } }
+			}
+		}
+
+		const composite = String(reqPath) + '|' + action + '|' + key;
 		const exp = idempotencySeen.get(composite);
 
 		if (exp && exp > now) { result = { key: composite, duplicate: true }; }
@@ -76,23 +102,16 @@ function initRoutes(router, upload) {
 	});
 
 
-	// The user guide (the shipped docs/README.md) for the in-app Help viewer. ONE source of truth — the SAME
-	// file the project ships — so in-app Help can never drift from the docs. It is public documentation (nothing
-	// secret) but is served only to a logged-in session, matching every other page, and is rendered client-side
-	// by the vendored markdown library (see the Help block in symbot-ui.js). The Hub serves the identical file
-	// from its own router, so both surfaces show the same guide.
-	router.get('/readme.md', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		if (!req.session.loggedIn) { denyUnauthorized(req, res); return; }
-
-		res.type('text/markdown; charset=utf-8');
-
-		res.sendFile(path.join(__dirname, '..', '..', 'docs', 'README.md'), (err) => {
-
-			if (err && !res.headersSent) { res.status(404).type('text').send('The guide is unavailable.'); }
-		});
+	// Routes shared verbatim with the Hub — the in-app Help guide (docs/README.md) plus session view/revoke —
+	// registered from one module so the two surfaces can never drift (see libs/webserver/sharedRoutes.js).
+	SharedRoutes.register(router, {
+		cap: cap,
+		shareData: shareData,
+		sendErr: sendErr,
+		denyUnauthorized: denyUnauthorized,
+		isAuthed: function (req) { return !!(req.session && req.session.loggedIn); },
+		isHub: false,
+		readmeFile: path.join(__dirname, '..', '..', 'docs', 'README.md')
 	});
 
 
@@ -287,12 +306,7 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.get('/login', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		res.render( 'loginView', { 'appData': shareData.appData } );
-	});
+	// (/login GET+POST are registered by SharedRoutes above, identically to the Hub.)
 
 
 	router.get('/dashboard', async (req, res) => {
@@ -370,25 +384,7 @@ function initRoutes(router, upload) {
 	});
 
 
-	router.post('/login', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		shareData.Common.verifyLogin(req, res);
-	});
-
-
-	router.get('/logout', (req, res) => {
-
-		res.set('Cache-Control', 'no-store');
-
-		// Audit the logout before the session is torn down, so the actor still resolves.
-		shareData.Common.auditEvent(req, 'auth.logout', '', '');
-
-		req.session.destroy((err) => {});
-
-		res.redirect('/login');
-	});
+	// (/logout is registered by SharedRoutes, identically to the Hub.)
 
 
 	router.get('/bots/create', (req, res) => {
@@ -619,6 +615,31 @@ function initRoutes(router, upload) {
 	});
 
 
+	// Resolve the provider API key to use for a config-screen probe (list models / preflight). The key
+	// field in the form is write-only (it submits blank when unchanged), so we may fall back to the STORED
+	// decrypted key — but ONLY when the probe targets the SAME endpoint that key is saved against. If the
+	// caller points the probe at a DIFFERENT base_url (OpenAI) or host (Ollama), the stored key is NOT
+	// attached: sending it to a foreign endpoint would exfiltrate it. For a new endpoint the caller must
+	// supply the key explicitly. (This is defense in depth behind the settings.write route gate.)
+	async function resolveProviderProbeKey(body) {
+		if (body.api_key) { return body.api_key; }
+		if (!body.provider) { return body.api_key; }
+		try {
+			const cfg = await shareData.Common.getConfig(shareData.appData.app_config);
+			const saved = (cfg && cfg.data && cfg.data.ai && cfg.data.ai[body.provider]) || {};
+			const norm = (u) => String(u == null ? '' : u).trim().replace(/\/+$/, '').toLowerCase();
+			const savedEndpoint = body.provider === 'ollama' ? saved.host : saved.base_url;
+			const reqEndpoint = body.provider === 'ollama' ? body.host : body.base_url;
+			// Use the stored key only when no endpoint override is given, or it matches the saved one.
+			if (!norm(reqEndpoint) || norm(reqEndpoint) === norm(savedEndpoint)) {
+				return await shareData.Common.readSecret(saved.api_key);
+			}
+			return '';   // foreign endpoint → never attach the stored key
+		}
+		catch (e) { return body.api_key; }
+	}
+
+
 	// Lists the models a provider offers, so the config screen can present real
 	// choices for every model field instead of a free-text guess. POST (not GET) so
 	// an API key travels in the body, never the URL. The body may carry
@@ -632,16 +653,9 @@ function initRoutes(router, upload) {
 
 			const body = req.body || {};
 
-			// The key field is write-only (submits blank when unchanged), so fall back to the stored
-			// decrypted key for that provider — otherwise "list models" would fail without re-typing it.
-			let apiKey = body.api_key;
-			if (!apiKey && body.provider) {
-				try {
-					const cfg = await shareData.Common.getConfig(shareData.appData.app_config);
-					apiKey = await shareData.Common.readSecret(cfg?.data?.ai?.[body.provider]?.api_key);
-				}
-				catch (e) { apiKey = body.api_key; }
-			}
+			// The key field is write-only (submits blank when unchanged); resolveProviderProbeKey falls back to
+			// the stored key ONLY when the probe targets the saved endpoint, never a caller-supplied foreign one.
+			const apiKey = await resolveProviderProbeKey(body);
 
 			const opts = {
 				'provider': body.provider,
@@ -711,14 +725,7 @@ function initRoutes(router, upload) {
 
 			const body = req.body || {};
 
-			let apiKey = body.api_key;
-			if (!apiKey && body.provider) {
-				try {
-					const cfg = await shareData.Common.getConfig(shareData.appData.app_config);
-					apiKey = await shareData.Common.readSecret(cfg?.data?.ai?.[body.provider]?.api_key);
-				}
-				catch (e) { apiKey = body.api_key; }
-			}
+			const apiKey = await resolveProviderProbeKey(body);
 
 			const opts = {
 				'provider': body.provider,
@@ -1493,50 +1500,9 @@ function initRoutes(router, upload) {
 	});
 
 	// ── Authorization: API-key management ───────────────────────────────────
-	router.get('/api/keys', cap('apikey.read'), async (req, res) => {
-		try { res.status(200).json({ success: true, keys: await shareData.ApiKeys.list() }); }
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/keys', cap('apikey.create'), async (req, res) => {
-		try {
-			const body = req.body || {};
-			const r = await shareData.ApiKeys.create({
-				name: body.name,
-				capabilities: Array.isArray(body.capabilities) ? body.capabilities : [],
-				signing: body.signing,
-				expiresAt: body.expires_at ? new Date(body.expires_at) : null,
-				rateLimit: body.rate_limit,
-				ipAllowlist: Array.isArray(body.ip_allowlist) ? body.ip_allowlist : [],
-				ipBlocklist: Array.isArray(body.ip_blocklist) ? body.ip_blocklist : [],
-				ownerUserId: req.principal && req.principal.id,
-				ownerCapabilities: (req.principal && req.principal.capabilities) || []   // key scopes ⊆ owner
-			});
-			if (r.success) { shareData.Common.auditEvent(req, 'apikey.create', r.key.prefix, r.key.name); }
-			res.status(200).json(r);   // r.clearKey shown once by the UI
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/keys/:id/rotate', cap('apikey.create'), async (req, res) => {
-		try {
-			const body = req.body || {};
-			const r = await shareData.ApiKeys.rotate(req.params.id, { graceHours: body.grace_hours });
-			if (r.success) { shareData.Common.auditEvent(req, 'apikey.rotate', (r.key && r.key.prefix) || req.params.id, 'rotated; predecessor expires in ' + r.grace_hours + 'h'); }
-			res.status(200).json(r);   // r.clearKey shown once by the UI
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/keys/:id/status', cap('apikey.revoke'), async (req, res) => {
-		try {
-			const status = (req.body && req.body.status) || 'revoked';
-			const r = await shareData.ApiKeys.setStatus(req.params.id, status);
-			if (r.success) { shareData.Common.auditEvent(req, status === 'revoked' ? 'apikey.revoke' : 'apikey.status', req.params.id, status); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
+	// The core key CRUD (list, create, rotate, set status), user management, and the audit log are registered
+	// once in libs/webserver/sharedRoutes.js so the instance and Hub can never drift. Only the routes below
+	// are instance-specific: a key's IP allow/block lists, its post-hoc expiry, and the caller's own IP.
 
 	// Edit a key's IP allow/block lists (exact / CIDR / wildcard). Invalid entries are dropped
 	// server-side. Managing keys is an apikey.create-level action.
@@ -1577,96 +1543,10 @@ function initRoutes(router, upload) {
 		res.status(200).json({ success: true, ip: ip });
 	});
 
-	// ── Authorization: user management ──────────────────────────────────────
-	router.get('/api/users', cap('user.read'), async (req, res) => {
-		try { res.status(200).json({ success: true, users: await shareData.Users.list() }); }
-		catch (e) { sendErr(res, e); }
-	});
+	// (User management — list/create/set role/set status — plus the session view/revoke routes, the audit log,
+	// and the capability catalog are all registered by SharedRoutes above, identically to the Hub.)
 
-	router.post('/api/users', cap('user.invite'), async (req, res) => {
-		try {
-			const body = req.body || {};
-			// Bound the new user's role/grants to the creator's own authority so a non-owner cannot mint an
-			// owner (or grant capabilities they lack). The owner ('*') is unaffected. Legacy owner session
-			// (loggedIn, no userId) has no scoped principal but is the implicit owner, so treat it as '*'.
-			const creatorCaps = (req.principal && Array.isArray(req.principal.capabilities))
-				? req.principal.capabilities
-				: ((req.session && req.session.loggedIn && !req.session.userId) ? [ '*' ] : []);
-			const scoped = shareData.Authz.scopeNewUser(creatorCaps, { role: body.role, grants: body.grants });
-			if (scoped.exceeded) { return res.status(403).json({ success: false, error: 'You cannot create a user more privileged than your own account.' }); }
-			const r = await shareData.Users.create({ username: body.username, password: body.password, role: scoped.role, grants: scoped.grants });
-			if (r.success) { shareData.Common.auditEvent(req, 'user.create', r.user.username, r.user.role); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/users/:id/role', cap('user.manage'), async (req, res) => {
-		try {
-			const r = await shareData.Users.setRole(req.params.id, (req.body && req.body.role));
-			if (r.success) { shareData.Common.auditEvent(req, 'user.role', req.params.id, (req.body && req.body.role)); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/users/:id/status', cap('user.manage'), async (req, res) => {
-		try {
-			const status = (req.body && req.body.status) || 'active';
-			const r = await shareData.Users.setStatus(req.params.id, status);
-			if (r.success) { shareData.Common.auditEvent(req, 'user.status', req.params.id, status); }
-			res.status(200).json(r);
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	// ── Logged-in sessions: view + revoke ────────────────────────────────────
-	// Sessions are an access-management concern, so they reuse the user.manage capability rather than
-	// introducing new ones. Both viewing and revoking require user.manage (admin/owner) — the active
-	// session list exposes each device's source IP, which a read-only viewer should not see. Store-agnostic
-	// list/destroy lives in libs/app/Sessions.js. Gated inline, so the default-deny middleware auto-detects
-	// the guard.
-	router.get('/api/sessions', cap('user.manage'), async (req, res) => {
-		try {
-			const r = await shareData.Sessions.list(req.sessionID);
-			res.status(200).json({ success: true, supported: r.supported, current: req.sessionID, sessions: r.sessions });
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/sessions/revoke', cap('user.manage'), async (req, res) => {
-		try {
-			const sid = (req.body && req.body.sid) || '';
-			if (!sid) { return res.status(400).json({ success: false, error: 'A session id is required.' }); }
-			// Ending your OWN session is a logout — route it there so the cookie is cleared and the UI redirects
-			// cleanly, rather than a silent store-destroy of the request's own session mid-response.
-			if (sid === req.sessionID) { return res.status(400).json({ success: false, error: 'That is your current session — use Log out.', self: true }); }
-			const ok = await shareData.Sessions.revoke(sid);
-			if (ok) { shareData.Common.auditEvent(req, 'session.revoke', String(sid).slice(0, 12), 'ended one session'); }
-			res.status(200).json({ success: ok });
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.post('/api/sessions/revoke-others', cap('user.manage'), async (req, res) => {
-		try {
-			const n = await shareData.Sessions.revokeAllExcept(req.sessionID);
-			shareData.Common.auditEvent(req, 'session.revoke_others', String(n), 'signed out all other sessions');
-			res.status(200).json({ success: true, revoked: n });
-		}
-		catch (e) { sendErr(res, e); }
-	});
-
-	// ── Authorization: audit log + capability catalog (for the UIs) ──────────
-	router.get('/api/audit', cap('audit.read'), async (req, res) => {
-		try { res.status(200).json({ success: true, entries: await shareData.Audit.list({ action: req.query.action, actor: req.query.actor, limit: req.query.limit }) }); }
-		catch (e) { sendErr(res, e); }
-	});
-
-	router.get('/api/authz/capabilities', cap('apikey.read'), (req, res) => {
-		res.status(200).json({ success: true, capabilities: shareData.Authz.CAPABILITIES, roles: shareData.Authz.ROLE_NAMES });
-	});
-
+	// ── Diagnostics catalog (for the Audit Log UI) ───────────────────────────
 	// Clear-language "what it means / how to fix" for diagnostic codes (watchdog findings, version
 	// notices). Static help text with no sensitive data — the Audit Log view fetches it to explain a
 	// finding on hover. Gated the same as the audit log, which is where it is consumed.
@@ -1845,9 +1725,15 @@ async function processConfig(req, res) {
 
 	if (req.session.loggedIn) {
 
+		// The webhook API token is a live credential — with webhooks enabled it can open, pause and close
+		// deals. Only send it to a caller who can write settings (the owner and any settings.write role), so a
+		// read-only user cannot read it from the page and drive trades past their role. The owner still sees it
+		// for webhook setup. A caller without the capability gets no token and the field renders empty.
+		const canSeeToken = !!(shareData.Authz && typeof shareData.Authz.can === 'function' && shareData.Authz.can(req.principal, 'settings.write'));
+
 		const token = shareData.appData.api_token;
 
-		if (token != undefined && token != null && token != '') {
+		if (canSeeToken && token != undefined && token != null && token != '') {
 
 			tokenBase64 = Buffer.from(token, 'utf8').toString('base64');
 		}

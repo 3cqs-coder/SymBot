@@ -102,6 +102,10 @@ const CATALOG = {
 		meaning: 'A built-in scheduled-task definition file could not be read or parsed. Only that one definition is affected; the rest of the platform is fine.',
 		fix: 'Reinstall or restore the affected file (a fresh copy of the release fixes it). The broken definition is skipped until then.'
 	},
+	'watchdog.shipped_recipe_no_handler': {
+		meaning: 'A built-in scheduled-task type has no handler wired in this build, so that task could never run if it were enabled. This points to an incomplete build rather than anything you configured; nothing else is affected.',
+		fix: 'Reinstall or update to a complete copy of the release, which includes every built-in task handler. Until then the affected task simply stays inactive.'
+	},
 	'watchdog.backup_last_run_failed': {
 		meaning: 'Your scheduled database backup failed its most recent run(s), so this instance may not have a fresh backup. Trading is not affected — it runs from the live database — but you would have less to restore from if you needed to. This is a quiet reminder shown at startup; a persistent failure also raises its own alert.',
 		fix: 'Open Schedules, find "System backup", and click "Run now" to run the full backup and see any error (or check the logs for the failure reason — common causes: a full or read-only disk, or an off-site/SFTP destination that is unreachable). The warning clears automatically once a backup succeeds.'
@@ -143,6 +147,10 @@ const CATALOG = {
 	'watchdog.signal_activity_recognizer': {
 		meaning: 'The internal recognizer that labels inbound webhook signals (entry / add funds / close / panic sell) for the Signal Activity view no longer maps a command correctly — an internal wiring problem from a build, not a setting of yours. Signals still reach your bots and trade normally; they just may not be recorded on the Signal Activity screen.',
 		fix: 'Update to a released version. If the warning continues on an official build, report the listed path — trading is unaffected, only the activity record is.'
+	},
+	'watchdog.instance_down': {
+		meaning: 'On the Hub, an instance that is marked enabled has no running worker and is not currently scheduled to restart — so it is not trading. This usually means the instance crashed repeatedly and used up its automatic restart attempts, leaving it stopped with nothing bringing it back.',
+		fix: 'Open the Hub and start the listed instance again, and check its recent logs for the error that kept crashing it (for example bad exchange credentials or a config problem) so it stays up. If you meant to stop it, disable it in the Hub so this reminder clears.'
 	},
 
 	// ── Audit-log tamper evidence ──

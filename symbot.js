@@ -68,18 +68,9 @@ let shutdownTimeout = 2000;
 
 // Read a `--name value` or `--name=value` command-line argument, or null if absent. SymBot is
 // parameterized via command-line arguments (never environment variables).
-function getCliArg(name) {
-
-	const argv = process.argv;
-
-	for (let i = 2; i < argv.length; i++) {
-
-		if (argv[i] === '--' + name && argv[i + 1] != undefined) { return argv[i + 1]; }
-		if (argv[i].indexOf('--' + name + '=') === 0) { return argv[i].slice(('--' + name + '=').length); }
-	}
-
-	return null;
-}
+// Shared CLI-argument parser (supports "--name value" and "--name=value"), defined once in Bootstrap so the
+// instance and the Hub read arguments identically and cannot drift.
+const getCliArg = Bootstrap.getCliArg;
 
 
 // Graceful shutdown + the trading-inviolable uncaughtException/unhandledRejection handlers (log and keep
@@ -510,30 +501,9 @@ async function init() {
 
 	Common.freezeProperty(shareData['appData'], [ 'path_root', 'app_filename' ]);
 
-	// Flag whether the owner password is still the shipped default ("admin"). This drives a
-	// non-blocking "change your default password" nudge in the UI only — it never gates login,
-	// startup, or trading. It is recomputed on a password change (Common config save) so the
-	// nudge clears the instant the operator sets their own password. Best-effort: any failure
-	// leaves the flag false, so a glitch can never invent a warning.
-	try {
-
-		const ownerPass = shareData['appData']['password'];
-
-		if (typeof ownerPass === 'string' && ownerPass.indexOf(':') !== -1) {
-
-			const passParts = ownerPass.split(':');
-
-			shareData['appData']['default_password'] = await Common.verifyPasswordHash({ 'salt': passParts[0], 'hash': passParts[1], 'data': 'admin' });
-		}
-		else {
-
-			shareData['appData']['default_password'] = false;
-		}
-	}
-	catch (e) {
-
-		shareData['appData']['default_password'] = false;
-	}
+	// Flag whether the owner password is still the shipped default ("admin"). Shared helper, so the instance
+	// and Hub compute the "change your default password" nudge flag identically (UI-only, never gates trading).
+	await Common.resolveDefaultPasswordFlag(shareData['appData']);
 
 	// Apply config overrides from hub
 	if (Object.keys(workerDataObj).length > 0 && typeof workerDataObj['overrides'] === 'object') {
@@ -867,10 +837,11 @@ async function init() {
 			try { ScheduleRecipes.init(shareData); const seeded = await ScheduleRecipes.seed(); if (seeded && seeded.seeded) { Common.logger('ScheduleRecipes: imported ' + seeded.seeded + ' pre-defined task(s) as disabled schedules'); } }
 			catch (e) { Common.logger('ScheduleRecipes: seeding skipped: ' + e.message); }
 
-			// Now that the audit trail is wired, run the central self-policing watchdog so its
-			// boot-time integrity findings can be recorded to the audit log (not just the console).
-			try { WebServer.runWatchdog('instance'); }
-			catch (e) { Common.logger('Watchdog run skipped: ' + e.message); }
+			// Now that the audit trail is wired, start the central self-policing watchdog: it runs a
+			// verbose boot sweep now (findings recorded to the audit log, not just the console) and then
+			// keeps monitoring continuously on a quiet, self-unref'd interval for the life of the process.
+			try { WebServer.startWatchdogMonitor('instance'); }
+			catch (e) { Common.logger('Watchdog monitor start skipped: ' + e.message); }
 		}
 		catch (e) { Common.logger('Scheduler failed to start: ' + e.message); }
 
@@ -888,7 +859,9 @@ async function init() {
 		};
 
 		refreshUpdateFlag();
-		setInterval(refreshUpdateFlag, TWELVE_HOURS);
+		const updateFlagTimer = setInterval(refreshUpdateFlag, TWELVE_HOURS);
+		// Unref'd so this 12-hour background check never keeps the process alive (matches every other timer).
+		if (typeof updateFlagTimer.unref === 'function') { updateFlagTimer.unref(); }
 
 		setTimeout(() => {
 
@@ -1048,13 +1021,27 @@ async function start(args) {
 		}
 	}
 
-	await Common.makeDir('backups');
-	await Common.makeDir('uploads');
-	await Common.makeDir('downloads');
-	await Common.makeDir('temp');
-	await Common.makeDir('logs');
-	await Common.makeDir('logs/services');
-	await Common.makeDir('logs/services/notifications');
+	// Create the runtime working directories before init. Guard them so a filesystem failure (a read-only
+	// volume, wrong ownership, a full disk) becomes a clean non-zero shutdown — the same supervised-restart
+	// path as an init error — rather than an unhandled rejection out of start(), which under the Hub would
+	// leave the instance worker as a deaf, falsely-online "zombie" thread that is never restarted.
+	try {
+
+		await Common.makeDir('backups');
+		await Common.makeDir('uploads');
+		await Common.makeDir('downloads');
+		await Common.makeDir('temp');
+		await Common.makeDir('logs');
+		await Common.makeDir('logs/services');
+		await Common.makeDir('logs/services/notifications');
+	}
+	catch (e) {
+
+		Common.logger('Startup error: could not create required working directories (' + (e && e.message) + '). Check filesystem permissions and free space.', true);
+
+		shutDown(1);
+		return;
+	}
 
 	if (args && args.length > 0) {
 

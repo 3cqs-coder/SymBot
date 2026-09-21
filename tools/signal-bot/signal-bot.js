@@ -28,10 +28,10 @@
  *            retry, so a first attempt that actually landed cannot double-open a deal. Set
  *            IDEMPOTENCY_KEY to reuse a key across separate runs; otherwise one is generated per run.
  *
- * Usage:
- *   BASE_URL=http://localhost:3000 WEBHOOK_TOKEN=xxxx BOT_ID=my-bot node signal-bot.js entry BTC/USD
- *   node signal-bot.js add_funds BTC/USD 25
- *   node signal-bot.js close BTC/USD
+ * Usage (CLI flags preferred; BASE_URL / WEBHOOK_TOKEN / BOT_ID / IDEMPOTENCY_KEY env vars still work as a fallback):
+ *   node signal-bot.js entry BTC/USD --base-url http://localhost:3000 --token xxxx --bot my-bot
+ *   node signal-bot.js add_funds BTC/USD 25 --token xxxx --bot my-bot
+ *   node signal-bot.js close BTC/USD --token xxxx --bot my-bot
  */
 
 const http = require('http');
@@ -39,13 +39,45 @@ const https = require('https');
 const crypto = require('crypto');
 const { URL } = require('url');
 
-const BASE_URL      = process.env.BASE_URL      || 'http://localhost:3000';
-const WEBHOOK_TOKEN = process.env.WEBHOOK_TOKEN || 'REPLACE_WITH_YOUR_WEBHOOK_TOKEN';
-const BOT_ID        = process.env.BOT_ID        || 'my-bot';
+// Per-request transport timeout (ms). A server that accepts the connection but never responds must not hang
+// the script forever — the timeout below turns that stall into a transport error so the same-key retry runs.
+const REQUEST_TIMEOUT_MS = 15000;
 
-// One idempotency key for this signal. Generated per run (or pinned via env) and REUSED across the
-// retry below, so a resend never opens or funds a deal twice. See the header note.
-const IDEMPOTENCY_KEY = process.env.IDEMPOTENCY_KEY || crypto.randomUUID();
+// Read a "--name value" or "--name=value" flag from argv, or null. SymBot is configured through CLI args
+// and config files rather than environment variables, so these flags are the preferred way to configure this
+// sample; the environment variables remain as a fallback for existing setups.
+function cliFlag(name) {
+	const argv = process.argv.slice(2);
+	for (let i = 0; i < argv.length; i++) {
+		if (argv[i] === '--' + name && argv[i + 1] != null) { return argv[i + 1]; }
+		if (argv[i].indexOf('--' + name + '=') === 0) { return argv[i].slice(('--' + name + '=').length); }
+	}
+	return null;
+}
+
+// The positional arguments (action, pair, volume) — everything that is not a --flag or a flag's value.
+function positionals() {
+	const argv = process.argv.slice(2);
+	const out = [];
+	for (let i = 0; i < argv.length; i++) {
+		const a = argv[i];
+		if (a.indexOf('--') === 0) {
+			// "--name value" consumes the next token as its value; "--name=value" consumes only itself.
+			if (a.indexOf('=') === -1 && argv[i + 1] != null && argv[i + 1].indexOf('--') !== 0) { i++; }
+			continue;
+		}
+		out.push(a);
+	}
+	return out;
+}
+
+const BASE_URL      = cliFlag('base-url') || process.env.BASE_URL      || 'http://localhost:3000';
+const WEBHOOK_TOKEN = cliFlag('token')    || process.env.WEBHOOK_TOKEN || 'REPLACE_WITH_YOUR_WEBHOOK_TOKEN';
+const BOT_ID        = cliFlag('bot')      || process.env.BOT_ID        || 'my-bot';
+
+// One idempotency key for this signal. Generated per run (or pinned via --idempotency-key) and REUSED across
+// the retry below, so a resend never opens or funds a deal twice. See the header note.
+const IDEMPOTENCY_KEY = cliFlag('idempotency-key') || process.env.IDEMPOTENCY_KEY || crypto.randomUUID();
 
 
 // POST a JSON body and resolve with { status, body }. Uses http or https by URL scheme.
@@ -70,6 +102,7 @@ function postSignal(action, pair, volume) {
 			port:     url.port || (url.protocol === 'https:' ? 443 : 80),
 			path:     url.pathname,
 			method:   'POST',
+			timeout:  REQUEST_TIMEOUT_MS,
 			headers:  {
 				'Content-Type':    'application/json',
 				'Content-Length':  Buffer.byteLength(data),
@@ -81,6 +114,10 @@ function postSignal(action, pair, volume) {
 			res.on('end', () => { let body; try { body = JSON.parse(buf); } catch (e) { body = buf; } resolve({ status: res.statusCode, body }); });
 		});
 
+		// A stalled connection (accepted but never answered) fires 'timeout' but NOT 'error', so destroy the
+		// request with an error — that surfaces as a transport failure and the same-key retry can run, instead
+		// of the script hanging forever.
+		req.on('timeout', () => { req.destroy(new Error('request timeout after ' + REQUEST_TIMEOUT_MS + 'ms')); });
 		req.on('error', reject);
 		req.write(data);
 		req.end();
@@ -110,11 +147,19 @@ async function postSignalSafe(action, pair, volume) {
 
 async function main() {
 
-	const [ action, pair, volume ] = process.argv.slice(2);
+	const [ action, pair, volume ] = positionals();
 
 	if (!action) {
-		console.log('Usage: node signal-bot.js <entry|add_funds|close|panic_sell|close_all> [pair] [volume]');
-		console.log('Env:   BASE_URL, WEBHOOK_TOKEN, BOT_ID');
+		console.log('Usage: node signal-bot.js <entry|add_funds|close|panic_sell|close_all> [pair] [volume] \\');
+		console.log('         [--base-url URL] [--token TOKEN] [--bot BOT_ID] [--idempotency-key KEY]');
+		console.log('Example: node signal-bot.js entry BTC/USD --base-url http://localhost:3000 --token xxxx --bot my-bot');
+		console.log('(Environment variables BASE_URL, WEBHOOK_TOKEN, BOT_ID, IDEMPOTENCY_KEY are also honored as a fallback.)');
+		process.exit(1);
+	}
+
+	// Reject a non-numeric volume before sending, for a clear client-side error rather than a server rejection.
+	if (volume != null && !Number.isFinite(Number(volume))) {
+		console.error('Volume must be a number (got "' + volume + '").');
 		process.exit(1);
 	}
 

@@ -3,7 +3,7 @@
 
 ![SymBot Logo](https://user-images.githubusercontent.com/111208586/221390681-d13b9bce-dafb-4b55-a6f1-1bc5218cd204.png)
 
-SymBot is a user friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser or with simple built-in APIs. Best of all, your exchange credentials and keys always remain in your hands... not any other third-party.
+SymBot is a user-friendly, self-hosted and automated DCA (Dollar Cost Averaging) cryptocurrency bot solution. Create and manage your bots entirely from your web browser or with simple built-in APIs. Best of all, your exchange credentials and keys always stay in your hands, and never with any third party.
 
 ![SymBot](https://github.com/user-attachments/assets/c0e8b81c-3ee8-4657-90c4-989c38f94297)
 
@@ -20,21 +20,21 @@ SymBot automates the entire process for you. It watches the market, places those
 
 With that in mind, here's a simple way to picture how the pieces fit together.
 
-Think of SymBot as a real-world business that you own. It's the entire operation... the building, the electrical and plumbing systems, the phone lines, the computers, the accounting department... everything that keeps the business running. It's the infrastructure that allows your trading operation to function.
+Think of SymBot as a real-world business that you own. It is the entire operation: the building, the electrical and plumbing systems, the phone lines, the computers, and the accounting department. It is all the infrastructure that keeps your trading operation running.
 
 Now think of each bot as one of your managers. Every manager is responsible for a team of employees, and those employees are your deals. Just like in a real business, your managers and employees need working capital to do their jobs.
 
-Where do your managers get the work in the first place? Think of signals as your sales leads. A lead is a tip that an opportunity might be worth pursuing... and just like in a real business, a manager doesn't chase every lead that comes across the desk. You decide which leads your managers are allowed to act on, using each bot's start conditions. A good lead in the right market can be the beginning of a profitable deal; a weak one might be better left alone. Signals can come from sources like 3CQS or your own setup, but the important part is the same: they're the leads that tell your managers when it might be time to put someone to work... they don't guarantee a sale, and it's still up to you to decide which ones are worth acting on.
+Where do your managers get the work in the first place? Think of signals as your sales leads. A lead is a tip that an opportunity might be worth pursuing. Just like in a real business, a manager does not chase every lead that comes across the desk. You decide which leads your managers are allowed to act on, using each bot's start conditions. A good lead in the right market can be the beginning of a profitable deal. A weak one might be better left alone. Signals can come from sources like 3CQS or your own setup, but the important part is the same. They are the leads that tell your managers when it might be time to put someone to work. They do not guarantee a sale, and it is still up to you to decide which ones are worth acting on.
 
-That same restraint applies to how much you take on. If business is slow, you probably wouldn't hire ten new managers and hundreds of employees just to have them standing around. The same principle applies to trading: you don't want to run more bots or open more deals than your capital and market conditions can comfortably support. Good risk management is really just good business management... adjusting your workforce to match the workload.
+That same restraint applies to how much you take on. If business is slow, you probably wouldn't hire ten new managers and hundreds of employees just to have them standing around. The same principle applies to trading: you don't want to run more bots or open more deals than your capital and market conditions can comfortably support. Good risk management is really just good business management: adjusting your workforce to match the workload.
 
-One of the fun features in SymBot is that you can even use AI to "chat" with your employees (your deals). Ask them how things are going, why they're taking so long, or when they think they might close a profitable sale. Just don't be too hard on them... they're simply following the instructions you gave them.
+One of the fun features in SymBot is that you can even use AI to "chat" with your employees (your deals). Ask them how things are going, why they're taking so long, or when they think they might close a profitable sale. Just don't be too hard on them. They are simply following the instructions you gave them.
 
 The goal isn't to build the biggest business. It's to build one that's efficient, well-managed, and profitable over the long run.
 
-If you take away just two things, make it these. First, always be sure you can fully cover all your bots. Every deal a bot opens may need funding all the way down through its safety orders, so your capital has to be able to support the worst case, not just the best one. This is exactly why SymBot calculates a risk percentage for you... it shows how much of your portfolio you'd be committing if every bot ran to its maximum. Keep an eye on it, and don't let it get ahead of what you can actually cover.
+If you take away just two things, make it these. First, always be sure you can fully cover all your bots. Every deal a bot opens may need funding all the way down through its safety orders, so your capital has to be able to support the worst case, not just the best one. This is exactly why SymBot calculates a risk percentage for you. It shows how much of your portfolio you would be committing if every bot ran to its maximum. Keep an eye on it, and don't let it get ahead of what you can actually cover.
 
-Second, patience is key. DCA trading rewards discipline over urgency. Deals can take time to close in profit, and that's normal... it's the strategy working, not failing. Resist the urge to overextend, chase, or micromanage. A calm, well-funded operation almost always beats a busy, overstretched one.
+Second, patience is key. DCA trading rewards discipline over urgency. Deals can take time to close in profit, and that is normal. It is the strategy working, not failing. Resist the urge to overextend, chase, or micromanage. A calm, well-funded operation almost always beats a busy, overstretched one.
 
 This entire guide is built into SymBot. Click the **?** Help button in the top bar, or press the `/` key, to open it and search it without leaving the app.
 
@@ -222,7 +222,7 @@ All views refresh automatically and pause when a confirmation dialog is open to 
 In the Hub, several SymBot instances run together inside one program, which makes per-instance memory a little more nuanced than a single number. Because they share that one program, the operating system's total memory reading for it — its **resident memory**, or **RSS** — belongs to the whole group and can't be split cleanly between individual instances. So instead of one figure, the Manage Instances view shows a per-instance **Memory** column with two figures for each online instance:
 
 - **Heap** — how much memory that instance's own working data (its JavaScript *heap*) is actively using.
-- **Attr** (*Attributed*) — the memory that genuinely belongs to that instance: its heap plus its own off-heap buffers (the `External` and `Array Buffers` that hold things like network and file data). **This is the figure to compare between instances** when you are working out which one is the heaviest.
+- **Attr** (*Attributed*) — the memory that genuinely belongs to that instance: its heap plus its own off-heap buffers (the `External` and `Array Buffers` that hold things like network and file data). This is the figure to compare between instances when you are working out which one is the heaviest.
 
 Because the instances share one program, these Attributed figures will normally add up to less than the program's total memory — the difference is shared runtime, buffers, and allocator overhead that isn't tied to any single instance. After an upgrade, an instance that has not yet restarted reports only its heap until it does.
 
@@ -255,7 +255,7 @@ Once SymBot Hub is running, it is recommended to update your process manager to 
 
 If your process manager, such as [pm2](#pm2-id), has maximum memory restart parameters configured, you may need to increase the limit, as SymBot Hub will consume more resources as the number of instances grows.
 
-Lastly, be aware that exchanges often impose connection limits, and if you’re using services like Telegram, 3CQS signals, or other providers requiring API keys, there may also be restrictions on the number of connections allowed per IP address or API key. To stay within these limits, you may need to disable certain services on specific instances.
+Lastly, be aware that exchanges often impose connection limits, and if you're using services like Telegram, 3CQS signals, or other providers requiring API keys, there may also be restrictions on the number of connections allowed per IP address or API key. To stay within these limits, you may need to disable certain services on specific instances.
 
 ## Upgrading
 
@@ -355,7 +355,7 @@ These files are located in the `config` directory
 			- `password` associated with the username. This is an encrypted value so it should not be manually entered. On the configuration screen this field is write-only — it shows "Password is set" when a value exists and is never displayed back; leave it blank to keep the existing password, or click the **[Clear]** link next to it to remove it.
 			- `private_key` stores an encrypted form of your private key content. This should not be manually entered — paste the contents of your private key file (e.g. `id_rsa` or `id_ed25519`) into the Private Key field on the configuration screen. The key will be encrypted and stored securely. If the configuration password is ever changed, all stored SFTP secrets including the private key are automatically re-encrypted under the new password.
 			- `passphrase` an optional passphrase for your private key. This is an encrypted value so it should not be manually entered. On the configuration screen this field is write-only — it shows "Passphrase is set" when a value exists and is never displayed back; leave it blank to keep the existing passphrase, or click the **[Clear]** link next to it to remove it.
-			- `remote_directory` is the path on the remote host where your backups will be uploaded. Each instance uploads into its own subfolder of this path (named by the instance's internal identity), and the automatic removal of old backups (per the maximum-backups value) only ever affects that instance's own subfolder. Several instances can therefore safely share one `remote_directory` without one instance's rotation deleting another's off-site backups; any backups you had uploaded under an earlier version are moved into the subfolder automatically on the next upload. Because the subfolder is named by the instance's internal identity (not a human-readable name), the uploaded **file** is prefixed with the instance's own name — for example `Coinbase-Real-backup-<date>_<time>.zip.enc` — so a plain remote directory listing shows which instance a backup belongs to. That name comes from the instance's own stable identifier, so it is identical whether a backup was taken on schedule or on demand with *Run now*
+			- `remote_directory` is the path on the remote host where your backups will be uploaded. Each instance uploads into its own subfolder of this path, named by the instance's internal identity. The automatic removal of old backups (per the maximum-backups value) only ever affects that instance's own subfolder. Several instances can therefore share one `remote_directory` safely, without one instance's rotation deleting another's off-site backups. Any backups you uploaded under an earlier version are moved into the subfolder automatically on the next upload. The uploaded file is also prefixed with the instance's own name — for example `Coinbase-Real-backup-<date>_<time>.zip.enc` — so a plain remote directory listing shows which instance a backup belongs to. That name comes from the instance's own stable identifier, so it is identical whether a backup was taken on schedule or on demand with *Run now*.
 			- `enabled` is whether the backups will be automatically uploaded after being processed via cron
 
 	- `telegram` contains an optional Telegram token id and user id to send SymBot notifications to. This includes system warnings such as detected connectivity issues, bot and deal start / stops, and more! You must first create a Telegram bot with `@BotFather` to use (see [Telegram Setup](#telegram-setup)).
@@ -391,6 +391,7 @@ These files are located in the `config` directory
 		- `pause_duration_secs` how long in seconds to block new buys when the circuit breaker activates. Sells, cancels, and panic sells are always allowed through. Default is `60`.
 		- `repeat_alert_window_secs` if the circuit breaker activates more than once within this window, an elevated Telegram alert is sent warning that market conditions may be deteriorating. Default is `3600` (1 hour).
 		- `price_zero_alert_count` number of consecutive Invalid Price: 0 events for the same deal before a Telegram alert is sent. Default is `4`.
+		- The next four keys are advanced tuning values that are not present in the shipped `config/app.json` and are not shown in the Circuit Breaker screen. They use the built-in defaults shown below unless you add them by hand (see the note under [Circuit Breaker](#circuit-breaker)).
 		- `price_deviation_high_ratio` reject a fetched price more than this multiple above a deal's DCA average as implausible (a corrupt price feed). Must be greater than 1 and above your largest take-profit multiple. Default is `2`.
 		- `price_deviation_low_ratio` reject a fetched price more than this multiple below a deal's DCA average (i.e. price < average ÷ this). Set generously so deep averaging-down is never blocked. Default is `10`.
 		- `price_implausible_alert_count` number of consecutive implausible-price events for the same deal before a Telegram alert is sent. Default is `4`.
@@ -473,7 +474,7 @@ If you're experiencing issues such as application crashes or slow performance, t
 - Keep your system up to date with the latest security patches and performance improvements. Use your package manager to update the installed software regularly.
 - Disable unnecessary services and daemons that are not required for your specific use case. This reduces the system's resource usage.
 
-Below are some additional tips to optimizing your system and SymBot performance.
+Below are some additional tips for optimizing your system and SymBot performance.
 
 ### Swap space
 Swap space is a portion of your storage that the system uses as extra "virtual" memory when the real memory (RAM) fills up. It can keep the machine from crashing when it would otherwise run out of memory.
@@ -550,6 +551,8 @@ Because the protection works per source IP address, it assumes SymBot sees the r
 
 For a direct-to-internet deployment, add `"security": { "trust_proxy": false }` to your `app.json`. SymBot then ignores the client-supplied forwarding headers and uses the real socket address everywhere it identifies a client. That covers the login throttle, the login IP filter, the server-wide IP filter, and per-key IP filters, so a forged `X-Forwarded-For` cannot spoof any of them. Leave it unset (the default) when a trusted proxy sits in front of SymBot, so the real client address from the proxy is used.
 
+If you serve SymBot over HTTPS, you can also add `"secure_cookie": true` to the same `security` block. The session cookie is then marked `Secure` (sent only over HTTPS) and its SameSite policy is tightened to `strict`. Leave it off (the default) for a plain-HTTP install, because a browser will not send a `Secure` cookie over HTTP and you would be unable to log in.
+
 #### IP Access Control (allow / block lists)
 
 Beyond the automatic brute-force throttle, SymBot can restrict access by source IP address at three independent layers, each optional and off by default:
@@ -581,7 +584,7 @@ SymBot writes logs to three places: the console, dated files under each instance
 
 The scrubbing is central — it runs inside the single logging function every subsystem uses, so nothing can bypass it. It removes values by both shape and field name: SymBot API keys (the secret half only — the short non-secret prefix is kept so you can still tell keys apart), passwords and passphrases, exchange secrets, bearer tokens, Telegram bot tokens, and any credential embedded in a URL (a `user:pass@host`, or a `?token=…` on a notification webhook). Each becomes `[REDACTED]`. Ordinary content — prices, deal and bot IDs, error messages — is left untouched.
 
-As a backstop, the boot-time [self-policing watchdog](#audit-log) also samples the recent logs and warns (in the audit log) if any line still looks like it holds an unredacted credential — so a gap in the scrubbing surfaces immediately rather than sitting unnoticed in a log you might share. The warning names the *shape* it found and the line count only; it never repeats the value.
+As a backstop, the [self-policing watchdog](#audit-log) also samples the recent logs and warns (in the audit log) if any line still looks like it holds an unredacted credential — so a gap in the scrubbing surfaces immediately rather than sitting unnoticed in a log you might share. The warning names the *shape* it found and the line count only; it never repeats the value.
 
 One value is shown but never stored: on a brand-new install SymBot prints an auto-generated API key to the console once so you can copy it. That console line is deliberately kept out of the log file and the web stream — save it then, or generate a scoped key under **Access Control → API Keys**.
 
@@ -803,7 +806,7 @@ The band ratios are configurable. If you run very high take-profit percentages, 
 
 ### Configuration
 
-Most circuit breaker settings are configurable in **Configuration → Circuit Breaker** and take effect immediately without restarting SymBot; they are stored in `config/app.json` under the `circuit_breaker` key. Four advanced tuning keys — `price_deviation_high_ratio`, `price_deviation_low_ratio`, `price_implausible_alert_count`, and `close_held_alert_count` (the last four rows below) — are **not** shown in that screen and are not present in the shipped default file; set them by hand-editing `config/app.json`, where they take effect on the next restart (they fall back to sensible built-in defaults when absent).
+Most circuit breaker settings are configurable in **Configuration → Circuit Breaker** and take effect immediately without restarting SymBot; they are stored in `config/app.json` under the `circuit_breaker` key. Four advanced tuning keys — `price_deviation_high_ratio`, `price_deviation_low_ratio`, `price_implausible_alert_count`, and `close_held_alert_count` (the last four rows below) — are not shown in that screen and are not present in the shipped default file; set them by hand-editing `config/app.json`, where they take effect on the next restart (they fall back to sensible built-in defaults when absent).
 
 | Setting | Description | Default |
 |---------|-------------|----------|
@@ -830,19 +833,21 @@ The Active Deals view has a Health column (the first column) showing a small gly
 
 A deal is "underwater" when its current price is below your average buy price — it is showing a paper (not yet realized) loss; "drawdown" is how far below that average the price has fallen.
 
+Each state has its own shape as well as its color, so you can tell them apart without relying on color alone.
+
 | Glyph | Meaning |
 |-------|---------|
-| 🟢 | In profit — the deal is currently above its break-even point |
-| 🟡 | Slightly underwater, with few or no safety orders used yet |
-| 🟠 | Underwater and working through its safety orders (roughly 40%+ used) |
-| 🔴 | Deep drawdown — most of the safety-order budget is consumed (roughly 75%+ used) |
+| 🟢 | In profit — the deal is currently above its break-even point (circle) |
+| 🟨 | Slightly underwater, with few or no safety orders used yet (square) |
+| 🔶 | Underwater and working through its safety orders, roughly 40%+ used (diamond) |
+| 🔺 | Deep drawdown — most of the safety-order budget is consumed, roughly 75%+ used (triangle) |
 | ⏸️ | Paused (manually or automatically) |
 | ⚠️ | In an error state — check the logs |
 | ⚪ | Connecting — the deal has resumed but its live figures haven't arrived yet (see below) |
 
-The thresholds are based on how far the deal has drawn down and how much of its configured safety-order budget it has consumed, so a deal that's down a little with plenty of safety orders left reads very differently from one that's down and nearly out of room. Error and paused states take precedence over the profit/drawdown glyphs. Sorting the column orders deals by how much attention they need, so 🔴 / ⚠️ / ⏸️ deals rise to the top.
+The thresholds are based on how far the deal has drawn down and how much of its configured safety-order budget it has consumed. A deal that is down a little with plenty of safety orders left reads very differently from one that is down and nearly out of room. Error and paused states take precedence over the profit and drawdown glyphs. Sorting the column orders deals by how much attention they need, so 🔺 / ⚠️ / ⏸️ deals rise to the top.
 
-When SymBot restarts, your open deals are shown **immediately** with everything already known from their saved state — pair, deal count, safety orders used, average entry, and take-profit target — while the live-only figures (current price and profit) briefly read "updating…" and the Health dot is a neutral gray ⚪ until the first live price arrives from the exchange. This first price can take a few seconds longer if the exchange connection is slow to come up on a cold restart. The deals are never hidden while this happens, and no stale or placeholder profit number is ever shown as if it were live — the live cells fill in on their own the moment the price is available. This applies to both the instance view and the Hub's combined Active Deals view.
+When SymBot restarts, your open deals are shown immediately with everything already known from their saved state — pair, deal count, safety orders used, average entry, and take-profit target — while the live-only figures (current price and profit) briefly read "updating…" and the Health dot is a neutral gray ⚪ until the first live price arrives from the exchange. This first price can take a few seconds longer if the exchange connection is slow to come up on a cold restart. The deals are never hidden while this happens, and no stale or placeholder profit number is ever shown as if it were live — the live cells fill in on their own the moment the price is available. This applies to both the instance view and the Hub's combined Active Deals view.
 
 
 ## Deal Chart
@@ -886,7 +891,7 @@ A trailing stop takes the same idea further: once the deal reaches a configured 
 | **Trailing Activation Profit %** | The live net profit % at which the trailing stop activates and starts tracking the peak. Below this, the deal behaves normally. |
 | **Trailing Rides Past Take-Profit** | When enabled (default), an active trailing stop overrides the fixed Target Profit so the deal can ride an extended run-up and exit on the pullback. When disabled, the deal still closes at Target Profit and the trailing stop only protects the way there. |
 
-Like the stop-loss, it never fires on an unreliable price feed, it can be changed on a running deal from the Edit action, and the stop only ever ratchets up. On the deal row an active trailing stop shows its level beneath the Target price marked with a ▲.
+Like the stop-loss, it never fires on an unreliable price feed. It can be changed on a running deal from the Edit action, and the stop only ever ratchets up. On the deal row an active trailing stop shows its level beneath the Target price marked with a ▲.
 
 
 ## Add Funds Estimator
@@ -931,7 +936,7 @@ The Active Deals view includes a live portfolio summary bar displayed below the 
 
 Exchange balance is fetched once per minute in the background and cached — the summary bar reads from the cache rather than calling the exchange on every refresh. This means the balance shown may be up to 60 seconds old, which is reflected by the Balance: Xm ago indicator. The cache is primed immediately at startup so the bar is populated on first load.
 
-If the exchange is temporarily unreachable (for example a Coinbase outage, the same condition that can delay deals appearing on a restart), the balance fetch can fail. When that happens SymBot keeps your **last-known** balance rather than replacing it with zero, and marks it: the Balance indicator reads `Balance: Xm ago (updating…)` while it keeps retrying in the background. If no balance has ever been fetched yet (a fresh start during an outage), Portfolio and Risk simply read `updating…` instead of a misleading `$0.00` / `N/A`. This is display-only — an unavailable balance never affects trading, and in particular it does **not** affect the [portfolio-loss circuit-breaker trigger](#circuit-breaker), which is calculated from realized losses of closed deals in the database, never from the live balance figure.
+If the exchange is temporarily unreachable (for example a Coinbase outage, the same condition that can delay deals appearing on a restart), the balance fetch can fail. When that happens SymBot keeps your last-known balance rather than replacing it with zero, and marks it: the Balance indicator reads `Balance: Xm ago (updating…)` while it keeps retrying in the background. If no balance has ever been fetched yet (a fresh start during an outage), Portfolio and Risk simply read `updating…` instead of a misleading `$0.00` / `N/A`. This is display-only — an unavailable balance never affects trading, and in particular it does **not** affect the [portfolio-loss circuit-breaker trigger](#circuit-breaker), which is calculated from realized losses of closed deals in the database, never from the live balance figure.
 
 ### Sandbox Mode
 
@@ -1005,13 +1010,13 @@ If you have AI enabled (see [Artificial Intelligence (AI)](#artificial-intellige
 
 **At-a-glance stats.** Above the entries, a summary strip reflects every deal matching your current bot/date filter (not just the visible page):
 
-- Total deals, and win rate (with the win/loss split).
+- Total deals, and win rate (with the win / loss / break-even split).
 - Total realized profit/loss.
 - Average hold time.
 - Your current win-or-loss streak.
 - Your best and worst deals by percentage.
 
-These use the same definitions as the dashboard — a "win" is any deal closed in profit — so the numbers line up with what you see elsewhere. While the figures are being computed a brief Processing deal data… indicator is shown in place of the strip, so it's clear they are still being worked out rather than appearing to jump in. Computed figures are cached briefly per filter, so returning to a filter you've already viewed shows them right away (tagging a deal's mood refreshes them).
+These use the same definitions as the dashboard — a win is a deal closed in profit, a loss one closed below break-even, and a deal that closes exactly at break-even counts as neither — so the numbers line up with what you see elsewhere. While the figures are being computed a brief Processing deal data… indicator is shown in place of the strip, so it's clear they are still being worked out rather than appearing to jump in. Computed figures are cached briefly per filter, so returning to a filter you've already viewed shows them right away (tagging a deal's mood refreshes them).
 
 When an instance trades in more than one quote currency, the profit figures — on both the dashboard and the journal — are broken out per currency rather than summed into one meaningless mixed-currency total; with a single quote currency you see one figure as before, shown with its currency symbol.
 
@@ -1364,7 +1369,7 @@ It calls whatever tools a question needs, across these areas:
 **Performance**
 
 - Count filled base and safety orders in a day range, broken down per deal and per bot.
-- Summarize performance over a named period, a from/to range, or all-time: deals, total profit (kept per quote currency so different currencies are never summed into a meaningless figure), average profit %, win rate, average time a deal stays open, best and worst deal, and a winners-vs-losers split.
+- Summarize performance over a named period, a from/to range, or all-time: deals, total profit (kept per quote currency so different currencies are never summed into a meaningless figure), average profit %, win rate, average time a deal stays open, best and worst deal, and a winners / losers / break-even split.
 - Break performance into per-day, per-week or per-month buckets — "how did I do each day this week?" or "profit by month this year?".
 
 **Pairs, portfolio and risk**
@@ -1422,7 +1427,7 @@ Several deterministic guardrails back that rulebook up in code, so the assistant
 - **Egress-sanitizing** — answers are cleaned before they reach you, so nothing that could quietly leak your data rides along in a reply: hidden tricks such as remote-image markup and invisible characters (known as data-exfiltration vectors) are stripped out.
 - **Untrusted content is fenced off** — a tool's free-text fields, and especially an uploaded log file, are wrapped in random delimiters and marked as *data, never instructions*, so a prompt-injection buried in a log can't hijack the assistant. Because the tools are read-only, the worst case is bad text, never a trade.
 
-The assistant will describe your data and explain concepts but declines to give buy/sell/hold or price-prediction advice, pivoting to what it can show from your own figures instead. Follow-ups stay on live data rather than the model's memory. A deictic follow-up like "why is *that* one stuck?" or "is *it* profitable?" resolves the reference to the deal you were just discussing; a ranking follow-up like "and which one is furthest away?" or "what's my best performer?" is treated as a fresh look across your deals; and a bare continuation — "tell me more", "go on", "elaborate", "break it down" — is treated as *continue on live data*. In each case the assistant re-runs the lookup and grounds the reply in real figures, rather than expanding its previous answer from memory (where a smaller local model can drift into invented rows). An optional topic guard (off by default; enable under AI Tools) declines off-topic requests with a friendly redirect.
+The assistant will describe your data and explain concepts but declines to give buy/sell/hold or price-prediction advice, pivoting to what it can show from your own figures instead. Follow-ups stay on live data rather than the model's memory. A deictic follow-up like "why is *that* one stuck?" or "is *it* profitable?" resolves the reference to the deal you were just discussing. A ranking follow-up like "and which one is furthest away?" or "what's my best performer?" is treated as a fresh look across your deals. A bare continuation — "tell me more", "go on", "elaborate", "break it down" — is treated as *continue on live data*. In each case the assistant re-runs the lookup and grounds the reply in real figures, rather than expanding its previous answer from memory (where a smaller local model can drift into invented rows). An optional topic guard (off by default; enable under AI Tools) declines off-topic requests with a friendly redirect.
 
 The model is also told the current date and time in UTC (all deal and log timestamps are UTC), so questions phrased with "today", "yesterday", or "the last few days" resolve correctly.
 
@@ -1439,22 +1444,22 @@ You don't need to change any of the options below to get accurate answers — th
 
 Requirements and behavior:
 
-- **Needs a tool-calling model.** Recent local models on Ollama (e.g. Llama 3.1+, Qwen 2.5+) and OpenAI models support tool-calling. If the active model or endpoint does not, SymBot detects it on the first call and falls back automatically to the normal Deal Context path — nothing breaks. A more capable model (e.g. Qwen 2.5 14B) selects tools and phrases answers noticeably more reliably than a small 8B one, and models under ~3B are generally not dependable for tools; see [Choosing a model for your hardware](#choosing-a-model-for-your-hardware). To catch a mismatch before you rely on it, the config screen shows a live tool-calling check next to the Ollama Model field whenever AI Tools is enabled — green when the chosen model supports tools, amber when it doesn't.
-- **Reliable with many tools.** Selection accuracy on small models drops off past ~10–15 tools, so rather than showing all 40+ tools every turn, SymBot shortlists the handful relevant to your question (a keyword router, with a small always-included core) and offers the model only those, along with a grouped "which tool for which question" guide. Tools requested together run concurrently, each with its own timeout so a slow scan can't hang the turn, and the loop stops and answers if the model repeats a call or hits a run of errors rather than looping or fabricating results.
+- Needs a tool-calling model. Recent local models on Ollama (e.g. Llama 3.1+, Qwen 2.5+) and OpenAI models support tool-calling. If the active model or endpoint does not, SymBot detects it on the first call and falls back automatically to the normal Deal Context path — nothing breaks. A more capable model (e.g. Qwen 2.5 14B) selects tools and phrases answers noticeably more reliably than a small 8B one, and models under ~3B are generally not dependable for tools; see [Choosing a model for your hardware](#choosing-a-model-for-your-hardware). To catch a mismatch before you rely on it, the config screen shows a live tool-calling check next to the Ollama Model field whenever AI Tools is enabled — green when the chosen model supports tools, amber when it doesn't.
+- Reliable with many tools. Selection accuracy on small models drops off past ~10–15 tools, so rather than showing all 40+ tools every turn, SymBot shortlists the handful relevant to your question (a keyword router, with a small always-included core) and offers the model only those, along with a grouped "which tool for which question" guide. Tools requested together run concurrently, each with its own timeout so a slow scan can't hang the turn, and the loop stops and answers if the model repeats a call or hits a run of errors rather than looping or fabricating results.
 	- **Compact results** — tools keep their output small so a single result stays within the model's size budget rather than being clipped into something it can't read. A long output — a deal with dozens of safety orders, a live status list covering many open deals, a long run of matching log lines, or a year-long day-by-day series — returns a representative page (most recent, or worst-first for open positions) while still reporting the true totals and the single best/worst entry.
-- **Built for cross-provider compatibility.** The tool loop normalizes the differences between providers so it works with Ollama, OpenAI, and OpenAI-compatible endpoints (llama.cpp, vLLM, LM Studio, Groq, and similar). Four normalizations do the work:
+- Built for cross-provider compatibility. The tool loop normalizes the differences between providers so it works with Ollama, OpenAI, and OpenAI-compatible endpoints (llama.cpp, vLLM, LM Studio, Groq, and similar). Four normalizations do the work:
   - Tool-call arguments are parsed tolerantly whether they arrive as an object or a JSON string, with light repair of fenced or trailing-comma JSON.
   - Missing tool-call ids are synthesized, so id-strict endpoints don't reject the follow-up.
   - A tool call a weaker model emits as plain text is recovered when its name matches a real tool.
   - An endpoint that silently ignores the tools falls back to the grounded path instead of answering blind.
-- **Deep research sub-agent (explore).** With Deep research on, the model gains one extra tool, `explore`, for questions that need gathering and comparing a lot of data at once — e.g. *"review all my completed BTC deals this month and identify which safety-order setups performed best"*. Rather than run that in the main conversation (dozens of tool calls the round cap would cut short), it hands the question to a sub-agent:
+- Deep research sub-agent (explore). With Deep research on, the model gains one extra tool, `explore`, for questions that need gathering and comparing a lot of data at once — e.g. *"review all my completed BTC deals this month and identify which safety-order setups performed best"*. Rather than run that in the main conversation (dozens of tool calls the round cap would cut short), it hands the question to a sub-agent:
 	- **How it works** — the sub-agent is a second tool-calling loop over the *same read-only tools*, bounded by the same Max Tool Rounds and a hard time limit. It gathers what it needs on its own and returns a single synthesized answer.
 	- **Kept safe and tidy** — it is read-only and cannot call `explore` itself (so it can never recurse), and its work stays out of the main chat's context: you get the conclusion, not the twenty lookups behind it.
 	- **Off by default** — it costs more (a nested loop of model calls) and is most effective on a capable model. For a single lookup the model just uses the specific tool directly.
 	- **`deep_explore`** (also off by default) — upgrades the sub-agent to a structured plan → gather → gap-check → cited-synthesis pass for the most demanding questions. It applies only when Deep research is already on.
-- **Applies to chat only.** The one-off deal analysis (the ⚡ button) is a self-contained report and does not use tools; only your typed chat questions do.
-- **The answer streams.** While the model is looking things up the assistant shows its "thinking" state; once it has the data, the final answer is revealed progressively rather than dropped in all at once.
-- **Works over the API too.** The `/api/ai/chat/prompt` endpoint accepts an API key, so tool-augmented chat is reachable from `curl`. A streaming request (the default) is delivered over the Socket.IO room; a non-streaming request (`message.stream: false`) is answered synchronously with the composed reply in the HTTP response body (`data`), so a plain `curl` client with no socket still gets the full answer.
+- Applies to chat only. The one-off deal analysis (the ⚡ button) is a self-contained report and does not use tools; only your typed chat questions do.
+- The answer streams. While the model is looking things up the assistant shows its "thinking" state; once it has the data, the final answer is revealed progressively rather than dropped in all at once.
+- Works over the API too. The `/api/ai/chat/prompt` endpoint accepts an API key, so tool-augmented chat is reachable from `curl`. A streaming request (the default) is delivered over the Socket.IO room; a non-streaming request (`message.stream: false`) is answered synchronously with the composed reply in the HTTP response body (`data`), so a plain `curl` client with no socket still gets the full answer.
 - When enabled, the Deal Context router is bypassed for chat — the tools replace it. You can keep Deal Context configured; it simply isn't used while AI Tools is on.
 
 In `app.json` under `ai.tools`:
@@ -1508,31 +1513,31 @@ patterns-only note — the question you asked and which read-only tools answered
 
 What it stores is deliberately narrow and safe:
 
-- **Patterns only — never values.** A record holds the question text and the tool
+- Patterns only — never values. A record holds the question text and the tool
   names that answered it, plus a cheap grounding flag (were the answer's figures all
   present in the tool output?). It never stores your P/L, balances, prices, deal ids,
   or the answer itself. There are no account values in the corpus at all.
-- **Agnostic, not siloed.** The corpus is generic "which tool answers this kind of
+- Agnostic, not siloed. The corpus is generic "which tool answers this kind of
   question" know-how, so it is stored once per database rather than partitioned per
   instance. In a Hub setup where instances share one database, they therefore
   share and aggregate their learning automatically and answer consistently; a
   standalone instance keeps its own.
-- **Kept out of system backups.** Because it is know-how and not per-deal data, the
+- Kept out of system backups. Because it is know-how and not per-deal data, the
   learning corpus is deliberately excluded from the system backup and restore
   cycle — restoring an older deal backup never wipes or resets what the chat has
   learned.
-- **Quality-filtered.** Only well-grounded answers (and any you explicitly rate 👍)
+- Quality-filtered. Only well-grounded answers (and any you explicitly rate 👍)
   are reused as examples; a shaky or 👎-rated answer is never fed back as a model to
   copy. Retrieval is a dependency-free keyword-similarity match (Okapi BM25, the ranking
   classic search engines use) — no embeddings, no external service, works offline.
-- **Rating a reply.** While learning is on, a small, faint 👍/👎 appears beneath each
+- Rating a reply. While learning is on, a small, faint 👍/👎 appears beneath each
   answer that was built from your live data (deal, bot, portfolio, log and error
   answers). Plain conversational replies — which teach nothing about which tool to use —
   intentionally don't show it, so the control only appears where your feedback is useful.
 
 Extras, all reachable from **Configuration → Artificial Intelligence (AI) → AI Learning**:
 
-- **Smart on first install.** SymBot ships a curated starter corpus of hundreds of
+- Smart on first install. SymBot ships a curated starter corpus of hundreds of
   common question→tool patterns (covering every tool, in many phrasings), imported
   automatically the first time you use the chat with learning on — so it routes almost
   any question correctly from day one, before it has learned anything of its own. The
@@ -1540,17 +1545,18 @@ Extras, all reachable from **Configuration → Artificial Intelligence (AI) → 
   corpus in the database, never edited in place. On upgrade, a newer default version
   merges its new patterns in (additively, deduped) without touching anything you have
   added, rated, or removed.
-- **Export / import a corpus pack.** *Export* downloads the corpus as a patterns-only
+- Export / import a corpus pack. *Export* downloads the corpus as a patterns-only
   file (no values); *Import* merges a pack from another install. Every import is
   verified first — it must be a genuine SymBot corpus (manifest), pass an integrity
   checksum (so a corrupt or tampered file is rejected), and every pattern it references
   must map to a tool that exists in your install (so a pack can't smuggle in anything
-  unknown). Invalid patterns are dropped and the rest still import.
-- **Hub aggregation.** When several instances run under a Hub, they pool their
+  unknown). Invalid patterns are dropped and the rest still import. An imported pack may
+  be up to 20 MB, which is far larger than any real corpus.
+- Hub aggregation. When several instances run under a Hub, they pool their
   learning: instances that share one database do so automatically, and instances on
   separate databases have their patterns relayed to the Hub, which periodically
   shares the combined set back — so every instance benefits from what the others learn.
-- **Combine shared patterns and check they actually help.** If other people share their
+- Combine shared patterns and check they actually help. If other people share their
   exported packs with you, you can combine several at once — and before saving anything,
   SymBot shows you whether it helps. It does this with a built-in set of *practice
   questions*: everyday questions each paired with the tool that should answer them, kept
@@ -1566,7 +1572,7 @@ Extras, all reachable from **Configuration → Artificial Intelligence (AI) → 
   your corpus as it stands — a simple score of how well what it has learned points to the
   right tool, and which questions it hasn't learned yet. A higher score is better; it is
   informational, not something you need to act on.)
-- **Optional 👍/👎.** A small, unobtrusive thumbs-up/down appears under a finished
+- Optional 👍/👎. A small, unobtrusive thumbs-up/down appears under a finished
   answer; it simply nudges which patterns are preferred or avoided. Ignore it and the
   automatic grounding signal still does the work.
 
@@ -1600,11 +1606,11 @@ node symbot.js corpus regen
 
 ## Scheduled Tasks
 
-SymBot can run tasks on a schedule and deliver the result to you automatically. A task is one of two kinds: an AI task — any prompt you would type into the chat, run on a schedule (a morning summary of your open deals, a periodic check for deals older than a week, an end-of-day P/L recap, or even a trivial one-off like *"what's the date and time?"*) — or a recipe, a ready-made task you add from a built-in library that runs a specific check, most of them without needing AI at all (see *Recipe library* below).
+SymBot can run tasks on a schedule and deliver the result to you automatically. A task is one of two kinds. An AI task is any prompt you would type into the chat, run on a schedule — for example, a morning summary of your open deals, a periodic check for deals older than a week, or an end-of-day P/L recap. A recipe is a ready-made task you add from a built-in library. Most recipes run a specific check without needing AI at all (see *Recipe library* below).
 
 Every task, AI or not, is strictly read-only: it can look up deals, orders, logs and balances, but it can never place, change or cancel a trade. An AI task runs as a fresh, memory-less chat turn that uses the same read-only tools as the interactive chat. The result is delivered to one or more destinations you choose per schedule — the browser, Telegram, email, or a webhook — each firing on the run outcomes you pick (see **Notify** below).
 
-Scheduled tasks live in the Schedules section in the navigation (they were previously under Configuration → AI; a link there now points to the section). The page's Scheduled Tasks panel lists every task and carries two buttons — + Add schedule (write your own AI task) and + Add from library (pick a ready-made recipe) — followed by a System Backup panel that summarizes the backup schedule, lets you **Run now** (which performs the full backup — the stored file, retention, and the off-site upload if configured — the same as a scheduled run, useful for taking a missed backup or testing an off-site change) or open its **History**, and links to its editor in Configuration. Once you have both recipes and your own tasks, the list groups them under Recipes and Your schedules headings so it stays legible. Click + Add schedule to open the editor:
+Scheduled tasks live in the Schedules section in the navigation (they were previously under Configuration → AI; a link there now points to the section). The page's Scheduled Tasks panel lists every task and carries two buttons: + Add schedule (write your own AI task) and + Add from library (pick a ready-made recipe). Below it, a System Backup panel summarizes the backup schedule. From there you can click **Run now**, open its **History**, or follow the link to its editor in Configuration. **Run now** performs the full backup — the stored file, retention, and the off-site upload if one is configured — exactly like a scheduled run, which is handy for taking a missed backup or testing an off-site change. Once you have both recipes and your own tasks, the list groups them under Recipes and Your schedules headings so it stays legible. Click + Add schedule to open the editor:
 
 | Field | Description |
 | --- | --- |
@@ -1635,8 +1641,8 @@ Four recipes ship today, all read-only and needing no AI:
 
 - **Error sentinel** — scans the logs on a schedule and alerts you only when an error type is *new* or *spiking* versus the previous days; silent when everything is normal.
 - **Drawdown sentinel** — alerts you when an open deal is underwater past a threshold or its safety-order ladder is nearly exhausted; quiet when everything is healthy. This one is AI-optional — tick *Enhance with AI* to append a short written summary.
-- **Resource sentinel** — samples the host machine's disk, memory and CPU, plus the instance's event-loop responsiveness, on a schedule and alerts you only when one crosses a warning threshold (running low on disk, near out of memory, CPU-saturated, or the event loop blocked); quiet when everything is healthy. It uses only built-in system stats — nothing extra to install — and works on Linux, macOS and Windows. Memory alerts use true *available* memory on Linux and Windows; macOS does not expose that to a pure check, so there the memory figure is shown but not alerted on. The event-loop check measures how long the loop was kept waiting, so it catches a stray synchronous call before it can slip the trading loop's timing. Disk, memory and CPU read the host, so in a Hub (several instances on one machine) enabling the sentinel on a single instance covers the host for those; the event-loop check is specific to the instance it runs on, so enable it on each instance you want watched.
-- **Performance report** — sends a scheduled summary of your realized trading performance over a look-back window (default the last 24 hours): deals closed, realized profit, win rate, average result, average duration, and your best and worst deal, followed by a snapshot of your current open positions. Unlike the sentinels it is a digest, not an alert, so it arrives on every run; set *skip when empty* if you would rather it stay quiet on a period where nothing closed. It reads only your closed-deal history and cached figures — no exchange calls on the schedule — so it can never slow the trading loop. Each instance reports its own performance, titled with the instance name, so in a Hub you can tell them apart.
+- **Resource sentinel** — samples the host machine's disk, memory and CPU, plus the instance's event-loop responsiveness, on a schedule. It alerts you only when one crosses a warning threshold — low disk, near out of memory, CPU-saturated, or the event loop blocked — and stays quiet when everything is healthy. It uses only built-in system stats, so there is nothing extra to install, and it works on Linux, macOS and Windows. Memory alerts use true *available* memory on Linux and Windows. macOS does not expose that to a pure check, so there the memory figure is shown but not alerted on. The event-loop check measures how long the loop was kept waiting, so it catches a stray synchronous call before it can slip the trading loop's timing. Disk, memory and CPU read the host, so in a Hub (several instances on one machine) enabling the sentinel on one instance covers the host for those. The event-loop check is specific to the instance it runs on, so enable it on each instance you want watched.
+- **Performance report** — sends a scheduled summary of your realized trading performance over a look-back window (the last 24 hours by default). It covers deals closed, realized profit, win rate, average result, average duration, and your best and worst deal, followed by a snapshot of your current open positions. Unlike the sentinels it is a digest rather than an alert, so it arrives on every run. Set *skip when empty* if you would rather it stay quiet on a period where nothing closed. It reads only your closed-deal history and cached figures, with no exchange calls on the schedule, so it can never slow the trading loop. Each instance reports its own performance, titled with the instance name, so in a Hub you can tell them apart.
 
 A recipe is just declarative data (a task type plus settings, carrying no account values), so the shipped set can grow over time; a newer version of a recipe never overwrites a task you have already added.
 
@@ -1716,7 +1722,7 @@ SymBot works out of the box for a single operator — you log in with one passwo
 | Role | Can do |
 | --- | --- |
 | **viewer** | Read-only — view deals, bots, stats, logs. Cannot act. |
-| **operator** | Everything viewer can, plus trade and manage running bots: start/stop bots, edit an existing bot’s settings, and start/pause/close deals. Cannot create or delete bots. |
+| **operator** | Everything viewer can, plus trade and manage running bots: start/stop bots, edit an existing bot's settings, and start/pause/close deals. Cannot create or delete bots. |
 | **admin** | Everything operator can, plus create/delete bots, change settings, manage API keys, add users, view the audit log. |
 | **owner** | Full access. Your existing single password is the owner. |
 
@@ -1767,12 +1773,12 @@ The single operator remains the implicit owner until you add anyone — so nothi
 
 ### Sessions
 
-See every device currently signed in under **Access Control → Sessions**, and end any of them. Each row shows the device (browser and operating system), the source IP, when it signed in, and when it was last active, with your current session marked. The source IP and device are kept **current** — if a session moves networks (a phone switching from Wi-Fi to mobile data) or the browser updates, the row reflects the new value on that session's next request — and **Last active** advances automatically as the session is used. A **Refresh** button re-reads the list in place so you can watch a change appear without leaving the tab. There are two actions:
+See every device currently signed in under **Access Control → Sessions**, and end any of them. Each row shows the device (browser and operating system), the source IP, when it signed in, and when it was last active, with your current session marked. The source IP and device stay up to date. If a session moves networks (a phone switching from Wi-Fi to mobile data) or the browser updates, the row reflects the new value on that session's next request, and **Last active** advances automatically as the session is used. A **Refresh** button re-reads the list in place, so you can watch a change appear without leaving the tab. There are two actions:
 
 - **Revoke** ends one session immediately — that device is signed out and must log in again. Useful if you left yourself logged in on a shared or public computer, or notice a session you don't recognize.
 - **Sign out everywhere else** ends every session except the one you're using — a one-click "log out my other devices" after a password change or a lost laptop.
 
-This works identically on a single instance and on the Hub. It reads directly from SymBot's session store, so a revoked session stops working on its very next request — there is nothing to wait for or expire. Every valid sign-in stays on the list for as long as it can be used: a session you keep active never drops off, no matter how long ago it signed in. A session that was already signed in before this view existed is filled in automatically the next time it's used — its device and IP are recorded from that request, though its **Signed in** time shows as “—” because the original login time wasn't captured for it. Both viewing the list and ending a session require the `user.manage` capability, so the page is available to an admin or the owner — the list shows each device's source IP, which a read-only viewer shouldn't see.
+This works identically on a single instance and on the Hub. It reads directly from SymBot's session store, so a revoked session stops working on its very next request — there is nothing to wait for or expire. Every valid sign-in stays on the list for as long as it can be used, so a session you keep active never drops off, no matter how long ago it signed in. A session that was already signed in before this view existed is filled in automatically the next time it's used. Its device and IP are recorded from that request, though its **Signed in** time shows as "—" because the original login time was not captured for it. Both viewing the list and ending a session require the `user.manage` capability, so the page is limited to an admin or the owner. The list shows each device's source IP, which a read-only viewer should not see.
 
 ### Audit log
 
@@ -1790,9 +1796,9 @@ Every audit point is a single call to one shared helper (`Common.auditEvent`), s
 
 ### Watchdog
 
-SymBot watches its own health on two levels. Every time it starts, a self-policing watchdog runs a full sweep of integrity checks — the set listed below. Separately, you can enable an hourly **Error sentinel** ([a scheduled task](#scheduled-tasks)) that keeps sweeping your logs while SymBot runs and alerts you when an error type is new or spiking.
+SymBot watches its own health on two levels. A self-policing watchdog runs a full sweep of integrity checks — the set listed below. It runs once at startup and then keeps running on its own at a set interval for as long as SymBot is up, so a problem that only appears later is caught too, not just one present at boot. The repeat interval defaults to 15 minutes; set `watchdog_interval_secs` in `config/app.json` to change it. Separately, you can enable an hourly **Error sentinel** ([a scheduled task](#scheduled-tasks)) that keeps sweeping your logs while SymBot runs and alerts you when an error type is new or spiking.
 
-The startup sweep's results are recorded in the Audit Log (a clean run logs one `watchdog.ok` entry; any problem is logged as a `watchdog` finding rather than going unnoticed), and its checks are warn-only — they surface issues, never block startup. They cover:
+The startup sweep's results are recorded in the Audit Log (a clean startup run logs one `watchdog.ok` entry; the quiet repeat sweeps that follow log nothing unless they find a problem, so ongoing monitoring never floods the log). Any problem is logged as a `watchdog` finding rather than going unnoticed, and the checks are warn-only — they surface issues, never block startup or trading. They cover:
 
 - Every state-changing route has a permission gate, and the gates are strong.
 - The capability model is internally consistent.
@@ -1816,6 +1822,7 @@ The startup sweep's results are recorded in the Audit Log (a clean run logs one 
 - No open deal points at a bot that no longer exists (a deal whose bot was deleted would never be advanced).
 - No two open deals exist for the same bot and pair (only one is allowed at a time, so a duplicate means the single-deal-start guard was bypassed and the loop would manage both against one pair).
 - No open deal is left stuck with no filled orders after a short grace period (a half-started deal that never actually entered but still holds its bot's slot for that pair).
+- On the Hub, every enabled instance is actually running (an instance that crashed and used up its automatic restart attempts would otherwise sit stopped and silently not trading; instances mid-restart are not flagged).
 - The audit log's tamper-evident hash chain is unbroken (a break means a past entry was altered or removed).
 - The IP allow/block filter can't be spoofed by a forged client-address header when SymBot sits behind a proxy.
 
@@ -1880,7 +1887,8 @@ The presented credential resolves to a principal carrying a set of capabilities,
 | Delete a bot | `DELETE /api/bots/{botId}` | `bot.delete` |
 | Read account balances | `POST /api/accounts[/{name}]/balances` | `account.read` |
 | Change settings / schedules / backups | `POST /config`, `/api/schedules…`, `/system/…` | `settings.write` |
-| Use AI features | `GET\|POST\|DELETE /api/ai/…` | `stats.read` |
+| Use AI features (chat, analysis, history) | `GET\|POST\|DELETE /api/ai/…` | `stats.read` |
+| Probe AI providers (list models, preflight, tool-support) | `POST /api/ai/models`, `/api/ai/preflight`, `/api/ai/model-tools-support` | `settings.write` |
 
 A single startup watchdog verifies that every state-changing route is covered by one of these rules, so a new route can never ship ungated (a gap is recorded in the [Audit log](#audit-log)).
 
@@ -1943,7 +1951,7 @@ A body-level failure always looks like `{ "success": false, "data": "<reason>" }
 | dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
-| dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (the deal counter can reset for multi-pair bots or when the bot is re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | pairBotsDealsMax              | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently including all other active bots. Default is unlimited in relation to other bots when empty or set to 0. |
@@ -1970,7 +1978,7 @@ POST /api/bots/create
 | dcaOrderStepPercentMultiplier | number   | YES           |                      | Multiplies the price deviation percentage used by the last safety order |
 | dcaTakeProfitPercent          | number   | YES           |                      | Take profit percentage the bot will use to close successful deals       |
 | dcaMaxOrder                   | integer  | YES           |                      | Maximum DCA / safety orders allowed per deal                            |
-| dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (Can reset for multi-pair bots or when re-enabled) |
+| dealMax                       | integer  | NO            |                      | Maximum deals allowed before bot is disabled. Set to 0 for unlimited (the deal counter can reset for multi-pair bots or when the bot is re-enabled) |
 | pairMax                       | integer  | NO            |                      | Maximum pairs allowed to start per bot. Set to 0 for unlimited          |
 | pairDealsMax                  | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently. Default is maximum one deal per pair when empty or set to 0. |
 | pairBotsDealsMax              | integer  | NO            |                      | Maximum number of same pair deals that can run concurrently including all other active bots. Default is unlimited in relation to other bots when empty or set to 0. |
@@ -2983,7 +2991,7 @@ Scheduled backups never bundle configuration unless you explicitly enable it, so
 
 #### Restoring
 
-To restore, you provide the archive's encryption password. Before anything in your database is touched, SymBot verifies the archive against its manifest — every file's checksum is checked, and any file that is missing, altered, or not listed is rejected — so a corrupted or tampered archive is refused while your live data is still intact. The backup's version is also compared to the running version; a mismatch is noted as a caution and the restore still proceeds, so you can restore an older backup after an upgrade. The restore also parses the entire backup into memory before it writes anything, and if a restore ever fails after it has begun writing, the instance shuts down rather than resume trading on partially restored data.
+To restore, you provide the archive's encryption password. Before anything in your database is touched, SymBot verifies the archive against its manifest — every file's checksum is checked, and any file that is missing, altered, or not listed is rejected — so a corrupted or tampered archive is refused while your live data is still intact. The backup's version is also compared to the running version; a mismatch is noted as a caution and the restore still proceeds, so you can restore an older backup after an upgrade. The restore also parses the entire backup into memory before it writes anything, and if a restore ever fails after it has begun writing, the instance shuts down rather than resume trading on partially restored data. When a restore succeeds, the instance restarts automatically so the restored data takes effect and your open deals resume; under the Hub it is rebooted through the Hub.
 
 The restore dialog mirrors the backup options. *Restore schedules* (off by default) overwrites this instance's schedules and their stored credentials with the archive's. *Restore configuration* (off by default, and only meaningful if the backup included configuration) overwrites this server's settings, exchange keys, and app password with the backup's — all together, so you never end up with a mismatched `app.json` and bot config whose secrets cannot decrypt. After a configuration restore you sign in with the app password from the *source* server, and the boot-time secret check confirms the restored keys decrypt.
 
@@ -3080,13 +3088,13 @@ These flags combine with the commands above (e.g. `node symbot.js reset users --
 
 #### Why SymBot?
 - SymBot was developed with two primary goals in mind:
-	- Create a simple, easy to use, yet powerful crypto trading bot that would provide anyone who wanted to start trading cryptocurrencies with the ability to get up and running quickly with little technical knowledge.
-	- Reduce the risk of having any other parties with access to your most valuable information when it comes to trading, which are your exchange credentials or API keys. There are ever growing cyber-threats, hacks, data breaches, and just overall bad actors that are constantly looking for ways to scam through sometimes fairly elaborate schemes. If your keys get into the hands of anyone with malicious intentions, you could lose all of your money and cryptocurrencies on your exchange. SymBot connects directly to your exchange so your API keys are never sent or shared with any other third-party.
+	- Create a simple, easy-to-use, yet powerful crypto trading bot that would provide anyone who wanted to start trading cryptocurrencies with the ability to get up and running quickly with little technical knowledge.
+	- Reduce the risk of having any other parties with access to your most valuable information when it comes to trading, which are your exchange credentials or API keys. There are ever-growing cyber-threats, hacks, data breaches, and just overall bad actors that are constantly looking for ways to scam through sometimes fairly elaborate schemes. If your keys get into the hands of anyone with malicious intentions, you could lose all of your money and cryptocurrencies on your exchange. SymBot connects directly to your exchange so your API keys are never sent or shared with any other third-party.
 
 #### How is SymBot different from just trading directly on my exchange?
 - An exchange gives you the tools to place individual orders by hand. SymBot turns those same tools into an automated, disciplined strategy that runs on your behalf around the clock. Running a DCA strategy manually would mean watching the market continuously, placing each safety order at the right price as the market moves, tracking your average entry across many partial fills, and closing at your target the instant it is reached, for every position, day and night. In practice that is very hard to do by hand without missing fills, miscalculating averages, or letting emotion drive decisions.
 - SymBot does all of that for you. It places your base and safety orders, recalculates your average entry and take-profit target on every fill, and closes each deal when it reaches profit, across many pairs and many concurrent deals at once. It also enforces safeguards a manual trader has to remember on their own, such as the risk percentage that shows how much of your capital you would commit if every bot ran to its maximum, price-feed sanity checks, and an optional circuit breaker that pauses new orders during abnormal market moves.
-- What SymBot does not do is change the exchange itself. Your orders still execute on your own exchange at its prices and fees, and SymBot connects directly with your own API keys so nothing is routed through a third party. The benefit is not a secret edge on price, it is consistent, automated, unemotional execution of a strategy that would be tedious and error-prone to run by hand.
+- What SymBot does not do is change the exchange itself. Your orders still execute on your own exchange at its prices and fees, and SymBot connects directly with your own API keys so nothing is routed through a third party. The benefit is not a secret edge on price. It is consistent, automated, unemotional execution of a strategy that would be tedious and error-prone to run by hand.
 
 #### What exchanges does SymBot support?
 - SymBot uses the [CCXT](https://github.com/ccxt/ccxt) (CryptoCurrency eXchange Trading) library which supports many popular exchanges such as Binance and Coinbase. If your exchange is listed then you should be able to connect to it.
@@ -3095,7 +3103,7 @@ These flags combine with the commands above (e.g. `node symbot.js reset users --
 - Yes — it is strongly recommended, especially if you are new to this. SymBot has a built-in Sandbox (paper trading) mode that runs your bots exactly as they would run live, but with a simulated wallet balance instead of real funds, so no real orders are placed. New bots default to Sandbox mode, and you can set a Sandbox wallet balance under **Configuration → Exchange**. Watch how your bots and deals behave in Sandbox until you are comfortable, then switch to Live when you are ready to trade with real money.
 
 #### Can I run SymBot on my home network?
-- Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established hosting data centers have readily available support teams to assist with system related issues, fully equipped with generators in case of power failures, redundant fiber connections, and operate inside hurricane resistant buildings. If your home experiences a power outage or any other unexpected scenarios, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
+- Yes, however using a trusted hosting provider is a more stable choice. Trading requires your system to be running 24/7 along with an uninterrupted high-speed internet connection. Most established data centers have support teams on hand for system issues. They are also equipped with backup generators, redundant fiber connections, and hardened, storm-resistant buildings. If your home experiences a power outage or any other unexpected scenarios, that may result in unplaced orders or missed trading signals which could impact your deals significantly.
 
 #### Can I run multiple SymBot instances on the same server?
 
@@ -3119,7 +3127,7 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 - While there are a lot of hosting providers to choose from, using one you trust is generally the best way to ensure SymBot runs smoothly at all times. Many providers offer free tier services or very low cost options. A quick search for "VPS hosting" or "cloud server" will surface a wide range of providers at various price points. For personal use, a low-cost VPS with 1-2GB RAM and a single CPU core is generally sufficient to run SymBot with multiple bots.
 
 #### How many DCA bots can I run at the same time?
-- You can technically run an unlimited number of bots, however any limitations mostly come from how often your exchange allows APIs to be accessed, and the amount of resources your system (server) has such as CPU, memory, etc. The more bots you run generally requires additional API calls to your exchange and more system processing capability to manage all of your deals efficiently.
+- You can technically run an unlimited number of bots. In practice, the limits come from two things: how often your exchange allows API access, and how much CPU, memory, and other resources your server has. The more bots you run, the more API calls and processing capability it takes to manage all of your deals efficiently.
 
 #### How does a bot decide which pairs to open deals on?
 - A bot opens deals on the pairs you assign to it, in the order they are listed, and keeps opening on the next pair until it reaches its Max Pairs limit (the most deals it is allowed to run at once). Pairs are never chosen at random. A pair that already has an open deal is skipped rather than started again, so the bot fills its idle pairs instead of repeating one. If you want certain pairs to be considered first, list them earlier in the bot's pair list.
@@ -3236,7 +3244,7 @@ Yes, with [SymBot Hub](#symbot-hub-id) you can easily run multiple instances on 
 - SymBot is the software used for trading, while SymBot Hub serves as a central platform to manage multiple SymBot instances, offering a simplified and more efficient way to access them. SymBot Hub includes a live dashboard, unified active deals and bots views across all instances, and a full bot management interface for creating, editing, and deleting bots on any instance without switching between them. While SymBot Hub is optional, it is highly recommended if you're running multiple SymBot instances.
 
 #### Why won't SymBot start, or why am I seeing an unsupported engine warning?
-- SymBot requires the Node.js version listed under [Requirements](#requirements) — a current v22 LTS or newer. That minimum is driven by two of its built-in dependencies: the Hub's storage uses Node's built-in SQLite (`node:sqlite`), available without an experimental flag from v22.13.0 (or Node v24+), and the Hub's instance proxy needs a slightly newer v22 release. If you are running an older version, `npm install` may print an *unsupported engine* warning and the Hub may fail to start its storage layer. Check your version with `node --version` and upgrade if it is below the required minimum. On systems with multiple Node.js versions installed, a version manager such as nvm can be used to select the correct one.
+- SymBot requires the Node.js version listed under [Requirements](#requirements) — a current v22 LTS or newer. That minimum is driven by two of its built-in dependencies: the Hub's storage uses Node's built-in SQLite (`node:sqlite`), available without an experimental flag from v22.13.0 (or Node v24+), and the Hub's instance proxy needs a slightly newer v22 release — which together are why the stated minimum is v22.15 (see [Requirements](#requirements)). If you are running an older version, `npm install` may print an *unsupported engine* warning and the Hub may fail to start its storage layer. Check your version with `node --version` and upgrade if it is below the required minimum. On systems with multiple Node.js versions installed, a version manager such as nvm can be used to select the correct one.
 - **A broken configuration file.** SymBot deliberately refuses to start if a configuration file (`app.json`, the bot config, or the server config) is present but cannot be parsed — for example an edit left invalid JSON. Rather than run with a half-loaded configuration, it stops immediately and logs a precise message naming the file and the exact parse error (e.g. *"Bot configuration file … is broken and cannot be parsed …"*) and exits with a non-zero code so a process manager surfaces the failure. Fix the JSON or restore the file from a backup, then restart. (A genuinely missing file on a fresh install is handled normally — it is only a *corrupt* file that halts startup.)
 
 #### How can I disable logging to file to save disk space?

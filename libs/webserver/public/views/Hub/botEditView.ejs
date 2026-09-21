@@ -188,12 +188,12 @@
 					buttons: {
 						ok: {
 							btnClass: 'btn-default',
-							text: '<div style="color: #4aa602;">' + botText + '</div>',
+							text: '<div style="color: var(--color-success);">' + botText + '</div>',
 							action: function() { confirmStart = true; submitForm('start'); }
 						},
 						cancel: {
 							btnClass: 'btn-default',
-							text: '<div style="color: #000000;">Cancel</div>',
+							text: '<div style="color: var(--color-neutral);">Cancel</div>',
 							action: function() {}
 						}
 					}
@@ -217,9 +217,9 @@
 		<div class="contentHeaderBox">
 			<b id="headerText" class="contentHeader"></b>
 			<span class="view-header-links">
-				<a href="/bots" class="view-back-link">&#8592; All Bots</a>
+				<a href="./bots" class="view-back-link">&#8592; All Bots</a>
 				<span style="opacity: 0.3; padding: 0 4px;">|</span>
-				<a href="/bots?instance=<%= encodeURIComponent(instanceId || '') %>" class="view-back-link">&#8592; <%= instanceName %> Bots</a>
+				<a href="./bots?instance=<%= encodeURIComponent(instanceId || '') %>" class="view-back-link">&#8592; <%= instanceName %> Bots</a>
 			</span>
 		</div>
 

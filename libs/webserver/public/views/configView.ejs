@@ -59,7 +59,7 @@
 							 },
 						 cancel: {
 									 btnClass: 'btn-default',
-									 text: '<div style="color: #000000;">Cancel</div>',	
+									 text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 									 action: function () { }
 								 }
 					 }
@@ -875,7 +875,7 @@
 			if (isSet) {
 
 				$status.html('&#10003; Set &nbsp;<span class="bot-cred-clear" data-field="' + field + '" style="cursor: pointer; color: var(--link-color); font-size: var(--fs-body);">[Clear]</span>');
-				$status.css('color', 'var(--green-color, var(--color-success))').show();
+				$status.css('color', 'var(--color-success)').show();
 			}
 			else {
 
@@ -946,13 +946,13 @@
 
 			if (isSandbox) {
 
-				$('#sandboxModeLabel').html('<span style="color: var(--color-warning); font-weight: 600;">&#9888; New bots default to Sandbox (Paper Trading)</span>');
+				$('#sandboxModeLabel').html('<span style="color: var(--color-warning); font-weight: var(--fw-medium);">&#9888; New bots default to Sandbox (Paper Trading)</span>');
 				$('#sandboxModeToggle').text('Set new-bot default to Live Trading');
 				$('#sandboxModeDesc').html('This is the default mode for <b>new</b> bots &mdash; no real trades. Existing bots keep their own mode and are not switched. Each bot keeps the mode it was created with; to run a bot in the other mode, create a new bot in that mode, and to run paper and live at the same time, use separate bots or Hub instances.');
 			}
 			else {
 
-				$('#sandboxModeLabel').html('<span style="color: var(--color-success); font-weight: 600;">&#9654; New bots default to Live Trading</span>');
+				$('#sandboxModeLabel').html('<span style="color: var(--color-success); font-weight: var(--fw-medium);">&#9654; New bots default to Live Trading</span>');
 				$('#sandboxModeToggle').text('Set new-bot default to Sandbox Mode');
 				$('#sandboxModeDesc').html('This is the default mode for <b>new</b> bots &mdash; real orders. Existing bots keep their own mode and are not switched. Each bot keeps the mode it was created with; to run a bot in the other mode, create a new bot in that mode, and to run paper and live at the same time, use separate bots or Hub instances.');
 			}
@@ -1021,7 +1021,7 @@
 					},
 					cancel: {
 						btnClass: 'btn-default',
-						text: '<div style="color: #000;">Cancel</div>',
+						text: '<div style="color: var(--color-neutral);">Cancel</div>',
 						action: function() {}
 					}
 				}
@@ -1035,7 +1035,7 @@
 			const exchangeChanged = selectedExchange && selectedExchange !== originalExchange;
 
 			const updateBotsHtml = exchangeChanged
-				? '<div style="font-size: var(--fs-dialog-title); margin-top: 14px; padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid var(--color-warning); border-radius: 2px;">'
+				? '<div style="font-size: var(--fs-dialog-title); margin-top: 14px; padding: 8px; background: var(--color-warning-soft); border-left: 3px solid var(--color-warning); border-radius: 2px;">'
 					+ '<b>&#9888; Exchange settings are saved to ' + ('<%= appData.bot_config %>'.split('/').pop().split('\\\\').pop()) + ' only.</b> Existing bots retain their original exchange. '
 					+ 'Bots with no active deals can be updated below. <b>Bots with active deals will be skipped.</b>'
 					+ '</div>'
@@ -1277,7 +1277,7 @@
 				'box-shadow': '0 0 10px rgba(0, 0, 0, 0.1)'
 			});
 
-			$('#msgBox').html('<div style="display: block; font-weight: bold;">' + msgBox + '</div>');
+			$('#msgBox').html('<div style="display: block; font-weight: var(--fw-bold);">' + msgBox + '</div>');
 		}
 
 		$('#pairbuttons').select2({ tags: true, data: pairButtons });
@@ -1323,7 +1323,7 @@
 
 			try {
 
-				const req = await fetch('/app-version');
+				const req = await fetch('./app-version');
 				const { update_available } = await req.json();
 
 				update_available ? alertBox(msg, function() {}) : alertBox(`No ${msg}`, function() {});
@@ -1388,7 +1388,12 @@
 						This is the Mongo Database URL used for <%- appData.name %> data storage.
 					</span></span>
 				</label>
-				<input name="mongodburl" id="mongodburl" value="<%= appData.mongo_db_url %>" class="form-field" style="width: 250px;" required>
+				<%# The Mongo URL can carry credentials (mongodb://user:pass@host). It is only editable/saved in
+				    config (setup) mode, so outside that mode never render it into the DOM — a less-privileged
+				    signed-in user could otherwise read it from the page and reach the database directly. Blank is
+				    safe there because the save path ignores this field outside config mode; `required` is applied
+				    only in config mode so a normal-mode save is not blocked by the intentionally-empty field. %>
+				<input name="mongodburl" id="mongodburl" value="<%= appData.config_mode ? appData.mongo_db_url : '' %>" class="form-field" style="width: 250px;" placeholder="<%= appData.config_mode ? '' : 'Managed in setup mode' %>"<%= appData.config_mode ? ' required' : '' %>>
 			</div>
 
 			<div style="padding-bottom: 5px;">
@@ -1594,8 +1599,8 @@
 				(function(){
 
 					var CATALOG  = <%- JSON.stringify(services['notifications_catalog'] || []).replace(/</g, '\\u003c') %>;
-					var CURRENT  = <%- JSON.stringify(services['notifications'] || null) %>;
-					var DEFAULTS = <%- JSON.stringify(services['notifications_defaults'] || {}) %>;
+					var CURRENT  = <%- JSON.stringify(services['notifications'] || null).replace(/</g, '\\u003c') %>;
+					var DEFAULTS = <%- JSON.stringify(services['notifications_defaults'] || {}).replace(/</g, '\\u003c') %>;
 					var SEVS = ['debug','info','warning','error','critical'];
 					var CH = ['browser','telegram','email'];
 
@@ -1618,7 +1623,7 @@
 							var cur = ev[item.event] || item.def || {};
 							var cells = CH.map(function(ch){
 								var on = (cur[ch] !== false);
-								return '<td class="notif-ch"><input type="checkbox" class="notif-cell" data-event="'+esc(item.event)+'" data-ch="'+ch+'"'+(on?' checked':'')+'></td>';
+								return '<td class="notif-ch"><input type="checkbox" class="notif-cell" data-event="'+esc(item.event)+'" data-ch="'+ch+'" aria-label="'+esc(item.label)+' — '+esc(ch)+'"'+(on?' checked':'')+'></td>';
 							}).join('');
 							body.append('<tr class="notif-event-row"><td class="notif-event">'+esc(item.label)+' <span class="notif-ev-sev">('+esc(item.severity)+')</span></td>'+cells+'</tr>');
 						});
@@ -1904,7 +1909,7 @@
 
 				</table>
 
-			<div class="section-title" style="padding-top: 12px;"><span class="icon icon-tool"></span> AI Tools <span style="font-weight: normal; opacity: 0.65;">(experimental)</span></div>
+			<div class="section-title" style="padding-top: 12px;"><span class="icon icon-tool"></span> AI Tools <span style="font-weight: var(--fw-normal); opacity: 0.65;">(experimental)</span></div>
 			<small style="display: block; padding-bottom: 4px;">Lets the AI chat look up your deal and log data by calling read-only tools, instead of the Deal Context router guessing what to include. Needs a provider/model that supports tool-calling (a recent Llama/Qwen on Ollama, or OpenAI); if unsupported it falls back automatically. Tool use is most reliable on a capable model (llama3.1:8b or qwen2.5:7b/14b and up); on limited hardware you can run a smaller, faster model with AI Tools off and rely on the Deal Context router instead. Read-only &mdash; it can look up deals and logs, never change them.<br><b>You don&rsquo;t need to change any of the options below to get accurate answers</b> &mdash; the defaults are the recommended balance of accuracy and speed. Each toggle only adds extra depth in exchange for a little more time; turn one on only if you want that specific behavior.</small>
 
 			<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
@@ -1976,7 +1981,7 @@
 
 			</table>
 
-						<div class="section-title" style="padding-top: 12px;"><span class="icon icon-brain"></span> AI Learning <span style="font-weight: normal; opacity: 0.65;">(experimental)</span></div>
+						<div class="section-title" style="padding-top: 12px;"><span class="icon icon-brain"></span> AI Learning <span style="font-weight: var(--fw-normal); opacity: 0.65;">(experimental)</span></div>
 			<small style="display: block; padding-bottom: 4px;">When on, the chat remembers which read-only tools answered past questions &mdash; <b>patterns only, never your values</b> (no P/L, balances, prices or deal ids) &mdash; and reuses similar past ones so answers get more accurate over time. Off by default; needs <b>AI Tools</b> on. The learned corpus is kept out of System Backups, and can be <b>exported / imported</b> as a validated pack to seed a new install or share between instances (a Hub that shares one database aggregates its instances automatically).</small>
 
 			<table id="botsCreate" style="margin-top: 5px;" cellpadding=0 cellspacing=0>
@@ -2020,7 +2025,7 @@
 					<input type="file" id="learningAggFiles" accept="application/json,.json" multiple style="display:none;">
 					<button type="button" id="btnLearningAggregate" class="btnAll">Aggregate &amp; verify&hellip;</button>
 					<button type="button" id="btnLearningEvaluate" class="btnAll">Check current accuracy</button>
-					<div id="ai_learning_agg_report" style="margin-top:8px; font-size:0.92rem; line-height:1.5; display:none;"></div>
+					<div id="ai_learning_agg_report" style="margin-top:8px; font-size: var(--fs-label); line-height:1.5; display:none;"></div>
 				</td>
 			</tr>
 
@@ -2212,7 +2217,7 @@
 						<input type="password" autocomplete="off" id="backup_password" class="form-field" style="width: 200px;" placeholder="">
 						<span id="showPassword" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
 						<% if (services['cron_backup'] && services['cron_backup']['password_set']) { %>
-							<div style="margin-top: 4px; font-size: var(--fs-body); color: var(--green-color, var(--color-success));">&#10003; Password is set &mdash; leave blank to keep it</div>
+							<div style="margin-top: 4px; font-size: var(--fs-body); color: var(--color-success);">&#10003; Password is set &mdash; leave blank to keep it</div>
 						<% } %>
 					</td>
 				</tr>
@@ -2342,7 +2347,7 @@
 						<input type="hidden" name="sftp_private_key_clear" id="sftp_private_key_clear" value="0">
 						<textarea name="sftp_private_key" id="sftp_private_key" class="form-field" style="width: 350px; height: 120px; font-family: var(--font-mono); font-size: var(--fs-label); resize: vertical;" placeholder="Paste private key here (leave blank to keep existing)"></textarea>
 						<% if (services['cron_backup']['sftp']['private_key_set']) { %>
-							<div id="sftp_private_key_status" style="margin-top: 4px; font-size: var(--fs-body); color: var(--green-color, var(--color-success));">&#10003; Private key is set &nbsp;<span id="sftp_clear_key" style="cursor: pointer; color: var(--link-color); font-size: var(--fs-body);">[Clear]</span></div>
+							<div id="sftp_private_key_status" style="margin-top: 4px; font-size: var(--fs-body); color: var(--color-success);">&#10003; Private key is set &nbsp;<span id="sftp_clear_key" style="cursor: pointer; color: var(--link-color); font-size: var(--fs-body);">[Clear]</span></div>
 						<% } else { %>
 							<div id="sftp_private_key_status" style="margin-top: 4px; font-size: var(--fs-body); display: none;"></div>
 						<% } %>
@@ -2525,7 +2530,7 @@
 					<!-- opacity is on the TEXT span only, never the <td>: an opacity < 1 on the cell would both
 					     dim the tooltip popup nested inside it AND create a stacking context that traps the
 					     popup's z-index, making it render transparent and behind other elements. -->
-					<tr><td colspan="2" style="padding-top:12px; font-weight:600;"><span style="opacity:0.85;">Portfolio Loss Halt</span>
+					<tr><td colspan="2" style="padding-top:12px; font-weight: var(--fw-medium);"><span style="opacity:0.85;">Portfolio Loss Halt</span>
 						<span class="toolTip">?<span class="toolTipText">An account-level safety net. When your realized losses over the window reach the limit, opening NEW deals is paused (using the same circuit breaker). Open deals are never force-closed. Off by default; independent of the market-anomaly triggers above.</span></span>
 					</td></tr>
 
@@ -2809,7 +2814,7 @@
 				<div style="padding-top: 10px;">
 					<div class="section-title"><span class="icon icon-mode"></span> Trading Mode</div>
 					<div style="margin-top: 8px; display: flex; align-items: center; gap: 12px;">
-						<span id="sandboxModeLabel" style="font-size: 1.1rem;"></span>
+						<span id="sandboxModeLabel" style="font-size: var(--fs-subhead);"></span>
 						<button type="button" id="sandboxModeToggle" class="btn" style="cursor: pointer;"></button>
 					</div>
 					<div style="margin-top: 6px; font-size: var(--fs-body); color: var(--table-content-color); opacity: 0.7;" id="sandboxModeDesc"></div>
@@ -2923,7 +2928,7 @@
 			arrow.className = 'config-section-arrow';
 			arrow.textContent = isOpen ? '▾' : '▸';
 			arrow.style.cssText = [
-				'font-size: 0.85rem',
+				'font-size: var(--fs-small)',
 				'opacity: 0.6',
 				'transition: transform 120ms ease',
 				'flex-shrink: 0'

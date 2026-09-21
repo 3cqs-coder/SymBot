@@ -9,6 +9,41 @@
 	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+	<!-- No-FOUC theme bootstrap. Apply the saved dark theme to <html> synchronously, BEFORE the page paints,
+	     so a dark-theme user never sees a flash of the light palette on load/navigation. The rest of the theme
+	     wiring (icon, body attribute) is reconciled by changeMode() on ready. Dark selectors are unqualified
+	     [data-theme="dark"], so setting it on the document element takes effect immediately. Fail-safe: any
+	     storage error simply leaves the default light theme. -->
+	<script>
+		(function () {
+			try {
+				var t = JSON.parse(localStorage.getItem('dataTracker') || '{}');
+				if (t && t.mode === 'dark') { document.documentElement.setAttribute('data-theme', 'dark'); }
+			} catch (e) {}
+		})();
+	</script>
+
+	<!-- Base href — injected SYNCHRONOUSLY here, before any stylesheet, script, or nav link is parsed, so
+	     relative in-app links (e.g. the sidebar's ./deals/history) always resolve against the correct app root
+	     even if a link is clicked mid-load. Previously the base tag was added later in $(document).ready, which
+	     left a window where a click on a page with a multi-segment path (for example /logs/live) resolved a
+	     relative link to the wrong path (/logs/deals/history) and 404'd. Under the Hub reverse proxy the app is
+	     served beneath /instance/<id>/, knowable only from the URL at runtime, so the base is computed here
+	     rather than rendered server-side. Absolute asset paths (/js, /css, /images) ignore <base>, so this only
+	     affects relative links. Fail-safe: any error leaves no base and the app still works from the root. -->
+	<script>
+		(function () {
+			try {
+				var basePath = '/';
+				var segs = window.location.pathname.split('/').filter(function (s) { return s; });
+				if (segs.length >= 2 && segs[0] === 'instance') { basePath = '/instance/' + segs[1] + '/'; }
+				var b = document.createElement('base');
+				b.href = window.location.origin + basePath;
+				document.head.appendChild(b);
+			} catch (e) {}
+		})();
+	</script>
+
 	<title><%= appData.name_display || appData.name %> <%- appData.version %></title>
 
 	<link rel="icon" href="/images/favicon.ico?v=<%- appData.version %>" sizes="any" />
@@ -23,8 +58,6 @@
 	<link rel="stylesheet" href="/css/vendor/simple-switch/simple-switch.css" />
 	<link rel="stylesheet" href="/css/vendor/tablesorter/filter.formatter.min.css" />
 	<link rel="stylesheet" href="/css/style.css?v=<%- appData.version %>" />
-
-	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 
 	<script src="/<%- appData.web_socket_path %>/socket.io.min.js"></script>
 	<script src="/js/vendor/jquery/jquery.min.js"></script>
@@ -138,14 +171,14 @@
 					buttons: {
 							ok: {
 								btnClass: 'btn-default',
-								text: '<div style="color:#c62828;">Close Chat</div>',
+								text: '<div style="color:var(--color-danger);">Close Chat</div>',
 								action: function () {
 									dialog.dialog('close');
 								}
 							},
 							cancel: {
 								btnClass: 'btn-default',
-								text: '<div style="color:#000;">Cancel</div>',
+								text: '<div style="color:var(--color-neutral);">Cancel</div>',
 								action: function () {}
 							}
 					}
@@ -203,7 +236,7 @@
 	    const currentUrl = window.location.href; // Get the full current URL
 
 		const url = new URL(currentUrl);
-    
+
 		const segments = url.pathname.split('/').filter(segment => segment);
 
 		if (segments.length >= 2 && segments[0] === 'instance') {
@@ -211,7 +244,13 @@
 			basePath = '/instance/' + segments[1] + '/';
 		}
 
-		$('head').append('<base href="' + url.origin + basePath + '">');
+		// The <base> tag is normally injected synchronously in the head (see the early bootstrap script above),
+		// so relative links resolve correctly from the first paint. Only append one here if that somehow did not
+		// run, so there is never a duplicate.
+		if (!document.querySelector('base')) {
+
+			$('head').append('<base href="' + url.origin + basePath + '">');
+		}
 
 		return basePath;
 	}
@@ -398,11 +437,13 @@
 
 			$('#mode').html('<span class="icon icon-moon" style="width:17px;height:17px;"></span>');
 			$('body').attr('data-theme', 'dark');
+			document.documentElement.setAttribute('data-theme', 'dark');   // keep <html> in sync with the no-FOUC bootstrap
 		}
 		else {
 
 			$('#mode').html('<span class="icon icon-sun" style="width:17px;height:17px;"></span>');
 			$('body').removeAttr('data-theme');
+			document.documentElement.removeAttribute('data-theme');   // clear <html> too, so a toggle to light isn't left stale
 		}
 
 		dataTracker['mode'] = mode;
@@ -487,7 +528,7 @@
 							const $aiContainer = $('#' + divId).find('.aiChatContainer');
 							if ($titlebar.length && $aiContainer.length && !$titlebar.find('.ai-popout-btn').length) {
 
-								const $popoutBtn = $('<span class="ai-popout-btn" title="Pop out chat"><span class="ui-icon ui-icon-newwin" style="display:inline-block;"></span></span>');
+								const $popoutBtn = $('<span class="ai-popout-btn" role="button" tabindex="0" aria-label="Pop out chat" title="Pop out chat"><span class="ui-icon ui-icon-newwin" style="display:inline-block;pointer-events:none;"></span></span>');
 
 								$popoutBtn.on('click', function() {
 
@@ -956,7 +997,9 @@
 
 	function updateDataTracker() {
 
-		localStorage.setItem('dataTracker', JSON.stringify(dataTracker));
+		// Guard the write: localStorage can throw (private mode, blocked site data, quota). This is called from
+		// hot paths (the 30s BTC price refresh, theme toggle), so an unguarded throw could break the caller.
+		try { localStorage.setItem('dataTracker', JSON.stringify(dataTracker)); } catch (e) {}
 	}
 
 
@@ -1093,7 +1136,7 @@
 			let manualTip = '';
 			if (orderInfo.isManual) {
 
-				style += ' color: #e38302;';
+				style += ' color: var(--color-warning);';   // theme-tuned; the raw orange was low-contrast on the light table
 				// Escape via the shared helper even though the label/tooltip are static today — so a future
 				// manualReason mapped from exchange- or user-derived text can never break out of the attribute.
 				manualTag = ' <span style="font-size: 0.82em; opacity: 0.85;">(' + SymBot.UI.esc(orderInfo.label) + ')</span>';
@@ -1130,7 +1173,7 @@
 		// Shared URL builder (ccxt→TradingView exchange mapping lives in SymBot.UI.tradingViewUrl).
 		let url = SymBot.UI.tradingViewUrl(pair, exchange, jquery, script);
 
-		openModal(modalId, `#${divId}`, `<span id="tradingViewSettings" style="display:inline-flex;align-items:center;vertical-align:middle;margin-right:6px;cursor:pointer;"><span class="ui-icon ui-icon-gear" style="display:inline-block;"></span></span>TradingView Chart ${pair}`, "Loading...");
+		openModal(modalId, `#${divId}`, `<span id="tradingViewSettings" role="button" tabindex="0" aria-label="Chart settings" style="display:inline-flex;align-items:center;vertical-align:middle;margin-right:6px;cursor:pointer;"><span class="ui-icon ui-icon-gear" style="display:inline-block;pointer-events:none;"></span></span>TradingView Chart ` + SymBot.UI.esc(pair), "Loading...");
 
 		$("#" + divId).load(url);
 	}
@@ -1260,33 +1303,33 @@
 	<% } %>
 
 	<div id="divLogo">
-		<img id="logo" src="/images/SymBot-Logo.png" style="width: auto; height: 55px; vertical-align: middle;" />
+		<img id="logo" src="/images/SymBot-Logo.png" alt="SymBot" style="width: auto; height: 55px; vertical-align: middle;" />
 	</div>
 
 	<div id="btcPrice"></div>
 
 	<div class="headerButtons">
 		<% if (typeof isLoginPage === 'undefined' || !isLoginPage) { %>
-		<div id="helpBtn" class="headerIconBtn modeButton" title="Open the guide — searchable help (press /)" aria-label="Open the guide">
+		<div id="helpBtn" class="headerIconBtn modeButton" role="button" tabindex="0" title="Open the guide — searchable help (press /)" aria-label="Open the guide">
 			<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.1 1-1.1 1.8M12 17h.01"/></svg>
 		</div>
 		<% } %>
-		<div id="mode" class="headerIconBtn modeButton"></div>
-		<div id="aiChat" class="headerIconBtn modeButton"<% if (typeof isHub !== 'undefined' && isHub) { %> style="display:none"<% } %>><span class="icon icon-chat" style="width:17px;height:17px;"></span></div>
-		<div id="notifications" class="headerIconBtn notificationButton"><span class="icon icon-bell" style="width:17px;height:17px;"></span><span class="notif-dot"></span></div>
+		<div id="mode" class="headerIconBtn modeButton" role="button" tabindex="0" aria-label="Toggle light and dark theme" title="Toggle light/dark theme"></div>
+		<div id="aiChat" class="headerIconBtn modeButton" role="button" tabindex="0" aria-label="Open AI chat" title="AI chat"<% if (typeof isHub !== 'undefined' && isHub) { %> style="display:none"<% } %>><span class="icon icon-chat" style="width:17px;height:17px;"></span></div>
+		<div id="notifications" class="headerIconBtn notificationButton" role="button" tabindex="0" aria-label="Notifications" title="Notifications"><span class="icon icon-bell" style="width:17px;height:17px;"></span><span class="notif-dot"></span></div>
 	</div>
 </div>
 
 <% if (_cfgMode) { %>
 <div id="configModeBanner" role="status">
 	<span class="cfg-badge">CONFIGURATION MODE</span>
-	<span class="cfg-text"><%= (typeof appData !== 'undefined' && appData && appData['name']) ? appData['name'] : 'SymBot' %> is not trading yet — finish setup on the <a href="/config">Configuration</a> page (set your database connection).</span>
+	<span class="cfg-text"><%= (typeof appData !== 'undefined' && appData && appData['name']) ? appData['name'] : 'SymBot' %> is not trading yet — finish setup on the <a href="./config">Configuration</a> page (set your database connection).</span>
 </div>
 <% } %>
 <% if (_defaultPass) { %>
 <div id="defaultPassBanner" role="status">
 	<span class="cfg-badge">SECURITY</span>
-	<span class="cfg-text">This instance is still using the default password. <a href="/config">Change it now</a> on the Configuration page to secure access.</span>
+	<span class="cfg-text">This instance is still using the default password. <a href="./config">Change it now</a> on the Configuration page to secure access.</span>
 </div>
 <% } %>
 
@@ -1296,8 +1339,8 @@
 <div class="nav-scrim" id="navScrim"></div>
 <% } %>
 
-<div id="spinner-overlay">
-	<div class="spinner-container"><span class="spinner"></span></div>
+<div id="spinner-overlay" role="status" aria-live="polite">
+	<div class="spinner-container"><span class="spinner"></span><span class="visually-hidden">Working, please wait…</span></div>
 </div>
 
 <center>

@@ -20,7 +20,7 @@
 		<div class="section-title"><span class="icon icon-calendar"></span> Scheduled Tasks</div>
 
 		<div class="section-desc">
-			Run tasks automatically on a schedule and get the result as a notification. Some tasks <b>use AI</b> &mdash; like a prompt you write; these need an AI provider configured and are marked <span style="font-size:0.72rem; white-space:nowrap; vertical-align:middle; margin:0 2px; padding:1px 6px; border-radius:8px; background:#7a5cff; color:#fff;">AI</span>. Others, like the error watchdog, are <b>plain checks that work without any AI</b>. Every task is <b>read-only</b>: it can look up your deals, orders, logs and balances, but never places or changes a trade. Times are entered and shown in <b>your local time</b> &mdash; stored in UTC by default so anyone in any timezone sees the correct time; tick <i>Keep fixed to my local time</i> on a schedule to pin it to your timezone across daylight-saving. Each run's full output is kept in its <b>History</b>; notifications are truncated.
+			Run tasks automatically on a schedule and get the result as a notification. Some tasks use AI, like a prompt you write; these need an AI provider configured and are marked <span style="font-size:var(--fs-micro); white-space:nowrap; vertical-align:middle; margin:0 2px; padding:1px 6px; border-radius:8px; background:var(--badge-ai); color:#fff;">AI</span>. Others, like the error watchdog, are plain checks that work without any AI. Every task is read-only: it can look up your deals, orders, logs, and balances, but it never places or changes a trade. Times are entered and shown in your local time, and stored in UTC by default so anyone in any timezone sees the correct time. Tick <i>Keep fixed to my local time</i> on a schedule to pin it to your timezone across daylight-saving changes. Each run's full output is kept in its History, and notifications are truncated.
 		</div>
 
 		<div style="margin: 4px 0 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -53,7 +53,7 @@
 	<div class="modal-box modal-flex">
 		<div class="modal-head">
 			<b id="schedFormTitle">Add schedule</b>
-			<a href="#" class="modal-close" data-close="form">&times;</a>
+			<a href="#" class="modal-close" data-close="form" aria-label="Close" title="Close">&times;</a>
 		</div>
 		<div class="modal-body">
 			<table id="botsCreate" cellpadding=0 cellspacing=0 style="width: 100%;">
@@ -175,7 +175,7 @@
 	<div class="modal-box modal-flex">
 		<div class="modal-head">
 			<b>Add from recipe library</b>
-			<a href="#" class="modal-close" data-close="lib">&times;</a>
+			<a href="#" class="modal-close" data-close="lib" aria-label="Close" title="Close">&times;</a>
 		</div>
 		<div class="modal-body">
 			<div style="opacity:0.75; font-size:var(--fs-content); margin-bottom:8px;">Pre-defined, read-only tasks. Adding one creates a <b>disabled</b> schedule you can then time, point at your notifications, and enable — nothing runs until you turn it on.</div>
@@ -194,7 +194,7 @@
 	<div class="modal-box modal-flex">
 		<div class="modal-head">
 			<b>Run history &mdash; <span id="schedHistTitle"></span></b>
-			<a href="#" class="modal-close" data-close="hist">&times;</a>
+			<a href="#" class="modal-close" data-close="hist" aria-label="Close" title="Close">&times;</a>
 		</div>
 		<div style="padding: 8px 16px; border-bottom: 1px solid var(--table-border-color, #ccc); display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
 			<input type="text" id="schedHistSearch" class="form-field" placeholder="Search output or date…" style="width: 210px;">
@@ -339,8 +339,8 @@
 	// recipe-library list (they had drifted — different tooltip wording and spacing). Returns the span.
 	function renderAiBadge(usesAI, aiOptional){
 		var base = 'font-size:0.72rem; white-space:nowrap; margin-left:6px; padding:1px 6px; border-radius:8px;';
-		if(usesAI){ return '<span title="Uses AI — needs an AI provider configured" style="'+base+' background:#7a5cff; color:#fff;">AI</span>'; }
-		if(aiOptional){ return '<span title="Runs without AI; can optionally add an AI summary" style="'+base+' border:1px solid #7a5cff; color:#7a5cff;">AI optional</span>'; }
+		if(usesAI){ return '<span title="Uses AI — needs an AI provider configured" style="'+base+' background:var(--badge-ai); color:#fff;">AI</span>'; }
+		if(aiOptional){ return '<span title="Runs without AI; can optionally add an AI summary" style="'+base+' border:1px solid var(--badge-ai); color:var(--text-color);">AI optional</span>'; }
 		return '<span title="No AI needed — a plain check that runs without an AI provider" style="'+base+' border:1px solid var(--table-border-color, rgba(128,128,128,0.5)); opacity:0.7;">no AI</span>';
 	}
 
@@ -349,8 +349,8 @@
 			if(s.catchup && s.catchup !== 'skip'){ when += ' · if missed: ' + (s.catchup==='once' ? 'run once' : 'run all'); }
 			var last = s.last_run ? ('Last run ' + esc(fmtLocal(s.last_run)) + ' &middot; ' + esc(s.last_status || '')) : 'Never run';
 			var statusHtml = s.enabled
-				? '<span style="font-size:0.85rem; white-space:nowrap; color:var(--color-success, #2e9e4f);">● enabled</span>'
-				: '<span style="font-size:0.85rem; white-space:nowrap; color:var(--color-danger, #d05050);">● disabled</span>';
+				? '<span style="font-size: var(--fs-small); white-space:nowrap; color:var(--color-success, #2e9e4f);">● enabled</span>'
+				: '<span style="font-size: var(--fs-small); white-space:nowrap; color:var(--color-danger, #d05050);">● disabled</span>';
 			// A pre-defined recipe (imported from a shipped definition) has no user prompt — show its
 			// recipe description instead, and tag it so it's distinguishable from a hand-written analysis.
 			var isRecipe = !!(s.settings && s.settings.recipe_id);
@@ -366,7 +366,7 @@
 			var meta = isRecipe ? recipeMeta[s.settings.recipe_id] : null;
 			var updHtml = (meta && meta.update_available)
 				? '<div style="margin-top:5px; font-size:var(--fs-content);">'
-					+ '<span style="padding:1px 6px; border-radius:8px; background:#e8a13a; color:#1a1a1a; font-weight:600;">Update available</span> '
+					+ '<span style="padding:1px 6px; border-radius:8px; background:#e8a13a; color:#1a1a1a; font-weight: var(--fw-medium);">Update available</span> '
 					+ '<span style="opacity:0.8;">v'+esc(String(meta.installed_version||'?'))+' &rarr; v'+esc(String(meta.shipped_version||'?'))+'</span> &middot; '
 					+ '<a href="#" data-act="update-diff" data-recipe="'+esc(s.settings.recipe_id)+'" data-id="'+esc(s.schedule_id)+'">View changes</a>'
 					+ '</div>'
@@ -390,7 +390,7 @@
 	}
 
 	function schedGroupHeader(txt){
-		return '<div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em; opacity:0.5; margin:12px 2px 5px;">'+txt+'</div>';
+		return '<div style="font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:0.05em; opacity:0.5; margin:12px 2px 5px;">'+txt+'</div>';
 	}
 
 	// Compactly render a settings value for the diff view: JSON for objects/arrays, a dash for
@@ -399,7 +399,7 @@
 		if(v === null || v === undefined || v === ''){ return '<span style="opacity:0.5;">(none)</span>'; }
 		var s = (typeof v === 'object') ? JSON.stringify(v) : String(v);
 		if(s.length > 120){ s = s.slice(0, 117) + '…'; }
-		return '<code style="font-size:0.82rem;">'+esc(s)+'</code>';
+		return '<code style="font-size: var(--fs-micro);">'+esc(s)+'</code>';
 	}
 
 	// Build the dialog body for an additive recipe update. It ADDS only the settings the new version
@@ -421,7 +421,7 @@
 		return head
 			+ '<div style="margin-top:8px; font-size:var(--fs-content);">This adds '+added.length+' new setting'+(added.length===1?'':'s')+' at '+(added.length===1?'its default':'their defaults')+'. Nothing you customized is changed — your existing settings, schedule and notifications are kept:</div>'
 			+ '<div style="max-height:300px; overflow:auto; margin-top:6px;"><table style="border-collapse:collapse; font-size:var(--fs-content);"><thead><tr style="opacity:0.6; text-align:left;"><th style="padding-right:10px;">New setting</th><th>Default</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-			+ '<div style="margin-top:8px; opacity:0.65; font-size:0.82rem;">To instead restore ALL shipped defaults (discarding your customizations), use &ldquo;Reset to defaults&rdquo; on the schedule.</div>';
+			+ '<div style="margin-top:8px; opacity:0.65; font-size: var(--fs-micro);">To instead restore ALL shipped defaults (discarding your customizations), use &ldquo;Reset to defaults&rdquo; on the schedule.</div>';
 	}
 	// Group the list so it stays legible as tasks grow: pre-defined RECIPES (imported, managed) vs the
 	// user's own hand-created schedules. Group headers only appear when BOTH groups have items, so a
@@ -463,8 +463,8 @@
 		var when = row.kind === 'cron' ? describeCron(row.cron, row.timezone) : (row.run_at ? describeOnce(row.run_at) : '—');
 		var last = row.last_run ? ('Last run ' + esc(fmtLocal(row.last_run)) + ' &middot; ' + esc(row.last_status || '')) : 'Never run';
 		var statusHtml = row.enabled
-			? '<span style="font-size:0.85rem; color:var(--color-success, #2e9e4f);">● enabled</span>'
-			: '<span style="font-size:0.85rem; color:var(--color-danger, #d05050);">● disabled</span>';
+			? '<span style="font-size: var(--fs-small); color:var(--color-success, #2e9e4f);">● enabled</span>'
+			: '<span style="font-size: var(--fs-small); color:var(--color-danger, #d05050);">● disabled</span>';
 		el.innerHTML = '<div style="border:1px solid var(--table-border-color, rgba(128,128,128,0.3)); border-left:3px solid ' + (row.enabled ? 'var(--color-success, #2e9e4f)' : 'var(--color-danger, #d05050)') + '; border-radius:6px; padding:8px 10px; background:var(--table-background-color, rgba(128,128,128,0.06));">'
 			+ '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;"><b>System backup</b>' + statusHtml + '</div>'
 			+ '<div style="opacity:0.85; font-size:var(--fs-content); margin-top:2px;">' + esc(when) + '</div>'
@@ -581,13 +581,16 @@
 			'</select>';
 
 		var targetInput = '<input type="text" class="form-field notify-target" style="width:195px;" value="'+esc(notifyTargetToStr(dest.type, dest.target))+'">';
-		var removeBtn = '<span class="notify-remove" title="Remove" style="cursor:pointer; padding:0 6px; opacity:0.7; font-size:1.1rem;">&times;</span>';
+		var removeBtn = '<span class="notify-remove" role="button" tabindex="0" aria-label="Remove" title="Remove" style="cursor:pointer; padding:0 6px; opacity:0.7; font-size: var(--fs-subhead);">&times;</span>';
 
 		row.innerHTML = chanSel + targetInput + condSel + removeBtn;
 		list.appendChild(row);
 
 		row.querySelector('.notify-type').addEventListener('change', function(){ renderNotifyRowTargetField(row); });
-		row.querySelector('.notify-remove').addEventListener('click', function(){ row.remove(); });
+		var notifyRemoveEl = row.querySelector('.notify-remove');
+		notifyRemoveEl.addEventListener('click', function(){ row.remove(); });
+		// Keyboard access for the role="button" remove ×.
+		notifyRemoveEl.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); row.remove(); } });
 
 		renderNotifyRowTargetField(row);
 	}

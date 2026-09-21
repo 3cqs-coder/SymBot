@@ -13,20 +13,20 @@
 
 <script>
 
-	// Action tints mirror the Signal Bot alert panel: entry = green (open), add_funds = blue (add),
-	// close = amber (graceful), panic_sell = red (danger).
+	// Action tints mirror the Signal Bot alert panel and use the shared semantic theme tokens so they adapt to
+	// light/dark: entry = green (open), add_funds = blue (add), close = amber (graceful), panic_sell = red.
 	const ACTION_STYLE = {
-		'entry':      { label: 'Entry',      color: '#4aa602' },
-		'add_funds':  { label: 'Add Funds',  color: '#2a7fd0' },
-		'close':      { label: 'Close',      color: '#c8961e' },
-		'panic_sell': { label: 'Panic Sell', color: '#d23c3c' },
-		'close_all':  { label: 'Close All',  color: '#d23c3c' }
+		'entry':      { label: 'Entry',      color: 'var(--color-success)' },
+		'add_funds':  { label: 'Add Funds',  color: 'var(--link-color)' },
+		'close':      { label: 'Close',      color: 'var(--color-warning)' },
+		'panic_sell': { label: 'Panic Sell', color: 'var(--color-danger)' },
+		'close_all':  { label: 'Close All',  color: 'var(--color-danger)' }
 	};
 
 	const OUTCOME_STYLE = {
 		'started':   { label: 'Started',   color: 'var(--color-success)' },
-		'processed': { label: 'Processed', color: '#2a7fd0' },
-		'rejected':  { label: 'Rejected',  color: 'var(--color-error, #d23c3c)' },
+		'processed': { label: 'Processed', color: 'var(--link-color)' },
+		'rejected':  { label: 'Rejected',  color: 'var(--color-danger, #d23c3c)' },
 		'duplicate': { label: 'Duplicate', color: 'var(--color-neutral, #888)' }
 	};
 
@@ -34,7 +34,7 @@
 	function actionBadge(action) {
 
 		const s = ACTION_STYLE[action] || { label: action || '—', color: 'var(--text-color)' };
-		return '<span style="color: ' + s.color + '; font-weight: 600;">' + SymBot.UI.esc(s.label) + '</span>';
+		return '<span style="color: ' + s.color + '; font-weight: var(--fw-medium);">' + SymBot.UI.esc(s.label) + '</span>';
 	}
 
 
@@ -42,7 +42,7 @@
 
 		const key = row.outcome || (row.duplicate ? 'duplicate' : (row.success ? 'processed' : 'rejected'));
 		const s = OUTCOME_STYLE[key] || { label: key || '—', color: 'var(--text-color)' };
-		return '<span style="color: ' + s.color + '; font-weight: 600;">' + SymBot.UI.esc(s.label) + '</span>';
+		return '<span style="color: ' + s.color + '; font-weight: var(--fw-medium);">' + SymBot.UI.esc(s.label) + '</span>';
 	}
 
 
@@ -60,7 +60,7 @@
 
 		const key = source || 'other';
 		const s = SOURCE_STYLE[key];
-		return '<span style="font-weight: 600;">' + SymBot.UI.esc(s ? s.label : key) + '</span>';
+		return '<span style="font-weight: var(--fw-medium);">' + SymBot.UI.esc(s ? s.label : key) + '</span>';
 	}
 
 	// A short "how slow are these signals" summary for the current filter, computed from the loaded rows.
@@ -82,7 +82,7 @@
 		const p95 = vals[Math.min(n - 1, Math.floor(0.95 * n))];
 
 		let out = 'Latency avg ' + fmtMs(Math.round(sum / n)) + ' · p95 ' + fmtMs(p95) + ' · max ' + fmtMs(vals[n - 1]);
-		if (slow > 0) { out += ' · <span style="color: var(--color-error, #d23c3c);">' + slow + ' slow</span>'; }
+		if (slow > 0) { out += ' · <span style="color: var(--color-danger, #d23c3c);">' + slow + ' slow</span>'; }
 		return out;
 	}
 

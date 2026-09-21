@@ -603,7 +603,21 @@ const restoreAllCollections = async (dbConnection, dir, includeSchedules = false
             // Scope the wipe-and-refill for server_id-bearing collections to THIS instance, so a restore
             // against a shared database never deletes or overwrites a sibling instance's rows. Collections
             // with no server_id (deals, bots) live in a per-instance database and are replaced whole.
-            const isScoped = serverId != undefined && serverId !== '' && docs.some(d => d && d.server_id !== undefined);
+            //
+            // Deriving "scoped" ONLY from the staged docs is unsafe: when this instance's backup of a scoped
+            // collection is EMPTY (zero rows for this server_id), the staged docs carry no server_id, the
+            // collection would be mistaken for unscoped, and the unscoped deleteMany() below would wipe EVERY
+            // row — including sibling instances' users/API keys/audit in a shared database. So also probe the
+            // LIVE collection for a server_id field (symmetric with how backupAllCollections decides scoping).
+            // When scoped, the branch below deletes and re-inserts ONLY this server_id, so an empty backup
+            // correctly leaves this instance with none while every sibling's rows stay intact.
+            let isScoped = serverId != undefined && serverId !== '' && docs.some(d => d && d.server_id !== undefined);
+
+            if (serverId != undefined && serverId !== '' && !isScoped) {
+
+                try { if (await collection.findOne({ 'server_id': { '$exists': true } })) { isScoped = true; } }
+                catch (e) { /* probe failed — fall back to the docs-based decision */ }
+            }
 
             if (isScoped) {
 
@@ -790,6 +804,16 @@ async function routeRestoreDb(req, res) {
 
 	shareData.Common.auditEvent(req, 'system.restore', '', 'database restore');
 
+	// Guard the multipart file BEFORE dereferencing it: a POST without the expected `backupFile` part leaves
+	// req.file undefined, and reading req.file.path would throw here — outside the try/catch below, which (the
+	// route wrapper discards this promise) surfaces as an unhandled rejection and a hung request instead of a
+	// clean 400.
+	if (!req.file || !req.file.path) {
+
+		if (!res.headersSent) { res.status(400).send('No backup file was uploaded.'); }
+		return;
+	}
+
 	const tempPath = req.file.path;
 	// Use ONLY the basename of the uploaded filename: a crafted multipart name ("../../…") must never
 	// steer the rename/unlink below outside tempDir. The rollback path guards the same way; mirror it here.
@@ -966,7 +990,9 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 
 	try {
 
-		await fsp.rename(tempPath, targetPath);
+		// The multer upload lands in uploads/ and targetPath is under temp/ — separate named volumes on Docker,
+		// so a bare rename throws EXDEV and the restore fails. Use the EXDEV-safe move (copy+verify+unlink).
+		await shareData.Common.moveFileAcrossFsAsync(tempPath, targetPath);
 
 		targetPathDec = targetPath + '.zip';
 
@@ -1010,25 +1036,36 @@ async function processRestoreDb(tempPath, targetPath, password, convertData, res
 		// the finally and MASK the real restore error in the response.
 		try { if (targetPath && fs.existsSync(targetPath)) { fs.unlinkSync(targetPath); } } catch (e) {}
 		try { if (targetPathDec && fs.existsSync(targetPathDec)) { fs.unlinkSync(targetPathDec); } } catch (e) {}
+		// On the normal path moveFileAcrossFsAsync already unlinked the uploaded source; but if that move itself
+		// threw (e.g. the EXDEV copy failed partway on a full disk), the upload is still in uploads/. Clean it so
+		// repeated failed restores can't slowly accumulate orphaned upload blobs. No-op when already removed.
+		try { if (tempPath && fs.existsSync(tempPath)) { fs.unlinkSync(tempPath); } } catch (e) {}
 
 		if (success) {
 
+			// Each post-restore step is guarded on its own: a throw here (e.g. a transient DB error during
+			// sandbox conversion or a reset write) must NOT escape the finally, or shutDownFunction() below
+			// would be skipped and system_pause (set when the restore began) would never lift — leaving
+			// trading paused until a manual restart. The restore itself already succeeded; these are
+			// best-effort finishing steps, so log and continue, then ALWAYS shut down for a clean reboot.
 			if (convertData) {
-
-				await shareData.DCABot.convertDataToSandBox();
+				try { await shareData.DCABot.convertDataToSandBox(); }
+				catch (e) { shareData.Common.logger('Restore post-step convertDataToSandBox failed (continuing to shutdown): ' + ((e && e.message) || e)); }
 			}
 
 			if (resetAiChats) {
-
-				await resetDatabase(false, false, true);
+				try { await resetDatabase(false, false, true); }
+				catch (e) { shareData.Common.logger('Restore post-step resetAiChats failed (continuing to shutdown): ' + ((e && e.message) || e)); }
 			}
 
 			if (resetServerId) {
-
-				await resetDatabase(false, true);
+				try { await resetDatabase(false, true); }
+				catch (e) { shareData.Common.logger('Restore post-step resetServerId failed (continuing to shutdown): ' + ((e && e.message) || e)); }
 			}
 
-			shutDownFunction();
+			// Reboot so the restored data takes effect. Hub-aware (mirrors rollback/update): a bare exit 0
+			// under the Hub is NOT respawned, which previously left a restored Hub instance offline.
+			await rebootAfterOp();
 		}
 		else if (destructive) {
 
@@ -1866,17 +1903,17 @@ async function listRollbacks() {
 		.filter(f => fs.statSync(path.join(rollbackDir, f)).isDirectory())
 		.map(f => {
 
-			let manifest = { version: 'unknown', date: null, snapshotName: f };
-
+			// The manifest is written LAST when a snapshot is created, so its ABSENCE (or an unparseable one)
+			// means the snapshot is incomplete — a crash mid-copy. Return null for those so they are filtered
+			// out below and never offered as restorable.
 			try {
 
 				const raw = fs.readFileSync(path.join(rollbackDir, f, '.rollback-manifest.json'), 'utf8');
-				manifest = { ...manifest, ...JSON.parse(raw) };
+				return { version: 'unknown', date: null, snapshotName: f, ...JSON.parse(raw) };
 			}
-			catch(e) {}
-
-			return manifest;
+			catch(e) { return null; }
 		})
+		.filter(Boolean)
 		.sort((a, b) => new Date(b.date) - new Date(a.date));
 
 	return snapshots;
@@ -1917,6 +1954,18 @@ async function routeRollbackSystem(req, res) {
 		return res.status(404).json({ success: false, error: 'Snapshot not found.' });
 	}
 
+	// Refuse an INCOMPLETE snapshot: the manifest is written last during creation, so a missing or unparseable
+	// one means the snapshot did not finish (e.g. a crash mid-copy) and restoring it would apply a partial tree
+	// over the live code.
+	try {
+
+		JSON.parse(fs.readFileSync(path.join(snapshotDir, '.rollback-manifest.json'), 'utf8'));
+	}
+	catch (e) {
+
+		return res.status(409).json({ success: false, error: 'Snapshot is incomplete (no valid manifest) and cannot be restored.' });
+	}
+
 	let success = false;
 	let error;
 
@@ -1954,17 +2003,23 @@ async function routeRollbackSystem(req, res) {
 
 	if (success) {
 
-		// Shutdown so process manager restarts with rolled-back code
-		const resParent = await shareData.Common.sendParentMsg({
-			'type': WORKER_TO_HUB.SHUTDOWN_HUB,
-			'data': ''
-		});
-
-		if (!resParent.success) {
-
-			shutDownFunction();
-		}
+		// Reboot so the process restarts with the rolled-back code (Hub-aware; see rebootAfterOp).
+		await rebootAfterOp();
 	}
+}
+
+
+// Reboot the app after an operation that requires a fresh process (rollback, system update, and DB restore).
+// Under the Hub every instance is a worker_thread in one process, and a bare exit 0 from a worker is treated
+// as an INTENTIONAL clean shutdown that is NOT respawned — so a worker must ask the parent to restart the whole
+// Hub instead. Standalone (no parent), fall back to the local shutdown, where the process manager restarts.
+// Single source so the three reboot flows can't drift — restore had omitted the Hub-aware branch, which left a
+// restored Hub instance permanently offline. Exposed for a unit test.
+async function rebootAfterOp() {
+
+	const resParent = await shareData.Common.sendParentMsg({ type: WORKER_TO_HUB.SHUTDOWN_HUB, data: '' });
+
+	if (!resParent || !resParent.success) { shutDownFunction(); }
 }
 
 
@@ -2125,6 +2180,10 @@ async function updateSystem() {
 	let cmdStdError = '';
 	let cmdStdOut = '';
 	let extractDirName = '';
+	// Hoisted so the finally below can clean up the downloaded zip and the extract dir on EVERY exit path,
+	// not just the success path — a failed update (corrupt download, a throw before cleanup) previously left
+	// the full archive and extracted tree behind in downloads/, accumulating across failed attempts.
+	let outFile = null;
 
 	const getFirstDir = rootPath => fs.readdirSync(rootPath).find(f => fs.statSync(path.join(rootPath, f)).isDirectory()) || null;
 
@@ -2173,9 +2232,21 @@ async function updateSystem() {
 		// Wait short delay for data to stop processing
 		await shareData.Common.delay(5000);
 
-		// Download latest tag zip file
+		// Download latest tag zip file. Node's fetch has no default timeout, so bound the connect/headers phase
+		// with an AbortController (the timer is cleared the moment the response arrives, so a legitimately slow
+		// but progressing body download is never aborted mid-stream). A hung connection fails cleanly instead
+		// of leaving the manual update wedged.
 		const downloadUrl = `https://github.com/${owner}/${repo}/archive/refs/tags/${latestTag}.zip`;
-		const zipResponse = await fetch(downloadUrl);
+		const dlController = new AbortController();
+		const dlTimer = setTimeout(() => { dlController.abort(); }, 60000);
+
+		let zipResponse;
+		try {
+			zipResponse = await fetch(downloadUrl, { signal: dlController.signal });
+		}
+		finally {
+			clearTimeout(dlTimer);
+		}
 
 		if (!zipResponse.ok) throw new Error(`Failed to download zip: ${zipResponse.statusText}`);
 
@@ -2183,7 +2254,7 @@ async function updateSystem() {
 		if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
 
 		const filename = `${repo}-${latestTag}.zip`;
-		const outFile = outputDir + '/' + runId + '-' + filename;   // uuid-unique (see runId above)
+		outFile = outputDir + '/' + runId + '-' + filename;   // uuid-unique (see runId above)
 
 		// Write the zip file to disk
 		const fileStream = fs.createWriteStream(outFile);
@@ -2213,6 +2284,16 @@ async function updateSystem() {
 		let hubConfigNew = await shareData.Common.getData(extractDir + '/' + extractDirName + '/config/hub.json');
 
 		let hubConfigOld = await shareData.Common.getData(pathRoot + '/config/hub.json');
+
+		// Create the rollback snapshot BEFORE any config is merged/written or code is moved, so it captures the
+		// PRISTINE pre-upgrade config (and the current code). Taking it after the merge would snapshot already-
+		// migrated config, so a rollback could not restore the original values.
+		const snapshotResult = await createRollbackSnapshot(appVersion);
+
+		if (!snapshotResult.success) {
+
+			shareData.Common.logger('Warning: Could not create rollback snapshot: ' + snapshotResult.error);
+		}
 
 		// Check for new hub.json params
 		if (hubConfigOld.success && hubConfigNew.success) {
@@ -2251,20 +2332,11 @@ async function updateSystem() {
 			await shareData.Common.saveConfig(file, configCombined, updated);
 		}
 
-		// Create rollback snapshot before overwriting files
-		const snapshotResult = await createRollbackSnapshot(appVersion);
-
-		if (!snapshotResult.success) {
-
-			shareData.Common.logger('Warning: Could not create rollback snapshot: ' + snapshotResult.error);
-		}
-
-		// Remove existing files except backups and config folders and replace with new 
+		// Remove existing files except backups and config folders and replace with new
+		// (the rollback snapshot was already taken above, before any config was merged).
 		await moveFiles(pathRoot, extractDir + '/' + extractDirName);
 
-		// Cleanup files
-		fs.unlinkSync(outFile);
-		removeDirectorySync(extractDir);
+		// The downloaded zip and extract dir are cleaned up in the finally below (covers success and failure).
 
 		// Execute "npm install" in the original directory
 		await new Promise((resolve, reject) => {
@@ -2304,6 +2376,13 @@ async function updateSystem() {
 
 		isErr = error.message;
 	}
+	finally {
+
+		// Always remove the downloaded zip and the extract dir, on success or failure, so a failed update
+		// never leaves the archive and extracted source tree behind to accumulate in downloads/. Best-effort.
+		try { if (outFile && fs.existsSync(outFile)) { fs.unlinkSync(outFile); } } catch (e) {}
+		try { if (fs.existsSync(extractDir)) { removeDirectorySync(extractDir); } } catch (e) {}
+	}
 
 	const resObj = {
 		'success': success,
@@ -2319,17 +2398,8 @@ async function updateSystem() {
 
 	if (success) {
 
-		// If Hub is running, shutdown all instances
-		const resParent = await shareData.Common.sendParentMsg({
-
-			'type': WORKER_TO_HUB.SHUTDOWN_HUB,
-			'data': ''
-		});
-
-		if (!resParent.success) {
-
-			shutDownFunction();
-		}
+		// Reboot so the process restarts with the updated code (Hub-aware; see rebootAfterOp).
+		await rebootAfterOp();
 	}
 	else {
 
@@ -2386,8 +2456,16 @@ async function copyFiles(sourceDir, destDir) {
 				}
 
 				await fsp.cp(src, tmp, { recursive: true });
-				removeDirectorySync(dest);
+
+				// Swap into place with a MINIMAL missing-dest window: move the old dir aside atomically, move
+				// the new one in, then delete the old. If interrupted between the two renames, both the previous
+				// tree (.old) and the new one (.new) still exist on disk and are recoverable — unlike a slow
+				// remove-then-rename, which leaves dest missing for the entire duration of the recursive delete.
+				const bak = dest + '.old';
+				if (fs.existsSync(bak)) { removeDirectorySync(bak); }
+				if (fs.existsSync(dest)) { await fsp.rename(dest, bak); }
 				await fsp.rename(tmp, dest);
+				if (fs.existsSync(bak)) { removeDirectorySync(bak); }
 			}
 			else {
 
@@ -2436,8 +2514,15 @@ async function moveFiles(originalDir, newDir) {
 				}
 
 				await fsp.rename(src, tmp);
-				removeDirectorySync(dest);
+
+				// Swap into place with a MINIMAL missing-dest window (see copyFiles): move the old dir aside
+				// atomically, move the new one in, then delete the old, so an interruption leaves both trees
+				// recoverable rather than leaving dest missing for the whole duration of a recursive delete.
+				const bak = dest + '.old';
+				if (fs.existsSync(bak)) { removeDirectorySync(bak); }
+				if (fs.existsSync(dest)) { await fsp.rename(dest, bak); }
 				await fsp.rename(tmp, dest);
+				if (fs.existsSync(bak)) { removeDirectorySync(bak); }
 			}
 			else {
 
@@ -2749,7 +2834,10 @@ async function cronBackup() {
 
 						backupFile = shareData.Common.ensureDataDir('backups') + '/' + resBackup.file_name;
 
-						await fsp.rename(resBackup.full_path, backupFile);
+						// The backup is produced in temp/ and stored under backups/ (or data/) — separate named
+						// volumes on Docker, so a bare rename throws EXDEV and the scheduled backup silently fails.
+						// Use the EXDEV-safe move (copy+verify+unlink) so it always reaches its destination.
+						await shareData.Common.moveFileAcrossFsAsync(resBackup.full_path, backupFile);
 						recordBackupArtifact(backupFile);   // track the stored backup in its directory manifest
 
 						success = true;
@@ -2770,7 +2858,7 @@ async function cronBackup() {
 	let maxFiles = Number(shareData['appData']['cron_backup']['max']);
 
 	// Clamp to at least 1. Written as "not >= 1" (rather than "< 1") so a non-numeric config value — Number()
-	// yields NaN, and NaN < 1 is false — is also caught and normalised, instead of flowing through as NaN.
+	// yields NaN, and NaN < 1 is false — is also caught and normalized, instead of flowing through as NaN.
 	if (!(maxFiles >= 1)) {
 
 		maxFiles = 1;
@@ -2902,7 +2990,7 @@ async function sftpPutAndRotate(sftp, localFile, remoteDir, opts) {
 	const maxBackups = Number(opts.maxBackups);
 	const isTest = !!opts.isTest;
 
-	// Normalise a trailing slash so "<remoteDir>/<sid>" never becomes a "//".
+	// Normalize a trailing slash so "<remoteDir>/<sid>" never becomes a "//".
 	remoteDir = String(remoteDir).replace(/\/+$/, '');
 
 	// Each instance uploads into its OWN <remoteDir>/<server_id>/ subfolder, which is what makes rotation
@@ -2928,6 +3016,25 @@ async function sftpPutAndRotate(sftp, localFile, remoteDir, opts) {
 	await sftp.fastPut(localFile, remotePath);
 
 	if (isTest) { try { await sftp.delete(remotePath); } catch (e) {} return; }
+
+	// Verify the transfer completed before trusting it: a dropped connection or a full remote disk can end a
+	// transfer the client reports as "done" but is truncated. Fail SAFE — only treat it as a failed upload when
+	// a size MISMATCH is positively confirmed (both sizes known and different): delete the partial and skip
+	// rotation so a corrupt copy is never counted as the newest valid backup and the prior good copies survive.
+	// If the remote size is indeterminate (a server/library that does not report one), keep the upload and
+	// proceed as before — never destroy a possibly-good backup just because it could not be verified. The
+	// archive is GCM-authenticated, so a size match is a sufficient, cheap integrity guard.
+	let localSize = null;
+	try { localSize = fs.statSync(localFile).size; } catch (e) {}
+
+	let remoteSize = null;
+	try { const rst = await sftp.stat(remotePath); if (rst && rst.size != null) { remoteSize = Number(rst.size); } } catch (e) {}
+
+	if (localSize != null && remoteSize != null && remoteSize !== Number(localSize)) {
+		try { if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') { shareData.Common.logger('Off-site backup upload is truncated (remote size ' + remoteSize + ' vs local ' + localSize + ') — removing the partial and skipping rotation so prior good copies are kept.'); } } catch (e) {}
+		try { await sftp.delete(remotePath); } catch (e) {}
+		return;
+	}
 
 	// Only rotate our OWN per-server_id subfolder — never the shared flat directory (the empty-sid fallback).
 	if (maxBackups > 0 && sid && targetDir !== remoteDir) { await sftpRotateDir(sftp, targetDir, maxBackups); }
@@ -3012,6 +3119,15 @@ async function findMissingParameters(obj1, obj2, path = '') {
 					// the `!(key in obj1)` branch above.
 					combined[key] = obj1[key];
 				}
+			}
+			else if (typeof obj1[key] !== 'object' || obj1[key] === null || Array.isArray(obj1[key])) {
+
+				// Type-change guard: the new default is a plain object, but the user's value is NOT (it is a
+				// scalar, null, or an array). Recursing would corrupt it — spreading a string into
+				// {0:'U',1:'S',...}, or spreading a boolean/number into {} — so take the new default wholesale
+				// and record it, rather than merge mismatched types.
+				missing[fullPath] = 'Type changed in obj2';
+				combined[key] = obj2[key];
 			}
 			else {
 
@@ -3400,6 +3516,10 @@ async function spawnCommand(command, options = {}) {
 
 			const [cmd, ...args] = command;
 
+			// Windows note for whoever wires this seam: spawn() of a .cmd/.bat target (npm, pm2 and most
+			// Node-ecosystem CLIs are .cmd shims on Windows) without shell:true throws EINVAL on current
+			// Node. If this branch is ever used to launch such a tool, pass { shell: true } on win32 or
+			// resolve the executable to its .cmd/.exe first. The string branch below already handles Windows.
 			p = spawn(cmd, args, {
 				stdio: ['ignore', 'pipe', 'pipe']
 			});
@@ -3802,13 +3922,19 @@ const LOG_SCAN_MAX_FILES  = 8;
 const LOG_SCAN_TAIL_BYTES = 262144;                 // read at most the last 256 KB of each file
 const LOG_SCAN_MAX_AGE_MS = 26 * 60 * 60 * 1000;    // only logs written in roughly the last day
 
+// These MUST stay at least as broad as Common.redactSecrets — this scanner is the safety net for a secret that
+// reached a log by some route OTHER than the central logger, so any shape the redactor knows must also be
+// detectable here, or the net has a blind spot. The 'telegram token' pattern and the widened 'credential field'
+// list mirror the redactor's Telegram-token and JSON-field coverage (apiToken/apiKey/apiPassphrase/apiPassword/
+// passphrase/smtp_pass/bot_token). A cross-check test (LogSecretScan.test.js) asserts this stays in agreement.
 const LOG_SECRET_PATTERNS = [
 	{ label: 'default api key',   re: /symb_auto_[0-9a-f]{16,}/ },
 	{ label: 'scoped api key',    re: /symb_(?:live|test)_[0-9a-f]{6,}_[0-9a-f]{16,}/ },
-	{ label: 'url credentials',   re: /:\/\/[^\s/@:]+:[^\s/@]+@/ },
+	{ label: 'url credentials',   re: /:\/\/[^\s/@:]+:(?!\[REDACTED\])[^\s/@]+@/ },
 	{ label: 'bearer token',      re: /\bBearer\s+[A-Za-z0-9._\-]{12,}/ },
+	{ label: 'telegram token',    re: /\bbot\d{5,}:[A-Za-z0-9_-]{20,}/ },
 	{ label: 'url secret param',  re: /[?&](?:token|secret|api[_-]?key|password|pass)=(?!\[REDACTED\])[^&\s"']{8,}/i },
-	{ label: 'credential field',  re: /\b(?:password|passwd|api_?secret|secret_key|access_key|private_?key|token_id)\b["']?\s*[:=]\s*["']?(?!\[REDACTED\])[^\s"',}]{8,}/i }
+	{ label: 'credential field',  re: /\b(?:password|passwd|passphrase|api_?secret|api_?key|api_?token|api_?passphrase|api_?password|secret_key|access_key|private_?key|token_id|smtp_pass|bot_token)\b["']?\s*[:=]\s*["']?(?!\[REDACTED\])[^\s"',}]{8,}/i }
 ];
 
 function readFileTail(file, maxBytes) {
@@ -3987,6 +4113,8 @@ module.exports = {
 	secretDecryptabilityCheck,
 	dbIndexPresenceCheck,
 	logSecretScanCheck,
+	ipFilterSpoofableCheck,   // exposed for tests — the watchdog that warns an IP filter is bypassable under trust_proxy
+	rebootAfterOp,            // exposed for tests — the single Hub-aware reboot used by rollback/update/restore
 
 	init: function(obj, shutDown) {
 

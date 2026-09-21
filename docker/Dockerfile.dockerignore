@@ -21,16 +21,34 @@ uploads/
 rollbacks/
 temp/
 downloads/
+# Session secrets and live logins: a session file holds a per-instance signing secret and logged-in
+# cookies. Baking them in would ship the developer's secret into the image and seed it into every fresh
+# volume (a credential leak and cross-install auth bleed). A fresh volume must start empty; the app then
+# generates its own secret.
+sessions/
 
-# Per-instance identity. Build images from the shipped config TEMPLATES — an app.json with an empty
-# mongo_db_url, a credential-free bot.json, and (for a future Hub build) a hub.json template — never a
-# populated working copy, otherwise the image would carry your exchange keys and app-password hash. Only
-# this host's identity file is excluded; the config templates are intentionally kept so a fresh install
-# (instance or Hub) can seed from them.
-config/server.json
+# Per-instance identity and any populated/real config. Build images from the shipped config TEMPLATES only —
+# an app.json with an empty mongo_db_url, a credential-free bot.json, and (for a future Hub build) a hub.json
+# template. Always build from a CLEAN checkout so those three files are the shipped templates, not your live
+# config, or the image would carry real exchange keys and the app-password hash. The patterns below exclude
+# the non-template files a working copy accumulates — per-host identity files (server.json, server-*.json),
+# real-exchange bot configs (bot-*.json), and editor duplicates ("app copy.json") — while the canonical
+# templates (app.json, bot.json, hub.json) are intentionally kept so a fresh install can seed from them.
+config/server*.json
+config/bot-*.json
+config/*copy*.json
+config/*real*.json
+config/*REAL*.json
 
 # Dev-only tooling and tests the runtime never needs (and which are not part of the deployed project).
+# scripts/ is intentionally KEPT (identical to the context-root .dockerignore): run-tests.js exits
+# gracefully when libs/test/ is absent and precheck.js syntax-checks the shipped libs/, so the package.json
+# check/test scripts behave in the image instead of crashing on a missing file under either builder.
 .githooks/
-scripts/
 libs/test/
+
+# The local-only working backlog is never shipped (kept in sync with the context-root .dockerignore).
 symbot-backlog.md
+
+# Editor / OS cruft that must never ship in the image.
+**/.DS_Store

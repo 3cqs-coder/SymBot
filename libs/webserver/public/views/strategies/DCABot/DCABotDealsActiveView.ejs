@@ -9,49 +9,21 @@
 	let modalId = 'activeDealsView';
 
 	// Shared auto-refresh timer (SymBot.UI owns the timeout). Fixed 5s interval, but DEFERS a refresh
-	// only while the user is typing in a per-deal fill-price field so it isn't yanked out mid-entry
-	// (a bespoke pause condition — not the default dialog-open one). The setReloadTimeout wrapper below
-	// keeps every existing callsite unchanged.
+	// while the user is typing in a per-deal fill-price field so it isn't yanked out mid-entry, AND while
+	// keyboard focus is anywhere inside the deals table — the refresh rebuilds every row, which would throw
+	// a keyboard user's focus off an action pill (add/close/cancel/…) to the top of the page every 5s and
+	// make those controls practically inoperable by keyboard. Deferring keeps focus stable; the next tick
+	// refreshes once focus leaves.
 	const _autoRefresh = SymBot.UI.autoRefresh({
 		defaultMs: 5000,
 		onReload: function() { getActiveDeals(); },
-		shouldDefer: function() { return $('.af-price-override:focus').length > 0; }
+		shouldDefer: function() { return $('.af-price-override:focus').length > 0 || $('#botsDeals').find(':focus').length > 0; }
 	});
 
-	const actionButtons = {
-							'add': {
-										'button': '<span class="pill-btn" title="Add funds to deal"><span class="icon icon-add" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'Add funds to deal'
-									},
-							'ai': {
-										'button': '<span class="pill-btn" title="AI Analyze deal"><span class="icon icon-ai" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'AI Analyze deal'
-									},
-							'cancel': {
-										'button': '<span class="pill-btn pill-danger" title="Cancel deal"><span class="icon icon-cancel" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'Cancel deal'
-									},
-							'edit': {
-										'button': '<span class="pill-btn" title="Edit deal"><span class="icon icon-edit" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'Edit deal'
-									},
-							'panic': {
-										'button': '<span class="pill-btn" title="Close deal"><span class="icon icon-close" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'Close deal'
-									},
-							'pause': {
-										'button': '<span class="pill-btn pill-warn" title="Pause deal"><span class="icon icon-pause" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'Pause deal'
-									},
-							'resume': {
-										'button': '<span class="pill-btn pill-warn" title="Resume deal"><span class="icon icon-resume" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'Resume deal'
-									},
-							'stop': {
-										'button': '<span class="pill-btn pill-danger" title="Stop bot"><span class="icon icon-stop" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-										'tooltip': 'Stop bot'
-									}
-						  };
+	// Deal action pills — the shared definition (SymBot.UI.actionButtons), so this view and the Hub Deals
+	// view render identical, keyboard-operable, screen-reader-named pills and can never drift. Each pill is a
+	// role="button" tabindex="0" span (Enter/Space are bridged to a click in symbot-ui.js).
+	const actionButtons = SymBot.UI.actionButtons();
 
 
 	const convertBoolean = new Function('return ' + `<%- convertBoolean %>`)();
@@ -612,7 +584,7 @@
 		const pauseInfo = SymBot.UI.systemPauseInfo(pauseReason);
 		const isSystemPaused = pauseInfo.isSystem;
 		const systemWarning = isSystemPaused
-			? '<div style="font-size: var(--fs-body); padding: 8px; margin-bottom: 10px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+			? '<div style="font-size: var(--fs-body); padding: 8px; margin-bottom: 10px; background: var(--color-warning-soft); border-left: 3px solid var(--color-warning); border-radius: 2px;">' +
 			  '<b>⚠ System paused:</b> This deal was automatically paused by the system due to ' + pauseInfo.description + '. ' +
 			  'Review the situation before resuming manually.</div>'
 			: '';
@@ -933,7 +905,7 @@
 		let dealDataErrors = 0;
 		const selectedBot = $('#active-bot-filter').val();
 
-		let msgBoxColor = '#386ec2';
+		let msgBoxColor = 'var(--link-color)';   // theme-tuned link blue (readable on both light and dark)
 		let profitTotalClass = 'profit-positive';
 
 		let msgBox = '';
@@ -1044,19 +1016,15 @@
 				stopButtonDeal = SymBot.UI.disabledStopButton();
 			}
 
+			// A system-paused deal (isSystemPaused) and a persistent data error each tint the row; the shared
+			// SymBot.UI.dealRowBackground helper decides the color once, below, so this view and the Hub view
+			// can never drift. Track the data-error case as a flag here.
+			let hasDataError = false;
+
 			if (pause || pauseBuy || pauseSell) {
 
 				pauseButtonId = 'resume';
 				pauseButtonDeal = resumeButtonDeal;
-
-				// System-paused deals get a distinct orange tint to distinguish from manual pauses.
-				// Use a translucent tint (not a solid dark color) so it layers over the themed row
-				// background and stays readable in BOTH light and dark mode — a solid dark brown
-				// (#7a4500) rendered dark-text-on-dark and was unreadable in light mode.
-				if (isSystemPaused) {
-
-					dealBackground = 'rgba(255,140,0,0.22)';
-				}
 			}
 
 			if (!awaiting && profitPerc <= 0) {
@@ -1099,9 +1067,7 @@
 
 					if (diffSec > maxSec) {
 
-						// Translucent amber tint (see system-pause note above) — readable in
-						// light and dark mode, unlike the previous solid #B78225.
-						dealBackground = 'rgba(183,130,37,0.28)';
+						hasDataError = true;
 						dealDataErrors++;
 					}
 					else {
@@ -1147,10 +1113,9 @@
 				safetyOrdersTotalDisplay += ' (+' + addedFunds + ')';
 			}
 
-			const estimates = JSON.stringify(deal.info.estimates || {})
-				.replace(/&/g, '&amp;')
-				.replace(/"/g, '&quot;')
-				.replace(/'/g, '&#39;');
+			// Escape via the shared helper (same convention as every other attribute here) so the JSON is
+			// safe inside the double-quoted data-estimates attribute.
+			const estimates = SymBot.UI.esc(JSON.stringify(deal.info.estimates || {}));
 
 			// Raw values the Add Funds Estimator needs per deal (invested sum + base
 			// qty from filled orders, current price, fee %, target %). Kept as data
@@ -1170,6 +1135,9 @@
 			// Hub views stay identical. No new column, so tablesorter column indices are unaffected.
 			const stopLossDisplay = SymBot.UI.stopLossCell(deal['info'], dealSym, convertNotation);
 
+			// Single source for the row tint (data error wins over system pause), shared with the Hub view.
+			dealBackground = SymBot.UI.dealRowBackground({ isSystemPaused: isSystemPaused, hasDataError: hasDataError });
+
 			contentArr.push('<tr style="background-color: ' + dealBackground + ';" data-dealid="' + dealId + '" data-pair="' + SymBot.UI.esc(deal['pair']) + '"  data-estimates="' + estimates + '" data-af-sum="' + afSum + '" data-af-qty="' + afQty + '" data-af-price="' + afPrice + '" data-af-fee="' + afFee + '" data-af-target="' + afTarget + '" data-af-avg="' + afAvg + '" data-af-profit="' + afProfit + '" data-af-sym="' + dealSym + '">');
 			contentArr.push(healthCell);
 			contentArr.push('<td class="cell-botname">' + SymBot.UI.esc(deal['info']['bot_name']) + '</td>');
@@ -1188,7 +1156,7 @@
 			contentArr.push('<td>' + SymBot.UI.pendingCell(awaiting, dealSym + maxFunds) + '</td>')
 			contentArr.push('<td>' + dealCount + '</td>');
 			const pillContent = aiButtonDeal + editButtonDeal + panicButtonDeal + addFundsButtonDeal + pauseButtonDeal + cancelButtonDeal + (stopButtonDeal || '');
-			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-pausereason="' + pauseReason + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + SymBot.UI.esc(deal['info']['bot_name']) + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
+			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-pausereason="' + SymBot.UI.esc(pauseReason) + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + SymBot.UI.esc(deal['info']['bot_name']) + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
 			contentArr.push('</tr>');
 		}
 
@@ -1754,6 +1722,11 @@ $(document).ready(function() {
 			}
 		});
 
+		// Keyboard access for the role="button" close ×: Enter/Space activate it like a click (WCAG 2.1.1).
+		$('#addFundsClose').on('keydown', function(e) {
+			if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); $(this).trigger('click'); }
+		});
+
 		// Close (×) hides and reverts.
 		$('#addFundsClose').click(function() {
 
@@ -1788,7 +1761,7 @@ $(document).ready(function() {
 
 			const $wrap = $('<span class="af-price-override-wrap"></span>');
 			const $inp = $('<input type="number" step="any" min="0" class="form-field af-price-override" placeholder="fill price">').val(current);
-			const $clr = $('<span class="af-override-clear" title="Use market price">&times;</span>');
+			const $clr = $('<span class="af-override-clear" role="button" tabindex="0" aria-label="Use market price" title="Use market price">&times;</span>');
 
 			$wrap.append($inp).append($clr);
 			$(this).append($wrap);
@@ -1811,6 +1784,11 @@ $(document).ready(function() {
 				ev.stopPropagation();
 				delete addFundsPriceOverride[dealId];
 				renderAddFundsProjections();
+			});
+
+			// Keyboard access for the role="button" clear control (Enter/Space), matching its sibling × controls.
+			$clr.on('keydown', function(ev) {
+				if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') { ev.preventDefault(); ev.stopPropagation(); $clr.trigger('click'); }
 			});
 		});
 
@@ -1943,7 +1921,7 @@ $(document).ready(function() {
 	<div id="circuitBreakerBanner" style="display:none; margin-bottom:10px;">
 		<div style="background:#7a4f00; color:#ffe08a; border:1px solid #c47f00; border-radius:6px; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
 			<span>⚡ <b>Circuit Breaker Active</b> — <span id="cbReason"></span> &nbsp;|&nbsp; Resumes in <span id="cbCountdown"></span></span>
-			<button class="btn btn-default" id="cbClearBtn" style="font-size:1.1rem; padding:3px 12px;">Clear</button>
+			<button class="btn btn-default" id="cbClearBtn" style="font-size: var(--fs-subhead); padding:3px 12px;">Clear</button>
 		</div>
 	</div>
 
@@ -1956,14 +1934,16 @@ $(document).ready(function() {
 				<b class="contentHeader">Active DCA Bot Deals</b>
 
 				<span class="viewSettings">
-					<span id="addFundsEstToggle" class="viewIconBtn" title="Add Funds Estimator"><span class="icon icon-add" style="width:13px;height:13px;"></span></span>
-					<span id="csvDownload" class="viewIconBtn" title="Download active deals (CSV)"><span class="icon icon-download" style="width:13px;height:13px;"></span></span>
-					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
+					<span id="addFundsEstToggle" class="viewIconBtn" role="button" tabindex="0" aria-label="Add Funds Estimator" title="Add Funds Estimator"><span class="icon icon-add" style="width:13px;height:13px;pointer-events:none;"></span></span>
+					<span id="csvDownload" class="viewIconBtn" role="button" tabindex="0" aria-label="Download active deals (CSV)" title="Download active deals (CSV)"><span class="icon icon-download" style="width:13px;height:13px;pointer-events:none;"></span></span>
+					<span id="botDealSelectorShow" class="viewIconBtn" role="button" tabindex="0" aria-label="Choose columns" title="Choose columns"><span class="icon icon-columns" style="width:13px;height:13px;pointer-events:none;"></span></span>
 				</span>
 			</div>
 
 			<div class="view-summary">
-				<div class="summary-bar">
+				<!-- Polite, atomic live region so a screen reader hears the COMPACT totals when they change on the
+				     5s refresh, without the per-row table churn being announced (which would be noise). -->
+				<div class="summary-bar" aria-live="polite" aria-atomic="true">
 					<p>Active P/L: <span id="totalProfit"></span></p>
 					<p>Projected Profit: <span id="projectedProfit"></span></p>
 					<p>In Deals: <span id="inDeals"></span></p>
@@ -1984,7 +1964,7 @@ $(document).ready(function() {
 				</div>
 			</div>
 
-			<span id="msgBox" style="position: relative; display: flex; justify-content: center;"></span>
+			<span id="msgBox" role="alert" style="position: relative; display: flex; justify-content: center;"></span>
 
 			<div class="botsDealsBox">
 
@@ -1994,7 +1974,7 @@ $(document).ready(function() {
 						Amount: <input id="addFundsAmount" class="form-field" type="number" min="0" step="any" placeholder="0.00" style="width: 120px;">
 					</span>
 					<span class="addfunds-bar-note">What-if only &mdash; nothing is added. Estimates update in realtime; click a deal's <b>price</b> to test a different fill price for that deal.</span>
-					<span id="addFundsClose" class="addfunds-bar-close" title="Close">&times;</span>
+					<span id="addFundsClose" class="addfunds-bar-close" role="button" tabindex="0" aria-label="Close" title="Close">&times;</span>
 				</div>
 
 				<div id="dealsLoadingMsg" class="deals-state-msg">Loading active deals&hellip;</div>

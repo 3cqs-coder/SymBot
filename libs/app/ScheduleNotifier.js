@@ -214,7 +214,14 @@ const channels = {
 async function deliver(targets, payload) {
 
 	const list = Array.isArray(targets) ? targets : [];
-	const message = (payload && payload.message) || '';
+	// Scrub secrets ONCE, up front, so every channel below is covered. Common.sendNotification already
+	// redacts the browser/history copy, but the Telegram, email, and webhook fan-out sent from the raw
+	// message did not — a recipe failure alert echoing an error that contains a Mongo URI or a token would
+	// otherwise leak it in the clear to an external chat, webhook, or inbox. Redacting here closes them all.
+	const rawMessage = (payload && payload.message) || '';
+	const message = (shareData && shareData.Common && typeof shareData.Common.redactSecrets === 'function')
+		? shareData.Common.redactSecrets(rawMessage)
+		: rawMessage;
 	const type = (payload && payload.type) || 'info';
 	const status = payload && payload.status;
 

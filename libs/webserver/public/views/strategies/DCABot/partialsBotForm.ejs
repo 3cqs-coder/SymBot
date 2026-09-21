@@ -104,7 +104,7 @@
 
 	<div class="card">
 		<details<%= _isUpdate ? ' open' : '' %> class="bot-form-section">
-			<summary style="cursor: pointer; padding: 2px 0; font-weight: 600; user-select: none; font-size: var(--fs-section);"><span class="icon icon-shield" style="width:15px;height:15px;vertical-align:-2px;"></span> Stop-Loss &amp; Trailing Stop</summary>
+			<summary style="cursor: pointer; padding: 2px 0; font-weight: var(--fw-medium); user-select: none; font-size: var(--fs-section);"><span class="icon icon-shield" style="width:15px;height:15px;vertical-align:-2px;"></span> Stop-Loss &amp; Trailing Stop</summary>
 			<table id="botsCreate" style="margin-top: 12px;" cellpadding=0 cellspacing=0>
 
 		<tr><td>Stop-Loss:
@@ -183,7 +183,7 @@
 
 	<div class="card">
 		<details<%= _isUpdate ? ' open' : '' %> class="bot-form-section">
-			<summary style="cursor: pointer; padding: 2px 0; font-weight: 600; user-select: none; font-size: var(--fs-section);"><span class="icon icon-list" style="width:15px;height:15px;vertical-align:-2px;"></span> Deal Limits &amp; Options</summary>
+			<summary style="cursor: pointer; padding: 2px 0; font-weight: var(--fw-medium); user-select: none; font-size: var(--fs-section);"><span class="icon icon-list" style="width:15px;height:15px;vertical-align:-2px;"></span> Deal Limits &amp; Options</summary>
 			<table id="botsCreate" style="margin-top: 12px;" cellpadding=0 cellspacing=0>
 
 		<tr><td>Max Deals:
@@ -259,3 +259,14 @@
 <% if (_formAction !== null) { %>
 </form>
 <% } %>
+
+<script>
+	// Accessibility: this form uses visual-only caption cells (first <td>) beside each control, which a screen
+	// reader cannot associate. Derive an accessible name for every field from its row caption in one reusable
+	// pass (shared helper), instead of repeating an aria-label on each of the many inputs. Covers both the
+	// instance and Hub bot editors, which both include this partial.
+	document.addEventListener('DOMContentLoaded', function () {
+		if (!(window.SymBot && SymBot.UI && typeof SymBot.UI.autoLabelFormFields === 'function')) { return; }
+		document.querySelectorAll('table#botsCreate').forEach(function (t) { SymBot.UI.autoLabelFormFields(t); });
+	});
+</script>

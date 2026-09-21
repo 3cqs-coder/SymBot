@@ -17,6 +17,15 @@ services:
       # first run /data/db is empty, so db-init.js runs and creates the symbot user; afterwards Mongo
       # skips init because the data is already there.
       - mongo-data:/data/db
+    # Report healthy only once Mongo actually accepts connections, so dependents can wait on readiness
+    # (condition: service_healthy) instead of a fixed sleep that can still lose the race on a cold host.
+    # start_period covers first-run initialization (db-init.js) without counting early failures.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Optional web-based MongoDB admin UI. It exposes FULL database access, so it is bound to LOOPBACK ONLY
   # (127.0.0.1) and protected with basic auth. Do NOT publish it on a public interface — on a production /
@@ -24,7 +33,8 @@ services:
   # password below before first use. (For reproducible builds, pin the image to a specific tag, e.g.
   # mongo-express:1.0.2-20-alpine3.19.)
   mongo-express:
-    image: mongo-express
+    # Pinned for reproducible rebuilds (an unpinned tag can pull a new major that breaks the admin UI).
+    image: mongo-express:1.0.2-20-alpine3.19
     restart: always
     ports:
       - 127.0.0.1:3010:8081
@@ -35,7 +45,8 @@ services:
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: changeme
     depends_on:
-      - database
+      database:
+        condition: service_healthy
 
   web:
     image: symbot
@@ -48,7 +59,8 @@ services:
     # mongo_db_url, SymBot connects to the "database" service using the symbot user that db-init.js
     # creates. To use a different database, set mongo_db_url in a mounted app.json.
     depends_on:
-      - database
+      database:
+        condition: service_healthy
     ports:
       - 3000:3000
     # Persist SymBot's state so an upgrade preserves it. These named volumes seed from the image on

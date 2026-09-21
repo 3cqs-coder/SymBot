@@ -104,10 +104,29 @@ function installProcessGuards(shutDown, logError) {
 }
 
 
+// Read a named CLI argument, supporting both "--name value" and "--name=value". Returns the value string,
+// or null when absent. SymBot is configured through CLI args and config files (never environment variables),
+// so this parser is load-bearing on both entry points — it lives here, in the shared bootstrap, so the
+// instance and the Hub cannot drift apart on how they read their arguments. Plain ES5 to match this module.
+function getCliArg(name) {
+
+	var argv = process.argv;
+
+	for (var i = 2; i < argv.length; i++) {
+
+		if (argv[i] === '--' + name && argv[i + 1] != undefined) { return argv[i + 1]; }
+		if (argv[i].indexOf('--' + name + '=') === 0) { return argv[i].slice(('--' + name + '=').length); }
+	}
+
+	return null;
+}
+
+
 module.exports = {
 	enforceNodeVersion: enforceNodeVersion,
 	preferDnsOrder: preferDnsOrder,
 	installProcessGuards: installProcessGuards,
+	getCliArg: getCliArg,
 	isNodeOlder: isNodeOlder,                          // exposed for tests
 	formatUncaughtException: formatUncaughtException,  // exposed for tests
 	formatUnhandledRejection: formatUnhandledRejection // exposed for tests

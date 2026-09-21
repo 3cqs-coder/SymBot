@@ -4,9 +4,6 @@ const path = require('path');
 
 const pathRoot = path.resolve(__dirname, ...Array(1).fill('..'));
 
-// State-changing HTTP methods — used by the capability middleware's default-deny for unmapped routes.
-const MUTATING_METHOD = { POST: true, PUT: true, PATCH: true, DELETE: true };
-
 const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
@@ -14,6 +11,8 @@ const FileStore = require('session-file-store')(session);
 const bodyParser = require('body-parser');
 const Routes = require(pathRoot + '/Hub/routes.js');
 const { sendErr } = require(pathRoot + '/routeUtils.js');
+const SharedMw = require(pathRoot + '/sharedMiddleware.js');   // bootstrap middleware shared with the instance
+const SharedSocket = require(pathRoot + '/sharedSocket.js');   // socket.io bootstrap shared with the instance
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
@@ -33,20 +32,7 @@ async function initApp() {
 	// attached to `router` by Routes.start() which runs AFTER this function). The default-deny
 	// consults it so a correctly-scoped Hub key or a non-owner Hub user reaches those guards instead
 	// of being blanket-denied.
-	let inlineGuarded = null;
-
-	const resolveInlineGuard = () => {
-		if (inlineGuarded === null) {
-			try {
-				const RP = shareData && shareData.RoutePermissions;
-				inlineGuarded = (RP && typeof RP.buildInlineGuardMatcher === 'function')
-					? RP.buildInlineGuardMatcher(router)
-					: function () { return false; };
-			}
-			catch (e) { inlineGuarded = function () { return false; }; }
-		}
-		return inlineGuarded;
-	};
+	const resolveInlineGuard = SharedMw.makeInlineGuardResolver(shareData, router);
 
 	const sessionExpireMins = 60 * 24;
 	const sessionCookieName = 'SymBotHub';
@@ -64,6 +50,10 @@ async function initApp() {
 	// Expose the store so the session-management feature (libs/app/Sessions.js) can list and revoke sessions.
 	shareData.sessionStore = sessionStore;
 
+	// Opt-in hardened cookie for TLS deployments (security.secure_cookie in the Hub config) — same behavior and
+	// default as the instance web server (off by default so a plain-HTTP install still receives the cookie).
+	const secureCookie = !!(shareData.appData && shareData.appData.security && shareData.appData.security.secure_cookie);
+
 	const sessionMiddleware = session({
 
 		'secret': hashPassword,
@@ -74,7 +64,8 @@ async function initApp() {
 		'store': sessionStore,
 		'cookie': {
 			'maxAge': (sessionExpireMins * 60) * 1000,
-			'sameSite': 'lax'
+			'sameSite': secureCookie ? 'strict' : 'lax',
+			'secure': secureCookie
 		}
 	});
 
@@ -82,22 +73,14 @@ async function initApp() {
 	// Opt-in via the Hub config ip_filter.server.enabled. Loopback is ALWAYS allowed and the check
 	// fails OPEN on error, so a filter mistake can never lock the operator out of the Hub. The
 	// console `reset ipfilter` command clears it.
-	const IpFilter = require(pathRoot + '/../app/IpFilter.js');
+	app.use(SharedMw.ipFilter(shareData));
 
-	app.use((req, res, next) => {
-		try {
-			const cfg = shareData.appData && shareData.appData.ip_filter && shareData.appData.ip_filter.server;
-			if (cfg && cfg.enabled) {
-				const ip = (shareData.AuthMiddleware && typeof shareData.AuthMiddleware.clientIp === 'function') ? shareData.AuthMiddleware.clientIp(req) : (req.ip || '');
-				const decision = IpFilter.evaluate(ip, { allow: cfg.allowlist || [], deny: cfg.blocklist || [] }, { allowLoopback: true });
-				if (!decision.allowed) { return res.status(403).send('Access denied.'); }
-			}
-		}
-		catch (e) { /* fail open — never lock out on a filter error */ }
-		next();
-	});
-
-	// Middleware to handle incoming requests
+	// Reverse proxy to a managed instance's own web server. This is DELIBERATELY unauthenticated at the Hub
+	// layer (it sits ahead of the Hub session/principal/capability middleware and carries no cap() guard):
+	// each instance authenticates the forwarded request against its OWN separate session store and enforces its
+	// own login and capabilities, so a Hub cookie is not a valid instance session. Only the server-wide IP
+	// filter precedes it. Do NOT ever share a session store or signing secret across the Hub and instances —
+	// that would turn this delegated-auth boundary into a cross-privilege hole.
 	app.use('/instance/:appId', async (req, res, next) => {
 
 		const { appId } = req.params;
@@ -116,65 +99,40 @@ async function initApp() {
 		return proxy(req, res, next);
 	});
 
-	app.use(sessionMiddleware);
-
-	// Keep each logged-in session's recorded source IP and device current (e.g. a phone moving from Wi-Fi
-	// to mobile data, or a browser update), so the Sessions view reflects where it is used now. Best-effort;
-	// writes only on a real change.
-	app.use((req, res, next) => { if (shareData.Sessions && typeof shareData.Sessions.noteRequestMeta === 'function') { shareData.Sessions.noteRequestMeta(req); } next(); });
-
 	app.disable('x-powered-by');
 
-	app.use((req, res, next) => {
+	// Baseline security headers (parity with the instance webserver), set BEFORE the static handlers so
+	// assets receive them too: prevent framing/clickjacking of the Hub control plane, MIME-sniffing, and
+	// referrer leakage. Script-safe (no script-src CSP). Placed after the /instance proxy so proxied instance
+	// responses keep their own headers.
+	app.use(SharedMw.securityHeaders({ serverHeader: 'SymBot Hub' }));
 
-		res.append('Server', 'SymBot Hub');
-		next();
-	});
+	// Static assets are PUBLIC and served BEFORE the session middleware (shared helper — same rationale and
+	// cache policy as the instance webserver, so the two can never drift).
+	SharedMw.mountStaticAssets(app, express, pathRoot + '/public');
 
+	app.use(sessionMiddleware);
+
+	// Keep each logged-in session's recorded source IP and device current (shared with the instance).
+	app.use(SharedMw.noteRequestMeta(shareData));
+
+	// Default (~100 KB) body limits are deliberate on the Hub — it takes only small control-plane payloads,
+	// so it needs no large-body allowance. One JSON parser (the redundant second bodyParser.json() was dropped).
 	app.use(express.json());
 
 	app.use(bodyParser.urlencoded({
 		extended: true
 	}));
 
-	app.use(bodyParser.json());
-
-	// Strip MongoDB operator keys from all user input before any handler runs (see the instance webserver
-	// for the rationale) — closes NoSQL operator injection on the Hub control plane too. Best-effort.
-	app.use((req, res, next) => {
-
-		try {
-
-			shareData.Common.stripMongoOperators(req.body);
-			shareData.Common.stripMongoOperators(req.query);
-			shareData.Common.stripMongoOperators(req.params);
-		}
-		catch (e) { /* defensive — never fail a request */ }
-
-		next();
-	});
+	// Strip MongoDB operator keys from all user input (shared with the instance — closes NoSQL operator
+	// injection on the Hub control plane too).
+	app.use(SharedMw.stripMongoOperators(shareData));
 
 	app.set('views', pathRoot + '/public/views');
 	app.set('view engine', 'ejs');
 
-	app.use('/js', express.static(pathRoot + '/public/js'));
-	app.use('/css', express.static(pathRoot + '/public/css'));
-	app.use('/data', express.static(pathRoot + '/public/data'));
-	app.use('/images', express.static(pathRoot + '/public/images'));
-
-	// Authorization: resolve whoever authenticated (Hub session OR a Hub API key, via
-	// HubStore) into one req.principal for the route guards — a logged-in session becomes the
-	// implicit owner. Non-breaking: if the auth subsystem isn't wired the request proceeds and
-	// the existing session gate applies.
-	app.use(async (req, res, next) => {
-		try {
-			if (shareData && shareData.AuthMiddleware && typeof shareData.AuthMiddleware.resolvePrincipal === 'function') {
-				req.principal = await shareData.AuthMiddleware.resolvePrincipal(req);
-			}
-		}
-		catch (e) { req.principal = null; }
-		next();
-	});
+	// Resolve whoever authenticated (Hub session OR Hub API key) into one req.principal (shared with the instance).
+	app.use(SharedMw.attachPrincipal(shareData));
 
 	// Per-key rate limiting (see AuthMiddleware.rateLimit) — no-op for sessions / unlimited keys.
 	app.use((req, res, next) => {
@@ -182,57 +140,9 @@ async function initApp() {
 		next();
 	});
 
-	// Capability enforcement for state-changing routes — identical to the instance web server
-	// (libs/webserver/index.js) so route gating behaves the SAME on the Hub. Without this the
-	// declarative RoutePermissions.RULES map (and the startup watchdog's coverage guarantee) would
-	// be decorative on the Hub. Only a request whose resolved principal LACKS the mapped capability
-	// is denied; an unauthenticated request is left to the route's own gate, an unmapped route is
-	// untouched, and the owner / legacy key (['*']) always pass.
-	app.use((req, res, next) => {
-		let capability = null;
-		try {
-			const RP = shareData && shareData.RoutePermissions;
-
-			// De-provisioned-session guard (same as the instance server): a named-user session whose userId
-			// no longer resolves to an ACTIVE user yields a null principal; deny it (401) so a disabled Hub
-			// user can't keep reaching session-only Hub read routes until session expiry.
-			if (req.session && req.session.loggedIn && req.session.userId && !req.principal) {
-
-				try { shareData.Common.auditEvent(req, 'authz.deny', req.path, 'session-user-not-active'); } catch (e) {}
-				return sendErr(res, 'Your account is no longer active — please sign in again.', 401);
-			}
-
-			capability = RP && typeof RP.required === 'function' ? RP.required(req.method, req.path) : null;
-
-			if (capability && req.principal && shareData.Authz && !shareData.Authz.can(req.principal, capability)) {
-
-				shareData.Common.auditEvent(req, 'authz.deny', req.path, capability);
-				return sendErr(res, 'Forbidden — missing permission (' + capability + ')', 403);
-			}
-
-			// Default-deny for UNMAPPED mutating routes (see instance server for the rationale). On the
-			// Hub EVERY action route is gated by an inline cap()/capAction() guard rather than RULES, so
-			// the inline-guard check is what lets a correctly-scoped Hub key or a non-owner Hub user
-			// reach those guards; only a route with neither a RULES rule nor an inline guard fails
-			// closed here. Owner/legacy (['*']) always passes.
-			else if (!capability && req.principal && MUTATING_METHOD[req.method]
-				&& !(Array.isArray(req.principal.capabilities) && req.principal.capabilities.includes('*'))
-				&& !(RP && typeof RP.isPublic === 'function' && RP.isPublic(req.method, req.path))
-				&& !resolveInlineGuard()(req.method, req.path)) {
-
-				// ...and NOT a PUBLIC route (login/logout/webhook) — those do their own auth in-handler.
-				shareData.Common.auditEvent(req, 'authz.deny', req.path, 'unmapped:' + req.method);
-				return sendErr(res, 'Forbidden — this key is not permitted for this route', 403);
-			}
-		}
-		catch (e) {
-			// Fail CLOSED on a mapped route that carries a resolved principal (see instance server).
-			if (capability && req.principal) {
-				return sendErr(res, 'Forbidden — enforcement error', 403);
-			}
-		}
-		next();
-	});
+	// Capability enforcement for state-changing routes — shared verbatim with the instance web server so route
+	// gating behaves the SAME on the Hub (see sharedMiddleware.capabilityEnforcement and SharedMiddleware.test.js).
+	app.use(SharedMw.capabilityEnforcement(shareData, { resolveInlineGuard, sendErr }));
 
 	app.use('/', router);
 
@@ -411,53 +321,17 @@ async function getAppPort(appId) {
 
 async function initSocket(sessionMiddleware, server) {
 
-	socket = require('socket.io')(server, {
-
-		cors: {
-			origin: '*',
-			methods: ['PUT', 'GET', 'POST', 'DELETE', 'OPTIONS'],
-			credentials: false
-		},
-		path: '/' + shareData.appData['web_socket_path'],
-		serveClient: true,
-		pingInterval: 10000,
-		pingTimeout: 5000,
-		maxHttpBufferSize: 1e6,
-		cookie: false
-	});
-
-	const wrap = middleware => (socket, next) => middleware(socket.request, {}, next);
-
-	socket.use(wrap(sessionMiddleware));
-
-	socket.use((client, next) => {
-
-		return next();
-	});
+	socket = SharedSocket.makeServer(server, shareData, sessionMiddleware);
 
 	socket.on('connect', async (client) => {
 
 		let query = client.handshake.query;
 
-		// Resolve the principal from the handshake and attach it, mirroring the HTTP layer. A session
-		// whose user no longer resolves to an active principal (disabled or deleted after login) must NOT
-		// be admitted on the socket, so a just-disabled user can't keep receiving instance/memory data
-		// over an already-open socket. A legacy session with no userId still resolves to the owner
-		// principal (non-null), so it is unaffected.
-		let principal = null;
+		// Resolve the principal from the handshake and attach it, flagging a deprovisioned session so it
+		// cannot be admitted. Shared with the instance (see sharedSocket.js).
+		const ip = (shareData.Common && typeof shareData.Common.getClientIp === 'function') ? shareData.Common.getClientIp(client) : '';
+		const { deprovisioned, sess } = await SharedSocket.resolveConnection(client, shareData, ip);
 
-		try {
-			if (shareData.AuthMiddleware && typeof shareData.AuthMiddleware.resolvePrincipal === 'function') {
-				const ip = (shareData.Common && typeof shareData.Common.getClientIp === 'function') ? shareData.Common.getClientIp(client) : '';
-				principal = await shareData.AuthMiddleware.resolvePrincipal({ session: client.request.session, headers: client.handshake.headers, ip });
-			}
-		}
-		catch (e) { principal = null; }
-
-		client.principal = principal;
-
-		const sess = client.request.session || {};
-		const deprovisioned = !!(sess.loggedIn && sess.userId && !principal);
 		let loggedIn = !deprovisioned && sess.loggedIn;
 
 		if (!loggedIn) {
@@ -467,25 +341,15 @@ async function initSocket(sessionMiddleware, server) {
 		}
 		else {
 
-			if (query.room == undefined || query.room == null || query.room == '') {
-
-				//const roomAuth = 'notifications';
-
-				//client.join(roomAuth);
-			}
-			else {
-
-				client.join(query.room);
-			}
+			SharedSocket.joinInitialRoom(client, query);
 
 			client.on('joinRooms', (data) => {
 
-				// Guard against a missing/malformed payload so a bad client emit can't throw inside the
-				// listener; normalize to an array (mirrors the instance server's joinRooms handler).
-				const rooms = data && data.rooms;
-				if (!rooms) { return; }
+				// Parse via the shared helper so this stays in lockstep with the instance handler and a bad
+				// client emit can't throw inside the listener.
+				const roomList = SharedSocket.normalizeRooms(data);
 
-				const roomList = Array.isArray(rooms) ? rooms : [rooms];
+				if (!roomList.length) { return; }
 
 				roomList.forEach(room => {
 
@@ -501,10 +365,7 @@ async function initSocket(sessionMiddleware, server) {
 				}
 			});
 
-			client.on('leaveRoom', (room) => {
-
-				client.leave(room);
-			});
+			SharedSocket.attachLeaveRoom(client);
 
 			client.on('notifications_history', function(data) {
 
@@ -592,19 +453,12 @@ async function start(port) {
 }
 
 
-// Run the central self-policing watchdog against the Hub's registered routes. Called from the
-// startup flow after the audit trail is wired so findings can be recorded to the audit log.
-function runWatchdog(label) {
+// Start the continuous, autonomous watchdog on the Hub: a verbose boot sweep plus a self-unref'd, quiet
+// periodic sweep for the life of the process. Non-blocking — mirrors the instance web server exactly. The
+// monitor lives in the Watchdog engine; this only supplies the Hub's router + label as an opaque context.
+function startWatchdogMonitor(label) {
 
-	if (shareData && shareData.Watchdog && typeof shareData.Watchdog.run === 'function') {
-
-		// Fire-and-forget; run() never rejects (each check is isolated), but attach a defensive catch so
-		// it can never surface as an unhandled rejection even if that contract ever changes — mirroring
-		// the instance boot caller.
-		return Promise.resolve(shareData.Watchdog.run(shareData, { router: router, label: label || 'hub' })).catch(function () {});
-	}
-
-	return Promise.resolve();
+	return shareData.Watchdog.startMonitor(shareData, { router: router, label: label || 'hub' });
 }
 
 
@@ -612,7 +466,7 @@ module.exports = {
 
 	app,
 	start,
-	runWatchdog,
+	startWatchdogMonitor,
 	getSocket,
 	clearProxyCache,
 

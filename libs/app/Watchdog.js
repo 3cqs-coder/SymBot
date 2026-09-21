@@ -24,11 +24,11 @@
 // Twelve built-in checks are registered at the bottom of this file (route_gating, route_gate_strength,
 // capability_integrity, ai_read_only, guide_present, capability_drift, auth_admin_present,
 // orphaned_open_deals, duplicate_open_deals_per_pair, deal_missing_orders, over_privileged_user,
-// default_password). Other modules register their own by calling Watchdog.register(...) — currently
-// ai_learning_drift + tool_schema_parity + tool_guide_coverage (AIClient), schedule_handler_coverage +
-// schedule_heartbeat (Scheduler), recipe_file_integrity (ScheduleRecipes), audit_chain_integrity (Audit),
-// signal_activity_recognizer (SignalActivity), and config_secret_decryptable + db_index_presence +
-// log_secret_scan + data_dir_writable + ip_filter_spoofable (System) — twenty-five checks in all.
+// default_password). Many more are registered by other modules that call Watchdog.register(...) at boot —
+// the AIClient (learning-drift, tool-schema/guide parity, and the answer-integrity family), the Scheduler
+// (handler coverage, shipped-recipe handler coverage, heartbeat, backup health), ScheduleRecipes, Audit,
+// SignalActivity, and System (secret, index, disk and IP-filter checks). Each module owns and documents
+// its own; the authoritative catalog of what every finding means and how to fix it lives in Diagnostics.js.
 
 const fs = require('fs');
 const path = require('path');
@@ -105,10 +105,13 @@ async function run(shareData, context) {
 			// in Access Control → Audit Log alongside the individual findings — parity with the clean-run ok.
 			audit('watchdog', 'watchdog.summary', String(checks.length), failedChecks + ' check(s) with finding(s), ' + passedChecks + ' passed' + label);
 		}
-		else {
+		else if (!context.periodic) {
+			// Boot / on-demand run: confirm the clean sweep in the log and audit trail.
 			logger('Watchdog' + label + ': all integrity checks passed (' + checks.length + ' checks).', true);
 			audit('watchdog', 'watchdog.ok', String(checks.length), 'startup integrity checks passed' + label);
 		}
+		// A periodic (continuous-monitoring) run that finds nothing stays silent — it reports only when there is
+		// a finding, so ongoing monitoring never floods the log or audit trail with routine all-clear entries.
 	}
 	catch (e) {}
 
@@ -146,16 +149,26 @@ register('capability_integrity', function () {
 });
 
 // 3. AI read-only invariant — no registered AI tool may have a mutating-sounding name (the AI must
-// never be able to place/modify a trade). `explore` is the allowed read-only orchestrator.
+// never be able to place/modify a trade). `explore` is the allowed read-only orchestrator. The list covers the
+// trade-mutation vocabulary (place/modify/execute/submit plus money movement) on top of the original set, and
+// matching is case-insensitive, so a future tool like `Place_Order` or `execute_trade` is caught even though
+// the invariant holds by construction today. Deliberately EXCLUDED: `open` and `trade` — those are nouns in
+// legitimate read-only tools (`get_open_deals`, `list_open_deals`, a `trade_history` reader), and a genuinely
+// mutating "open a deal" tool would already trip `create`/`start`, so including them would only false-positive.
 const MUTATING_SEGMENTS = new Set([
 	'create', 'update', 'delete', 'close', 'cancel', 'pause', 'panic', 'sell', 'buy',
-	'enable', 'disable', 'remove', 'write', 'save', 'add', 'start', 'set', 'stop'
+	'enable', 'disable', 'remove', 'write', 'save', 'add', 'start', 'set', 'stop',
+	'place', 'modify', 'execute', 'submit', 'transfer', 'withdraw', 'deposit', 'liquidate'
 ]);
+// A tool name "looks mutating" if any underscore-separated segment is a mutation verb (case-insensitive).
+// `explore` is the allowed read-only orchestrator. Exported (pure) so the safety net is unit-tested.
+function isMutatingToolName(name) {
+	if (!name || name === 'explore') { return false; }
+	return String(name).toLowerCase().split('_').some(seg => MUTATING_SEGMENTS.has(seg));
+}
 register('ai_read_only', function () {
 	const tools = (AITools && Array.isArray(AITools.TOOLS)) ? AITools.TOOLS : [];
-	const mutating = tools
-		.map(t => (t && t.name) || '')
-		.filter(name => name && name !== 'explore' && String(name).split('_').some(seg => MUTATING_SEGMENTS.has(seg)));
+	const mutating = tools.map(t => (t && t.name) || '').filter(isMutatingToolName);
 	return mutating.length ? { action: 'watchdog.mutating_ai_tool', target: String(mutating.length), detail: mutating.join(', ') } : null;
 });
 
@@ -341,14 +354,13 @@ register('default_password', async function (shareData) {
 
 	const Common  = shareData && shareData.Common;
 	const appData = shareData && shareData.appData;
-	if (!Common || typeof Common.verifyPasswordHash !== 'function' || !appData || !appData.password) { return null; }
-
-	const parts = String(appData.password).split(':');
-	if (parts.length !== 2) { return null; }
+	if (!Common || typeof Common.isDefaultPassword !== 'function' || !appData || !appData.password) { return null; }
 
 	try {
 
-		const isDefault = await Common.verifyPasswordHash({ salt: parts[0], hash: parts[1], data: 'admin' });
+		// One shared predicate (Common.isDefaultPassword) so the watchdog and the boot nudge can't diverge on
+		// what counts as the default password. It never throws (resolves false on any malformed hash).
+		const isDefault = await Common.isDefaultPassword(appData.password);
 
 		return isDefault ? { action: 'watchdog.default_password', target: 'owner', detail: 'the owner login password is still the default — change it before exposing SymBot to any network' } : null;
 	}
@@ -356,4 +368,123 @@ register('default_password', async function (shareData) {
 });
 
 
-module.exports = { register, list, run };
+// 9. Hub instance liveness — is every ENABLED instance actually running? When an instance worker crashes and
+// exhausts its restart attempts (or otherwise dies with nothing rescheduling it), it leaves no live worker and
+// nothing else re-surfaces it: it is silently not trading. Under continuous monitoring this check catches that
+// class of silent failure. Read-only (emits a finding, never acts). Instances mid-restart-backoff are excluded
+// (they are already being handled). No-ops on a standalone instance — the guard requires the Hub's workerMap
+// and supervisor — and fails safe (returns nothing) on any read error, so it can never raise a false alarm.
+register('instance_liveness', async function (shareData) {
+
+	try {
+
+		if (!shareData || !(shareData.workerMap instanceof Map) || !shareData.HubMain
+			|| !shareData.appData || !shareData.appData.hub_config
+			|| !shareData.Common || typeof shareData.Common.getConfig !== 'function') {
+
+			return [];   // not a Hub (or not wired) — nothing to check here
+		}
+
+		const hubData = await shareData.Common.getConfig(shareData.appData.hub_config);
+		const instances = (hubData && hubData.success && hubData.data && Array.isArray(hubData.data.instances))
+			? hubData.data.instances : null;
+
+		if (!instances) { return []; }
+
+		// IDs of instances that currently have a live worker.
+		const liveIds = new Set();
+		for (const [, info] of shareData.workerMap.entries()) {
+			if (info && info.instance && info.instance.id != null) { liveIds.add(info.instance.id); }
+		}
+
+		// IDs the supervisor is already restarting / backing off — don't flag those.
+		let pending = [];
+		try {
+			if (typeof shareData.HubMain.getScheduledRestartInstanceIds === 'function') {
+				pending = shareData.HubMain.getScheduledRestartInstanceIds();
+			}
+		}
+		catch (e) { /* if we can't read it, err toward not flagging */ }
+
+		return evaluateInstanceLiveness(instances, liveIds, pending);
+	}
+	catch (e) { return []; }   // fail safe — never a false alarm on a read error
+});
+
+
+// Pure liveness decision, factored out (and exported) so it can be unit-tested without a live Hub. Given the
+// configured instances, the set of instance IDs with a live worker, and the IDs currently scheduled for a
+// crash-restart, return a finding for every ENABLED instance that is neither running nor mid-restart. Disabled
+// instances and instances with no id are ignored. No side effects.
+function evaluateInstanceLiveness(instances, liveIds, pendingIds) {
+
+	if (!Array.isArray(instances)) { return []; }
+
+	const live = (liveIds instanceof Set) ? liveIds : new Set(liveIds || []);
+	const pending = (pendingIds instanceof Set) ? pendingIds : new Set(pendingIds || []);
+
+	const findings = [];
+
+	for (const cfg of instances) {
+
+		if (!cfg || cfg.id == null) { continue; }
+		if (cfg.enabled === false) { continue; }   // disabled → not expected to be running
+		if (live.has(cfg.id)) { continue; }         // running
+		if (pending.has(cfg.id)) { continue; }      // mid restart-backoff — being handled
+
+		const name = cfg.name || cfg.id;
+		findings.push({ action: 'watchdog.instance_down', target: String(name),
+			detail: 'enabled instance "' + name + '" has no live worker and is not scheduled for restart — it is not running' });
+	}
+
+	return findings;
+}
+
+
+// ── Autonomous continuous monitor ──────────────────────────────────────────────
+// The watchdog is a general "watch anything" system, so it OWNS its own scheduling here rather than relying on
+// a caller's loop: it runs one verbose sweep at startup and then keeps re-running on a self-unref'd interval for
+// the life of the process. A periodic sweep is QUIET on a clean run (reports only findings) so ongoing
+// monitoring never floods the log or audit trail. Everything is best-effort and NON-BLOCKING — run() never
+// rejects, each tick is fire-and-forget with its own catch, and the timer is unref'd so it never holds the
+// process open. Surface-specific inputs (for example the Express `router` the route-gating checks need) are
+// passed through as an opaque `context` value, so this file stays dependency-free and surface-agnostic.
+
+// Default cadence for the continuous sweep; an operator can override it with appData.watchdog_interval_secs (a
+// positive number of seconds). A value <= 0, absent, or non-numeric falls back to the default.
+const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;   // 15 minutes
+
+function resolveIntervalMs(shareData) {
+
+	const secs = (shareData && shareData.appData) ? Number(shareData.appData.watchdog_interval_secs) : NaN;
+
+	return (Number.isFinite(secs) && secs > 0) ? (secs * 1000) : DEFAULT_INTERVAL_MS;
+}
+
+// Run one sweep and never reject. `opts.periodic` marks a quiet continuous sweep; omit it (or pass false) for
+// the verbose boot / on-demand run. `context` is merged with the periodic flag and passed to run().
+function runOnce(shareData, context, opts) {
+
+	opts = opts || {};
+
+	const ctx = Object.assign({}, context || {}, { periodic: !!opts.periodic });
+
+	return Promise.resolve(run(shareData, ctx)).catch(function () {});
+}
+
+// Run the verbose boot sweep and arm the continuous, quiet monitor. `context` carries per-surface inputs such
+// as { router, label }. Returns the boot run's promise so a caller may await the first sweep; the interval keeps
+// running afterward. Call once per surface at startup.
+function startMonitor(shareData, context) {
+
+	const boot = runOnce(shareData, context, { periodic: false });
+
+	const timer = setInterval(function () { runOnce(shareData, context, { periodic: true }); }, resolveIntervalMs(shareData));
+
+	if (timer && typeof timer.unref === 'function') { timer.unref(); }
+
+	return boot;
+}
+
+
+module.exports = { register, list, run, runOnce, startMonitor, resolveIntervalMs, DEFAULT_INTERVAL_MS, evaluateInstanceLiveness, isMutatingToolName };

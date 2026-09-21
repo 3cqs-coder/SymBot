@@ -19,28 +19,10 @@
 		onReload: function() { getActiveDeals(); }
 	});
 
-	const actionButtons = {
-		'cancel': {
-			'button': '<span class="pill-btn pill-danger" title="Cancel deal"><span class="icon icon-cancel" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-			'tooltip': 'Cancel deal'
-		},
-		'panic': {
-			'button': '<span class="pill-btn" title="Close deal"><span class="icon icon-close" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-			'tooltip': 'Close deal'
-		},
-		'pause': {
-			'button': '<span class="pill-btn pill-warn" title="Pause deal"><span class="icon icon-pause" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-			'tooltip': 'Pause deal'
-		},
-		'resume': {
-			'button': '<span class="pill-btn pill-warn" title="Resume deal"><span class="icon icon-resume" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-			'tooltip': 'Resume deal'
-		},
-		'stop': {
-			'button': '<span class="pill-btn pill-danger" title="Stop bot"><span class="icon icon-stop" style="width:13px;height:13px;pointer-events:none;"></span></span>',
-			'tooltip': 'Stop bot'
-		}
-	};
+	// Deal action pills — the shared definition (SymBot.UI.actionButtons), so this view and the instance
+	// Active Deals view render identical, keyboard-operable, screen-reader-named pills and can never drift.
+	// This view renders only cancel/panic/pause/resume/stop; the extra keys are harmless.
+	const actionButtons = SymBot.UI.actionButtons();
 
 	const convertBoolean = new Function('return ' + `<%- convertBoolean %>`)();
 
@@ -92,7 +74,7 @@
 			buttons: {
 				formSubmit: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #d80f08;">Close Deal</div>',
+					text: '<div style="color: var(--color-danger);">Close Deal</div>',
 					action: function() {
 
 						const confirmNum = this.$content.find('#confirmNum').val();
@@ -108,7 +90,7 @@
 				},
 				cancel: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #000000;">Cancel</div>',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
 					action: function() { setReloadTimeout(); }
 				}
 			},
@@ -136,11 +118,11 @@
 			useBootstrap: false,
 			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Cancel deal ' + dealId + '?<br><br>' +
 				'This will cancel the deal without selling assets already bought.<br><br>' +
-				'<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check to confirm <span style="color: #d80f08;">CANCEL</span> deal</b></div>',
+				'<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check to confirm <span style="color: var(--color-danger);">CANCEL</span> deal</b></div>',
 			buttons: {
 				formSubmit: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #d80f08;">Cancel Deal</div>',
+					text: '<div style="color: var(--color-danger);">Cancel Deal</div>',
 					action: function() {
 
 						if (!$('#confirmBox').prop('checked')) {
@@ -154,7 +136,7 @@
 				},
 				cancel: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #000000;">Cancel</div>',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
 					action: function() { setReloadTimeout(); }
 				}
 			},
@@ -172,7 +154,7 @@
 		// so a maintainer resuming an automatically-paused deal from the Hub gets the same warning.
 		const pauseInfo = SymBot.UI.systemPauseInfo(pauseReason || '');
 		const systemWarning = pauseInfo.isSystem
-			? '<div style="font-size: var(--fs-body); padding: 8px; margin-bottom: 10px; background: rgba(255,140,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+			? '<div style="font-size: var(--fs-body); padding: 8px; margin-bottom: 10px; background: var(--color-warning-soft); border-left: 3px solid var(--color-warning); border-radius: 2px;">' +
 			  '<b>⚠ System paused:</b> This deal was automatically paused by the system due to ' + pauseInfo.description + '. ' +
 			  'Review the situation before resuming manually.</div>'
 			: '';
@@ -187,12 +169,12 @@
 				'<form action="" style="display: inline;">' +
 				'<input id="dealPauseBuy" type=checkbox class="form-field"> &nbsp; <b>Pause Buy</b><br>' +
 				'<input id="dealPauseSell" type=checkbox class="form-field"> &nbsp; <b>Pause Sell</b><br><br>' +
-				'<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check to confirm <span style="color: #d80f08;">PAUSE / RESUME</span></b>' +
+				'<input type="checkbox" id="confirmBox" class="form-field" style="width: 20px;" /> <b>Check to confirm <span style="color: var(--color-danger);">PAUSE / RESUME</span></b>' +
 				'</form></div>',
 			buttons: {
 				formSubmit: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #d80f08;">Pause / Resume Deal</div>',
+					text: '<div style="color: var(--color-danger);">Pause / Resume Deal</div>',
 					action: function() {
 
 						if (!$('#confirmBox').prop('checked')) {
@@ -209,7 +191,7 @@
 				},
 				cancel: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #000000;">Cancel</div>',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
 					action: function() { setReloadTimeout(); }
 				}
 			},
@@ -242,7 +224,7 @@
 			buttons: {
 				ok: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #d80f08;">Disable Bot</div>',
+					text: '<div style="color: var(--color-danger);">Disable Bot</div>',
 					action: function() {
 
 						botAction(instanceId, 'bot_disable', botId, SymBot.UI.esc(botName) + ' disabled');
@@ -250,7 +232,7 @@
 				},
 				cancel: {
 					btnClass: 'btn-default',
-					text: '<div style="color: #000000;">Cancel</div>',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
 					action: function() { setReloadTimeout(); }
 				}
 			}
@@ -357,7 +339,10 @@
 
 			activeDeals++;
 
-			// Deal data error handling
+			// Deal data error handling. A row that has held a data error past the grace window is still shown,
+			// but flagged so it gets the same amber data-error row tint as the instance Active Deals view.
+			let hasDataError = false;
+
 			if (isNaN(deal['info']['deal_count']) || (dealError != undefined && dealError != null && dealError != '')) {
 
 				const maxSec = 30;
@@ -374,6 +359,7 @@
 					if (diffSec <= maxSec) continue;
 
 					dealDataErrors++;
+					hasDataError = true;
 				}
 			}
 			else {
@@ -449,7 +435,7 @@
 			});
 
 			contentArr.push(
-				'<tr style="background-color: ' + (isSystemPaused ? 'rgba(255,140,0,0.22)' : '') + ';" data-dealid="' + dealId + '" data-pair="' + SymBot.UI.esc(deal['pair']) + '" data-instanceid="' + instanceId + '" data-botid="' + botId + '" data-botname="' + SymBot.UI.esc(botName) + '" data-exchange="' + SymBot.UI.esc(config['exchange'] || '') + '">' +
+				'<tr style="background-color: ' + SymBot.UI.dealRowBackground({ isSystemPaused: isSystemPaused, hasDataError: hasDataError }) + ';" data-dealid="' + dealId + '" data-pair="' + SymBot.UI.esc(deal['pair']) + '" data-instanceid="' + instanceId + '" data-botid="' + botId + '" data-botname="' + SymBot.UI.esc(botName) + '" data-exchange="' + SymBot.UI.esc(config['exchange'] || '') + '">' +
 				healthCell +
 				'<td>' + SymBot.UI.esc(instanceName) + '</td>' +
 				'<td>' + SymBot.UI.esc(botName) + '</td>' +
@@ -479,7 +465,7 @@
 			msgBox += '<div>WARNING: ' + dealDataErrors + ' deal(s) have errors or invalid data.</div>';
 		}
 
-		$('#msgBox').html(msgBox ? '<div style="color: #386ec2;">' + msgBox + '</div>' : '');
+		$('#msgBox').html(msgBox ? '<div style="color: var(--link-color);">' + msgBox + '</div>' : '');
 		$('#hubDeals tbody').empty().append(contentArr.join(''));
 
 		// Show the table only when there are rows to display; otherwise show a
@@ -687,7 +673,7 @@ $(document).ready(function() {
 
 				<span class="viewSettings">
 					<select id="hubRefreshInterval" class="form-field" style="width: auto; cursor: pointer;" title="Refresh interval"></select>
-					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
+					<span id="botDealSelectorShow" class="viewIconBtn" role="button" tabindex="0" aria-label="Choose columns" title="Choose columns"><span class="icon icon-columns" style="width:13px;height:13px;pointer-events:none;"></span></span>
 				</span>
 			</div>
 

@@ -132,7 +132,13 @@ async function viewCreateUpdateBot(req, res, botId) {
 
 	const isSignalBot = buildIsSignalBot(botData);
 
-	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'botData': botData, 'errorData': errMsg, 'startConditionString': startConditionString, 'startConditionSubString': startConditionSubString, 'symbolString': symbolString, 'activeChecked': activeChecked, 'signalAlerts': signalAlerts, 'apiToken': (shareData.appData.api_token || ''), 'webhookEnabled': (shareData.appData.webhook_enabled ? true : false), 'isSignalBot': isSignalBot } );
+	// The webhook token is a live credential — with webhooks enabled it can open, pause and close deals. Only
+	// hand it to a caller who can write settings (owner/editors), never a read-only user, so it cannot be read
+	// from this page's source and used to drive trades past that role. Mirrors the /config token gating; an
+	// empty token is simply not emitted by the signal-bot alerts partial.
+	const canSeeToken = !!(shareData.Authz && typeof shareData.Authz.can === 'function' && shareData.Authz.can(req.principal, 'settings.write'));
+
+	res.render( 'strategies/DCABot/DCABotCreateUpdateView', { 'formAction': formAction, 'appData': shareData.appData, 'botUpdate': botUpdate, 'botData': botData, 'errorData': errMsg, 'startConditionString': startConditionString, 'startConditionSubString': startConditionSubString, 'symbolString': symbolString, 'activeChecked': activeChecked, 'signalAlerts': signalAlerts, 'apiToken': (canSeeToken ? (shareData.appData.api_token || '') : ''), 'webhookEnabled': (shareData.appData.webhook_enabled ? true : false), 'isSignalBot': isSignalBot } );
 }
 
 
@@ -664,6 +670,10 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 
 	const days = 1;
 	const maxResults = 100;
+	// Even when a date range is supplied, cap the result set so a very wide range on a long, busy history can
+	// never load an unbounded number of hydrated deals into memory at once. Newest-first, so the cap keeps the
+	// most recent deals in range. Generous enough that normal use is never truncated.
+	const maxRangeResults = 5000;
 
 	let fromDate = req.query.from;
 	let toDate = req.query.to || fromDate;
@@ -687,6 +697,7 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 		const dateTo = new Date(new Date(`${toDate}T00:00:00${timeZoneOffset}`).getTime() + 86400000);
 
 		query['sellData.date'] = { '$gte': dateFrom, '$lt': dateTo };
+		queryOptions['limit'] = maxRangeResults;
 	}
 
 	if (botId && botId !== 'Default') {
@@ -882,11 +893,13 @@ async function apiShowDeal(req, res, dealId, sendResponse = true) {
 		const updated = dealDataDb['updatedAt'];
 		const sellData = dealDataDb['sellData'];
 
-		const dealTracker = await shareData.DCABot.getDealTracker();
+		// Clone only THIS deal's tracker entry, not the whole tracker — getDealTracker(dealId) returns just the
+		// one deal (with .info), avoiding a full deep-clone of every active deal to read a single price.
+		const dealTracker = await shareData.DCABot.getDealTracker(dealId);
 
-		if (dealTracker[dealId] != undefined && dealTracker[dealId] != null) {
+		if (dealTracker != undefined && dealTracker != null && dealTracker['info'] != undefined) {
 
-			priceLast = dealTracker[dealId]['info']['price_last'];
+			priceLast = dealTracker['info']['price_last'];
 		}
 
 		if (sellData != undefined && sellData != null) {
@@ -937,7 +950,26 @@ async function apiGetActiveDeals(req, res, sendResponse = true) {
 
 	let active = body.active;
 
-	const deals = await shareData.DCABot.getActiveDeals(active);
+	// Guard the fetch so a rejection can never leave the request hanging (the browser polls this every few
+	// seconds; an un-answered response would hang that poll until the client times out). Display-only path.
+	let deals;
+
+	try {
+
+		deals = await shareData.DCABot.getActiveDeals(active);
+	}
+	catch (e) {
+
+		shareData.Common.logger('apiGetActiveDeals failed: ' + ((e && e.message) ? e.message : e));
+
+		if (sendResponse) {
+
+			if (!res.headersSent) { res.status(500).send({ date: new Date(), error: 'Unable to load active deals' }); }
+			return;
+		}
+
+		return { date: new Date(), data: [], circuit_breaker: null, portfolio: null };
+	}
 
 	const cbActive = shareData.appData.circuit_breaker_active || null;
 	const cbClearsAt = shareData.appData.circuit_breaker_clears_at || null;
@@ -2693,38 +2725,83 @@ async function apiStartDeal(req, res, sendResponse = true) {
 
 	if (startDelayConfig != undefined && startDelayConfig != null) {
 
-		const startId = await shareData.DCABot.startDelay({ 'config': startDelayConfig, 'delay': startDelaySec, 'notify': false });
+		const startResult = await shareData.DCABot.startDelay({ 'config': startDelayConfig, 'delay': startDelaySec, 'notify': false });
+		const startId = startResult && startResult.startId;
+		const cooldownMs = (startResult && Number(startResult.cooldownMs)) || 0;
 
-		// Poll until the startDealTracker entry is removed, which confirms the
-		// deal has been committed to the database and entered the deal tracker.
-		// Timeout after 30 seconds to avoid hanging the response indefinitely.
-		const maxWaitMs  = 30000;
-		const pollMs     = 250;
-		const startedAt  = Date.now();
+		// The response poll window. A start deferred by a pair cooldown for LONGER than this cannot commit before
+		// we must answer, so it needs its own honest report rather than a poll that times out and looks successful.
+		const maxWaitMs = 30000;
+		const pollMs    = 250;
 
-		while (Date.now() - startedAt < maxWaitMs) {
+		if (!startResult || startResult.success === false) {
 
-			const trackerData = await shareData.DCABot.getStartDealTracker(startId);
+			// Synchronous rejection (queue not ready, or the pairMax fast pre-check). There is no queued task to
+			// poll for, so report the reason now (this also avoids a needless 30s wait on a start that was already
+			// refused up front).
+			success = false;
+			msg = (startResult && startResult.data) ? startResult.data : 'Deal start was rejected';
+		}
+		else if (startId == undefined || startId == null) {
 
-			if (trackerData == undefined || trackerData == null) {
+			// Accepted but no tracking id came back — nothing to correlate; report honestly rather than a false success.
+			success = false;
+			msg = 'Deal start did not return a tracking id';
+		}
+		else if (cooldownMs > maxWaitMs) {
 
-				// Start tracker removed — deal is live. Find the dealId from meta.
-				const dealTracker = await shareData.DCABot.getDealTracker();
+			// Accepted, but this pair is still in cooldown and the start is deferred until the cooldown elapses —
+			// longer than this response can wait. Report the deferral honestly instead of polling to a false success.
+			// The deferred start is still attempted (and re-gated by canStartDeal) when the cooldown ends.
+			success = false;
+			msg = 'Pair is in cooldown; the deal start is deferred until the cooldown elapses (' + Math.ceil(cooldownMs / 1000) + 's remaining)';
+		}
+		else {
 
-				if (dealTracker && typeof dealTracker === 'object') {
+			// Poll until the startDealTracker entry is removed, which confirms the
+			// deal has been committed to the database and entered the deal tracker.
+			// Timeout after the window above to avoid hanging the response indefinitely.
+			const startedAt  = Date.now();
 
-					dealId = Object.keys(dealTracker).find(id => dealTracker[id].meta?.start_id === startId);
+			while (Date.now() - startedAt < maxWaitMs) {
+
+				const trackerData = await shareData.DCABot.getStartDealTracker(startId);
+
+				if (trackerData == undefined || trackerData == null) {
+
+					// Start tracker removed. Either the deal is live (find its dealId from meta) or the queued start
+					// was rejected/failed and cleared the tracker with no deal.
+					const dealTracker = await shareData.DCABot.getDealTracker();
+
+					if (dealTracker && typeof dealTracker === 'object') {
+
+						dealId = Object.keys(dealTracker).find(id => dealTracker[id].meta?.start_id === startId);
+					}
+
+					if (dealId) {
+
+						msg = { 'deal_id': dealId };
+					}
+					else {
+
+						// No live deal for this startId. A recorded rejection reason is POSITIVE evidence the start was
+						// blocked (blacklist, pairMax, global pair limit, deal already active, circuit breaker, inactive
+						// bot, etc.) — report it as a failure instead of a false success. Its ABSENCE is not treated as a
+						// failure, so a slow or edge-case success is never mislabeled.
+						const rejected = shareData.DCABot.takeStartDealResult(startId);
+
+						if (rejected && rejected.reason) {
+
+							success = false;
+							msg = rejected.reason;
+						}
+					}
+
+					break;
 				}
 
-				if (dealId) {
-
-					msg = { 'deal_id': dealId };
-				}
-
-				break;
+				await shareData.Common.delay(pollMs);
 			}
-
-			await shareData.Common.delay(pollMs);
 		}
 	}
 
@@ -2752,6 +2829,41 @@ async function calculateOrders(body) {
 	const botConfig = await shareData.Common.getConfig(botConfigFile);
 
 	let botData = botConfig.data;
+
+	// Validate money-adjacent numeric config BEFORE it is copied into the bot or reaches the order math. The
+	// per-deal edit path (apiUpdateDeal) already does this; the create/update path did not, so a bot could be
+	// persisted with a negative take-profit (closes at a guaranteed loss), a negative/NaN order amount, or a
+	// 0%/negative deviation (a degenerate ladder). Only PROVIDED, non-empty values are checked, so omitted
+	// fields still fall back to defaults. On failure, return the standard orders-failure shape — the caller
+	// checks orders.success and neither recomputes nor persists, and surfaces the message to the user.
+	// Fields that must be strictly POSITIVE (a zero or negative value is meaningless for them):
+	const positiveFields = [
+		'dcaTakeProfitPercent', 'firstOrderAmount', 'dcaOrderAmount', 'dcaOrderStepPercent',
+		'dcaOrderSizeMultiplier', 'dcaOrderStepPercentMultiplier'
+	];
+	// Fields that must be NON-NEGATIVE (0 is a valid "off"/no-op), mirroring apiUpdateDeal:
+	const nonNegativeFields = [
+		'dcaStopLossPercent', 'dcaStopLossBreakevenTrigger', 'dcaTrailingStopDistance', 'dcaTrailingActivateProfit'
+	];
+	const provided = (v) => v !== undefined && v !== null && v !== '';
+	const invalidResult = (msg) => {
+		const resObj = { 'active': false, 'pairs': [], 'orders': { 'success': false, 'data': msg }, 'botData': botData };
+		shareData.Common.logger('Bot config validation: ' + msg);
+		return resObj;
+	};
+
+	for (const f of positiveFields) {
+		if (provided(body[f])) { const n = Number(body[f]); if (!Number.isFinite(n) || n <= 0) { return invalidResult('Invalid value for ' + f + ' (must be a number greater than 0)'); } }
+	}
+	for (const f of nonNegativeFields) {
+		if (provided(body[f])) { const n = Number(body[f]); if (!Number.isFinite(n) || n < 0) { return invalidResult('Invalid value for ' + f + ' (must be a number of 0 or more)'); } }
+	}
+	// dcaMaxOrder drives the order-build loop, so it must be a whole number in the safe range — reject a
+	// fractional/negative/out-of-range value clearly rather than silently clamping it (matches apiUpdateDeal).
+	if (provided(body.dcaMaxOrder)) {
+		const n = Number(body.dcaMaxOrder);
+		if (!Number.isInteger(n) || n <= 0 || n > MAX_DCA_ORDERS) { return invalidResult('dcaMaxOrder must be a whole number between 1 and ' + MAX_DCA_ORDERS); }
+	}
 
 	botData.startConditions = [];
 
@@ -3040,7 +3152,7 @@ async function getDashboardData({ duration, timeZoneOffset }) {
 
     // Guard-when-mixed (cross-currency): additionally bucket the money KPIs by the currency each deal's
     // profit is denominated in. Summing profit across different quote currencies into one figure is wrong
-    // and the codebase forbids it elsewhere (DealQuery.profitByCurrency). The existing single totals are
+    // and the codebase forbids it elsewhere (DealQuery buckets by quoteCurrency via collapseProfitFields). The existing single totals are
     // left untouched — for a single-currency instance this resolves to exactly one bucket and the display
     // is unchanged; only when more than one currency is present does the view show a per-currency split.
     const kpi_by_currency = {};   // ccy -> { profit, pl, in_deals }
@@ -3563,7 +3675,13 @@ function isAiEnabled() {
 // Builds the Mongo query for journal/stats from the shared filter params
 // (bot + date range). Used by both the paginated list and the stats summary so
 // the two always describe the same set of deals.
-function buildJournalQuery(reqQuery) {
+// Default look-back for the Journal STATS endpoint when the user has not set an explicit date range. The
+// stats path loads and reduces every matching closed deal in memory, so without a bound it would pull an
+// entire multi-year history on the default page view. The paginated Journal LIST is unaffected (it does not
+// pass a default window and keeps paging through all history a page at a time).
+const JOURNAL_STATS_DEFAULT_DAYS = 90;
+
+function buildJournalQuery(reqQuery, opts) {
 
 	const fromDate = reqQuery.from;
 	const toDate = reqQuery.to || fromDate;
@@ -3581,6 +3699,14 @@ function buildJournalQuery(reqQuery) {
 		const dateTo = new Date(new Date(`${toDate}T00:00:00${timeZoneOffset}`).getTime() + 86400000);
 
 		query['sellData.date'] = { '$gte': dateFrom, '$lt': dateTo };
+	}
+	else if (opts && opts.defaultWindowDays > 0) {
+
+		// No explicit range: bound to the last N days so a caller (the stats endpoint) does not scan the
+		// whole closed-deal history. An explicit from/to always overrides this.
+		const cutoff = new Date(Date.now() - opts.defaultWindowDays * 86400000);
+
+		query['sellData.date'] = { '$gte': cutoff };
 	}
 
 	if (botId && botId !== 'Default' && botId !== 'all') {
@@ -3775,7 +3901,11 @@ async function apiGetJournalStats(req, res) {
 		return;
 	}
 
-	const query = buildJournalQuery(req.query);
+	// Bound to the last JOURNAL_STATS_DEFAULT_DAYS days when the user has not set an explicit date range, so the
+	// default page view does not load and reduce the entire closed-deal history in memory. An explicit from/to
+	// overrides it; the effective default window is surfaced in the response so the UI can say so.
+	const usingDefaultWindow = !req.query.from;
+	const query = buildJournalQuery(req.query, { defaultWindowDays: JOURNAL_STATS_DEFAULT_DAYS });
 
 	// No projection: getProcessedDeals needs the full deal shape (orders, config,
 	// sellData, etc.). This mirrors how the dashboard loads deals for its stats.
@@ -3909,7 +4039,10 @@ async function apiGetJournalStats(req, res) {
 		stats_by_currency: journalStatsByCcy,
 		currencies: journalCurrencies,
 		multi_currency: journalCurrencies.length > 1,
-		currency_symbols: journalCurrencySymbols
+		currency_symbols: journalCurrencySymbols,
+		// When no explicit range was requested, these stats cover only the last N days (not all-time), so the
+		// view can tell the user and offer to widen it with a date range. null when an explicit range was used.
+		default_window_days: usingDefaultWindow ? JOURNAL_STATS_DEFAULT_DAYS : null
 	};
 
 	const payload = { 'date': new Date(), 'moods': JOURNAL_MOODS, 'summary': summary, 'mood_correlation': moodCorrelation };
@@ -4078,6 +4211,7 @@ function viewJournal(req, res) {
 
 module.exports = {
 
+	calculateOrders,   // exported for the config-validation regression test
 	apiStartDeal,
 	apiUpdateBotsExchange,
 	apiGetMarkets,

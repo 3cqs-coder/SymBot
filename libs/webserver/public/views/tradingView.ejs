@@ -22,7 +22,7 @@
 						let tvStudiesObj = {};
 						let tvStudiesSelected = [];
 
-						const tvDataString = <%- JSON.stringify(data.tv_data) %>;
+						const tvDataString = <%- JSON.stringify(data.tv_data).replace(/</g, '\\u003c') %>;
 
 						const tvData = JSON.parse(tvDataString);
 

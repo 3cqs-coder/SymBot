@@ -73,7 +73,7 @@
 		transition: color 120ms ease, border-color 120ms ease;
 	}
 	.ac-tab:hover { color: var(--link-color); }
-	.ac-tab.is-active { color: var(--link-color); border-bottom-color: var(--link-color); font-weight: 600; }
+	.ac-tab.is-active { color: var(--link-color); border-bottom-color: var(--link-color); font-weight: var(--fw-medium); }
 	.ac-panel.is-hidden { display: none; }
 
 	/* Mobile: tabs share the row as equal, comfortably tappable targets. */
@@ -146,8 +146,8 @@
 			<div class="section-title"><span class="icon icon-list"></span> Audit Log</div>
 			<div class="section-desc">Who did what. Every key/user change and state-changing action is recorded.</div>
 			<div class="ac-audit-filters">
-				<input type="text" id="acAuditAction" class="form-field" placeholder="Filter action (e.g. apikey.)" style="width:180px;">
-				<input type="text" id="acAuditActor" class="form-field" placeholder="Filter actor" style="width:150px;">
+				<input type="text" id="acAuditAction" class="form-field" aria-label="Filter audit log by action" placeholder="Filter action (e.g. apikey.)" style="width:180px;">
+				<input type="text" id="acAuditActor" class="form-field" aria-label="Filter audit log by actor" placeholder="Filter actor" style="width:150px;">
 				<button type="button" id="acAuditRefresh" class="btn" style="cursor:pointer;">Refresh</button>
 			</div>
 			<div class="ac-tablewrap">
@@ -356,14 +356,14 @@
 
 	$('#acKeyCreate').on('click', function () {
 		var caps = $('.ac-cap:checked').map(function () { return this.value; }).get();
-		if (!caps.length) { $('#acMsg').css('color', 'var(--warning-color)').text('Pick at least one capability.'); return; }
+		if (!caps.length) { $('#acMsg').css('color', 'var(--color-warning)').text('Pick at least one capability.'); return; }
 		var body = { name: $('#acKeyName').val(), capabilities: caps, signing: $('#acKeySigning').val(), ip_allowlist: splitIpList($('#acKeyIpAllow').val()), ip_blocklist: splitIpList($('#acKeyIpBlock').val()) };
 		var exp = $('#acKeyExpires').val(); if (exp) { body.expires_at = exp; }
 		$('#acMsg').css('color', '').text('Creating…');
 		api('POST', './api/keys', body).done(function (r) {
 			if (r && r.success) { SymBotModal.close(); $('#acSecretValue').text(r.clearKey); SymBotModal.open('acSecretModal'); loadKeys(); }
-			else { $('#acMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
-		}).fail(function (x) { $('#acMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+			else { $('#acMsg').css('color', 'var(--color-warning)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acMsg').css('color', 'var(--color-warning)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
 	});
 
 	$('#acSecretCopy').on('click', function () {
@@ -428,8 +428,8 @@
 		$('#acIpMsg').css('color', '').text('Saving…');
 		api('POST', './api/keys/' + id + '/ip', body).done(function (r) {
 			if (r && r.success) { SymBotModal.close(); loadKeys(); }
-			else { $('#acIpMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
-		}).fail(function (x) { $('#acIpMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+			else { $('#acIpMsg').css('color', 'var(--color-warning)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acIpMsg').css('color', 'var(--color-warning)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
 	});
 
 	$(document).on('click', '.ac-key-expiry', function () {
@@ -443,8 +443,8 @@
 		$('#acExpiryMsg').css('color', '').text('Saving…');
 		api('POST', './api/keys/' + id + '/expiry', { expires_at: value }).done(function (r) {
 			if (r && r.success) { SymBotModal.close(); loadKeys(); }
-			else { $('#acExpiryMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
-		}).fail(function (x) { $('#acExpiryMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+			else { $('#acExpiryMsg').css('color', 'var(--color-warning)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acExpiryMsg').css('color', 'var(--color-warning)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
 	}
 	$('#acExpirySave').on('click', function () { saveExpiry($(this).data('id'), $('#acExpiryInput').val()); });
 	$('#acExpiryClear').on('click', function () { saveExpiry($('#acExpirySave').data('id'), ''); });
@@ -487,8 +487,8 @@
 		var body = { username: $('#acUserName').val(), password: $('#acUserPass').val(), role: $('#acUserRole').val() };
 		$('#acUserModalMsg').css('color', '').text('Adding…');
 		api('POST', './api/users', body).done(function (r) {
-			if (r && r.success) { SymBotModal.close(); loadUsers(); } else { $('#acUserModalMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
-		}).fail(function (x) { $('#acUserModalMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+			if (r && r.success) { SymBotModal.close(); loadUsers(); } else { $('#acUserModalMsg').css('color', 'var(--color-warning)').text('✗ ' + ((r && r.error) || 'Failed')); }
+		}).fail(function (x) { $('#acUserModalMsg').css('color', 'var(--color-warning)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
 	});
 	$(document).on('change', '.ac-user-role', function () {
 		var el = this;
@@ -598,8 +598,8 @@
 			onConfirm: function () {
 				api('POST', './api/sessions/revoke', { sid: sid }).done(function (r) {
 					if (r && r.success) { loadSessions(); }
-					else { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ ' + ((r && r.error) || 'Failed')); }
-				}).fail(function (x) { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+					else { $('#acSessMsg').css('color', 'var(--color-warning)').text('✗ ' + ((r && r.error) || 'Failed')); }
+				}).fail(function (x) { $('#acSessMsg').css('color', 'var(--color-warning)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
 			}
 		});
 	});
@@ -613,8 +613,8 @@
 				$('#acSessMsg').css('color', '').text('Signing out…');
 				api('POST', './api/sessions/revoke-others', {}).done(function (r) {
 					if (r && r.success) { $('#acSessMsg').css('color', '').text('Signed out ' + (r.revoked || 0) + ' other session' + (r.revoked === 1 ? '' : 's') + '.'); loadSessions(); }
-					else { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ Failed'); }
-				}).fail(function (x) { $('#acSessMsg').css('color', 'var(--warning-color)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
+					else { $('#acSessMsg').css('color', 'var(--color-warning)').text('✗ Failed'); }
+				}).fail(function (x) { $('#acSessMsg').css('color', 'var(--color-warning)').text('✗ ' + (x.status === 403 ? 'Not permitted' : 'Request failed')); });
 			}
 		});
 	});

@@ -14,7 +14,7 @@
 										}
 							};
 
-		const exchanges = <%- JSON.stringify(exchanges) %>;
+		const exchanges = <%- JSON.stringify(exchanges).replace(/</g, '\\u003c') %>;
 
 		const numFormatter = new Function('return ' + `<%- numFormatter %>`)();
 
@@ -90,7 +90,7 @@
 
 						if (online[instanceId]) {
 
-							$(this).find('.hub-instance-status-indicator').css('background-color', '#2ecc71');
+							$(this).find('.hub-instance-status-indicator').css('background-color', 'var(--color-success)');
 
 							let m = memByInstance[instanceId];
 							if (m) {
@@ -262,7 +262,7 @@
 
 									ok: {
 											btnClass: 'btn-default',
-											text: '<div style="color: #4aa602;">Add Instance</div>',
+											text: '<div style="color: var(--color-success);">Add Instance</div>',
 											action: function () {
 							
 												addInstance(dataObj);
@@ -271,7 +271,7 @@
 									cancel: {
 
 							 				btnClass: 'btn-default',
-							 				text: '<div style="color: #000000;">Cancel</div>',	
+							 				text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 							 				action: function () {
 											}
 									}
@@ -290,7 +290,7 @@
 
 								ok: {
 										btnClass: 'btn-default',
-										text: '<div style="color: #4aa602;">Update Instances</div>',
+										text: '<div style="color: var(--color-success);">Update Instances</div>',
 										action: function () {
 
 										updateInstances();
@@ -299,7 +299,7 @@
 								cancel: {
 
 										 btnClass: 'btn-default',
-										 text: '<div style="color: #000000;">Cancel</div>',	
+										 text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 										 action: function () {
 										}
 								}
@@ -313,12 +313,12 @@
 						title: false,
 						boxWidth: '50%',
 						useBootstrap: false,
-						content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Restart ' + instanceName + '?</div>',
+						content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Restart ' + SymBot.UI.esc(instanceName) + '?</div>',
 						buttons: {
 
 									ok: {
 											btnClass: 'btn-default',
-											text: '<div style="color: #d80f08;">Restart</div>',
+											text: '<div style="color: var(--color-danger);">Restart</div>',
 											action: function () {
 											
 												restartInstance(instanceId);
@@ -327,7 +327,7 @@
 										cancel: {
 
 									 		btnClass: 'btn-default',
-									 		text: '<div style="color: #000000;">Cancel</div>',	
+									 		text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 									 		action: function () {
 											}
 										}
@@ -895,7 +895,7 @@
 
 							const data = botConfigMatches[i];
 
-							data.this.css('background-color', '#B78225');
+							data.this.css('background-color', 'var(--color-warning)');
 
 							console.log('Bot config match found for instance: ' + data.instance_id);
 						}
@@ -970,17 +970,17 @@
 					boxWidth: '50%',
 					useBootstrap: false,
 					content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' +
-						'<b style="color: #d80f08;">Remove ' + instanceName + ' from Hub?</b><br><br>' +
-						'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,160,0,0.15); border-left: 3px solid #ffa000; border-radius: 2px;">' +
+						'<b style="color: var(--color-danger);">Remove ' + SymBot.UI.esc(instanceName) + ' from Hub?</b><br><br>' +
+						'<div style="font-size: var(--fs-body); padding: 8px; background: var(--color-warning-soft); border-left: 3px solid var(--color-warning); border-radius: 2px;">' +
 						'The instance will be shut down and removed from Hub. Its config files and database will <b>not</b> be deleted.' +
 						'</div><br><br>' +
-						'Type <b>' + instanceName + '</b> to confirm: ' +
+						'Type <b>' + SymBot.UI.esc(instanceName) + '</b> to confirm: ' +
 						'<br><input type="text" id="removeConfirmName" class="form-field" style="width: 100%; margin-top: 6px; box-sizing: border-box;" required />' +
 						'</div>',
 					buttons: {
 						remove: {
 							btnClass: 'btn-default',
-							text: '<div style="color: #d80f08;">Remove from Hub</div>',
+							text: '<div style="color: var(--color-danger);">Remove from Hub</div>',
 							action: function() {
 
 								const typed = this.$content.find('#removeConfirmName').val().trim();
@@ -996,7 +996,7 @@
 						},
 						cancel: {
 							btnClass: 'btn-default',
-							text: '<div style="color: #000000;">Cancel</div>',
+							text: '<div style="color: var(--color-neutral);">Cancel</div>',
 							action: function() {}
 						}
 					},
@@ -1068,12 +1068,12 @@
 				<div class="contentHeaderBox">
 					<b id="headerText" class="contentHeader">Hub Instance Manager</b>
 					<span class="viewSettings">
-						<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
+						<span id="botDealSelectorShow" class="viewIconBtn" role="button" tabindex="0" aria-label="Choose columns" title="Choose columns"><span class="icon icon-columns" style="width:13px;height:13px;pointer-events:none;"></span></span>
 					</span>
 				</div>
 				<!-- Add New Instance Form -->
 				<div style="margin: 12px 0 0 0;">
-					<button id="toggle-add-form" type="button" class="hub-primary-btn" style="width: auto; padding: 5px 14px; font-size: 1.1rem;">+ Add Instance</button>
+					<button id="toggle-add-form" type="button" class="hub-primary-btn" style="width: auto; padding: 5px 14px; font-size: var(--fs-subhead);">+ Add Instance</button>
 				</div>
 				<div class="hub-add-instance-form" id="add-instance-form-wrapper" style="display: none; text-align: left; width: 100%; max-width: 600px; margin: 16px 0 0 0;">
 					<form class="hub-form" action="" method="POST">
@@ -1237,14 +1237,14 @@
 										</td>
 										<td nowrap>
 											<span id="loginButton" style="display: inline-block; margin-right: 5px;">
-												<button class="hub-primary-btn" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-login" style="width:13px;height:13px;"></span></button>
+												<button class="hub-primary-btn" aria-label="Log in to instance" title="Log in" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-login" style="width:13px;height:13px;" aria-hidden="true"></span></button>
 											</span>
 
 											<span id="restartButton" style="display: inline-block; margin-right: 5px;">
-												<button class="hub-stop-btn" id="restartInstance" data-instanceid="<%= config.id %>" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-restart" style="width:13px;height:13px;"></span></button>
+												<button class="hub-stop-btn" id="restartInstance" data-instanceid="<%= config.id %>" aria-label="Restart instance" title="Restart" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-restart" style="width:13px;height:13px;" aria-hidden="true"></span></button>
 											</span>
 											<span style="display: inline-block; margin-right: 5px;">
-												<button class="hub-remove-btn" id="removeButton" title="Remove from Hub" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-cancel" style="width:13px;height:13px;pointer-events:none;"></span></button>
+												<button class="hub-remove-btn" id="removeButton" aria-label="Remove from Hub" title="Remove from Hub" style="display:flex;align-items:center;justify-content:center;"><span class="icon icon-cancel" style="width:13px;height:13px;pointer-events:none;" aria-hidden="true"></span></button>
 											</span>
 											
 											<span class="hub-toggle-cell">

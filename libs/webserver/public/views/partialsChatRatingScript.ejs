@@ -14,7 +14,7 @@ window.SymBotChatRating = window.SymBotChatRating || {
 
 		var send = function(rating) {
 			$.ajax({ type: 'POST', url: './api/ai/learning/rate', contentType: 'application/json', data: JSON.stringify({ id: id, rating: rating }) }).always(function(){});
-			$rate.css('opacity', '0.5').html('<span style="font-size:0.75rem;">Thanks for the feedback</span>');
+			$rate.css('opacity', '0.5').html('<span style="font-size:var(--fs-micro);">Thanks for the feedback</span>');
 		};
 
 		$('<span title="Helpful" style="cursor:pointer;">👍</span>').on('click', function(){ send(1); }).appendTo($rate);

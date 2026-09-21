@@ -1,0 +1,18 @@
+{
+  "core/drawdown-sentinel": {
+    "version": "1.0",
+    "hash": "b22a6f957593f0f8"
+  },
+  "core/performance-report": {
+    "version": "1.0",
+    "hash": "de1bf359156de581"
+  },
+  "core/resource-sentinel": {
+    "version": "1.1",
+    "hash": "1fe51906d19898e1"
+  },
+  "core/watchdog-error-scanner": {
+    "version": "1.1",
+    "hash": "149663d2e86133cc"
+  }
+}

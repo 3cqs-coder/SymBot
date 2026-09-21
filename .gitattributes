@@ -1,0 +1,17 @@
+# Shape the published source archive. GitHub builds the /archive/*.zip download and the release source
+# tarballs with `git archive`, which honors `export-ignore`, and that archive is exactly what SymBot's
+# self-updater downloads and installs. Paths marked below stay in the repository — so continuous
+# integration, the pre-commit hook, and anyone who clones still have them — but they are left OUT of the
+# distributed archive, so a running instance's upgrade never installs files the runtime does not need. A
+# fresh `git clone` is unaffected and still contains everything.
+#
+# This is kept in step with the Docker build's .dockerignore so the self-update install and the Docker image
+# agree on what ships. For the archive to be shaped this way, .gitattributes must be committed and present at
+# the release tag.
+#
+# scripts/ is intentionally KEPT in the archive: run-tests.js is written to exit gracefully with "no tests
+# bundled" when libs/test/ is absent, so `npm test` / `npm run check` behave (and precheck.js can syntax-check
+# the shipped libs/) on an installed copy. Only the bulk test suite (libs/test/) and dev-only hook/CI dirs are
+# excluded.
+libs/test          export-ignore
+.githooks          export-ignore

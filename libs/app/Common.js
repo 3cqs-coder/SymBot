@@ -127,6 +127,32 @@ function renameWithRetry(doRename, sleep, isWindows, src, dest, attempts) {
 }
 
 
+// Per-file async mutex. Each file path gets its own promise-chain lock so operations on the SAME file run one
+// at a time, while different files never block each other. Keyed by path; the set of files that use it is
+// small and fixed (the config files plus the notification-history file), so the map does not grow unbounded.
+// Two uses today:
+//   - saveConfig wraps its write/rename so a file's writes are atomic and strictly ordered (never interleaved);
+//   - sendNotification wraps the whole history read-modify-write so concurrent notifications can't lose each
+//     other via a stale read.
+// It is deliberately NOT shared with updateConfig's separate RMW chain, so a saveConfig call made from inside
+// that chain cannot deadlock against itself. A prior rejection can't wedge the chain (the next waiter still
+// runs), and the lock is released in .finally() so an error frees it.
+const _fileLockChains = new Map();
+
+function withFileLock(fileName, fn) {
+
+	const prior = _fileLockChains.get(fileName) || Promise.resolve();
+
+	let release;
+	const gate = new Promise((resolve) => { release = resolve; });
+
+	// The next caller waits on this one; a prior rejection must not wedge the chain.
+	_fileLockChains.set(fileName, prior.then(() => gate, () => gate));
+
+	return prior.catch(() => {}).then(() => fn()).finally(() => { release(); });
+}
+
+
 async function saveConfig(fileName, data, updated) {
 
 	let err;
@@ -147,12 +173,31 @@ async function saveConfig(fileName, data, updated) {
 		// Atomic write: serialize to a temp file, then rename over the target. rename() is atomic on the
 		// same filesystem, so a crash mid-write — or a concurrent reader (e.g. the Hub reading an
 		// instance's app.json) — never observes a truncated/torn config. A failed write leaves the
-		// previous good file intact.
+		// previous good file intact. The temp name is UNIQUE per write (pid + time + random) so two
+		// overlapping writers to the same file (e.g. a bot save and a credential re-key both touching
+		// bot.json) never share one intermediate file and cannot publish a half-written config — each
+		// rename is its own atomic publish. The per-file write lock below additionally serializes the
+		// write/rename so the file's writes are strictly ordered, never interleaved.
 		const target = pathRoot + '/config/' + fileName;
-		const tmp = target + '.tmp';
 
-		fs.writeFileSync(tmp, JSON.stringify(data, null, 4));
-		renameWithRetry(fs.renameSync, sleepSync, process.platform === 'win32', tmp, target, 5);
+		// Serialize this file's write/rename against any other in-flight write to the SAME file.
+		await withFileLock(fileName, async () => {
+
+			const tmp = target + '.' + process.pid + '.' + Date.now() + '.' + require('crypto').randomBytes(4).toString('hex') + '.tmp';
+
+			try {
+
+				fs.writeFileSync(tmp, JSON.stringify(data, null, 4));
+				renameWithRetry(fs.renameSync, sleepSync, process.platform === 'win32', tmp, target, 5);
+			}
+			catch (e) {
+
+				// A failure after the temp file was created (e.g. the rename failed) must not leave an orphan
+				// temp behind, since the name is unique and would otherwise accumulate. Best-effort cleanup.
+				try { if (fs.existsSync(tmp)) { fs.unlinkSync(tmp); } } catch (e2) {}
+				throw e;
+			}
+		});
 
 		success = true;
 	} catch (e) {
@@ -166,13 +211,17 @@ async function saveConfig(fileName, data, updated) {
 }
 
 
-// Serialize the whole-file app.json read-modify-write. _updateConfigImpl reads the entire config,
-// mutates it, and writes it back with long awaits in between (secret re-encryption, a live DB
-// connect test, an SFTP test upload). Two overlapping /config saves would otherwise drop each
-// other's fields (last writer wins). This promise-chain mutex makes config saves run one at a time.
+// Serialize whole-file config read-modify-writes (app.json AND bot.json). Each of these reads the entire
+// config, mutates it, and writes it back with long awaits in between (secret re-encryption, a live DB
+// connect test, an SFTP test upload). Two overlapping saves — even across DIFFERENT config entry points
+// (the /config page vs. the Exchange-settings save vs. a password-change re-key) — would otherwise drop
+// each other's fields (last writer wins), including the exchange-credential path. This single promise-chain
+// mutex makes every whole-config save run one at a time. saveConfig's own withFileLock only guards the
+// temp-write+rename, not the surrounding read→mutate→write, so this coarser gate is what prevents the
+// lost update. Config saves are rare and operator-initiated, so serializing them has no practical cost.
 let _configSaveChain = Promise.resolve();
 
-async function updateConfig(req, res) {
+async function withConfigSaveChain(fn) {
 
 	let release;
 	const prior = _configSaveChain;
@@ -182,8 +231,13 @@ async function updateConfig(req, res) {
 	try { await prior; }
 	catch (e) { /* ignore */ }
 
-	try { return await _updateConfigImpl(req, res); }
+	try { return await fn(); }
 	finally { release(); }
+}
+
+async function updateConfig(req, res) {
+
+	return withConfigSaveChain(() => _updateConfigImpl(req, res));
 }
 
 
@@ -1146,7 +1200,21 @@ async function saveData(fileName, data) {
 
 	try {
 
-		fs.writeFileSync(fileName, data);
+		// Atomic write: a unique temp file in the same directory, then rename over the target. rename() is
+		// atomic on the same filesystem, so a crash mid-write never truncates the file (a concurrent reader
+		// sees the previous good version), matching how config files are written.
+		const tmp = fileName + '.' + process.pid + '.' + Date.now() + '.' + require('crypto').randomBytes(4).toString('hex') + '.tmp';
+
+		try {
+
+			fs.writeFileSync(tmp, data);
+			renameWithRetry(fs.renameSync, sleepSync, process.platform === 'win32', tmp, fileName, 5);
+		}
+		catch (e) {
+
+			try { if (fs.existsSync(tmp)) { fs.unlinkSync(tmp); } } catch (e2) {}
+			throw e;
+		}
 	}
 	catch (e) {
 
@@ -1175,10 +1243,19 @@ async function fetchURL(data) {
 		method = 'get';
 	}
 
+	// Node's fetch has NO default timeout, so a hung or half-open remote would leave the caller awaiting
+	// forever (this is used by the 3CQS signal client and the Hub relay). Bound every request with an
+	// AbortController so a stalled endpoint fails cleanly instead of wedging the caller. Callers may pass a
+	// custom data.timeoutMs; the default is a conservative 15s.
+	const timeoutMs = (typeof data['timeoutMs'] === 'number' && data['timeoutMs'] > 0) ? data['timeoutMs'] : 15000;
+	const controller = new AbortController();
+	const timer = setTimeout(() => { controller.abort(); }, timeoutMs);
+
 	const response = await fetch(url, {
 		method: method,
 		headers: headers,
 		body: JSON.stringify(body),
+		signal: controller.signal,
 	})
 	.then(response => {
 
@@ -1190,6 +1267,10 @@ async function fetchURL(data) {
 		errMsg = err;
 
 		return err;
+	})
+	.finally(() => {
+
+		clearTimeout(timer);
 	});
 
 	if (success) {
@@ -1289,6 +1370,10 @@ async function showTradingView(req, res) {
 }
 
 
+// IMPORTANT (trading-tick safety): this is called from the money path (deal open/fill/close, safety orders).
+// It MUST stay effectively non-blocking — every real delivery (Telegram, browser socket, email, history
+// write) is already fire-and-forget internally. Do NOT add a genuine awaited network/file step before the
+// dispatch: the money-path callers await this, so a blocking await here would stall the trading loop.
 async function sendNotification(data) {
 
 	let maxNotifications = 500;
@@ -1325,14 +1410,9 @@ async function sendNotification(data) {
 
 	let obj = { 'date': new Date(), 'type': msgType, 'message': msg };
 
-	// Get notifications
-	let historyArr = [];
-	try { historyArr = await getNotificationHistory(); } catch (e) {}
-	if (!Array.isArray(historyArr)) { historyArr = []; }
-
-	historyArr.push(obj);
-
-	historyArr = historyArr.slice(-maxNotifications);
+	// Persistence to the notification-history file is done at the end of this function, under a per-file lock
+	// and fire-and-forget (see below), so this fire-and-forget caller — which may be on the trading path —
+	// never awaits a history read or write.
 
 	// Resolve which channels this event may reach, from the operator's per-instance `notifications`
 	// preferences (event × channel × min-severity + quiet hours). With no block configured this returns
@@ -1409,8 +1489,23 @@ async function sendNotification(data) {
 		catch (e) {}
 	}
 
-	// Save notifications (best-effort; a write failure must not reject into a fire-and-forget caller).
-	try { saveData(fileName, JSON.stringify(historyArr)); } catch (e) {}
+	// Persist to the notification-history file under a per-file lock so concurrent notifications (a single deal
+	// event commonly emits several) can't lose each other via a stale read-modify-write: each queued task reads
+	// the file AFTER the previous one wrote it. Fire-and-forget and fully guarded — the caller never awaits this
+	// file I/O, and a failure is swallowed so it can never reject into a fire-and-forget (possibly trading-path)
+	// caller. saveData writes atomically (temp + rename), so the direct getNotificationHistory read used
+	// elsewhere never sees a torn file.
+	withFileLock(fileName, async () => {
+
+		let arr = [];
+		try { arr = await getNotificationHistory(); } catch (e) {}
+		if (!Array.isArray(arr)) { arr = []; }
+
+		arr.push(obj);
+		arr = arr.slice(-maxNotifications);
+
+		await saveData(fileName, JSON.stringify(arr));
+	}).catch(() => {});
 }
 
 
@@ -1783,7 +1878,11 @@ function auditEvent(actor, action, target, detail, ip) {
 // without its field name — e.g. inside an exchange error string) and by sensitive FIELD NAME
 // (JSON `"k":"v"` or `k=v`). A cheap trigger test short-circuits the vast majority of lines
 // (price ticks, deal state) so the hot logging path pays almost nothing.
-const SECRET_TRIGGER = /(symb_(?:live|test|auto)_|passphrase|password|secret|api[_-]?key|apitoken|api_token|token_id|private_?key|authorization|bearer|:\/\/[^\s/@]+:[^\s/@]+@|[?&](?:token|key|secret|sig|signature|pass|password|api[_-]?key)=)/i;
+// The trigger MUST include every sensitive FIELD NAME the field-redaction regex below handles, or a line
+// carrying that field is short-circuited here and never reaches the redaction (smtp_pass and bot_token were
+// listed for redaction but missing from this fast-path, so an SMTP password or Telegram bot token in a logged
+// config object leaked unredacted). A cross-check test (WatchdogSystemChecks) keeps the two in agreement.
+const SECRET_TRIGGER = /(symb_(?:live|test|auto)_|passphrase|password|secret|api[_-]?key|apitoken|api_token|token_id|private_?key|smtp_pass|bot_token|authorization|bearer|bot\d{5,}:|:\/\/[^\s/@]+:[^\s/@]+@|[?&](?:token|key|secret|sig|signature|pass|password|api[_-]?key)=)/i;
 
 
 // Recursively remove any object key that begins with '$' (a MongoDB query operator) from user-supplied
@@ -1807,7 +1906,11 @@ function stripMongoOperators(obj, depth) {
 
 	for (const key of Object.keys(obj)) {
 
-		if (key.charCodeAt(0) === 36) {   // '$' — a Mongo operator key has no legitimate place in request input
+		// '$' — a Mongo operator key has no legitimate place in request input. Also drop the
+		// prototype-pollution keys (__proto__, constructor, prototype): none are valid request data, and
+		// stripping them here means a future handler that deep-merges request input into a shared object
+		// can never be poisoned through this ingress. Defense in depth alongside the operator strip.
+		if (key.charCodeAt(0) === 36 || key === '__proto__' || key === 'constructor' || key === 'prototype') {
 
 			delete obj[key];
 		}
@@ -1845,6 +1948,10 @@ function redactSecrets(str) {
 
 	// HTTP bearer tokens.
 	out = out.replace(/\b(Bearer\s+)[A-Za-z0-9._\-]{8,}/gi, '$1[REDACTED]');
+
+	// Telegram bot token, e.g. in an API URL https://api.telegram.org/bot<id>:<token>/sendMessage that a
+	// network error might surface. The <id>:<token> shape has no user:pass@ or query marker, so redact it here.
+	out = out.replace(/\bbot(\d{5,}):[A-Za-z0-9_-]{20,}/g, 'bot$1:[REDACTED]');
 
 	// Sensitive field values in JSON (`"key":"value"`) or key=value / key: value form.
 	out = out.replace(
@@ -1963,7 +2070,7 @@ const MIGRATED_KINDS = new Set(['backups', 'logs']);
 // logs/ dir (its own store is already under data/hub/), so its own writes/retention keep the legacy
 // location. (Only the Hub process carries appData.hub_config; per-instance workers do not.)
 function instanceDataDir(kind) {
-	try { if (shareData.appData && shareData.appData.hub_config) { return pathRoot + '/' + kind; } } catch (e) {}
+	try { if (isHub()) { return pathRoot + '/' + kind; } } catch (e) {}
 	return MIGRATED_KINDS.has(kind) ? (perInstanceRoot() + '/' + kind) : (pathRoot + '/' + kind);
 }
 
@@ -1994,7 +2101,7 @@ function instanceDataDirsAll(kind) {
 // own directory. The Hub, aggregating a migrated kind across per-instance folders, resolves to the EXACT
 // instance folder when a server_id is given (the robust, unambiguous path — a bare "<date>.log" can be held
 // by several instances); with no server_id it falls back to the first basename match across folders (the
-// legacy behaviour, kept so an old link or a still-unique filename still resolves). Both server_id and
+// legacy behavior, kept so an old link or a still-unique filename still resolves). Both server_id and
 // fileName are basename-guarded, so neither can escape the data tree. Returns null if not found.
 function resolveDataFilePath(type, fileName, isHub, serverId) {
 	if (!fileName || fileName !== path.basename(fileName)) { return null; }   // traversal guard (filename)
@@ -2033,10 +2140,9 @@ function logFileName(date, instanceName) {
 	// filename — the directory carries identity and the manifest the display label. Legacy
 	// "<date>-<name>.log" files still list, search and prune fine (all the readers are name-agnostic); only
 	// NEW files use this simplified name.
-	let isHub = false;
-	try { isHub = !!(shareData.appData && shareData.appData.hub_config); } catch (e) {}
-	if (!isHub && instanceName === 'hub') { isHub = true; }   // the Hub's own writer, belt-and-suspenders
-	return isHub ? (date + '-hub.log') : (date + '.log');
+	let hubMode = isHub();
+	if (!hubMode && instanceName === 'hub') { hubMode = true; }   // the Hub's own writer, belt-and-suspenders
+	return hubMode ? (date + '-hub.log') : (date + '.log');
 }
 function logFilePath(date, instanceName) { return logDir() + '/' + logFileName(date, instanceName); }
 
@@ -2066,8 +2172,54 @@ function moveFileAcrossFs(src, dest) {
 
 		if (e && e.code === 'EXDEV') {
 
-			fs.copyFileSync(src, dest);
-			if (fs.statSync(dest).size === fs.statSync(src).size) { fs.unlinkSync(src); }
+			// Cross-device move: copy to a TEMP name first and rename into place only after verifying the size,
+			// so the final destination never holds a truncated file. The migration callers treat an existing
+			// dest as "already migrated" (existsSync → skip), so a partial copy left at the final name would
+			// permanently shadow the good source. On a size mismatch, delete the partial and throw so the
+			// caller logs it and the next boot retries cleanly instead of skipping forever.
+			const tmp = dest + '.tmp-' + process.pid + '-' + Date.now();
+			fs.copyFileSync(src, tmp);
+			if (fs.statSync(tmp).size !== fs.statSync(src).size) {
+				try { fs.unlinkSync(tmp); } catch (e2) {}
+				throw new Error('Cross-device copy of ' + src + ' was incomplete (size mismatch)');
+			}
+			fs.renameSync(tmp, dest);   // same filesystem now → atomic
+			fs.unlinkSync(src);
+		}
+		else { throw e; }
+	}
+}
+
+
+// Async, non-blocking sibling of moveFileAcrossFs for RUNTIME paths (backup/restore) where the file can be
+// large and a synchronous copy would stall the event loop and the trading loop. Same EXDEV-safe semantics:
+// try an atomic rename first, and on a cross-mount move (EXDEV — the Docker case, where temp/, uploads/,
+// backups/ and data/ are separate named volumes) fall back to copy-to-temp + size-verify + rename-into-place
+// + unlink, so the destination never holds a truncated file and the source is removed only after a verified
+// copy. Throws only if even the copy fails, so the caller's try/catch can report it.
+async function moveFileAcrossFsAsync(src, dest) {
+
+	try {
+
+		await fsp.rename(src, dest);
+	}
+	catch (e) {
+
+		if (e && e.code === 'EXDEV') {
+
+			const tmp = dest + '.tmp-' + process.pid + '-' + Date.now();
+			await fsp.copyFile(src, tmp);
+
+			const tmpStat = await fsp.stat(tmp);
+			const srcStat = await fsp.stat(src);
+
+			if (tmpStat.size !== srcStat.size) {
+				try { await fsp.unlink(tmp); } catch (e2) {}
+				throw new Error('Cross-device copy of ' + src + ' was incomplete (size mismatch)');
+			}
+
+			await fsp.rename(tmp, dest);   // same filesystem now → atomic
+			await fsp.unlink(src);
 		}
 		else { throw e; }
 	}
@@ -2465,7 +2617,7 @@ async function recoverRekeyJournal() {
 
 // Display/identity context stored in every artifact manifest (logs AND backups). server_id is the immutable
 // data-identity key; instance_name is the human display label a rename updates (never the filename). Read
-// defensively so a partially-initialised appData can't throw here. Shared by System's backup indexing so the
+// defensively so a partially-initialized appData can't throw here. Shared by System's backup indexing so the
 // two kinds record identity identically.
 function instanceIndexMeta() {
 	const ad = (shareData && shareData.appData) ? shareData.appData : {};
@@ -2488,8 +2640,8 @@ function retainLogs(maxDays, dirOverride) {
 		// odd suffixes like "<date>-.log" that a name quirk once produced — so no log can escape cleanup.
 		// The Hub process shares the flat logs/ folder with other instances' not-yet-migrated leftovers, so
 		// there it must stay strict and prune ONLY its own "<date>-hub.log".
-		const isHub = !!(shareData.appData && shareData.appData.hub_config);
-		const isArtifact = isHub
+		const hubMode = isHub();
+		const isArtifact = hubMode
 			? (n) => /^\d{4}-\d{2}-\d{2}-hub\.log$/.test(n)
 			: isLogArtifact;
 		const deriveEntry = (name) => { const d = name.slice(0, 10); return { date: d, created_utc: d + 'T00:00:00.000Z' }; };
@@ -2501,7 +2653,7 @@ function retainLogs(maxDays, dirOverride) {
 		// max_log_days = 1 anywhere west of UTC. Keep today plus the previous (days-1) local days; because the
 		// cutoff is derived the same local way the filename is, today's date is never below it (days >= 1).
 		// Step back whole days from local NOON (not from Date.now()): anchoring at noon means the ±1h shift on a
-		// DST-transition day can never move the cutoff onto the adjacent local date. JS normalises the day
+		// DST-transition day can never move the cutoff onto the adjacent local date. JS normalizes the day
 		// underflow across month/year boundaries.
 		const t = getDateParts(new Date());
 		const cutoffDate = getDateParts(new Date(Number(t.year), Number(t.month) - 1, Number(t.day) - (days - 1), 12, 0, 0)).date;
@@ -2538,7 +2690,7 @@ function logMonitor() {
 	// manifest is populated from the start, rather than waiting for the first interval hours later.
 	retainLogs(maxDays);
 
-	setInterval(() => {
+	const cleanupTimer = setInterval(() => {
 
 		const sweep = (dir, days, deleteSubdirs, matchFn) => {
 			try { delFiles(dir, days, deleteSubdirs, matchFn); }
@@ -2551,6 +2703,9 @@ function logMonitor() {
 		sweep(pathRoot + '/downloads', 1, true);
 
 	}, (hoursInterval * (60 * 60 * 1000)));
+
+	// Don't let this periodic sweep hold the process open (consistent with every other background timer).
+	if (typeof cleanupTimer.unref === 'function') { cleanupTimer.unref(); }
 }
 
 
@@ -2871,7 +3026,7 @@ async function getSystemHealth() {
 	const attributed = (mem.heapUsed || 0) + (mem.external || 0) + (mem.arrayBuffers || 0);
 
 	// Is this instance a Hub worker (shares the process) or standalone?
-	const isHubWorker = shareData.appData.parent_port != null;
+	const isHubWorker = getParentPort() != null;
 
 	// Uptime from when this instance started.
 	const started = shareData.appData.started ? new Date(shareData.appData.started) : null;
@@ -4188,7 +4343,7 @@ async function verifyLogin(req, res, isHub) {
 
 				if (shareData.HubStore && typeof shareData.HubStore.authenticate === 'function') {
 
-					user = shareData.HubStore.authenticate(username, password);
+					user = await shareData.HubStore.authenticate(username, password);
 				}
 			}
 			else if (shareData.Users && typeof shareData.Users.authenticate === 'function') {
@@ -4324,11 +4479,19 @@ async function verifyLogin(req, res, isHub) {
 }
 
 
-function validateApiKey(key) {
+// Validate a legacy API key. Async and off the event loop (via pbkdf2Async), matching the password path
+// above — a synchronous derivation here would run on EVERY API-key-authenticated request (webhooks/signals
+// included) and briefly stall the loop, amplified by a burst of calls on a shared Hub process. Both callers
+// (AuthMiddleware and the WebSocket auth in the web server) await it.
+async function validateApiKey(key) {
 
 	let data;
 	let hashData;
 	let success = false;
+
+	// Only a non-empty string can be a key. Guard first so a non-string (a malformed caller, or a body that
+	// slipped an object through) fails fast as false instead of reaching the derivation.
+	if (typeof key !== 'string' || key === '') { return success; }
 
 	try {
 		data = shareData.appData.api_key.split(':');
@@ -4343,7 +4506,7 @@ function validateApiKey(key) {
 
 	try {
 
-		hashData = crypto.pbkdf2Sync(key, salt, 1000, 64, 'sha256').toString('hex');
+		hashData = await pbkdf2Async(key, salt, 1000);
 	}
 	catch(e) {}
 
@@ -4424,9 +4587,57 @@ async function sendSocketMsg(data) {
 }
 
 
+// The Hub worker channel (a worker_thread MessagePort) for THIS process, or undefined on a standalone
+// instance / the Hub main thread. It is set at boot on `shareData.appData.parent_port` (see symbot.js);
+// this is the ONE canonical accessor so no caller has to remember the exact property path. Reading the
+// wrong path (`shareData.parent_port`) silently disabled Hub email relay and AI learning/tools relay, so
+// every consumer now goes through here. Never throws.
+function getParentPort() {
+	return (shareData && shareData.appData && shareData.appData.parent_port) || null;
+}
+
+
+// Is THIS process the Hub (as opposed to a standalone instance or a Hub-managed instance worker)? Only the
+// Hub main thread carries appData.hub_config. This is the ONE canonical predicate so the same truth is not
+// re-spelled inline at each call site (where copies can drift). Never throws.
+function isHub() {
+	try { return !!(shareData && shareData.appData && shareData.appData.hub_config); }
+	catch (e) { return false; }
+}
+
+
+// Whether an owner-password hash is still the shipped default ("admin"). Drives the non-blocking "change your
+// default password" UI nudge only — it never gates login, startup, or trading. Returns a boolean and never
+// throws: a malformed hash or any verify glitch resolves to false, so a nudge is never invented. Shared by
+// the instance and the Hub bootstraps so the flag is computed one way in both.
+async function isDefaultPassword(passwordHash) {
+	try {
+		if (typeof passwordHash !== 'string' || passwordHash.indexOf(':') === -1) { return false; }
+		const parts = passwordHash.split(':');
+		return (await verifyPasswordHash({ salt: parts[0], hash: parts[1], data: 'admin' })) === true;
+	}
+	catch (e) { return false; }
+}
+
+
+// Set appData.default_password from the stored password hash. This drives a non-blocking "change your default
+// password" nudge in the UI only — it never gates login, startup, or trading, and is recomputed on a password
+// change so the nudge clears the instant the operator sets their own password. Best-effort: any failure leaves
+// the flag false, so a glitch can never invent a warning. Shared by the instance and Hub entry points so the
+// semantics can't diverge.
+async function resolveDefaultPasswordFlag(appData) {
+	try {
+		appData['default_password'] = await isDefaultPassword(appData['password']);
+	}
+	catch (e) {
+		appData['default_password'] = false;
+	}
+}
+
+
 async function sendParentMsg(data) {
 
-	const parentPort = shareData.appData.parent_port;
+	const parentPort = getParentPort();
 
 	let msg = data['data'];
 	let msgType = data['type'];
@@ -4609,7 +4820,14 @@ async function getBotConfig(req, res) {
 }
 
 
+// Serialized through the shared config-save chain so an Exchange-settings save can't interleave with a
+// /config save or a password re-key and lose fields (see withConfigSaveChain).
 async function updateBotConfig(req, res) {
+
+	return withConfigSaveChain(() => _updateBotConfigImpl(req, res));
+}
+
+async function _updateBotConfigImpl(req, res) {
 
 	let success = false;
 	let dataMessage;
@@ -4740,7 +4958,12 @@ async function updateBotConfig(req, res) {
 					}
 
 					// Flush the exchange connection cache so the new credentials take effect
-					if (shareData.appData.exchanges) shareData.appData.exchanges = {};
+					if (shareData.appData.exchanges) {
+						// Best-effort close of each cached ccxt client's keep-alive agent before flushing the cache,
+						// so old sockets don't linger. Guarded and non-blocking; never affects trading.
+						try { for (const k of Object.keys(shareData.appData.exchanges)) { const ex = shareData.appData.exchanges[k]; if (ex && typeof ex.close === 'function') { Promise.resolve(ex.close()).catch(() => {}); } } } catch (e) {}
+						shareData.appData.exchanges = {};
+					}
 
 					const saveResult = await saveConfig(botConfigFile, cfg);
 
@@ -4781,7 +5004,14 @@ async function updateBotConfig(req, res) {
 }
 
 
+// Serialized through the shared config-save chain (see withConfigSaveChain) so a sandbox toggle can't
+// interleave with another config save and lose fields.
 async function updateBotConfigSandbox(req, res) {
+
+	return withConfigSaveChain(() => _updateBotConfigSandboxImpl(req, res));
+}
+
+async function _updateBotConfigSandboxImpl(req, res) {
 
 	let success = false;
 	let dataMessage;
@@ -4820,7 +5050,11 @@ async function updateBotConfigSandbox(req, res) {
 			else {
 
 				// Flush exchange connection cache
-				if (shareData.appData.exchanges) shareData.appData.exchanges = {};
+				if (shareData.appData.exchanges) {
+					// Best-effort close of each cached ccxt client's keep-alive agent before flushing the cache.
+					try { for (const k of Object.keys(shareData.appData.exchanges)) { const ex = shareData.appData.exchanges[k]; if (ex && typeof ex.close === 'function') { Promise.resolve(ex.close()).catch(() => {}); } } } catch (e) {}
+					shareData.appData.exchanges = {};
+				}
 
 				const modeLabel = sandBox ? 'Sandbox (paper trading)' : 'Live trading';
 				dataMessage = 'Trading mode changed to: ' + modeLabel;
@@ -4957,11 +5191,25 @@ async function uploadAiChatFile(req, res) {
 						workerData: { buffer: ab },
 						transferList: [ab]
 					});
+
+					// A malformed, encrypted, or pathological PDF can make pdf-parse hang or run unbounded. Without
+					// a bound the upload request would never settle and the worker (a full V8 isolate) would leak.
+					// Cap it, and always terminate the worker on every exit path so no zombie thread survives.
+					let settled = false;
+					const finish = (fn, arg) => {
+						if (settled) { return; }
+						settled = true;
+						clearTimeout(timer);
+						worker.terminate();
+						fn(arg);
+					};
+					const timer = setTimeout(() => { finish(reject, new Error('PDF parsing timed out')); }, 60000);
+
 					worker.once('message', msg => {
-						if (msg.success) resolve(msg.text);
-						else reject(new Error(msg.error));
+						if (msg.success) { finish(resolve, msg.text); }
+						else { finish(reject, new Error(msg.error)); }
 					});
-					worker.once('error', reject);
+					worker.once('error', err => { finish(reject, err); });
 				});
 			}
 			else if (ext === '.docx') {
@@ -4980,6 +5228,12 @@ async function uploadAiChatFile(req, res) {
 
 			if (!text) return res.status(400).json({ success: false, error: 'Could not extract text from file' });
 
+			// Cap the retained text so a very large upload can neither bloat the attachment cache nor make the
+			// later keyword scan (AIClient.extractPassage) stall the event loop — which on an instance is shared
+			// with the trading loop. The assistant only ever uses a short passage from this, so ~1 MB is ample.
+			const MAX_ATTACHMENT_TEXT = 1000000;
+			if (text.length > MAX_ATTACHMENT_TEXT) { text = text.slice(0, MAX_ATTACHMENT_TEXT); }
+
 			// Store text server-side — never sent to client
 			if (!shareData.attachmentCache) shareData.attachmentCache = new Map();
 
@@ -4988,7 +5242,10 @@ async function uploadAiChatFile(req, res) {
 			shareData.attachmentCache.set(attachmentId, { name: file.originalname, text });
 
 			// Auto-expire after 1 hour
-			setTimeout(() => shareData.attachmentCache.delete(attachmentId), 60 * 60 * 1000);
+			// Self-expire the cached attachment after an hour; unref'd so this per-upload timer never holds the
+			// process open (consistent with every other timer in the codebase).
+			const attachExpiry = setTimeout(() => shareData.attachmentCache.delete(attachmentId), 60 * 60 * 1000);
+			if (typeof attachExpiry.unref === 'function') { attachExpiry.unref(); }
 
 			res.status(200).json({
 				success:      true,
@@ -5030,6 +5287,7 @@ module.exports = {
 	getSignalConfigs,
 	saveConfig,
 	updateConfig,
+	withConfigSaveChain,   // exported so the config-save serialization invariant can be unit-tested
 	pairBlackListed,
 	getInstanceName,
 	getInstanceLabel,
@@ -5089,6 +5347,7 @@ module.exports = {
 	instanceLabelSync,
 	instanceDataDir,
 	ensureDataDir,
+	moveFileAcrossFsAsync,
 	logDir,
 	logFileName,
 	logFilePath,
@@ -5125,6 +5384,10 @@ module.exports = {
 	retainLogs,
 	sendSocketMsg,
 	sendParentMsg,
+	getParentPort,
+	isHub,
+	isDefaultPassword,
+	resolveDefaultPasswordFlag,
 	getBotConfig,
 	updateBotConfig,
 	updateBotConfigSandbox,

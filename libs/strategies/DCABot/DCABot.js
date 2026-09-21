@@ -297,6 +297,21 @@ let resumeDealTracker = {};
 let balanceTracker = {};
 let exchangeMarkets = {};
 
+// Rejected/failed deal-start outcomes, keyed by startId, so the poller (apiStartDeal) can report WHY a start
+// did not open a deal instead of a false success. requestDealStart runs the authoritative gate on the serial
+// queue AFTER it has returned to the caller, so the rejection reason is only known later. This is REPORTING
+// ONLY — it never affects whether a deal starts. Best-effort and bounded: each entry carries a timestamp, is
+// pruned by age, and is read-and-cleared, so a fire-and-forget caller that never polls cannot leak memory.
+const START_RESULT_TTL_MS = 60000;
+let startDealResults = {};
+
+// Per-bot+pair cooldown deadline (ms epoch). A completed deal's cooldown is enforced HERE instead of by
+// holding the shared deal-start queue for the whole wait — otherwise one pair's multi-minute dealCoolDown
+// head-of-line-blocked new-deal starts for every other pair and bot. Any start for the same bot+pair waits
+// until this deadline (so the pair still cannot open a new deal during its cooldown); other pairs are
+// unaffected. Keyed by botId + '|' + pair; elapsed entries are pruned opportunistically and are harmless.
+let dealCooldownUntil = {};
+
 // Serial queue for all new deal starts — single entry point, single path.
 // Ensures no two deal-creation attempts run concurrently regardless of
 // whether the trigger is an API call, a signal, or an internal ASAP/cooldown.
@@ -5541,6 +5556,10 @@ async function connectExchange(configObj) {
 			});
 		}
 
+		// Best-effort release of the discarded ccxt client's keep-alive HTTP agent before dropping the
+		// reference, so its sockets don't linger until idle-timeout. Guarded and non-blocking — never on the
+		// order path, and a missing/throwing close() must never affect trading.
+		try { const old = shareData.appData.exchanges[exchangeHash]; if (old && typeof old.close === 'function') { Promise.resolve(old.close()).catch(() => {}); } } catch (e) {}
 		delete shareData.appData.exchanges[exchangeHash];
 	}
 
@@ -6063,6 +6082,82 @@ async function deleteStartDealTracker(id) {
 }
 
 
+// Record WHY a deal start was rejected/failed, keyed by startId, for the poller to read back. Called from the
+// deal-start queue task on any non-success path, right before the start tracker is deleted. Prunes stale
+// entries on every write so an outcome that is never read back (a fire-and-forget caller) cannot accumulate.
+function recordStartDealResult(startId, reason) {
+
+	if (startId == undefined || startId == null || startId == '') { return; }
+
+	startDealResults[startId] = {
+		'reason': (reason != undefined && reason != null && reason !== '') ? String(reason) : 'Deal not started',
+		'date': Date.now()
+	};
+
+	const now = Date.now();
+
+	for (const id in startDealResults) {
+
+		if (!startDealResults[id] || (now - startDealResults[id]['date']) > START_RESULT_TTL_MS) {
+
+			delete startDealResults[id];
+		}
+	}
+}
+
+
+// Resolve the effective wait (ms) before a deal-start may be attempted, honoring any active per-pair cooldown,
+// and record a new cooldown when this request is the 'deal complete' auto-reopen. This is what lets the cooldown
+// wait live OUTSIDE the serial deal-start queue: the queue is no longer held for the whole delay (so one pair's
+// multi-minute cooldown cannot head-of-line-block new-deal starts for other pairs/bots), yet a start for a pair
+// STILL in cooldown waits out the remaining time — preserving the pre-existing "no new deal on this pair during
+// its cooldown" behavior. Only the 'deal complete' source carries a real cooldown; other delays are simple
+// staggering and must not create a pair cooldown. Mutates dealCooldownUntil (records the new deadline, prunes
+// elapsed ones). Exported and `now`-injectable for deterministic unit testing.
+function resolveStartDelayMs({ botId, pair, delaySec = 0, source = '', now } = {}) {
+
+	const cdNow = (typeof now === 'number') ? now : Date.now();
+	const key = (botId != undefined && botId != null && pair != undefined && pair != null) ? (botId + '|' + pair) : null;
+
+	if (key && source === 'deal complete' && delaySec > 0) {
+
+		dealCooldownUntil[key] = cdNow + (delaySec * 1000);
+
+		for (const k in dealCooldownUntil) { if (dealCooldownUntil[k] <= cdNow) { delete dealCooldownUntil[k]; } }
+	}
+
+	return Math.max((delaySec > 0 ? delaySec * 1000 : 0), pairCooldownRemainingMs(botId, pair, cdNow));
+}
+
+
+// Read-only: milliseconds remaining on the active per-pair cooldown for this bot+pair (0 if none). Used both to
+// compute the effective start delay and to let the API/poll path report an honest "deferred for cooldown" instead
+// of a false success when the deferral outlasts its response window. Pure, `now`-injectable, no mutation.
+function pairCooldownRemainingMs(botId, pair, now) {
+
+	const cdNow = (typeof now === 'number') ? now : Date.now();
+	const key = (botId != undefined && botId != null && pair != undefined && pair != null) ? (botId + '|' + pair) : null;
+
+	return key ? Math.max(0, (dealCooldownUntil[key] || 0) - cdNow) : 0;
+}
+
+
+// Read-and-clear a recorded rejection outcome for a startId (or null if none). The poller calls this when the
+// start tracker cleared with no live deal: a recorded reason is POSITIVE evidence the start was rejected, so
+// the caller can report an honest failure. Absence means no rejection was recorded (e.g. a normal success),
+// so the caller must NOT infer failure from a null return.
+function takeStartDealResult(startId) {
+
+	if (startId == undefined || startId == null || startId == '') { return null; }
+
+	const result = startDealResults[startId];
+
+	if (result) { delete startDealResults[startId]; }
+
+	return result || null;
+}
+
+
 async function createResumeDealTracker(dealId, botId) {
 
 	if (resumeDealTracker[dealId] == undefined || resumeDealTracker[dealId] == null) {
@@ -6142,7 +6237,63 @@ function buildResumeInfo(deal) {
 }
 
 
+// Short-lived cache for the active-deals DISPLAY payload. getActiveDealsUncached is pure display work: a full
+// deep clone of the live deal tracker plus per-deal normalization and a sort, recomputed from scratch on every
+// call. The /api/deals view polls it about every 5 seconds, multiplied by every open browser tab and every Hub
+// worker poll — all on this instance's single main thread, the same thread the trading loop runs on. A short
+// TTL plus in-flight coalescing collapses concurrent and rapid-repeat polls into ONE computation per window,
+// keeping that recurring synchronous work off the trading thread. Every caller treats the result as read-only
+// (verified), so returning a shared reference is safe. Display-only; it never touches order internals. The Hub
+// deal aggregation uses the same pattern (see libs/app/Hub/Hub.js).
+const ACTIVE_DEALS_CACHE_TTL_MS = 2000;
+let _activeDealsCache = { key: null, at: 0, data: null, inflight: null };
+
 async function getActiveDeals(active) {
+
+	if (active == undefined || active == null || active == '') {
+
+		active = true;
+	}
+
+	const key = String(active);
+	const now = Date.now();
+
+	// Fresh-enough cached payload → serve it.
+	if (_activeDealsCache.key === key && _activeDealsCache.data !== null && (now - _activeDealsCache.at) < ACTIVE_DEALS_CACHE_TTL_MS) {
+
+		return _activeDealsCache.data;
+	}
+
+	// A computation for this key is already running → join it instead of starting a second clone.
+	if (_activeDealsCache.inflight && _activeDealsCache.key === key) {
+
+		return _activeDealsCache.inflight;
+	}
+
+	const p = getActiveDealsUncached(active);
+	_activeDealsCache = { key: key, at: now, data: null, inflight: p };
+
+	try {
+
+		const data = await p;
+
+		// Publish only if this is still the current in-flight computation (a newer key may have superseded it).
+		if (_activeDealsCache.inflight === p) {
+
+			_activeDealsCache = { key: key, at: Date.now(), data: data, inflight: null };
+		}
+
+		return data;
+	}
+	catch (e) {
+
+		if (_activeDealsCache.inflight === p) { _activeDealsCache = { key: null, at: 0, data: null, inflight: null }; }
+		throw e;
+	}
+}
+
+
+async function getActiveDealsUncached(active) {
 
 	let dealsArr = [];
 	let dealsSort = [];
@@ -6182,7 +6333,12 @@ async function getActiveDeals(active) {
 
 		let botId = deal['deal']['botId'];
 		let config = deal['deal']['config'];
-		let info = JSON.parse(JSON.stringify(deal['info']));
+		// `dealTracker` above came from getDealTracker() with no id, which already returns a FULL deep clone of
+		// the live tracker (JSON round-trip). So `deal` — and everything under it — is a private, JSON-normalized
+		// copy; the per-deal fields here are safe to read and mutate directly without re-cloning. Re-cloning
+		// `info` again was redundant work on every poll (this feeds the 5s active-deals view). Behavior is
+		// identical because the source is already a JSON-normalized clone; the live trading tracker is untouched.
+		let info = deal['info'];
 
 		// A just-resumed deal sits in the tracker with empty info until the first live price tick fills it
 		// (that tick waits on the exchange connection, slow/failing on a cold restart). Seed a non-live
@@ -7199,15 +7355,18 @@ async function createDeal(pair, pairMax, dealCount, dealMax, config, orders) {
 // eliminating all race conditions regardless of call origin.
 //
 // delaySec: optional cooldown/stagger delay before the attempt runs.
-// Returns { success, data, startId } where:
-//   success  — true if successfully enqueued, false if queue not initialized
-//   data     — error message if success is false, otherwise null
-//   startId  — ID callers (e.g. apiStartDealProcess) can poll to confirm commit
+// Returns { success, data, startId, cooldownMs } where:
+//   success    — true if successfully enqueued, false if queue not initialized
+//   data       — error message if success is false, otherwise null
+//   startId    — ID callers (e.g. apiStartDealProcess) can poll to confirm commit
+//   cooldownMs — ms remaining on a pre-existing pair cooldown deferring this start (0 if none), so a polling
+//                caller can report an honest "deferred for cooldown" instead of a false success
 async function requestDealStart(config, delaySec = 0, source = '') {
 
 	let success = false;
 	let data    = null;
 	let startId = null;
+	let cooldownMs = 0;   // ms remaining on an active pair cooldown deferring this start (for honest reporting)
 
 	if (!dealStartQueue) {
 
@@ -7250,24 +7409,33 @@ async function requestDealStart(config, delaySec = 0, source = '') {
 			if (pendingForBot > pairMaxFast) {
 
 				deleteStartDealTracker(startId);
-				return { success: false, data: 'pairMax pre-check: too many pending starts', startId: null };
+				return { success: false, data: 'pairMax pre-check: too many pending starts', startId: null, cooldownMs: 0 };
 			}
 		}
 
-		dealStartQueue.enqueue(async () => {
+		// Effective wait BEFORE the gate-and-start work is enqueued. Moving the wait out of the serial queue
+		// stops one pair's cooldown from head-of-line-blocking other pairs/bots, while resolveStartDelayMs keeps
+		// the same-pair cooldown intact (a start for a pair still in cooldown waits out the remainder). cdNow is
+		// shared so the cooldown read and the delay computation see one consistent clock.
+		const cdNow = Date.now();
+
+		// The active pair cooldown that (partly) defers THIS start, captured BEFORE resolveStartDelayMs records a
+		// new one — so it reflects a cooldown already in effect (the case a polling caller must be told about),
+		// not this request's own freshly-set 'deal complete' cooldown. Returned to the caller so a start deferred
+		// past its response window is reported honestly rather than as a false success.
+		cooldownMs = pairCooldownRemainingMs(botIdSnapshot, pairSnapshot, cdNow);
+
+		const effectiveDelayMs = resolveStartDelayMs({ botId: botIdSnapshot, pair: pairSnapshot, delaySec: delaySec, source: source, now: cdNow });
+
+		const doEnqueue = () => dealStartQueue.enqueue(async () => {
 
 			let taskSuccess = false;
 			let taskData    = null;
 
 			try {
 
-				// Apply optional stagger/cooldown delay
-				if (delaySec > 0) {
-
-					await Common.delay(delaySec * 1000);
-				}
-
-				// Wait for any resuming deals before proceeding
+				// The stagger/cooldown wait already elapsed on a timer before this task was enqueued (see below),
+				// so it no longer occupies the serial queue. Wait for any resuming deals before proceeding.
 				await processResumeDealTracker();
 
 				// Use the values snapshotted at enqueue time — never re-read the shared config object here.
@@ -7331,14 +7499,29 @@ async function requestDealStart(config, delaySec = 0, source = '') {
 
 			if (!taskSuccess) {
 
+				// Remember WHY before clearing the tracker, so the poller reports the reason instead of a false
+				// success. Reporting only — does not change the start decision above.
+				recordStartDealResult(startId, taskData);
+
 				deleteStartDealTracker(startId);
 			}
 
 			return { 'success': taskSuccess, 'data': taskData };
 		});
+
+		// Elapse the wait on an unref'd timer (never on the queue). A zero delay enqueues immediately.
+		if (effectiveDelayMs > 0) {
+
+			const t = setTimeout(doEnqueue, effectiveDelayMs);
+			if (t && typeof t.unref === 'function') { t.unref(); }
+		}
+		else {
+
+			doEnqueue();
+		}
 	}
 
-	return { success, data, startId };
+	return { success, data, startId, cooldownMs };
 }
 
 
@@ -8780,7 +8963,8 @@ async function applyConfigData(data) {
 
 // startDelay is a compatibility shim — all work delegated to requestDealStart.
 // External callers (DCABotManager, signals) pass { config, delay, notify }.
-// Returns the startId string directly so apiStartDealProcess polling still works.
+// Returns the full requestDealStart result ({ success, data, startId, cooldownMs }) so the caller can both poll
+// by startId and report a synchronous rejection reason or a cooldown deferral.
 async function startDelay(dataObj) {
 
 	const data   = JSON.parse(JSON.stringify(dataObj));
@@ -8796,7 +8980,11 @@ async function startDelay(dataObj) {
 
 	const result = await requestDealStart(config, delay, 'api/signal');
 
-	return result.startId;
+	// Return the FULL result ({ success, data, startId, cooldownMs }) so the caller can report a synchronous
+	// rejection (queue not ready, or the pairMax fast pre-check) immediately, correlate the async outcome by
+	// startId, and honestly report a start deferred by a pair cooldown. The sole caller (apiStartDeal) is
+	// updated in lockstep.
+	return result;
 }
 
 
@@ -8873,8 +9061,10 @@ async function initApp() {
 	await resumeBots();
 
 	// Prime the balance cache immediately so the portfolio bar
-	// shows correct data on first load rather than waiting 60s
-	getBalanceTracker();
+	// shows correct data on first load rather than waiting 60s. Wrapped in the same fire-and-forget guard as
+	// the periodic call above so a future change that lets it reject can never surface as an unhandled
+	// rejection during trading-engine startup.
+	Promise.resolve(getBalanceTracker()).catch((e) => Common.logger('getBalanceTracker prime error: ' + ((e && (e.stack || e.message)) || e)));
 
 	// Best-effort: contain a possible throw from its early config/secret reads so it can never
 	// surface as an unhandled rejection during trading-engine startup.
@@ -8898,6 +9088,10 @@ module.exports = {
 	stopDeal,
 	createStartDealTracker,
 	deleteStartDealTracker,
+	recordStartDealResult,
+	takeStartDealResult,
+	resolveStartDelayMs,
+	pairCooldownRemainingMs,
 	updateDeal,
 	refreshUpdateDeal,
 	addFundsDeal,

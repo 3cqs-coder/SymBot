@@ -8,9 +8,20 @@
 
 		// Click event for images and titles
 		$('.article-link').on('click', function(e) {
-			const link = $(this).data('link'); // Get the URL from data attribute
-			if (link) {
-				window.open(link, '_blank'); // Open the URL in a new window
+			const link = $(this).data('link'); // Get the URL from data attribute (an RSS-supplied value)
+			// Only ever open http(s) links. The URL comes from an external feed, so guard against a
+			// javascript:/data: scheme slipping through; open in a new tab with noopener.
+			if (link && /^https?:\/\//i.test(String(link))) {
+				window.open(link, '_blank', 'noopener');
+			}
+		});
+
+		// Keyboard access: the title is a role="button" tabindex="0", so open the article on Enter/Space too
+		// (WCAG 2.1.1). Mirrors the click above.
+		$('.article-link').on('keydown', function(e) {
+			if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+				e.preventDefault();
+				$(this).trigger('click');
 			}
 		});
 
@@ -56,7 +67,7 @@
             <b id="headerText" class="contentHeader">Latest News</b>
         </div>
 
-        <input type="text" id="search-input" placeholder="Search articles..." />
+        <input type="text" id="search-input" class="form-field" placeholder="Search articles..." />
 
         <div id="articles-container">
             <% articles.forEach(article => { %>
@@ -71,7 +82,7 @@
                         <% } %>
                     </div>
                     <div class="card-body">
-                        <h5 class="card-title article-link" data-link="<%= article.link %>">
+                        <h5 class="card-title article-link" role="button" tabindex="0" data-link="<%= article.link %>">
                             <%= article.title %>
                         </h5>
                         <p class="card-text"><%= article.description %></p>

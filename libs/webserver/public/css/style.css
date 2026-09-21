@@ -3,7 +3,7 @@
 	font-family: 'Heebo';
 	font-style: normal;
 	font-weight: 300;
-	src: url(https://fonts.gstatic.com/s/heebo/v21/NGS6v5_NC0k9P9H0TbFhsqMA6aw.woff2) format('woff2');
+	src: url(vendor/fonts/heebo-hebrew.woff2) format('woff2');
 	unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
 }
 
@@ -12,7 +12,7 @@
 	font-family: 'Heebo';
 	font-style: normal;
 	font-weight: 300;
-	src: url(https://fonts.gstatic.com/s/heebo/v21/NGS6v5_NC0k9P9H2TbFhsqMA.woff2) format('woff2');
+	src: url(vendor/fonts/heebo-latin.woff2) format('woff2');
 	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -21,7 +21,7 @@
 	font-family: 'Heebo';
 	font-style: normal;
 	font-weight: 400;
-	src: url(https://fonts.gstatic.com/s/heebo/v21/NGS6v5_NC0k9P9H0TbFhsqMA6aw.woff2) format('woff2');
+	src: url(vendor/fonts/heebo-hebrew.woff2) format('woff2');
 	unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
 }
 
@@ -30,7 +30,7 @@
 	font-family: 'Heebo';
 	font-style: normal;
 	font-weight: 400;
-	src: url(https://fonts.gstatic.com/s/heebo/v21/NGS6v5_NC0k9P9H2TbFhsqMA.woff2) format('woff2');
+	src: url(vendor/fonts/heebo-latin.woff2) format('woff2');
 	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -39,7 +39,7 @@
 	font-family: 'Heebo';
 	font-style: normal;
 	font-weight: 600;
-	src: url(https://fonts.gstatic.com/s/heebo/v21/NGS6v5_NC0k9P9H0TbFhsqMA6aw.woff2) format('woff2');
+	src: url(vendor/fonts/heebo-hebrew.woff2) format('woff2');
 	unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
 }
 
@@ -48,7 +48,7 @@
 	font-family: 'Heebo';
 	font-style: normal;
 	font-weight: 600;
-	src: url(https://fonts.gstatic.com/s/heebo/v21/NGS6v5_NC0k9P9H2TbFhsqMA.woff2) format('woff2');
+	src: url(vendor/fonts/heebo-latin.woff2) format('woff2');
 	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -100,12 +100,9 @@
 	--card-pad:     18px 20px;
 	--card-gap:     18px;
 	--label-color:  #7a7a7a;
-	/* Canonical semantic colors (these were previously only referenced as fallbacks;
-	   defining them here makes them the single source of truth). Values match the most
-	   common existing fallback so nothing shifts. */
-	--color-success: #2e9e4f;
-	--color-danger:  #d05050;
-	--color-warning: #d08700;
+	/* Semantic colors (--color-success / --color-danger / --color-warning and their -soft and
+	   -neutral companions) are defined ONCE, in the shell token block further down this file, so
+	   there is a single source of truth for both themes. Do not redeclare them here. */
 	--input-background-color: #ffffff;
 }
 
@@ -128,17 +125,46 @@
 	--body-bg: linear-gradient(to bottom, #4a4a4a 0%, #0d0d0d 100%);
 
 	/* Design tokens — dark theme overrides (only the values that change; the sizes/radii
-	   are inherited from :root). */
+	   are inherited from :root). Semantic colors are overridden once, in the shell dark-theme
+	   token block further down, not here. */
 	--label-color:  #8f8f8f;
-	--color-success: #35c07f;
-	--color-danger:  #ef5b52;
-	--color-warning: #e0a53a;
 	--input-background-color: #1a1a1a;
 }
 
 
 * {
 	box-sizing: border-box;
+}
+
+
+/* Respect the OS "reduce motion" setting. The UI runs several infinite animations (the two spinners, the
+   pulse, the journal spinner, and the AI mascot), which can trigger discomfort for users with vestibular
+   sensitivity. This near-instant, single-iteration reset stops the continuous motion and collapses
+   transitions while leaving the interface fully functional (a spinner simply becomes a static indicator). */
+@media (prefers-reduced-motion: reduce) {
+
+	*, *::before, *::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+
+/* Screen-reader-only text: visually hidden but announced by assistive tech (e.g. a spinner's "Working…"
+   label, or a live-region status line). The standard clip technique — not display:none, which would hide it
+   from screen readers too. */
+.visually-hidden {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 
@@ -149,6 +175,13 @@ html {
 	   expressed in rem/em (or a --fs-* token, which are themselves rem), so changing this one
 	   value rescales the entire UI uniformly. Keep this the ONLY px font-size in the app. */
 	font-size: 12px;
+
+	/* Stop the browser's native pull-to-refresh. The page scrolls the body under a position:fixed
+	   top bar, so content routinely sits at scroll-top; on mobile a slight downward drag there would
+	   otherwise trigger a full page reload ("the slightest touch reloads the page"). `contain` keeps
+	   normal in-page and in-container scrolling; it only prevents the scroll chaining to the browser
+	   chrome. Set on both html and body so it applies whichever element is the scroll container. */
+	overscroll-behavior-y: contain;
 }
 
 body {
@@ -156,6 +189,7 @@ body {
 	background-repeat: no-repeat;
 	background-attachment: fixed;
 	background-image: var(--body-bg);
+	overscroll-behavior-y: contain;
 }
 
 a {
@@ -204,6 +238,10 @@ a:visited {
 
 .ui-dialog-titlebar>.ui-button {
 
+	/* No focus ring on the jQuery-UI dialog close (X) button: the dialog auto-focuses this button on open, so a
+	   :focus-visible ring would paint a distracting outline every time a modal opens via the keyboard. These
+	   dialogs trap focus and are closable with Escape or a backdrop click, so the button stays operable without
+	   it. (The app-wide focus-visible ring still applies to form fields, links and the custom icon controls.) */
 	outline: none;
 	flex-shrink: 0;
 }
@@ -334,8 +372,10 @@ a:visited {
 	height: 36px;
 	margin: 8px;
 	border-radius: 50%;
-	border: 6px solid #000000;
-	border-color: #000000 transparent #000000 transparent;
+	/* Theme-aware so the spinner is visible on both light and dark surfaces (a hardcoded black ring was
+	   invisible against the dark theme's dark panels). */
+	border: 6px solid var(--text-color);
+	border-color: var(--text-color) transparent var(--text-color) transparent;
 	animation: spinner-dynamic 1.2s linear infinite;
 }
 
@@ -359,7 +399,7 @@ a:visited {
     color: #000;
     background: #fff;
     width: 32px;
-    font-weight: bold;
+    font-weight: var(--fw-bold);
     border-radius: 3px;
 }
 
@@ -378,7 +418,7 @@ a:visited {
 	/* Set a fixed width for labels */
 	margin-right: 10px;
 	text-align: right;
-	font-weight: bold;
+	font-weight: var(--fw-bold);
 }
 
 
@@ -397,8 +437,8 @@ a:visited {
 
 
 .hub-primary-btn {
-	background-color: #28a745;
-	font-size: 1.0rem;
+	background-color: var(--color-success);
+	font-size: var(--fs-body);
 	color: white;
 	width: 30px;
 	height: 30px;
@@ -410,7 +450,7 @@ a:visited {
 
 
 .hub-stop-btn {
-	background-color: #dc3545;
+	background-color: var(--color-danger);
 	color: white;
 	font-size: 1.4rem;
 	width: 30px;
@@ -456,20 +496,20 @@ a:visited {
     margin-left: 16px;
     margin-bottom: 10px;
     vertical-align: middle;
-    font-size: 0.95rem;
+    font-size: var(--fs-label);
 }
 .hub-hostload-label {
     opacity: 0.6;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    font-size: 0.82rem;
+    font-size: var(--fs-micro);
 }
 .hub-hostload-val {
-    font-weight: 600;
+    font-weight: var(--fw-medium);
 }
 .hub-hostload-sub {
     opacity: 0.55;
-    font-size: 0.85rem;
+    font-size: var(--fs-small);
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -485,7 +525,7 @@ a:visited {
 .hub-memory-btn {
 	background-color: var(--table-header-background-color);
 	color: var(--text-color);
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	padding: 4px 10px;
 	border: 1px solid #5d5d5d;
 	border-radius: 5px;
@@ -504,7 +544,7 @@ a:visited {
 #hub-memory-container {
     display: none;
     position: fixed;
-    font-size: 1.1rem;
+    font-size: var(--fs-subhead);
     color: var(--content-box-color);
     background-color: var(--content-box-background-color);
     top: 75px;
@@ -526,8 +566,8 @@ a:visited {
     color: var(--content-box-color);
     background-color: transparent;
     border: none;
-    font-size: 1.25rem;
-    font-weight: bold;
+    font-size: var(--fs-section);
+    font-weight: var(--fw-bold);
     cursor: pointer;
     z-index: 2000;
 }
@@ -555,7 +595,7 @@ a:visited {
 .hub-remove-btn {
 	background-color: #8b0000;
 	color: white;
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	width: 30px;
 	height: 30px;
 	border: none;
@@ -575,12 +615,24 @@ a:visited {
 	width: 100%;
 }
 
+/* The Hub home page centers its instance-cards and nav columns at 80% on desktop, but on a narrow
+   phone that wastes a fifth of the viewport, so the columns go full width below the mobile breakpoint. */
+.hub-home-col {
+	display: inline-block;
+	text-align: left;
+	width: 80%;
+}
+
+@media (max-width: 860px) {
+	.hub-home-col { width: 100%; }
+}
+
 .hub-dash-card {
 	background: var(--content-box-background-color);
 	border: 1px solid #c0c0c0;
 	border-radius: 8px;
 	padding: 16px 18px;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 	display: flex;
 	flex-direction: column;
@@ -592,8 +644,8 @@ a:visited {
 }
 
 .hub-dash-card-title {
-	font-weight: 600;
-	font-size: 1.3rem;
+	font-weight: var(--fw-medium);
+	font-size: var(--fs-section);
 	margin-bottom: 12px;
 	border-bottom: 1px solid var(--table-border-color);
 	padding-bottom: 8px;
@@ -607,17 +659,17 @@ a:visited {
 	justify-content: space-between;
 	align-items: center;
 	padding: 4px 0;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 }
 
 .hub-dash-label {
 	opacity: 0.6;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 }
 
 .hub-dash-sandbox-badge {
 	font-size: 0.7rem;
-	font-weight: 700;
+	font-weight: var(--fw-bold);
 	background: #e6a800;
 	color: #000;
 	border-radius: 3px;
@@ -640,7 +692,7 @@ a:visited {
 }
 
 .hub-dash-card-link {
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	opacity: 0.7;
 	text-decoration: none;
 	color: var(--link-color);
@@ -686,7 +738,7 @@ a:visited {
 }
 
 .hub-toggle-label {
-	font-size: 0.9rem;
+	font-size: var(--fs-small);
 	color: var(--content-box-color);
 	opacity: 0.75;
 	white-space: nowrap;
@@ -738,6 +790,32 @@ form textarea {
 }
 
 
+/* Keyboard focus indicator. Several controls set `outline: none` to drop the default browser ring, which
+   left keyboard users with no visible focus at all. This restores a clear, theme-aware indicator for
+   keyboard navigation only (:focus-visible does not fire on a mouse click, so pointer users see no change).
+   Buttons, links and icon controls have no border of their own, so they get an offset outline ring. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex="0"]:focus-visible {
+
+	outline: 2px solid var(--link-color);
+	outline-offset: 2px;
+}
+
+/* Text inputs already draw their own bordered box, so an offset outline would read as an awkward second
+   border around it. Recolor the existing border on focus instead — the same clean treatment the Help
+   search box uses — for one clear ring rather than two. */
+.form-field:focus-visible,
+#chatInput:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+
+	outline: none;
+	border-color: var(--link-color);
+}
+
+
 .form-select-pair+.select2-container .select2-selection {
 
 	min-height: 25px;
@@ -759,7 +837,7 @@ form textarea {
 
 .form-select-pair+.select2.select2-container .select2-selection__choice {
 
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	color: #000000;
 	background-color: #dce9ef;
 	border: 1px outset #cccccc;
@@ -783,7 +861,7 @@ form textarea {
 
 	color: transparent;
 	text-shadow: var(--modify-buttons-color);
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	white-space: nowrap;
 }
 
@@ -966,7 +1044,7 @@ form textarea {
 .notificationsItem {
 
 	margin-top: 8px;
-	font-size: 0.85rem;
+	font-size: var(--fs-small);
 	color: var(--table-content-color);
 	opacity: 0.75;
 }
@@ -1049,7 +1127,7 @@ form textarea {
 	height: 25px;
 	padding: 0 10px 0 10px;
 	background-color: #000000;
-	font-size: 0.95rem;
+	font-size: var(--fs-label);
 }
 
 
@@ -1073,7 +1151,7 @@ form textarea {
 
 	z-index: 1000;
 	position: relative;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	width: 98%;
 	margin: 0 auto;
 	padding: 15px;
@@ -1252,7 +1330,7 @@ form textarea {
 #chatConversationBar .btn {
 	flex-shrink: 0;
 	white-space: nowrap;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	padding: 4px 10px;
 }
 
@@ -1277,7 +1355,7 @@ form textarea {
 	outline: none;
 	/* ≈16px at the 12px root — kept large enough to avoid mobile focus-zoom, but expressed
 	   in rem so it still tracks the root font-size like everything else. */
-	font-size: 1.33rem;
+	font-size: var(--fs-section);
 	font-family: inherit;
 	line-height: 1.4;
 	-webkit-user-select: text;
@@ -1305,7 +1383,7 @@ form textarea {
 	z-index: 1000;
 	position: relative;
 	display: none;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	width: 90%;
 	margin: 0 auto;
 	padding: 20px;
@@ -1328,7 +1406,7 @@ form textarea {
 
 .tableHeader {
 
-	font-weight: bold;
+	font-weight: var(--fw-bold);
 	text-align: left;
 	white-space: nowrap;
 }
@@ -1398,8 +1476,8 @@ select[id^='startCondition'],
 
 .btn {
 
-	font-weight: 400;
-	font-size: 1.1rem;
+	font-weight: var(--fw-normal);
+	font-size: var(--fs-subhead);
 	color: #424141;
 	background: linear-gradient(0deg, #b8b8b8 0%, #f5f0f0 100%);
 	padding: 5px 20px;
@@ -1423,8 +1501,8 @@ select[id^='startCondition'],
 
 .btnAll {
 
-	font-weight: 600;
-	font-size: 0.95rem;
+	font-weight: var(--fw-medium);
+	font-size: var(--fs-label);
 	color: #424141;
 	padding: 5px;
 	background: linear-gradient(0deg, #b8b8b8 0%, #f5f0f0 100%);
@@ -1440,7 +1518,7 @@ select[id^='startCondition'],
 
 table#login {
 
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	color: var(--table-content-color);
 	border: 0;
 	width: auto;
@@ -1450,7 +1528,7 @@ table#login {
 
 table#botsCreate {
 
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	color: var(--table-content-color);
 	border: 0;
 	width: 495px;
@@ -1473,7 +1551,7 @@ table#botsCreate td {
 table#botsDeals, table#hubDeals, table#hubBots {
 
 	position: relative;
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	color: #e7e7e7;
 	width: auto;
 	min-width: 100%;
@@ -1487,7 +1565,7 @@ table#botsDeals th, table#hubDeals th, table#hubBots th {
 	padding-bottom: 8px;
 	padding-left: 5px;
 	padding-right: 5px;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	text-align: left;
 	background: #3d3d3d;
 }
@@ -1557,7 +1635,7 @@ table#botsDeals td, table#hubDeals td, table#hubBots td {
 	   original 5px so the table width is unchanged and columns like Bot Name don't start wrapping. */
 	padding: 6px 5px;
 	color: var(--table-content-color);
-	font-weight: normal;
+	font-weight: var(--fw-normal);
 	border-bottom: 1px solid rgba(128, 128, 128, 0.16);
 }
 
@@ -1623,7 +1701,7 @@ table#botsDeals tbody tr:hover, table#hubDeals tbody tr:hover, table#hubBots tbo
 
 .notificationsRow {
 
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	margin-top: 8px;
 	margin-bottom: 8px;
 	padding: 11px 13px;
@@ -1672,7 +1750,7 @@ table#botsDeals tbody tr:hover, table#hubDeals tbody tr:hover, table#hubBots tbo
 
 .logRow {
 
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	padding: 5px;
 	border-bottom: var(--table-border);
 	color: var(--table-content-color);
@@ -1692,7 +1770,7 @@ table#botsDeals tbody tr:hover, table#hubDeals tbody tr:hover, table#hubBots tbo
 .contentHeader {
 
 	position: relative;
-	font-size: 1.65rem;
+	font-size: var(--fs-page-title);
 }
 
 
@@ -1800,7 +1878,7 @@ table#botsDeals tbody tr:hover, table#hubDeals tbody tr:hover, table#hubBots tbo
 	/* width:auto (not 100%) so the label and its input stay adjacent instead of being pushed to
 	   opposite edges when the dialog is wide — matches the compact bot Create/Update form. */
 	width: auto;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	border-collapse: collapse;
 }
 .dealEditModal table.dealEditTable tr {
@@ -2047,7 +2125,7 @@ body.has-shell .mailerTable tbody tr:hover td {
 	justify-content: center;
 	align-items: center;
 	gap: 20px;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	margin-top: 10px;
 }
 
@@ -2070,7 +2148,7 @@ body.has-shell .mailerTable tbody tr:hover td {
 
 	.summary-bar {
 		gap: 6px 16px;
-		font-size: 1rem;
+		font-size: var(--fs-body);
 		margin-top: 6px;
 	}
 
@@ -2091,20 +2169,14 @@ body.has-shell .mailerTable tbody tr:hover td {
 }
 
 
-/* Portfolio risk bar color coding — matches profit-positive/negative colors */
-.portfolio-risk-low  { color: #1a9f00; }
-.portfolio-risk-mid  { color: #a85f00; }
-.portfolio-risk-high { color: #d82715; }
-
-[data-theme="dark"] .portfolio-risk-low  { color: #3ec43e; }
-[data-theme="dark"] .portfolio-risk-mid  { color: #ffb700; }
-[data-theme="dark"] .portfolio-risk-high { color: #f05040; }
+/* Portfolio risk bar color coding — same theme-switching tokens as the profit classes. */
+.portfolio-risk-low  { color: var(--profit-up); }
+.portfolio-risk-mid  { color: var(--profit-mid); }
+.portfolio-risk-high { color: var(--profit-down); }
 
 /* Available funds coloring reuses existing profit classes */
 #portfolioAvail.profit-positive { color: inherit; }
-#portfolioAvail.profit-negative { color: #d82715; }
-
-[data-theme="dark"] #portfolioAvail.profit-negative { color: #f05040; }
+#portfolioAvail.profit-negative { color: var(--profit-down); }
 
 
 .toolTip {
@@ -2113,8 +2185,10 @@ body.has-shell .mailerTable tbody tr:hover td {
 	display: inline-block;
 	cursor: pointer;
 	color: #ffffff;
-	font-size: 0.98rem;
-	background: #969696;
+	font-size: var(--fs-body);
+	/* Darkened from #969696 so the white "?" glyph clears the 4.5:1 contrast minimum (it was ~2.9:1).
+	   Self-contained colors that read the same in both themes. */
+	background: #6b6b6b;
 	padding: 0px 6px;
 	border-radius: 100%;
 }
@@ -2125,7 +2199,7 @@ body.has-shell .mailerTable tbody tr:hover td {
 	z-index: 7000;
 	visibility: hidden;
 	position: absolute;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	width: 400px;
 	min-height: 55px;
 	background-color: #525252;
@@ -2175,7 +2249,7 @@ body.has-shell .mailerTable tbody tr:hover td {
 	border-radius: 5px;
 	padding: 5px;
 	cursor: pointer;
-	font-size: 0.98rem;
+	font-size: var(--fs-body);
 	white-space: nowrap;
 }
 
@@ -2186,8 +2260,8 @@ body.has-shell .mailerTable tbody tr:hover td {
 	display: inline-block;
 	cursor: pointer;
 	color: #ffffff;
-	font-size: 0.98rem;
-	font-weight: normal;
+	font-size: var(--fs-body);
+	font-weight: var(--fw-normal);
 	background: #969696;
 	padding: 0px 6px;
 	border-radius: 100%;
@@ -2201,7 +2275,7 @@ body.has-shell .mailerTable tbody tr:hover td {
 	top: 50%;
 	left: 120%;
 	transform: translateY(-50%);
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	min-width: 300px; /* Set min-width to 300px */
 	max-width: 350px; /* Set max-width */
 	width: auto; /* Allow width to adjust based on content */
@@ -2297,6 +2371,53 @@ body.has-shell .mailerTable tbody tr:hover td {
 [data-theme="dark"] .viewIconBtn {
 
 	background: rgba(255, 255, 255, 0.06);
+}
+
+
+/* On touch devices these small toolbar icons (CSV, columns, funds estimator) sit close together, so give
+   each a comfortable ~40px tap area without enlarging the glyph or affecting the compact desktop layout.
+   min-* only grows the hit area; the flexbox centering keeps the icon the same size. */
+@media (pointer: coarse) {
+
+	.viewIconBtn {
+
+		min-width: 40px;
+		min-height: 40px;
+	}
+
+	/* The deal/bot action pills (Cancel, Close, Pause/Resume, Stop, Add-Funds, AI, Edit, Delete) and the
+	   header icon buttons are the primary controls in the Active Deals, Manage Bots, and Hub tables. Give
+	   them a comfortable ~40px touch target on phones without changing the compact desktop layout — min-*
+	   only grows the hit area; flex centering keeps the glyph the same size. */
+	.pill-btn,
+	.pill-group .pill-btn,
+	.headerIconBtn {
+
+		min-width: 40px;
+		min-height: 40px;
+	}
+
+	/* The Hub Manage-instances action buttons (Log in, Restart, Remove) are the primary controls in that
+	   table; give them the same comfortable ~40px touch target on phones. min-* only grows the hit area. */
+	.hub-primary-btn,
+	.hub-stop-btn,
+	.hub-remove-btn {
+
+		min-width: 40px;
+		min-height: 40px;
+	}
+
+	/* Trading Journal interactive chips (mood tags and the delete-reflection ×) are role="button" spans;
+	   grow their hit area to ~40px on touch without changing the glyph size. */
+	.journal-mood-chip,
+	.journal-narrative-del {
+
+		min-width: 40px;
+		min-height: 40px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
 }
 
 
@@ -2410,7 +2531,9 @@ body[data-theme="dark"].has-shell #csvDownload .icon {
 
 .botDealSelector .disabled {
 
-	color: #ddd;
+	/* A muted-but-legible token, not a near-white literal: #ddd on the light-theme white popover was
+	   effectively invisible (~1.3:1 contrast). --label-color reads as "muted" in both themes. */
+	color: var(--label-color);
 }
 
 
@@ -2429,7 +2552,8 @@ body[data-theme="dark"].has-shell #csvDownload .icon {
 
 #popover-botdeals .disabled {
 
-	color: #ddd;
+	/* Muted but legible in both themes (see .botDealSelector .disabled). */
+	color: var(--label-color);
 }
 
 .flex-container {
@@ -2516,28 +2640,17 @@ body[data-theme="dark"].has-shell #csvDownload .icon {
 /* Used in active deals and deal history tables instead of inline hex colors.  */
 /* Defined here so they respect the current theme rather than being hardcoded.  */
 
+/* The profit tokens switch by theme (defined per theme above), so one rule serves light and dark. */
 table#botsDeals td.profit-positive,
 table#hubDeals td.profit-positive,
 #totalProfit.profit-positive {
-	color: #1a9f00 !important;
+	color: var(--profit-up) !important;
 }
 
 table#botsDeals td.profit-negative,
 table#hubDeals td.profit-negative,
 #totalProfit.profit-negative {
-	color: #d82715 !important;
-}
-
-[data-theme="dark"] table#botsDeals td.profit-positive,
-[data-theme="dark"] table#hubDeals td.profit-positive,
-[data-theme="dark"] #totalProfit.profit-positive {
-	color: #3ec43e !important;
-}
-
-[data-theme="dark"] table#botsDeals td.profit-negative,
-[data-theme="dark"] table#hubDeals td.profit-negative,
-[data-theme="dark"] #totalProfit.profit-negative {
-	color: #f05040 !important;
+	color: var(--profit-down) !important;
 }
 
 
@@ -2699,8 +2812,8 @@ table#hubDeals td.profit-negative,
 /* ─── Home menu section labels ─────────────────────────────────────────────── */
 
 .mainMenuSection {
-	font-size: 0.9rem;
-	font-weight: 600;
+	font-size: var(--fs-small);
+	font-weight: var(--fw-medium);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	opacity: 0.45;
@@ -2738,8 +2851,8 @@ table#hubDeals td.profit-negative,
 
 #popoutTitle {
 
-	font-size: 1.0rem;
-	font-weight: 600;
+	font-size: var(--fs-body);
+	font-weight: var(--fw-medium);
 	color: var(--table-content-color);
 }
 
@@ -2859,7 +2972,7 @@ body.popout-body #chatInputContainer {
 	border: 1px solid var(--table-border-color, #444);
 	border-radius: 12px;
 	padding: 2px 8px;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	color: var(--table-content-color);
 	max-width: 200px;
 }
@@ -2893,7 +3006,7 @@ body.popout-body #chatInputContainer {
 
 .user-message .attach-badge {
 	display: block;
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	opacity: 0.7;
 	margin-top: 4px;
 }
@@ -2953,6 +3066,22 @@ body.popout-body #chatInputContainer {
 	--color-warning: #e0891b;
 	--color-warning-soft: rgba(224, 137, 27, 0.15);
 	--color-neutral: var(--content-box-color);
+
+	/* Profit / loss and portfolio-risk colors. Kept as their own tokens (not the generic success/danger)
+	   because the trading green/red are intentionally tuned for the money columns, but single-sourced here so
+	   the profit cells, the total, the portfolio-risk bar, and available-funds all track one value per theme
+	   instead of the same hex being repeated across a dozen rules that then drift. */
+	--profit-up: #1a9f00;
+	--profit-down: #d82715;
+	--profit-mid: #a85f00;
+
+	/* Amber accent stripe on a system/status message in the AI chat. One token so the main chat view and the
+	   popout can't drift. Amber reads on both themes, so it is not re-declared under dark. */
+	--chat-system-accent: #f0a500;
+
+	/* The "AI" pill used on schedule rows (a violet chip with white text). Single-sourced so the static intro
+	   badge and the JS-built badges can't drift. Reads on both themes, so it is not re-declared under dark. */
+	--badge-ai: #7a5cff;
 }
 
 [data-theme="dark"] {
@@ -2974,6 +3103,11 @@ body.popout-body #chatInputContainer {
 	--color-success-soft: rgba(74, 222, 128, 0.12);
 	--color-warning: #fbbf24;
 	--color-warning-soft: rgba(251, 191, 36, 0.15);
+
+	/* Dark-theme profit / portfolio-risk colors (brighter for contrast on dark). */
+	--profit-up: #3ec43e;
+	--profit-down: #f05040;
+	--profit-mid: #ffb700;
 	/* --color-neutral is defined at :root as var(--content-box-color). The dark override of
 	   --content-box-color lives on the body-level [data-theme="dark"] selector, NOT on :root, so the
 	   :root definition would resolve against the light value (#000) and render black on dark. Re-declare
@@ -3028,7 +3162,7 @@ body.has-shell .hub-superscript {
 	width: auto;
 	padding: 2px 7px;
 	font-size: var(--fs-small);
-	font-weight: 700;
+	font-weight: var(--fw-bold);
 	letter-spacing: 0.05em;
 	background: #0e8a8a;
 	color: #ffffff;
@@ -3038,7 +3172,7 @@ body.has-shell .hub-superscript {
 
 body.has-shell #btcPrice {
 	position: static; left: auto; bottom: auto;
-	margin-left: 16px; font-size: 0.95rem; color: var(--btc-text); white-space: nowrap;
+	margin-left: 16px; font-size: var(--fs-label); color: var(--btc-text); white-space: nowrap;
 }
 
 body.has-shell .headerButtons {
@@ -3063,7 +3197,7 @@ body.has-shell .headerButtons {
 }
 .side-nav-group { margin-bottom: 16px; }
 .side-nav-label {
-	font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+	font-size: 0.7rem; font-weight: var(--fw-medium); letter-spacing: 0.1em; text-transform: uppercase;
 	color: var(--nav-text-muted); padding: 6px 10px 6px 12px; white-space: nowrap; overflow: hidden;
 }
 .side-nav-item {
@@ -3079,8 +3213,8 @@ body.has-shell .headerButtons {
 }
 .side-nav-item:hover .side-nav-ic { color: var(--nav-toggle-ic); }
 .nav-ic { width: 19px; height: 19px; }
-.side-nav-text { font-size: 1.08rem; overflow: hidden; text-overflow: ellipsis; }
-.side-nav-ext { margin-left: auto; font-size: 0.8rem; color: var(--nav-text-muted); }
+.side-nav-text { font-size: var(--fs-subhead); overflow: hidden; text-overflow: ellipsis; }
+.side-nav-ext { margin-left: auto; font-size: var(--fs-micro); color: var(--nav-text-muted); }
 .side-nav-item.is-active {
 	background: var(--nav-item-active-bg); color: var(--nav-item-active-text) !important;
 }
@@ -3145,15 +3279,15 @@ body.nav-collapsed > center > main { margin-left: var(--shell-sidebar-rail-w); }
 #configModeBanner .cfg-badge {
 	background: #1a1a1a;
 	color: #f5c518;
-	font-weight: 700;
+	font-weight: var(--fw-bold);
 	letter-spacing: 0.6px;
 	padding: 3px 9px;
 	border-radius: 4px;
 	font-size: var(--fs-label, 0.78rem);
 	white-space: nowrap;
 }
-#configModeBanner .cfg-text { font-weight: 600; font-size: var(--fs-body, 0.95rem); }
-#configModeBanner a { color: #1a1a1a; text-decoration: underline; font-weight: 700; }
+#configModeBanner .cfg-text { font-weight: var(--fw-medium); font-size: var(--fs-body, 0.95rem); }
+#configModeBanner a { color: #1a1a1a; text-decoration: underline; font-weight: var(--fw-bold); }
 
 /* "Still on the default password" security nudge. It reuses the exact same fixed top-strip mechanics as
    the config-mode banner (the two never show at once — the nudge only appears once the bot is live), but
@@ -3175,15 +3309,15 @@ body.nav-collapsed > center > main { margin-left: var(--shell-sidebar-rail-w); }
 #defaultPassBanner .cfg-badge {
 	background: #fff;
 	color: #b3261e;
-	font-weight: 700;
+	font-weight: var(--fw-bold);
 	letter-spacing: 0.6px;
 	padding: 3px 9px;
 	border-radius: 4px;
 	font-size: var(--fs-label, 0.78rem);
 	white-space: nowrap;
 }
-#defaultPassBanner .cfg-text { font-weight: 600; font-size: var(--fs-body, 0.95rem); }
-#defaultPassBanner a { color: #fff; text-decoration: underline; font-weight: 700; }
+#defaultPassBanner .cfg-text { font-weight: var(--fw-medium); font-size: var(--fs-body, 0.95rem); }
+#defaultPassBanner a { color: #fff; text-decoration: underline; font-weight: var(--fw-bold); }
 
 /* The top bar is position:fixed (z-index 9999) on every page, login included, so a banner must be
    fixed ABOVE it (z-index 10000) and the top bar pushed down by the banner's height — on ALL banner
@@ -3287,7 +3421,7 @@ body.has-shell #ordersBox #ordersTable tr:last-child td {
 body.has-shell #ordersBox #ordersTable tr:first-child th,
 body.has-shell #ordersBox #ordersTable tr:first-child td {
 	border-bottom: 1px solid var(--shell-section-border);
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 }
 /* The bot-preview ladder (#ordersBox content: balance summary + order steps table).
    JS toggles visibility (hide/show), so no :empty handling needed here. */
@@ -3318,7 +3452,7 @@ body.has-shell .contentHeader,
 body.has-shell #headerText,
 body.has-shell .contentHeaderBox b {
 	font-size: 1.5rem;
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 	color: var(--content-box-color);
 }
 
@@ -3474,6 +3608,14 @@ body.has-shell .botDealSelector {
 body.has-shell .ui-widget-overlay { z-index: 99990 !important; position: fixed !important; background: #000 !important; opacity: 0.45 !important; }
 body.has-shell .ui-dialog,
 body.has-shell .jconfirm { z-index: 100000 !important; position: fixed !important; }
+
+/* Confirm/alert dialogs (jquery-confirm) are opened with a fixed boxWidth of '50%' in ~30 call sites, and the
+   vendored jquery-confirm.min.css carries no media queries — so on a phone the box is ~half the viewport
+   (~187px on a 375px screen), cramped enough that button labels wrap. Widen the box on small screens so the
+   dialog is comfortably readable and its buttons fit. One place, applies to every confirm/alert dialog. */
+@media (max-width: 600px) {
+	.jconfirm .jconfirm-box { width: 94% !important; max-width: 94% !important; }
+}
 /* Confirm-dialog buttons (jconfirm) sit on a light button surface in BOTH themes.
    The action text is set inline to semantic color vars, which in dark mode become
    light tints (e.g. --color-danger #f87171, --color-neutral #b8b8b8) that are
@@ -3589,9 +3731,9 @@ body.has-shell #modalTvSettings {
 	max-width: 900px; margin: 0 auto; text-align: center; padding: 48px 32px 52px 32px;
 }
 .home-welcome-title {
-	font-size: 1.9rem; font-weight: 600; margin: 0 0 8px 0; color: var(--content-box-color);
+	font-size: 1.9rem; font-weight: var(--fw-medium); margin: 0 0 8px 0; color: var(--content-box-color);
 }
-.home-welcome-sub { font-size: 1.05rem; opacity: 0.7; margin: 0 0 34px 0; }
+.home-welcome-sub { font-size: var(--fs-body); opacity: 0.7; margin: 0 0 34px 0; }
 .home-quick-grid {
 	display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;
 }
@@ -3608,7 +3750,7 @@ body.has-shell #modalTvSettings {
 }
 .home-quick-ic { color: var(--nav-item-active-bar); display: flex; }
 .home-quick-ic svg { width: 30px; height: 30px; }
-.home-quick-label { font-size: 1.05rem; font-weight: 500; }
+.home-quick-label { font-size: var(--fs-body); font-weight: var(--fw-medium); }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3639,12 +3781,12 @@ body.has-shell .view-summary .summary-bar {
 	justify-content: flex-start;
 	margin-top: 0;
 	margin-bottom: 8px;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 }
 
 /* Back link in a view header (e.g. Create/Update Bot "← Bots"). */
 body.has-shell .contentHeaderBox .view-back-link {
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	text-decoration: none;
 	opacity: 0.65;
 	white-space: nowrap;
@@ -3656,7 +3798,7 @@ body.has-shell .contentHeaderBox .view-header-links {
 	display: inline-flex;
 	align-items: center;
 	flex-shrink: 0;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	white-space: nowrap;
 }
 
@@ -3807,7 +3949,7 @@ body.has-shell .hub-toggle-cell {
 }
 body.has-shell .hub-toggle-label {
 	font-size: 0.7rem;
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
 	opacity: 0.7;
@@ -3826,7 +3968,7 @@ body.has-shell .hub-instance-status-indicator {
 body.has-shell #toggle-add-form.hub-primary-btn {
 	width: auto;
 	border-radius: 8px;
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 }
 
 /* Update button: align it with the table/Add Instance content. It's a direct
@@ -3836,7 +3978,7 @@ body.has-shell #toggle-add-form.hub-primary-btn {
 body.has-shell #update-button {
 	display: inline-block;
 	border-radius: 8px;
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 	margin: 4px 0 20px 24px;
 }
 
@@ -3904,7 +4046,7 @@ body.has-shell #botsDeals td[data-field="mongo_db_url_override"],
 body.has-shell table#botsDeals td[data-field="mongo_db_url"],
 body.has-shell table#botsDeals td[data-field="mongo_db_url_override"] {
 	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-	font-size: 0.95rem;
+	font-size: var(--fs-label);
 	opacity: 0.82;
 }
 
@@ -3999,7 +4141,7 @@ body.has-shell .hub-dash-totals-box {
 	padding: 14px 26px !important;
 }
 body.has-shell .hub-dash-totals-box .summary-bar p {
-	font-size: 1.15rem;
+	font-size: var(--fs-subhead);
 }
 
 /* Grid: a touch more gap and a comfortable min column. */
@@ -4029,7 +4171,7 @@ body.has-shell .hub-dash-card-title {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	font-size: 1.25rem;
+	font-size: var(--fs-section);
 	border-bottom: 1px solid var(--shell-section-border) !important;
 	padding-bottom: 10px;
 	margin-bottom: 10px;
@@ -4051,12 +4193,12 @@ body.has-shell .hub-dash-status.is-offline {
 /* Rows: label muted, value clear. */
 body.has-shell .hub-dash-card-row {
 	padding: 4px 0;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 }
 body.has-shell .hub-dash-label {
 	opacity: 1;
 	color: var(--nav-text-muted);
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 }
 body.has-shell .hub-dash-divider {
 	border-top: 1px solid var(--shell-section-border);
@@ -4072,7 +4214,7 @@ body.has-shell .hub-dash-card-actions {
 	border-top: 1px solid var(--shell-section-border);
 }
 body.has-shell .hub-dash-card-link {
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	opacity: 1;
 	padding: 3px 12px;
 	border-radius: 6px;
@@ -4106,7 +4248,7 @@ body.has-shell #botsDeals td.hub-mem-cell {
 body.has-shell .hub-mem-cell .hub-mem-metric {
 	display: block;
 	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-	font-size: 0.9rem;
+	font-size: var(--fs-small);
 	line-height: 1.2;
 	opacity: 0.85;
 	white-space: nowrap;
@@ -4127,7 +4269,7 @@ body.has-shell .hub-mem-cell .hub-mem-k {
 	text-align: center;
 	color: var(--table-content-color);
 	opacity: 0.7;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -4139,14 +4281,14 @@ body.has-shell .hub-mem-cell .hub-mem-k {
 	margin: 12px 0 20px;
 	line-height: 1.5;
 	color: var(--table-content-color);
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 }
 /* Small navigational cross-reference from Deals History to Transaction Export,
    so users hunting for a tax-tool import file are pointed to the right page
    (which carries all the tax disclaimers). Purely a pointer — makes no tax claim. */
 .deals-history-xref {
 	margin: 12px 0 0;
-	font-size: 0.95rem;
+	font-size: var(--fs-label);
 	opacity: 0.7;
 	color: var(--table-content-color);
 }
@@ -4169,14 +4311,14 @@ body.has-shell .hub-mem-cell .hub-mem-k {
 	align-items: center;
 	gap: 14px 18px;
 	margin-bottom: 22px;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 }
 .transaction-export-controls .transaction-export-sandbox {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 	color: var(--table-content-color);
-	font-size: 1.15rem;
+	font-size: var(--fs-subhead);
 	cursor: pointer;
 }
 .transaction-export-disclaimer {
@@ -4187,7 +4329,7 @@ body.has-shell .hub-mem-cell .hub-mem-k {
 	border: 1px solid var(--color-warning);
 	color: var(--table-content-color);
 	line-height: 1.55;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 }
 .transaction-export-disclaimer a {
 	color: var(--link-color);
@@ -4222,12 +4364,12 @@ body.has-shell #contentBox .transaction-export-disclaimer {
 	margin-bottom: 14px;
 }
 .system-health-title {
-	font-size: 1.25rem;
-	font-weight: 600;
+	font-size: var(--fs-section);
+	font-weight: var(--fw-medium);
 	color: var(--table-content-color);
 }
 .system-health-status {
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	padding: 2px 10px;
 	border-radius: 999px;
 	color: var(--table-content-color);
@@ -4248,33 +4390,30 @@ body.has-shell #contentBox .transaction-export-disclaimer {
 	gap: 3px;
 }
 .system-health-stat-label {
-	font-size: 1.05rem;
+	font-size: var(--fs-body);
 	color: var(--table-content-color);
 	opacity: 0.7;
 }
 .system-health-stat-value {
-	font-size: 1.35rem;
-	font-weight: 600;
+	font-size: var(--fs-section);
+	font-weight: var(--fw-medium);
 	color: var(--table-content-color);
 }
 .system-health-stat-sub {
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	color: var(--table-content-color);
 	opacity: 0.6;
 }
-/* Load figure color coding — reuses the portfolio Risk % palette so the whole
-   app speaks one color language: green healthy, amber busy, red saturated. */
-.health-load-low  { color: #1a9f00 !important; }
-.health-load-med  { color: #a85f00 !important; }
-.health-load-high { color: #d82715 !important; }
-[data-theme="dark"] .health-load-low  { color: #3ec43e !important; }
-[data-theme="dark"] .health-load-med  { color: #ffb700 !important; }
-[data-theme="dark"] .health-load-high { color: #f05040 !important; }
+/* Load figure color coding — reuses the shared profit / risk tokens so the whole app speaks one color
+   language: green healthy, amber busy, red saturated. The tokens switch by theme, so no dark override. */
+.health-load-low  { color: var(--profit-up) !important; }
+.health-load-med  { color: var(--profit-mid) !important; }
+.health-load-high { color: var(--profit-down) !important; }
 .system-health-foot {
 	margin-top: 14px;
 	padding-top: 12px;
 	border-top: 1px solid var(--table-border-color, rgba(128,128,128,0.2));
-	font-size: 1.05rem;
+	font-size: var(--fs-body);
 	color: var(--table-content-color);
 	opacity: 0.65;
 }
@@ -4294,7 +4433,7 @@ body.has-shell #contentBox .transaction-export-disclaimer {
 	border-radius: 10px;
 	background: var(--table-header-background-color);
 	border: 1px solid var(--shell-section-border);
-	font-size: 1.05rem;
+	font-size: var(--fs-body);
 	color: var(--table-content-color);
 }
 /* The shell forces #contentBox text-align:left and max-width:1100px for data
@@ -4311,7 +4450,7 @@ body.has-shell #contentBox.home-welcome {
 	opacity: 0.65;
 }
 .home-health-val {
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 }
 .home-health-sep {
 	opacity: 0.4;
@@ -4333,13 +4472,13 @@ body.has-shell #contentBox.home-welcome {
 	border: 1px solid var(--table-border-color);
 	border-left: 4px solid var(--nav-item-active-bar, #14b8b8);
 	color: var(--table-content-color);
-	font-size: 1.05rem;
+	font-size: var(--fs-body);
 }
 .addfunds-bar-label {
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 }
 .addfunds-bar-note {
-	font-size: 0.92rem;
+	font-size: var(--fs-label);
 	opacity: 0.85;
 	flex: 1 1 240px;
 }
@@ -4356,9 +4495,9 @@ body.has-shell #contentBox.home-welcome {
 /* Projected values injected under the Price / Target cells. */
 .af-proj {
 	margin-top: 3px;
-	font-size: 0.9rem;
+	font-size: var(--fs-small);
 	color: var(--link-color, #008aeb);
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 	white-space: nowrap;
 }
 /* Deals using a custom fill price stand out from market-price estimates so you
@@ -4370,7 +4509,7 @@ body.has-shell #contentBox.home-welcome {
 	opacity: 0.8;
 }
 .af-override-tag {
-	font-weight: 700;
+	font-weight: var(--fw-bold);
 	color: var(--color-warning, #c77700);
 	margin-left: 2px;
 }
@@ -4387,7 +4526,7 @@ body.has-shell #contentBox.home-welcome {
 .af-override-clear {
 	cursor: pointer;
 	opacity: 0.6;
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	line-height: 1;
 }
 .af-override-clear:hover {
@@ -4399,7 +4538,7 @@ body.has-shell #contentBox.home-welcome {
    AI reflection. Themed cards.
    ═══════════════════════════════════════════════════════════════════════════ */
 .journal-intro {
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	opacity: 0.8;
 	margin: 18px 4px 18px;
 	color: var(--table-content-color);
@@ -4410,7 +4549,7 @@ body.has-shell #contentBox.home-welcome {
 	align-items: center;
 	gap: 10px 18px;
 	margin: 0 4px 20px;
-	font-size: 1.15rem;
+	font-size: var(--fs-subhead);
 	color: var(--table-content-color);
 }
 .journal-state-msg {
@@ -4418,7 +4557,7 @@ body.has-shell #contentBox.home-welcome {
 	text-align: center;
 	color: var(--table-content-color);
 	opacity: 0.7;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 }
 .journal-entry {
 	margin: 0 4px 16px;
@@ -4437,8 +4576,8 @@ body.has-shell #contentBox.home-welcome {
 	margin-bottom: 8px;
 }
 .journal-pair {
-	font-size: 1.3rem;
-	font-weight: 600;
+	font-size: var(--fs-section);
+	font-weight: var(--fw-medium);
 	color: var(--table-content-color);
 }
 .journal-head-left {
@@ -4454,7 +4593,7 @@ body.has-shell #contentBox.home-welcome {
    the pair or profit. Wraps/truncates rather than pushing the profit off. */
 .journal-dealid {
 	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-	font-size: 0.95rem;
+	font-size: var(--fs-label);
 	opacity: 0.55;
 	color: var(--table-content-color);
 	word-break: break-all;
@@ -4470,18 +4609,18 @@ body.has-shell #contentBox.home-welcome {
 	border-radius: 8px;
 	background: #e8a13a;
 	color: #1a1a1a;
-	font-weight: 600;
+	font-weight: var(--fw-medium);
 	cursor: help;
 }
 .journal-profit {
-	font-size: 1.15rem;
-	font-weight: 600;
+	font-size: var(--fs-subhead);
+	font-weight: var(--fw-medium);
 }
 .journal-facts {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px 20px;
-	font-size: 1.15rem;
+	font-size: var(--fs-subhead);
 	opacity: 0.8;
 	color: var(--table-content-color);
 	margin-bottom: 12px;
@@ -4492,13 +4631,13 @@ body.has-shell #contentBox.home-welcome {
 	padding: 10px 12px;
 	border-radius: 6px;
 	background: var(--table-header-background-color);
-	font-size: 1.15rem;
+	font-size: var(--fs-subhead);
 	line-height: 1.5;
 	color: var(--table-content-color);
 }
 .journal-narrative-label {
 	display: block;
-	font-size: 0.92rem;
+	font-size: var(--fs-label);
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	opacity: 0.6;
@@ -4510,14 +4649,14 @@ body.has-shell #contentBox.home-welcome {
 	gap: 6px;
 }
 .journal-note-label {
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	opacity: 0.7;
 	color: var(--table-content-color);
 }
 .journal-note {
 	width: 100%;
 	resize: vertical;
-	font-size: 1.15rem;
+	font-size: var(--fs-subhead);
 	/* Textareas default to the browser's monospace UA font; without this the notes field
 	   (and its placeholder) renders in a typewriter font that clashes with the rest of the
 	   card. Inherit the app font so it matches the surrounding Heebo text. */
@@ -4533,7 +4672,7 @@ body.has-shell #contentBox.home-welcome {
 	margin-top: 4px;
 }
 .journal-status {
-	font-size: 0.95rem;
+	font-size: var(--fs-label);
 }
 .journal-status.ok {
 	color: var(--color-success, #0e9f6e);
@@ -4554,7 +4693,7 @@ body.has-shell #contentBox.home-welcome {
 	top: 6px;
 	right: 8px;
 	cursor: pointer;
-	font-size: 1.2rem;
+	font-size: var(--fs-dialog-title);
 	line-height: 1;
 	opacity: 0.4;
 	color: var(--table-content-color);
@@ -4590,7 +4729,7 @@ body.has-shell #contentBox.home-welcome {
 	background: var(--table-background-color, var(--content-box-background-color));
 	border: 1px solid var(--table-border-color);
 	color: var(--table-content-color);
-	font-size: 1.05rem;
+	font-size: var(--fs-body);
 	opacity: 0.85;
 	display: flex;
 	align-items: center;
@@ -4617,7 +4756,7 @@ body.has-shell #contentBox.home-welcome {
 	border: 1px solid var(--table-border-color);
 }
 .journal-stat-label {
-	font-size: 0.9rem;
+	font-size: var(--fs-small);
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	opacity: 0.6;
@@ -4625,14 +4764,14 @@ body.has-shell #contentBox.home-welcome {
 	margin-bottom: 4px;
 }
 .journal-stat-val {
-	font-size: 1.25rem;
-	font-weight: 600;
+	font-size: var(--fs-section);
+	font-weight: var(--fw-medium);
 	color: var(--table-content-color);
 }
 .journal-stat-sub {
 	display: block;
-	font-size: 0.9rem;
-	font-weight: 400;
+	font-size: var(--fs-small);
+	font-weight: var(--fw-normal);
 	opacity: 0.6;
 	margin-top: 2px;
 }
@@ -4645,7 +4784,7 @@ body.has-shell #contentBox.home-welcome {
 	border-left: 4px solid var(--nav-item-active-bar, #14b8b8);
 }
 .journal-corr-title {
-	font-size: 0.92rem;
+	font-size: var(--fs-label);
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	opacity: 0.6;
@@ -4653,7 +4792,7 @@ body.has-shell #contentBox.home-welcome {
 	margin-bottom: 10px;
 }
 .journal-corr-empty {
-	font-size: 1.1rem;
+	font-size: var(--fs-subhead);
 	line-height: 1.5;
 	opacity: 0.8;
 	color: var(--table-content-color);
@@ -4666,7 +4805,7 @@ body.has-shell #contentBox.home-welcome {
 }
 .journal-corr-mood {
 	flex: 0 0 130px;
-	font-size: 0.98rem;
+	font-size: var(--fs-body);
 	color: var(--table-content-color);
 }
 .journal-corr-bar-wrap {
@@ -4688,7 +4827,7 @@ body.has-shell #contentBox.home-welcome {
 	left: 8px;
 	top: 0;
 	line-height: 22px;
-	font-size: 0.85rem;
+	font-size: var(--fs-small);
 	color: var(--table-content-color);
 }
 .journal-corr-meta {
@@ -4696,14 +4835,14 @@ body.has-shell #contentBox.home-welcome {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-end;
-	font-size: 0.85rem;
+	font-size: var(--fs-small);
 }
 .journal-corr-n {
 	opacity: 0.55;
 	color: var(--table-content-color);
 }
 .journal-corr-foot {
-	font-size: 0.85rem;
+	font-size: var(--fs-small);
 	opacity: 0.6;
 	color: var(--table-content-color);
 	margin-top: 10px;
@@ -4718,7 +4857,7 @@ body.has-shell #contentBox.home-welcome {
 .journal-mood-label {
 	/* Match the parallel "Notes" label (.journal-note-label) so the two read as a set;
 	   was 0.9rem, which looked noticeably smaller than the rest of the card text. */
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	opacity: 0.7;
 	color: var(--table-content-color);
 	margin-right: 4px;
@@ -4758,7 +4897,7 @@ body.has-shell #contentBox.home-welcome {
    the old emoji had. Palette follows the standard traffic-light convention. */
 .deal-health {
 	cursor: default;
-	font-size: 1.0rem;
+	font-size: var(--fs-body);
 	line-height: 1;
 }
 .deal-health-cell {
@@ -4805,11 +4944,26 @@ body.has-shell #contentBox.home-welcome {
 [data-theme="dark"] .deal-health-dot.dh-red    { background: radial-gradient(circle at 36% 32%, #ff7060, #f05040 72%); }
 [data-theme="dark"] .deal-health-dot.dh-pending { background: radial-gradient(circle at 36% 32%, #d6dade, #a8aeb4 72%); }
 
+/* Shape encoding so the running health states are distinguishable WITHOUT relying on color (colorblind-safe):
+   a filled CIRCLE when in profit, a rounded SQUARE when just underwater, a DIAMOND as the safety-order budget
+   fills, and a TRIANGLE (the universal warning shape) when stressed; a hollow RING while live figures are
+   pending. Color still carries the same meaning for everyone else — this is redundant coding, not a
+   replacement. Shapes use clip-path/border-radius so the box size and vertical alignment are unchanged. */
+.deal-health-dot.dh-green   { border-radius: 50%; }
+.deal-health-dot.dh-yellow  { border-radius: 3px; }
+.deal-health-dot.dh-orange  { border-radius: 0; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+.deal-health-dot.dh-red     { border-radius: 0; clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
+.deal-health-dot.dh-pending { border-radius: 50%; background: transparent; border: 2px solid #9aa0a6; box-shadow: none; }
+[data-theme="dark"] .deal-health-dot.dh-pending { background: transparent; border: 2px solid #a8aeb4; }
+/* The glossy top-left "shine" only reads on the round/square shapes; hide it on the clipped and hollow ones. */
+.deal-health-dot.dh-orange::after,
+.deal-health-dot.dh-red::after,
+.deal-health-dot.dh-pending::after { display: none; }
+
 /* Stop-loss annotation inside the Target cell (SymBot.UI.stopLossCell), instance + Hub deal views. Uses the
    same theme-aware red as the negative-profit text so it stays legible in dark mode (a plain #c0392b was a
    muddy low-contrast red on the dark table). */
-.sl-annot { font-size: 0.82em; color: #d82715; }
-[data-theme="dark"] .sl-annot { color: #f05040; }
+.sl-annot { font-size: 0.82em; color: var(--profit-down); }
 
 /* Styled glyphs for paused / error, sized to match the dot slot. */
 .deal-health-glyph {
@@ -4853,8 +5007,8 @@ body.has-shell #contentBox.home-welcome {
 	left: 50%;
 	transform: translate(-50%, -50%);
 	color: #ffffff;
-	font-size: 0.85rem;
-	font-weight: 700;
+	font-size: var(--fs-small);
+	font-weight: var(--fw-bold);
 	line-height: 1;
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 	text-shadow: 0 1px 1px rgba(0,0,0,0.3);
@@ -4887,7 +5041,7 @@ body.has-shell #contentBox.home-welcome {
 	.journal-corr-mood {
 		flex: 1 1 90px;
 		min-width: 0;
-		font-size: 0.92rem;
+		font-size: var(--fs-label);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -5029,7 +5183,7 @@ body.has-shell #contentBox.home-welcome {
 	display: flex; flex-direction: column; align-items: center; justify-content: center;
 	gap: 12px; text-align: center; width: 100%; flex: 1 1 auto; min-height: 260px; box-sizing: border-box; padding: 20px;
 }
-.chat-mascot-hero-text { color: var(--table-content-color); opacity: 0.65; font-size: 1.05rem; max-width: 320px; }
+.chat-mascot-hero-text { color: var(--table-content-color); opacity: 0.65; font-size: var(--fs-body); max-width: 320px; }
 
 /* Inline "thinking" bubble shown in the chat while awaiting a response (follow-ups). */
 .chat-thinking-bubble { display: inline-flex; align-items: center; gap: 8px; }
@@ -5126,7 +5280,7 @@ body.config-mode, body.default-pass { --modal-top: calc(var(--cfg-banner-h, 44px
 #helpSearch { flex: 1 1 auto; min-width: 0; border: 1px solid var(--table-border-color); border-radius: 999px; padding: 7px 12px; font-size: var(--fs-body); background: var(--input-background-color); color: var(--text-color); outline: none; }
 #helpSearch:focus { border-color: var(--link-color); }
 .help-search-count { flex: 0 0 auto; font-size: var(--fs-small); color: var(--label-color); white-space: nowrap; }
-.help-nav-btn { flex: 0 0 auto; border: 1px solid var(--table-border-color); background: var(--content-box-background-color); color: var(--label-color); cursor: pointer; font-size: 11px; line-height: 1; padding: 5px 7px; border-radius: 6px; }
+.help-nav-btn { flex: 0 0 auto; border: 1px solid var(--table-border-color); background: var(--content-box-background-color); color: var(--label-color); cursor: pointer; font-size: var(--fs-micro); line-height: 1; padding: 5px 7px; border-radius: 6px; }
 .help-nav-btn:hover { color: var(--link-color); border-color: var(--link-color); }
 .help-matches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--table-border-color); max-height: 96px; overflow-y: auto; }
 .help-matches::before { content: "Jump to:"; font-size: var(--fs-small); color: var(--label-color); margin-right: 2px; }

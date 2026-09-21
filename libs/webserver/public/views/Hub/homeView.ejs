@@ -43,15 +43,30 @@
 
 		const sym = '$';
 
+		// Render a profit value that may be a single-currency scalar (with its own symbol) or, when deals span
+		// multiple quote currencies, a per-currency breakdown — the server never sums across currencies, so the
+		// dashboard never shows a meaningless mixed total. Returns { text, cls }.
+		function fmtProfit(obj) {
+			if (obj && typeof obj.profit === 'number') {
+				const s = getCurrencySymbol(obj.profit_currency) || sym;
+				return { text: s + obj.profit.toFixed(2), cls: obj.profit >= 0 ? 'profit-positive' : 'profit-negative' };
+			}
+			const by = (obj && obj.profit_by_currency) || {};
+			const keys = Object.keys(by);
+			if (!keys.length) { return { text: sym + '0.00', cls: 'profit-positive' }; }
+			const parts = keys.map(function (c) { return (by[c] >= 0 ? '+' : '') + by[c].toFixed(2) + ' ' + c; });
+			return { text: parts.join('  ·  '), cls: '' };
+		}
+
 		// ── Combined totals bar ────────────────────────────────────────────
-		const tpClass = totals.profit >= 0 ? 'profit-positive' : 'profit-negative';
+		const tp = fmtProfit(totals);
 
 		$('#hub-total-deals').text(totals.deals || 0);
 		$('#hub-total-bots').text(totals.bots || 0);
 		$('#hub-total-profit')
 			.removeClass('profit-positive profit-negative')
-			.addClass(tpClass)
-			.text(sym + (totals.profit || 0).toFixed(2));
+			.addClass(tp.cls)
+			.text(tp.text);
 
 		// ── Per-instance cards ─────────────────────────────────────────────
 		const container = $('#hub-instance-cards');
@@ -59,7 +74,7 @@
 
 		for (const inst of instances) {
 
-			const pClass = inst.profit >= 0 ? 'profit-positive' : 'profit-negative';
+			const ip = fmtProfit(inst);
 			const portfolio = inst.portfolio;
 			let portfolioRows = '';
 
@@ -110,10 +125,10 @@
 
 			container.append(
 				'<div class="hub-dash-card' + (isOnline ? '' : ' is-offline') + '">' +
-					'<div class="hub-dash-card-title">' + statusDot + escHtml(inst.name_display || inst.name) + sandboxBadge + '</div>' +
+					'<div class="hub-dash-card-title" role="heading" aria-level="3">' + statusDot + escHtml(inst.name_display || inst.name) + sandboxBadge + '</div>' +
 					'<div class="hub-dash-card-row">' +
 						'<span class="hub-dash-label">Active Deals</span>' +
-						'<span style="font-weight:600;">' + inst.deals + '</span>' +
+						'<span style="font-weight: var(--fw-medium);">' + inst.deals + '</span>' +
 					'</div>' +
 					'<div class="hub-dash-card-row">' +
 						'<span class="hub-dash-label">Bots</span>' +
@@ -121,7 +136,7 @@
 					'</div>' +
 					'<div class="hub-dash-card-row">' +
 						'<span class="hub-dash-label">Active P/L</span>' +
-						'<span class="' + pClass + '" style="font-weight:600;">' + sym + (inst.profit || 0).toFixed(2) + '</span>' +
+						'<span class="' + ip.cls + '" style="font-weight: var(--fw-medium);">' + escHtml(ip.text) + '</span>' +
 					'</div>' +
 					portfolioRows +
 					'<div class="hub-dash-card-actions">' +
@@ -158,7 +173,9 @@
 		<!-- Combined totals box -->
 		<div style="text-align: center; margin-bottom: 24px; padding-top: 24px;">
 			<div class="hub-dash-totals-box">
-				<div class="summary-bar" style="justify-content: center; gap: 28px; margin-top: 0;">
+				<!-- Polite, atomic live region: the compact fleet totals are announced when they change on the
+				     30s poll, without announcing the per-instance card re-render. -->
+				<div class="summary-bar" aria-live="polite" aria-atomic="true" style="justify-content: center; gap: 28px; margin-top: 0;">
 					<p>Deals: <span id="hub-total-deals">—</span></p>
 					<p>Bots: <span id="hub-total-bots">—</span></p>
 					<p>Active P/L: <span id="hub-total-profit">—</span></p>
@@ -167,12 +184,12 @@
 		</div>
 
 		<!-- Per-instance cards -->
-		<div style="display: inline-block; text-align: left; width: 80%; margin-bottom: 20px;">
+		<div class="hub-home-col" style="margin-bottom: 20px;">
 			<div id="hub-instance-cards" class="hub-dash-grid"></div>
 		</div>
 
 		<!-- Nav -->
-		<div style="display: inline-block; text-align: left; width: 80%;">
+		<div class="hub-home-col">
 
 			<div class="card">
 

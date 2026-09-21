@@ -54,6 +54,7 @@ Formatting:
 - Use short paragraphs
 - Use bullet points when helpful
 - Keep responses easy to read
+- Write any math or formulas in plain text, never in LaTeX or math markup. Do not use \text, \frac, \times, \approx, dollar-sign math, or \[ ... \] and \( ... \) delimiters. For example, write "New Average Price = (Position Value + Added Funds) / (Quantity + Added Funds / Price)" and then show the computed number, rather than a LaTeX fraction.
 
 Instructions:
 - Only mention your name if the user asks who you are

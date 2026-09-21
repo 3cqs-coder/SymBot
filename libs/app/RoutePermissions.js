@@ -104,6 +104,16 @@ const RULES = [
 	{ m: 'POST',   re: /^\/api\/ai\/learning\/rate$/,             cap: 'settings.write' },
 	{ m: 'POST',   re: /^\/api\/ai\/learning\/aggregate$/,        cap: 'settings.write' },
 
+	// Provider PROBES used only by the configuration screen: list a provider's models, check a model's
+	// tool-calling support, and the readiness preflight. These accept a caller-supplied endpoint
+	// (base_url/host) and can fall back to the STORED provider key, so a read scope must not reach them —
+	// otherwise a low-scope caller could point the probe at a foreign endpoint and have the server deliver
+	// the stored key there (key exfiltration), or drive arbitrary outbound requests (SSRF). They are
+	// config-setup helpers, so require the config-editing scope. Matched before the generic /api/ai/ rule.
+	{ m: 'POST',   re: /^\/api\/ai\/models$/,                     cap: 'settings.write' },
+	{ m: 'POST',   re: /^\/api\/ai\/preflight$/,                  cap: 'settings.write' },
+	{ m: 'POST',   re: /^\/api\/ai\/model-tools-support$/,        cap: 'settings.write' },
+
 	// AI features are read-only for trading (they can never place/modify a trade) but consume
 	// paid generations, so require at least a read scope rather than admitting any key. Covers the
 	// GET history/conversation reads and the POST/DELETE generate + persistence routes. The

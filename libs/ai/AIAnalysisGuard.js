@@ -82,17 +82,35 @@ function stripGroundingNoise(src) {
 }
 
 
+// Is a cited figure present in the source at a NUMBER BOUNDARY (not merely as a substring of a longer
+// run)? A raw substring test has a false-negative: a fabricated "234.56" hides inside a legitimate
+// "1234.56", and a fabricated "3.45" inside "13.456" — so an invented figure that happens to be a tail of
+// a real one scores as grounded and ships uncaveated. Requiring a LEFT boundary (the figure is not preceded
+// by another digit or a decimal point) closes that hole. The RIGHT side is treated by shape: a DECIMAL
+// figure keeps its right side open so a rounded citation still matches (75.5 ↔ 75.53272 — the documented
+// rounding tolerance), while an INTEGER figure requires a right boundary too (a stated whole number is not a
+// rounding of a longer digit run, and "6620" must not match inside "66201"). Pure and total — a malformed
+// figure that can't compile a regex is treated as ungrounded rather than throwing.
+function figureGrounded(src, n) {
+	try {
+		const esc = String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const right = String(n).indexOf('.') !== -1 ? '' : '(?!\\d)';   // decimal: right open (rounding); integer: bounded
+		return new RegExp('(?<![\\d.])' + esc + right).test(src);
+	}
+	catch (e) { return false; }
+}
+
 // Which significant figures in the reply do NOT appear anywhere in the data the
-// model was given? A substring match against the comma-stripped, id/epoch-scrubbed
-// source gives natural tolerance for rounding (a reply that shortens 75.53272 to
-// 75.5 still matches), while an invented price or amount is surfaced.
+// model was given? Boundary-matched against the comma-stripped, id/epoch-scrubbed source (see
+// figureGrounded): rounding of a real figure is tolerated, while an invented price or amount — even one
+// that coincides with the tail of a longer real number — is surfaced.
 function checkNumbers(output, source) {
 
 	const src = stripGroundingNoise(String(source || '').replace(/,/g, ''));
 
 	const numbers = extractSignificantNumbers(output);
 
-	const ungrounded = numbers.filter(n => src.indexOf(n) === -1);
+	const ungrounded = numbers.filter(n => !figureGrounded(src, n));
 
 	return { numbersChecked: numbers.length, ungrounded };
 }

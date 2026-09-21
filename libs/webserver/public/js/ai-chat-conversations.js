@@ -63,8 +63,11 @@
 		if (mins < 1)   return 'just now';
 		if (mins < 60)  return mins  + 'm ago';
 		if (hours < 24) return hours + 'h ago';
-		const rem = Math.round((diff % 86400000) / 3600000 * 10) / 10;
-		return days + (rem > 0 ? '.' + String(rem).replace('.','').slice(0,1) : '') + 'd ago';
+		// Leftover time as TENTHS OF A DAY (0-9), so "2 days 12 hours" reads "2.5d ago". (The previous form
+		// divided the leftover by an hour, then glued that hour count's first digit on as a day-decimal, so
+		// 2d12h wrongly showed "2.1d".)
+		const tenths = Math.floor((diff % 86400000) / 8640000);
+		return days + (tenths > 0 ? '.' + tenths : '') + 'd ago';
 	}
 	function getBase() { return window.AIChatConv_basePath || './'; }
 

@@ -60,7 +60,7 @@
 		</td>
 		<td>
 			<input type="password" autocomplete="off" name="mailer_password" id="mailer_password" class="form-field secretClearField" style="width: 250px;" value="" placeholder="<%= _m.password_set ? 'leave blank to keep existing' : '' %>">
-			<span id="showMailerPassword" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
+			<span id="showMailerPassword" role="button" tabindex="0" aria-label="Show or hide the password" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" style="margin-left: 10px; cursor: pointer; color: var(--link-color);">Show</span>
 			<%- include('partialsSecretClear', { field: 'mailer_password', isSet: _m.password_set, label: 'Password is set' }) %>
 		</td>
 	</tr>

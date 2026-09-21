@@ -44,16 +44,28 @@ function nowMs() { return Date.now(); }
 const PASSWORD_PBKDF2_ITERATIONS = 600000;
 const LEGACY_PBKDF2_ITERATIONS   = 1000;
 
-function hashPassword(password) {
-	const salt = crypto.randomBytes(16).toString('hex');
-	return salt + ':' + crypto.pbkdf2Sync(String(password), salt, PASSWORD_PBKDF2_ITERATIONS, 64, 'sha256').toString('hex');
+// Derive the key OFF the event loop. The Hub runs the web server AND every instance's worker message-relay in
+// ONE process, so a synchronous 600k-iteration PBKDF2 during a login (~200-400ms) would stall the whole Hub —
+// including the trading-relay timing — and a burst of failed logins would amplify that. crypto.pbkdf2 (async)
+// keeps HubStore's deliberate Common-independence (Node built-in, no shareData). Same algorithm/iterations/
+// dklen, so every existing "salt:hash" verifies unchanged. Mirrors the instance-side pbkdf2Async fix.
+function pbkdf2(password, salt, iterations) {
+	return new Promise((resolve, reject) => {
+		crypto.pbkdf2(String(password), salt, iterations, 64, 'sha256', (err, dk) => err ? reject(err) : resolve(dk));
+	});
 }
-function verifyPassword(password, stored) {
+
+async function hashPassword(password) {
+	const salt = crypto.randomBytes(16).toString('hex');
+	const dk = await pbkdf2(password, salt, PASSWORD_PBKDF2_ITERATIONS);
+	return salt + ':' + dk.toString('hex');
+}
+async function verifyPassword(password, stored) {
 	const [ salt, hash ] = String(stored || '').split(':');
 	if (!salt || !hash) { return false; }
 	const b = Buffer.from(hash, 'hex');
 	for (const iterations of [ PASSWORD_PBKDF2_ITERATIONS, LEGACY_PBKDF2_ITERATIONS ]) {
-		const a = Buffer.from(crypto.pbkdf2Sync(String(password), salt, iterations, 64, 'sha256').toString('hex'), 'hex');
+		const a = await pbkdf2(password, salt, iterations);
 		if (a.length === b.length && crypto.timingSafeEqual(a, b)) { return true; }
 	}
 	return false;
@@ -181,14 +193,14 @@ function userToPrincipal(u) { return UsersPure.toPrincipal(u); }
 
 // Seed the initial owner from an existing "salt:hash" (the hub.json password) or a plaintext.
 // Idempotent. Single exit.
-function seedOwner(opts) {
+async function seedOwner(opts) {
 	opts = opts || {};
 	let result = { success: false };
 	if (driver) {
 		const existing = driver.get('SELECT * FROM users WHERE is_initial = 1');
 		if (existing) { result = { success: true, seeded: false, user: UsersPure.publicView(rowToUser(existing)) }; }
 		else {
-			const password_hash = opts.passwordHash || (opts.password ? hashPassword(opts.password) : '');
+			const password_hash = opts.passwordHash || (opts.password ? await hashPassword(opts.password) : '');
 			const id = uuid();
 			driver.run('INSERT INTO users (user_id, username, password_hash, role, grants, status, is_initial, created_at) VALUES (?,?,?,?,?,?,1,?)',
 				[ id, (opts.username || 'owner'), password_hash, 'owner', '[]', 'active', nowMs() ]);
@@ -199,27 +211,28 @@ function seedOwner(opts) {
 	return result;
 }
 
-function createUser(opts) {
+async function createUser(opts) {
 	opts = opts || {};
 	let result = { success: false, error: 'Username and password are required' };
 	const username = (opts.username || '').trim();
 	if (driver && username && opts.password) {
 		if (driver.get('SELECT 1 FROM users WHERE username = ?', [ username ])) { result = { success: false, error: 'Username already exists' }; }
 		else {
+			const password_hash = await hashPassword(opts.password);
 			const id = uuid();
 			driver.run('INSERT INTO users (user_id, username, password_hash, role, grants, status, created_at) VALUES (?,?,?,?,?,?,?)',
-				[ id, username, hashPassword(opts.password), UsersPure.normalizeRole(opts.role), JSON.stringify(Array.isArray(opts.grants) ? opts.grants : []), 'active', nowMs() ]);
+				[ id, username, password_hash, UsersPure.normalizeRole(opts.role), JSON.stringify(Array.isArray(opts.grants) ? opts.grants : []), 'active', nowMs() ]);
 			result = { success: true, user: UsersPure.publicView(getUserById(id)) };
 		}
 	}
 	return result;
 }
 
-function authenticate(username, password) {
+async function authenticate(username, password) {
 	let user = null;
 	if (driver) {
 		const row = rowToUser(driver.get('SELECT * FROM users WHERE username = ? AND status = ?', [ (username || '').trim(), 'active' ]));
-		if (row && verifyPassword(password, row.password_hash)) {
+		if (row && await verifyPassword(password, row.password_hash)) {
 			driver.run('UPDATE users SET last_login_at = ? WHERE user_id = ?', [ nowMs(), row.user_id ]);
 			user = row;
 		}
@@ -273,7 +286,16 @@ function createKey(opts) {
 	return result;
 }
 
-// Resolve a presented key string → Authz principal, or null. Constant-time; touches last_used.
+// Throttle the last_used bookkeeping write. resolveKey runs on EVERY authenticated API request, and the SQLite
+// driver opens with synchronous=FULL, so an unconditional UPDATE fsyncs on the Hub's shared main thread per
+// request — a frequently-polling API client would serialize fsyncs on the same thread that relays messages to
+// every instance. last_used is a display-only convenience field (never a security decision; expiry uses
+// expires_at), so writing it at most once per key per minute removes the per-request fsync while keeping it
+// fresh enough. Bounded naturally: keyed by key_id, and few keys exist.
+const LAST_USED_TOUCH_MS = 60000;
+const lastUsedTouch = new Map();
+
+// Resolve a presented key string → Authz principal, or null. Constant-time; touches last_used (throttled).
 function resolveKey(presentedKey, ctx) {
 	ctx = ctx || {};
 	let principal = null;
@@ -287,7 +309,11 @@ function resolveKey(presentedKey, ctx) {
 			const ipCheck = IpFilter.evaluate(ctx.ip, { allow: row.ip_allowlist || [], deny: row.ip_blocklist || [] });
 
 			if (ipCheck.allowed) {
-				driver.run('UPDATE api_keys SET last_used_at = ?, last_used_ip = ? WHERE key_id = ?', [ nowMs(), ctx.ip || '', row.key_id ]);
+				const nowT = nowMs();
+				if (nowT - (lastUsedTouch.get(row.key_id) || 0) >= LAST_USED_TOUCH_MS) {
+					lastUsedTouch.set(row.key_id, nowT);
+					driver.run('UPDATE api_keys SET last_used_at = ?, last_used_ip = ? WHERE key_id = ?', [ nowT, ctx.ip || '', row.key_id ]);
+				}
 				principal = Authz.makePrincipal({ id: row.key_id, kind: 'apikey', apiKeyId: row.key_id, capabilities: row.capabilities, rateLimit: row.rate_limit });
 			}
 			else {
@@ -324,19 +350,27 @@ function rotateKey(keyId, opts) {
 		else {
 			const oldCaps = Array.isArray(old.capabilities) ? old.capabilities.slice() : [];
 
-			const created = createKey({
-				name:              old.name ? (old.name + ' (rotated)') : 'rotated key',
-				capabilities:      oldCaps,
-				ownerCapabilities: oldCaps,                 // bound to the predecessor's scope — rotation never escalates
-				ownerUserId:       old.owner_user_id || '',
-				signing:           old.signing,
-				rateLimit:         old.rate_limit,
-				ipAllowlist:       Array.isArray(old.ip_allowlist) ? old.ip_allowlist.slice() : [],
-				ipBlocklist:       Array.isArray(old.ip_blocklist) ? old.ip_blocklist.slice() : []
-			});
+			// Mint the successor AND grace-expire/cross-link the predecessor as ONE atomic unit. Without a
+			// transaction a crash between the writes could leave a minted successor with the old key NOT
+			// grace-expired (two active keys) or a missing rotated_from back-reference. driver.transaction rolls
+			// the whole thing back on any error (and a transient-busy retry re-runs it cleanly after rollback,
+			// so no duplicate successor is ever committed).
+			result = driver.transaction(() => {
 
-			if (!created || !created.success) { result = { success: false, error: (created && created.error) || 'Could not create the successor key.' }; }
-			else {
+				const created = createKey({
+					name:              old.name ? (old.name + ' (rotated)') : 'rotated key',
+					capabilities:      oldCaps,
+					ownerCapabilities: oldCaps,                 // bound to the predecessor's scope — rotation never escalates
+					ownerUserId:       old.owner_user_id || '',
+					signing:           old.signing,
+					rateLimit:         old.rate_limit,
+					ipAllowlist:       Array.isArray(old.ip_allowlist) ? old.ip_allowlist.slice() : [],
+					ipBlocklist:       Array.isArray(old.ip_blocklist) ? old.ip_blocklist.slice() : []
+				});
+
+				// Throw to roll the transaction back so a failed mint leaves the predecessor untouched.
+				if (!created || !created.success) { throw new Error((created && created.error) || 'Could not create the successor key.'); }
+
 				const newKeyId = created.key && created.key.key_id;
 				const graceExpiry = graceHours > 0 ? (nowMs() + (graceHours * 3600 * 1000)) : nowMs();
 
@@ -344,8 +378,8 @@ function rotateKey(keyId, opts) {
 				if (newKeyId) { driver.run('UPDATE api_keys SET rotated_from = ? WHERE key_id = ?', [ keyId, newKeyId ]); }
 
 				log('rotated key ' + old.prefix + ' → ' + (created.key && created.key.prefix) + ' (old expires in ' + graceHours + 'h)');
-				result = { success: true, key: created.key, clearKey: created.clearKey, old_key_id: keyId, grace_expires_at: graceExpiry, grace_hours: graceHours };
-			}
+				return { success: true, key: created.key, clearKey: created.clearKey, old_key_id: keyId, grace_expires_at: graceExpiry, grace_hours: graceHours };
+			});
 		}
 	}
 	catch (e) { log('rotateKey failed: ' + e.message); result = { success: false, error: e.message }; }

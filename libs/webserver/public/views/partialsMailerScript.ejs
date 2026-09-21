@@ -42,7 +42,7 @@
 
 				if (resp && resp.success) {
 
-					$out.css('color', 'var(--green-color, var(--color-success))')
+					$out.css('color', 'var(--color-success)')
 						.text('✓ Success' + (resp.sent_to ? ' — test sent to ' + resp.sent_to : ''));
 				}
 				else {

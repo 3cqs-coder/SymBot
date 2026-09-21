@@ -127,7 +127,7 @@
 			useBootstrap: false,
 			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">' +
 				'<b style="color: var(--color-danger);">Delete ' + botName + '?</b><br><br>' +
-				'<div style="font-size: var(--fs-body); padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid #d80f08; border-radius: 2px;">' +
+				'<div style="font-size: var(--fs-body); padding: 8px; background: var(--color-danger-soft); border-left: 3px solid var(--color-danger); border-radius: 2px;">' +
 				'<b>This cannot be undone.</b> The bot and all of its deal history will be permanently deleted. Active deals must be closed or canceled first.' +
 				'</div><br>' +
 				'Type the bot name to confirm:<br>' +
@@ -252,8 +252,9 @@
 			let botId = $(row).data('botid');
 			// Escape at read: botName is DB/user-controlled and is only ever concatenated into HTML dialog
 			// content (delete confirm + deletion alert), so escaping with the shared escaper here closes the
-			// stored-XSS round-trip that jQuery.data() (browser-decoded) otherwise reopens.
-			let botName = (window.SymBot && SymBot.UI && SymBot.UI.esc) ? SymBot.UI.esc($(row).data('botname')) : $(row).data('botname');
+			// stored-XSS round-trip that jQuery.data() (browser-decoded) otherwise reopens. symbot-ui.js is a
+			// hard page dependency, so call the shared escaper directly (no unescaped fallback) as elsewhere.
+			let botName = SymBot.UI.esc($(row).data('botname'));
 
 			if (col == (colCount - 1)) {
 
@@ -346,12 +347,12 @@
 			<div class="contentHeaderBox">
 				<b id="headerText" class="contentHeader">DCA Bots</b>
 				<span class="viewSettings">
-					<span id="botDealSelectorShow" class="viewIconBtn"><span class="icon icon-columns" style="width:13px;height:13px;"></span></span>
+					<span id="botDealSelectorShow" class="viewIconBtn" role="button" tabindex="0" aria-label="Choose columns" title="Choose columns"><span class="icon icon-columns" style="width:13px;height:13px;pointer-events:none;"></span></span>
 				</span>
 			</div>
 
 			<div class="view-summary">
-				<span style="display: flex; justify-content: flex-start; align-items: center; font-size: 1.05rem; gap: 10px; margin: 0;">
+				<span style="display: flex; justify-content: flex-start; align-items: center; font-size: var(--fs-body); gap: 10px; margin: 0;">
 					<input id="showActive" name="showActive" type=checkbox> Show Active
 				</span>
 			</div>
@@ -483,10 +484,10 @@
 						%><%- botMaxFunds %></td>
 						<td><%- startCondition %></td>
 						<td><%- sandBox %></td>
-						<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %>></td>
+						<td><input id="toggle<%- bot['botId'] %>" type=checkbox <%- active %> aria-label="Enable or disable this bot"></td>
 						<td style="width: 1%; white-space: nowrap; text-align: center;">
 							<div class="pill-group">
-								<span class="pill-btn pill-danger" title="Delete bot">&#10005;</span>
+								<span class="pill-btn pill-danger" role="button" tabindex="0" aria-label="Delete bot" title="Delete bot">&#10005;</span>
 							</div>
 						</td>
 					</tr>

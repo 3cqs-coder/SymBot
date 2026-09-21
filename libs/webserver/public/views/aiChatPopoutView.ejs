@@ -29,9 +29,20 @@
 	%>
 	<base href="<%= basePath %>">
 
+	<!-- No-FOUC theme bootstrap (mirrors the main app): apply the saved dark theme to <html> synchronously,
+	     BEFORE paint, so popping out chat never flashes the light palette for a dark-theme user. applyMode()
+	     reconciles the icon and body attribute afterward. Fail-safe: any storage error leaves the default. -->
+	<script>
+		(function () {
+			try {
+				var t = JSON.parse(localStorage.getItem('dataTracker') || '{}');
+				if (t && t.mode === 'dark') { document.documentElement.setAttribute('data-theme', 'dark'); }
+			} catch (e) {}
+		})();
+	</script>
+
 	<link rel="stylesheet" href="css/style.css?v=<%- appData.version %>" />
 	<link rel="stylesheet" href="css/vendor/jquery-confirm/jquery-confirm.min.css" />
-	<link href="https://fonts.googleapis.com/css?family=Heebo:400,600,300" rel="stylesheet" type="text/css">
 </head>
 
 <body class="popout-body">
@@ -42,7 +53,7 @@
 	<span id="chatMascotHeader" class="chat-mascot-header" title="Assistant"></span>
 	<span id="popoutTitle">AI Chat</span>
 	<div id="popoutHeaderBtns">
-		<div id="popoutMode" title="Toggle theme"></div>
+		<div id="popoutMode" role="button" tabindex="0" aria-label="Toggle light and dark theme" title="Toggle theme"></div>
 	</div>
 </div>
 
@@ -55,9 +66,11 @@
 </div>
 <div class="aiChatContainer" id="popoutChatContainer">
 	<div id="aiChatBox"></div>
+	<!-- The finished answer's text is copied here once so a screen-reader user hears it (see the main chat). -->
+	<div id="aiLiveStatus" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 </div>
 <div id="chatInputContainer">
-	<textarea id="chatInput" placeholder="Type your message here..." autocomplete="off" rows="1" style="resize:none;overflow:hidden;"></textarea>
+	<textarea id="chatInput" placeholder="Type your message here..." aria-label="Message" autocomplete="off" rows="1" style="resize:none;overflow:hidden;"></textarea>
 	<button id="chatSendButton">Send</button>
 </div>
 
@@ -108,11 +121,13 @@
 
 			if (mode === 'dark') {
 
+				document.documentElement.setAttribute('data-theme', 'dark');
 				document.body.setAttribute('data-theme', 'dark');
 				$('#popoutMode').html('<span class="icon icon-moon" style="width:15px;height:15px;"></span>');
 			}
 			else {
 
+				document.documentElement.removeAttribute('data-theme');
 				document.body.removeAttribute('data-theme');
 				$('#popoutMode').html('<span class="icon icon-sun" style="width:15px;height:15px;"></span>');
 			}
@@ -203,6 +218,8 @@
 
 			if ($currentMessageElement) {
 				$lastAssistantMessage = $currentMessageElement;
+				// Announce the finished answer to assistive tech once (see the main chat view).
+				try { $('#aiLiveStatus').text($currentMessageElement.text()); } catch (e) {}
 				messageBuffer = '';
 				$currentMessageElement = null;
 			}
@@ -383,7 +400,7 @@
 							'font-style': 'italic',
 							'margin': '6px 0 2px 0',
 							'padding': '4px 8px',
-							'border-left': '3px solid #f0a500',
+							'border-left': '3px solid var(--chat-system-accent)',
 						}).text('⚠ ' + (data.message || 'Response stopped due to timeout.'));
 
 						$('#aiChatBox').append($notice);
@@ -477,6 +494,11 @@
 
 			// Event handlers
 			$('#popoutMode').on('click', toggleMode);
+			// Keyboard activation for the theme toggle (it is a role="button"), so keyboard and assistive-tech
+			// users can operate it exactly like the main header toggle — Enter or Space fires it.
+			$('#popoutMode').on('keydown', function(e) {
+				if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); toggleMode(); }
+			});
 
 
 			// Paperclip button

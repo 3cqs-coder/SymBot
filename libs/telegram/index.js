@@ -179,7 +179,12 @@ async function helpCommand(ctx) {
 }
 
 
-async function sendMessage(id, msg) {
+// `outbound` distinguishes an operator-initiated notification (sent to a recipient chat id the operator
+// configured — e.g. a schedule's Telegram target) from an inbound COMMAND REPLY (sent back to whoever messaged
+// the bot). The authorization rewrite below applies ONLY to inbound replies, so a stranger who messages the bot
+// gets "not authorized" instead of real content — while an outbound notification to a legitimately-configured
+// second chat id is delivered verbatim (previously it was wrongly replaced with the "not authorized" text).
+async function sendMessage(id, msg, outbound) {
 
 	// Independent of the command poll: as long as we have a bot for the token and Telegram is enabled we
 	// can send, even if bot.launch() failed or was never started (send-only mode). This is what keeps
@@ -189,7 +194,7 @@ async function sendMessage(id, msg) {
 		return;
 	}
 
-	if (id != shareData.appData.telegram_id) {
+	if (!outbound && id != shareData.appData.telegram_id) {
 
 		msg = 'You are not authorized to access ' + shareData.appData.name;
 	}
@@ -202,7 +207,15 @@ async function sendMessage(id, msg) {
 
 	if (text.length > 4000) { text = text.slice(0, 4000) + '\n… (truncated)'; }
 
-	bot.telegram.sendMessage(id, text, { 'disable_web_page_preview': true }).catch(err => logError(err, id));
+	// Bound the send so a network black-hole to Telegram can't leave the promise pending for the OS socket
+	// timeout (~1-2 min); under a sustained outage with frequent alerts those would otherwise accumulate.
+	// Fire-and-forget with a timeout, matching the webhook channel; failures/timeouts are logged, never thrown.
+	const send = bot.telegram.sendMessage(id, text, { 'disable_web_page_preview': true });
+	send.catch(() => {});   // swallow a late rejection that settles AFTER the timeout below (race doesn't cancel it)
+	const bounded = (shareData && shareData.Common && typeof shareData.Common.withTimeout === 'function')
+		? shareData.Common.withTimeout(send, 10000)
+		: send;
+	Promise.resolve(bounded).catch(err => logError(err, id));
 }
 
 
@@ -250,7 +263,10 @@ module.exports = {
 
 	start,
 	stop,
-	sendMessage,
+	// External callers (notification dispatch) always send OUTBOUND to an operator-configured recipient, so the
+	// exported entry marks the send outbound — the inbound "not authorized" rewrite never applies to a
+	// notification. Inbound command replies call the internal sendMessage directly and keep that protection.
+	sendMessage: (id, msg) => sendMessage(id, msg, true),
 
 	init: function(obj) {
 

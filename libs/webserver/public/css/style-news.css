@@ -37,49 +37,32 @@
 }
 
 .card-title {
-	font-size: 1.5rem; /* Enlarging the title */
+	font-size: var(--fs-section); /* card heading */
 	cursor: pointer; /* Pointer cursor for titles */
 	margin-bottom: 10px; /* Spacing below the title */
 }
 
-.card-title a {
-	text-decoration: none; /* Remove underline from links */
-	color: var(--content-box-color); /* Link color */
-}
-
-.card-title a:hover {
-	text-decoration: underline; /* Underline on hover */
-}
-
 .card-text {
-	font-size: 1.3rem; /* Enlarging the description text */
+	font-size: var(--fs-content); /* description text — matches the app's readable data size */
 	margin: 10px 0; /* Margin for spacing */
 }
 
 .article-published-info {
-	font-size: 1.4rem; /* Enlarging the published by text */
-	color: #6c757d; /* Muted text color */
+	font-size: var(--fs-small); /* byline / date */
+	color: var(--label-color); /* Muted text color */
 }
 
 .article-link {
 	cursor: pointer; /* Pointer cursor for images and titles */
 }
 
+/* The search box uses the shared .form-field class for its border, padding, dark-theme styling, and the
+   app-wide focus ring, so only the news-specific layout (centered, capped width) lives here. */
 #search-input {
 	width: 100%;
 	max-width: 400px;
 	margin: 20px auto;
-	padding: 10px;
-	font-size: 1.2rem;
-	border: 1px solid #ccc;
-	border-radius: 5px;
 	display: block;
-	outline: none; /* Removes the blue border on focus */
-}
-
-#search-input:focus {
-	outline: none; /* Ensures no outline on focus */
-	border-color: #999; /* Optional: Change border color on focus if needed */ 
 }
 
 @media (max-width: 768px) {

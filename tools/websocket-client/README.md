@@ -23,39 +23,40 @@ npm install socket.io-client
 
 ```
 
-2. Open the script and set your API key:
+2. Open the script and set your API key (near the top of `ws-client.js`):
 
 ```js
-
-const  apiKey = "{API-KEY}";
-
+let apiKey = 'symb_live_…';
 ```
 
-Create a **scoped** key under **Configuration → Access Control → API Keys** and paste the
-full `symb_live_…` value here. The key needs only the capabilities your WebSocket calls use
+Create a scoped key under Configuration → Access Control → API Keys and paste the full
+`symb_live_…` value here. The key needs only the capabilities your WebSocket calls use
 (a read-only key is enough for reading deals/logs); calls it isn't scoped for are rejected.
 
-3. (Optional) Enable SymBot Hub:
+3. (Optional) Connect through SymBot Hub instead of a direct instance by setting the flag near the top:
 
 ```js
-
-const  useHub = true;
-
+let useHub = true;
 ```
 
 4. Run the script:
 
 ```bash
-
 node ws-client.js
+```
 
+To limit what is printed, pass `--show=` with a comma-separated list of `api`, `log`, and
+`notification` (the default is all three):
+
+```bash
+node ws-client.js --show=api,notification
 ```
 
 ## Read-only API (no idempotency needed)
 
-The WebSocket API is **read-only** — its actions (`deals`, `deals/show`, `deals/completed`, `bots`,
+The WebSocket API is read-only — its actions (`deals`, `deals/show`, `deals/completed`, `bots`,
 `balances`, `markets`, `markets/ohlcv`) only fetch data and never open, fund, or close a deal. Because
-replaying a read has no side effect, write-safety features such as an **`Idempotency-Key`** do not
+replaying a read has no side effect, write-safety features such as an `Idempotency-Key` do not
 apply here — there is nothing to deduplicate. That protection belongs on the one state-changing
 surface, the Signal Bot webhook; see [../signal-bot/](../signal-bot/). If a state-changing WebSocket
 action is ever added, it would be capability-gated (and would then warrant the same idempotency

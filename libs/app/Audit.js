@@ -150,7 +150,16 @@ async function ensureTip(sid) {
 				const last = await model().findOne({ server_id: sid, seq: { $ne: null } }).sort({ seq: -1 }).select({ seq: 1, hash: 1 });
 				chainTip[sid] = (last && last.seq != null) ? { seq: Number(last.seq), hash: String(last.hash || GENESIS_HASH) } : { seq: 0, hash: GENESIS_HASH };
 			}
-			catch (e) { chainTip[sid] = { seq: 0, hash: GENESIS_HASH }; }
+			catch (e) {
+				// Do NOT memoize a FAILED load. If the DB was briefly unavailable at the first audit for this
+				// server_id, caching a genesis tip permanently would make writeChained resume at seq 1 over
+				// already-sealed rows once the DB recovers — duplicate seqs that verifyChain reports as a
+				// (self-inflicted) false tamper alarm. Use a genesis tip for THIS call, but clear the memo so the
+				// next write re-attempts the real load. This write itself will almost always land on the unchained
+				// fallback anyway, since create() fails during the same outage.
+				chainTip[sid] = { seq: 0, hash: GENESIS_HASH };
+				delete tipReady[sid];
+			}
 		})();
 	}
 	await tipReady[sid];
@@ -291,5 +300,8 @@ module.exports = {
 	chainHash,
 	verifyChainRows,
 	verifyChain,
-	GENESIS_HASH
+	GENESIS_HASH,
+	// Exported for unit testing the chain-tip seal directly (production drives it through the fire-and-forget
+	// writeQueue in audit()); mutates the passed doc in place with seq/prev_hash/hash assigned.
+	writeChained
 };

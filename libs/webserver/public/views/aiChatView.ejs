@@ -18,10 +18,14 @@
             <button id="chatDeleteBtn" class="btn btn-default" title="Delete" style="display:none;">Delete</button>
         </div>
         <div id="aiChatBox"></div>
+        <!-- The streamed answer is written to #aiChatBox chunk-by-chunk, which is not announced to assistive
+             tech (and announcing every chunk would be noise). On completion the finished answer's text is
+             copied here ONCE so a screen-reader user hears the response. -->
+        <div id="aiLiveStatus" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
         <div id="chatAttachments"></div>
         <div id="chatInputContainer">
-            <input id="chatInput" type="text" placeholder="Type your message here...">
-            <button id="chatAttachBtn" title="Attach file (PDF, DOCX, TXT, CSV, MD — max 25 MB)">📎</button>
+            <input id="chatInput" type="text" placeholder="Type your message here..." aria-label="Message">
+            <button id="chatAttachBtn" aria-label="Attach file" title="Attach file (PDF, DOCX, TXT, CSV, MD — max 25 MB)">📎</button>
             <input id="chatAttachFile" type="file" accept=".pdf,.docx,.txt,.md,.csv">
             <button id="chatSendButton">Send</button>
         </div>
@@ -96,8 +100,13 @@
 					rooms: [room]
 				});
 	
-				// Handle incoming data
-				socket.on('data', function(data) {
+				// Handle incoming data. This init re-runs every time the chat modal is opened (the view's
+				// inline script is re-evaluated), so remove any previously-bound handler FIRST — socket.io has
+				// no event namespaces, so it must be removed by reference. Without this, N opens leave N live
+				// 'data' handlers on the shared socket, each processing every chunk (duplicate renders, repeated
+				// auto-saves, and detached-DOM memory growth on the hours-long dashboard).
+				if (window.__aiChatDataHandler) { socket.off('data', window.__aiChatDataHandler); }
+				const onChatData = function(data) {
 
 					if (data.type === 'message') {
 
@@ -138,12 +147,14 @@
 							'font-style': 'italic',
 							'margin': '6px 0 2px 0',
 							'padding': '4px 8px',
-							'border-left': '3px solid #f0a500',
+							'border-left': '3px solid var(--chat-system-accent)',
 						}).text('⚠ ' + (data.message || 'Response stopped due to timeout.'));
 
 						$('#aiChatBox').append($notice);
 					}
-				});
+				};
+				socket.on('data', onChatData);
+				window.__aiChatDataHandler = onChatData;
 	
 				// Leave room on window unload
 				const leaveRoom = () => {
@@ -154,8 +165,9 @@
 					}
 				};
 	
-				$(window).on('beforeunload', leaveRoom);
-				$(document).on('dialogclose', '.ui-dialog-content', leaveRoom);
+				// Namespaced + off-before-on so reopening the modal doesn't stack duplicate unload/close handlers.
+				$(window).off('beforeunload.aichat').on('beforeunload.aichat', leaveRoom);
+				$(document).off('dialogclose.aichat', '.ui-dialog-content').on('dialogclose.aichat', '.ui-dialog-content', leaveRoom);
 			}
 	
 			function postChatPrompt(content) {
@@ -202,6 +214,9 @@
 
 				if ($currentMessageElement) {
 					$lastAssistantMessage = $currentMessageElement;
+					// Announce the finished answer to assistive tech ONCE (plain text of the rendered answer),
+					// rather than the per-chunk streaming which is not announced.
+					try { $('#aiLiveStatus').text($currentMessageElement.text()); } catch (e) {}
 					messageBuffer = '';
 					$currentMessageElement = null;
 				}
@@ -325,12 +340,17 @@
 				const $area = $('#chatAttachments');
 				$area.empty();
 				pendingAttachments.forEach(function(att, idx) {
+					const removeAttachment = function() {
+						pendingAttachments.splice(idx, 1);
+						renderAttachmentPills();
+					};
 					const $pill = $('<div class="chat-attachment-pill">')
 						.append($('<span>').text('📄 ' + att.name))
-						.append($('<span class="pill-remove">').text('×').on('click', function() {
-							pendingAttachments.splice(idx, 1);
-							renderAttachmentPills();
-						}));
+						.append($('<span class="pill-remove">')
+							.text('×')
+							.attr({ role: 'button', tabindex: 0, 'aria-label': 'Remove attachment ' + att.name, title: 'Remove attachment' })
+							.on('click', removeAttachment)
+							.on('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); removeAttachment(); } }));
 					$area.append($pill);
 				});
 			}

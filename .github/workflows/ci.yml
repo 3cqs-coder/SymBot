@@ -1,0 +1,57 @@
+# Continuous integration: run SymBot's unit suite on every push and pull request.
+#
+# The suite is plain Node with no database and no native build step (tests use in-memory stubs and
+# fixtures — for example the log-redaction test carries a mongodb:// string only to prove the password is
+# scrubbed, it never connects), so no service container is needed. It runs across all three supported
+# operating systems and both ends of the supported Node range, which is the cheap way to catch a
+# path-separator, line-ending, or Node-version regression before it reaches anyone.
+#
+# Requires the test files and helper scripts to be present in the repository (libs/test/, scripts/run-tests.js
+# and scripts/precheck.js). There is no committed package-lock.json, so dependencies install from the ranges
+# in package.json with `npm install` rather than `npm ci`.
+
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:      # allow a manual run from the Actions tab
+
+# Least privilege: the suite only reads the repository, so the run's token gets read-only access.
+permissions:
+  contents: read
+
+# Only the latest run for a given branch or pull request needs to finish; cancel any superseded run so a
+# rapid series of pushes does not queue up stale jobs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false     # let every OS/Node combination report, so one failure does not hide the others
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        node: [ '22.15.0', '24' ]   # the minimum supported version (see package.json engines) and the current major
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install dependencies
+        shell: bash
+        run: npm install --no-audit --no-fund
+
+      - name: Syntax gate
+        shell: bash
+        run: npm run check
+
+      - name: Unit suite
+        shell: bash
+        run: npm test

@@ -5,8 +5,8 @@
 <script>
     <% const { active_deals, total_in_deals, available_balance, total_profit, total_pl } = kpi; %>
     <% const kpiByCurrency = kpi.by_currency || {}; const kpiCurrencies = kpi.currencies || []; const kpiMultiCurrency = !!kpi.multi_currency; const kpiCurrencySymbols = kpi.currency_symbols || {}; %>
-    const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map, equity_curve_map = {}, win_rate_map = {}, pair_profit_map = {}, pair_profit_pos_map = {}, pair_profit_neg_map = {}, so_utilization_map = {} } = <%- JSON.stringify(charts) %>;
-    const balances = <%- JSON.stringify(available_balance) %>;
+    const { profit_by_bot_map, profit_by_day_map, active_pl_map, adjusted_pl_map, bot_deal_duration_map, bot_funds_in_use_map, max_funds_deals_map, equity_curve_map = {}, win_rate_map = {}, pair_profit_map = {}, pair_profit_pos_map = {}, pair_profit_neg_map = {}, so_utilization_map = {} } = <%- JSON.stringify(charts).replace(/</g, '\\u003c') %>;
+    const balances = <%- JSON.stringify(available_balance).replace(/</g, '\\u003c') %>;
     const currencies = <%- JSON.stringify(currencies || []).replace(/</g, '\\u003c') %>;
 
     // kpiSymbol derived server-side from most common quote currency in completed deals
@@ -14,19 +14,28 @@
     let currencySymbol = '<%- kpiSymbol %>';
     const botIdNameMap = <%- JSON.stringify(botIdNameMap).replace(/</g, '\\u003c') %>;
 
-    const isDarkMode = document.body.getAttribute('data-theme') === 'dark';
-    const chartGridColor = isDarkMode ? '#555555' : undefined;
-    const chartTickColor = isDarkMode ? '#aaaaaa' : undefined;
-    const chartLabelColor = isDarkMode ? '#d8d8d8' : undefined;
+    // Chart styling is theme-INDEPENDENT so switching light/dark WITHOUT reloading never changes it. These
+    // charts are built once at page load and are NOT re-rendered on a theme toggle, so any theme-dependent
+    // value would "stick" at whatever theme the page loaded in — which is what made the grid lines bold in dark
+    // and left them bold after switching back to light. A faint gray grid reads subtly on both the light and
+    // dark panels; the axis ticks and labels use Chart.js's neutral defaults, matching the look these charts
+    // had before and toggling cleanly in both directions.
+    const chartGridColor = 'rgba(128, 128, 128, 0.15)';
+    const chartTickColor = undefined;
+    const chartLabelColor = undefined;
 
-    // In dark mode use higher opacity so bars are vivid against dark background
+    // Bar FILL is the subtle/faint tint in BOTH themes — the full-opacity borders below keep the bars crisply
+    // visible on a light or dark panel. Keeping the fill theme-INDEPENDENT is deliberate: the charts are built
+    // once at page load and are not re-rendered on a theme toggle, so a theme-dependent fill would "stick" at
+    // whatever theme the page loaded in (loading in dark then toggling to light left the bars deep). A constant
+    // fill is always correct in both modes and can never get stuck.
     const bgColors = [
-        isDarkMode ? 'rgba(255, 99, 132, 0.85)' : 'rgba(255, 99, 132, 0.2)',
-        isDarkMode ? 'rgba(54, 162, 235, 0.85)' : 'rgba(54, 162, 235, 0.2)',
-        isDarkMode ? 'rgba(255, 206, 86, 0.85)' : 'rgba(255, 206, 86, 0.2)',
-        isDarkMode ? 'rgba(75, 192, 192, 0.85)' : 'rgba(75, 192, 192, 0.2)',
-        isDarkMode ? 'rgba(153, 102, 255, 0.85)' : 'rgba(153, 102, 255, 0.2)',
-        isDarkMode ? 'rgba(255, 159, 64, 0.85)' : 'rgba(255, 159, 64, 0.2)'
+        'rgba(255, 99, 132, 0.2)',
+        'rgba(54, 162, 235, 0.2)',
+        'rgba(255, 206, 86, 0.2)',
+        'rgba(75, 192, 192, 0.2)',
+        'rgba(153, 102, 255, 0.2)',
+        'rgba(255, 159, 64, 0.2)'
     ];
 
     const borderColors = [
@@ -103,7 +112,10 @@
                         label: label,
                         data: values,
                         borderColor: 'rgba(75, 192, 192, 1)',
-                        backgroundColor: isDarkMode ? 'rgba(75, 192, 192, 0.4)' : 'rgba(75, 192, 192, 0.1)',
+                        // Subtle area fill in BOTH themes (the full-opacity 2px line carries the visibility). Kept
+                        // theme-independent for the same reason as the bar fills: the chart is built once at load
+                        // and not re-rendered on a theme toggle, so a theme-dependent fill would stick.
+                        backgroundColor: 'rgba(75, 192, 192, 0.15)',
                         borderWidth: 2,
                         pointRadius: 3,
                         fill: true,
@@ -176,9 +188,10 @@
                         x: {
                             ticks: { color: chartTickColor, callback: function(value) {
                                 const str = this.getLabelForValue(value);
-                                return window.matchMedia("only screen and (max-width: 768px)").matches
-                                    ? str.substring(0, 10) + ".."
-                                    : str.substring(0, 20) + "..";
+                                // Only append the "…" marker when the label was actually truncated, so a short
+                                // label (e.g. "AB") isn't rendered as "AB.." as if it were cut off.
+                                const max = window.matchMedia("only screen and (max-width: 768px)").matches ? 10 : 20;
+                                return str.length > max ? str.substring(0, max) + ".." : str;
                             }},
                             grid: { color: chartGridColor }
                         },
@@ -313,10 +326,10 @@
                 <div class="kpi-container" style="margin-top: 6px;">
                     <% kpiCurrencies.forEach(function(c){ var b = kpiByCurrency[c] || {}; var sym = kpiCurrencySymbols[c] || ''; %>
                     <div class="performance-kpi">
-                        <span style="font-size: var(--fs-content); font-weight: 600;"><%- c %></span>
-                        <span style="font-size: var(--fs-content);">Profit <%- sym %><%- Number(b.profit || 0).toLocaleString() %></span>
-                        <span style="font-size: var(--fs-content);">Active P/L <%- sym %><%- Number(b.pl || 0).toLocaleString() %></span>
-                        <span style="font-size: var(--fs-content);">In Deals <%- sym %><%- Number(b.in_deals || 0).toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content); font-weight: var(--fw-medium);"><%= c %></span>
+                        <span style="font-size: var(--fs-content);">Profit <%= sym %><%- Number(b.profit || 0).toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content);">Active P/L <%= sym %><%- Number(b.pl || 0).toLocaleString() %></span>
+                        <span style="font-size: var(--fs-content);">In Deals <%= sym %><%- Number(b.in_deals || 0).toLocaleString() %></span>
                     </div>
                     <% }); %>
                 </div>

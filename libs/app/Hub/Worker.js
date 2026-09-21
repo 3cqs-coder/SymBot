@@ -106,17 +106,31 @@ async function processWorkerTask(instanceData) {
 
 		console.log(colors.bgBlack.brightGreen.bold(`Finished Starting Instance: ${instanceName}`));
 
-		// Listen for command requests from the main thread
+		// Listen for command requests from the main thread. Guard the dispatch so a malformed or unexpected
+		// message can never throw an unhandled rejection into the worker (mirrors the Hub-side dispatcher's
+		// wrapper); the Hub always sends well-formed { type } messages, so this is a belt-and-suspenders backstop.
 		parentPort.on('message', (message) => {
 
-			processWorkerTaskMessage(SymBot, message);
+			try {
+
+				if (!message || typeof message.type !== 'string') { return; }
+
+				Promise.resolve(processWorkerTaskMessage(SymBot, message)).catch(() => {});
+			}
+			catch (e) { /* never let a bad message crash the worker */ }
 		});
 
 	}
 	catch (error) {
 
-		// Log the error and inform the main thread
-		console.log(colors.bgBlack.brightRed.bold(`Error performing task for ${instanceData.name}: ${error.message}`));
+		// A failed start must become a SUPERVISED CRASH, not a silent "zombie". parentPort keeps the worker's
+		// event loop alive, so simply logging and returning here would leave the thread lingering — falsely
+		// reported online, deaf to every Hub message, and never restarted. Exiting non-zero fires the Worker's
+		// 'exit' handler in the Hub, which restarts the instance with backoff (the same path a normal init
+		// failure takes via shutDown(1)).
+		console.log(colors.bgBlack.brightRed.bold(`Error starting instance ${instanceData.name}: ${error.message} — exiting for supervised restart`));
+
+		process.exit(1);
 	}
 }
 

@@ -13,10 +13,10 @@ Content-Type: application/json
 { "apiToken": "<webhook token>", "action": "entry", "pair": "BTC/USD" }
 ```
 
-- **`apiToken`** — the webhook credential. It can be **either** a scoped **API key**
-  (Access Control → API Keys) with the **`deal.create`** capability — recommended, since it can
-  be revoked or rotated on its own — **or** the legacy **Webhook API Token** from
-  **Configuration → Webhook API Token** (kept for backward compatibility). A header-capable
+- **`apiToken`** — the webhook credential. It can be either a scoped API key
+  (Access Control → API Keys) with the `deal.create` capability — recommended, since it can
+  be revoked or rotated on its own — or the legacy Webhook API Token from
+  Configuration → Webhook API Token (kept for backward compatibility). A header-capable
   sender may instead pass the same value as an `api-token`/`api-key` header (checked before the
   body). See [../README.md](../README.md).
 - **`action`** — one of `entry`, `add_funds`, `close`, `panic_sell`, `close_all`.
@@ -42,11 +42,11 @@ scoped per bot, so the same id sent to two different bots is not cross-deduplica
 
 The sample generates one key per run and reuses it across a single automatic retry (so a first attempt
 that actually landed is never acted on twice). Pin a key across separate runs with the
-`IDEMPOTENCY_KEY` environment variable when you want to prove a resend is ignored:
+`--idempotency-key` flag when you want to prove a resend is ignored:
 
 ```bash
-IDEMPOTENCY_KEY=my-fixed-id node signal-bot.js entry BTC/USD   # opens the deal
-IDEMPOTENCY_KEY=my-fixed-id node signal-bot.js entry BTC/USD   # duplicate — ignored
+node signal-bot.js entry BTC/USD --token your_token --bot my-bot --idempotency-key my-fixed-id   # opens the deal
+node signal-bot.js entry BTC/USD --token your_token --bot my-bot --idempotency-key my-fixed-id   # duplicate — ignored
 ```
 
 > The WebSocket API ([../websocket-client/](../websocket-client/)) is read-only and takes no
@@ -63,16 +63,17 @@ recorded, so if a signal never appears there at all, the token is wrong or webho
 
 ## Usage
 
-```bash
-BASE_URL=http://localhost:3000 WEBHOOK_TOKEN=your_token BOT_ID=my-bot \
-  node signal-bot.js entry BTC/USD
+Configure the connection with CLI flags (preferred):
 
-node signal-bot.js add_funds BTC/USD 25
-node signal-bot.js close BTC/USD
-node signal-bot.js panic_sell BTC/USD
+```bash
+node signal-bot.js entry BTC/USD --base-url http://localhost:3000 --token your_token --bot my-bot
+node signal-bot.js add_funds BTC/USD 25 --token your_token --bot my-bot
+node signal-bot.js close BTC/USD --token your_token --bot my-bot
+node signal-bot.js panic_sell BTC/USD --token your_token --bot my-bot
 ```
 
-Environment variables: `BASE_URL`, `WEBHOOK_TOKEN`, `BOT_ID`.
+Flags: `--base-url`, `--token`, `--bot`, `--idempotency-key`. The environment variables `BASE_URL`,
+`WEBHOOK_TOKEN`, `BOT_ID`, and `IDEMPOTENCY_KEY` are still honored as a fallback for existing setups.
 
 ## Actions
 
@@ -82,7 +83,7 @@ Environment variables: `BASE_URL`, `WEBHOOK_TOKEN`, `BOT_ID`.
 | `add_funds` | Add funds (a manual safety order) to the open deal. Requires `volume > 0`. |
 | `close` | Close the deal **only if** its take-profit target is met (otherwise reports why). |
 | `panic_sell` | Force-close the deal immediately, regardless of profit. |
-| `close_all` | Emergency close of the bot's open deal(s) — an alias of `panic_sell` (force-closes regardless of profit), **not** the take-profit-respecting `close`. |
+| `close_all` | An alias of `panic_sell`, not a whole-book liquidation: it force-closes the bot's single resolved active deal regardless of profit, and errors if several deals are open (target one by pair, or use the deal-id endpoint). It is not the take-profit-respecting `close`. |
 
 > This is a reference example. Treat the webhook token like a password — anyone with it can
 > start and close deals on that bot. Keep it out of source control and rotate it if exposed.

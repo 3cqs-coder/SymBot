@@ -60,18 +60,9 @@ let gotSigInt = false;
 const shutdownTimeout = 2000;
 // Read a `--name value` or `--name=value` command-line argument, or null if absent. The Hub is
 // parameterized via command-line arguments (never environment variables).
-function getCliArg(name) {
-
-	const argv = process.argv;
-
-	for (let i = 2; i < argv.length; i++) {
-
-		if (argv[i] === '--' + name && argv[i + 1] != undefined) { return argv[i + 1]; }
-		if (argv[i].indexOf('--' + name + '=') === 0) { return argv[i].slice(('--' + name + '=').length); }
-	}
-
-	return null;
-}
+// Shared CLI-argument parser (supports "--name value" and "--name=value"), defined once in Bootstrap so the
+// instance and the Hub read arguments identically and cannot drift.
+const getCliArg = Bootstrap.getCliArg;
 
 // Standalone overrides via command-line flags: `--hub-config <file>` selects an alternate Hub
 // config file under /config and `--hub-data-dir <dir>` relocates the Hub's SQLite database +
@@ -208,11 +199,28 @@ async function startHub() {
 					'Sessions': Sessions,
 					'Watchdog': Watchdog,
 					'HubStore': HubStore,
-					// Present HubStore under the interfaces AuthMiddleware / route guards expect,
-					// so the same principal-resolution + enforcement seam works on the Hub
-					// (SQLite-backed) exactly as on instances (Mongo-backed).
-					'ApiKeys': { resolve: (key, ctx) => HubStore.resolveKey(key, ctx) },
-					'Users':   { getById: (id) => HubStore.getUserById(id), toPrincipal: (u) => HubStore.userToPrincipal(u) },
+					// Present HubStore under the interfaces AuthMiddleware / route guards expect, so the same
+					// principal-resolution + enforcement seam works on the Hub (SQLite-backed) exactly as on
+					// instances (Mongo-backed). These adapters expose the SAME method surface as the instance's
+					// ApiKeys/Users/Audit modules so the shared Access Control routes (libs/webserver/sharedRoutes.js)
+					// run unchanged on both. HubStore is mostly synchronous (SQLite), except the password KDF paths
+					// (createUser/authenticate) which are async and off the event loop; the shared handlers `await`
+					// every call regardless, so both sync and async returns are handled uniformly.
+					'ApiKeys': {
+						resolve:   (key, ctx)    => HubStore.resolveKey(key, ctx),
+						list:      ()            => HubStore.listKeys(),
+						create:    (opts)        => HubStore.createKey(opts),
+						rotate:    (id, opts)    => HubStore.rotateKey(id, opts),
+						setStatus: (id, status)  => HubStore.setKeyStatus(id, status)
+					},
+					'Users':   {
+						getById:     (id)          => HubStore.getUserById(id),
+						toPrincipal: (u)           => HubStore.userToPrincipal(u),
+						list:        ()            => HubStore.listUsers(),
+						create:      (opts)        => HubStore.createUser(opts),
+						setRole:     (id, role)    => HubStore.setUserRole(id, role),
+						setStatus:   (id, status)  => HubStore.setUserStatus(id, status)
+					},
 					'Audit':   { audit: (a, ac, t, d, ip) => HubStore.audit(a, ac, t, d, ip), list: (o) => HubStore.listAudit(o) },
 					'WebServer': WebServer,
 					'Hub': Hub,
@@ -222,29 +230,9 @@ async function startHub() {
 
 		Common.freezeProperty(shareData['appData'], [ 'path_root', 'hub_filename' ]);
 
-		// Flag whether the Hub login is still on the shipped default password ("admin"). Drives the
-		// non-blocking "change your default password" nudge in the UI only — never gates login. It is
-		// recomputed on a password change (Common config save) so it clears when a real password is set.
-		// Best-effort: any failure leaves it false, so a glitch can never invent a warning.
-		try {
-
-			const ownerPass = shareData['appData']['password'];
-
-			if (typeof ownerPass === 'string' && ownerPass.indexOf(':') !== -1) {
-
-				const passParts = ownerPass.split(':');
-
-				shareData['appData']['default_password'] = await Common.verifyPasswordHash({ 'salt': passParts[0], 'hash': passParts[1], 'data': 'admin' });
-			}
-			else {
-
-				shareData['appData']['default_password'] = false;
-			}
-		}
-		catch (e) {
-
-			shareData['appData']['default_password'] = false;
-		}
+		// Flag whether the Hub login is still on the shipped default password ("admin"). Shared helper, so the
+		// Hub and instance compute the "change your default password" nudge flag identically (UI-only).
+		await Common.resolveDefaultPasswordFlag(shareData['appData']);
 
 		HubMain.init(Worker, shareData, shutDown);
 
@@ -275,7 +263,7 @@ async function startHub() {
 
 		if (storeState.available) {
 
-			HubStore.seedOwner({ username: 'owner', passwordHash: shareData.appData.password });
+			await HubStore.seedOwner({ username: 'owner', passwordHash: shareData.appData.password });
 
 			// Best-effort: a backup failure must never halt Hub boot or crash the daily timer.
 			try { HubStore.backup(); } catch (e) {}
@@ -285,7 +273,7 @@ async function startHub() {
 		}
 		else {
 
-			Hub.logger('error', 'Hub storage unavailable — Node 22.13+ is required for built-in SQLite. Hub users/API keys/audit are disabled until Node is upgraded.');
+			Hub.logger('error', 'Hub storage unavailable — the SymBot minimum Node version (see the README) provides the built-in SQLite this needs. Hub users/API keys/audit are disabled until Node is upgraded.');
 		}
 
 		AuthMiddleware.init(shareData);
@@ -361,10 +349,11 @@ async function startHub() {
 
 	await WebServer.start(port);
 
-	// Run the central self-policing watchdog now that routes and the audit trail are wired, so its
-	// boot-time integrity findings are recorded to the Hub audit log.
-	try { WebServer.runWatchdog('hub'); }
-	catch (e) { Hub.logger('error', 'Watchdog run skipped: ' + e.message); }
+	// Start the central self-policing watchdog now that routes and the audit trail are wired: a verbose boot
+	// sweep now (findings recorded to the Hub audit log) plus continuous, quiet monitoring on a self-unref'd
+	// interval for the life of the process.
+	try { WebServer.startWatchdogMonitor('hub'); }
+	catch (e) { Hub.logger('error', 'Watchdog monitor start skipped: ' + e.message); }
 
 	HubMain.start(configs);
 
@@ -383,8 +372,13 @@ async function startHub() {
 	// soon as the page loads. The delay gives workers time to come online before
 	// the first request is sent — without it the workerMap may still be empty.
 	// The interval then handles all subsequent refreshes.
-	setTimeout(() => Hub.logMemoryUsage(), 3000);
-	setInterval(() => Hub.logMemoryUsage(), memoryPollMs);
+	const initialMemPoll = setTimeout(() => Hub.logMemoryUsage(), 3000);
+	const memPollTimer = setInterval(() => Hub.logMemoryUsage(), memoryPollMs);
+
+	// Unref both so this background monitoring never holds the process open (consistent with every other timer;
+	// shutdown is driven explicitly by process.exit).
+	if (typeof initialMemPoll.unref === 'function') { initialMemPoll.unref(); }
+	if (typeof memPollTimer.unref === 'function') { memPollTimer.unref(); }
 }
 
 
@@ -442,7 +436,13 @@ async function shutDown() {
 
 				const onShutdownReceived = async (message) => {
 
+					// Use on() + explicit off() rather than once(): a live worker emits other messages
+					// (log batches, memory polls, dashboard replies) that could arrive before the ACK, and
+					// once() would be consumed by the first of ANY type and miss the real SHUTDOWN_RECEIVED,
+					// leaving the worker to be force-terminated after the full timeout.
 					if (message.type !== WORKER_TO_HUB.SHUTDOWN_RECEIVED) return;
+
+					worker.off('message', onShutdownReceived);
 
 					// Acknowledged — cancel the safety timeout
 					clearTimeout(workerShutdownTimeout);
@@ -543,7 +543,7 @@ async function handleHubReset() {
 
 	if (!storeState.available) {
 
-		console.log('\nHub storage unavailable — Node 22.13+ is required for built-in SQLite. Nothing to reset.');
+		console.log('\nHub storage unavailable — the SymBot minimum Node version (see the README) provides the built-in SQLite this needs. Nothing to reset.');
 		process.exit(1);
 	}
 

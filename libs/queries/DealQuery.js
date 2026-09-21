@@ -27,6 +27,17 @@ const DEALS_SCAN_LIMIT = 1000;
 const STATUS_ACTIVE = 0;
 const STATUS_COMPLETE = 1;
 
+// The base $match for a REALIZED-profit aggregation. A canceled deal is written with status:1 AND a full
+// sellData whose profitQuote is an UNREALIZED, marked-to-market figure (the cancel keeps the coins and sells
+// nothing) — so it must never be counted as realized profit/loss, folded into a win rate, or ranked as a
+// best/worst deal. This mirrors the exclusions already in DCABot.portfolioLossMatchStage and
+// TransactionExport, kept here as one helper so the realized aggregations can't drift from each other.
+// (History LISTS deliberately still show canceled deals, with their `canceled` flag, so real activity is
+// visible; only the realized-PROFIT math excludes them.)
+function realizedMatch(extra) {
+	return Object.assign({ 'status': STATUS_COMPLETE, 'canceled': { '$ne': true } }, extra || {});
+}
+
 
 let shareData;
 
@@ -36,6 +47,34 @@ let shareData;
 function round2(n) { return Math.round(n * 100) / 100; }
 
 
+// Quote currencies that are denominated like fiat and read naturally at 2 decimal places (the major
+// fiats plus the common USD-pegged stablecoins). Any quote currency NOT in this set is treated as a
+// crypto quote and kept to more precision by roundMoney.
+const TWO_DP_QUOTE_CURRENCIES = new Set([
+	'USD', 'USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'USDP', 'FDUSD', 'PYUSD', 'GUSD', 'USDD',
+	'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY', 'NZD', 'SGD', 'HKD', 'BRL', 'TRY', 'ZAR'
+]);
+
+// Round a MONEY amount to a sensible precision FOR ITS QUOTE CURRENCY. A fixed 2-decimal round is right
+// for fiat/stablecoin quotes (USDT, USD, ...), but it silently destroys crypto-quoted amounts: a real
+// 0.0049 BTC profit or free balance would round to 0.00 and vanish from the readout. For a non-fiat quote
+// this keeps up to 8 decimals (the usual on-chain precision) so sub-cent amounts survive. Currency-unaware
+// callers that are rounding a PERCENTAGE, COUNT or DURATION must keep using round2 — this is only for money.
+function roundMoney(amount, currency) {
+
+	const n = Number(amount);
+
+	if (isNaN(n)) { return 0; }
+
+	const cur = String(currency == null ? '' : currency).toUpperCase();
+
+	if (TWO_DP_QUOTE_CURRENCIES.has(cur)) { return Math.round(n * 100) / 100; }
+
+	// Crypto (or unknown) quote: keep up to 8 decimals so a small amount is not rounded away to zero.
+	return Math.round(n * 1e8) / 1e8;
+}
+
+
 // Shape the open-portfolio unrealized-P/L fields consistently for the open-deal reports. When open deals
 // span more than one quote currency there is no single meaningful total — computeOpenDealsLive already
 // returns totalUnrealized:null and a per-currency breakdown + note in that case — so the total must stay
@@ -43,7 +82,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
 // single-currency account gets the one rounded total, exactly as before.
 function openUnrealizedFields(core) {
 
-	const out = { 'total_unrealized_pnl': (core && core.totalUnrealized != null) ? round2(core.totalUnrealized) : null };
+	const out = { 'total_unrealized_pnl': (core && core.totalUnrealized != null) ? roundMoney(core.totalUnrealized, core.unrealized_currency) : null };
 
 	if (core && core.unrealizedByCurrency) { out.unrealized_by_currency = core.unrealizedByCurrency; }
 	if (core && core.note) { out.unrealized_note = core.note; }
@@ -135,29 +174,6 @@ function quoteCurrency(pair) {
 	const parts = pair.split(sep);
 
 	return (parts.length >= 2 && parts[1]) ? parts[1].toUpperCase() : 'UNKNOWN';
-}
-
-
-// Sum per-deal profit into a { currency: amount } map (each amount rounded to 2dp),
-// so a total is only ever formed within a single quote currency.
-function profitByCurrency(deals) {
-
-	const map = {};
-
-	for (const d of (deals || [])) {
-
-		const q = Number(d && d.profit);
-
-		if (isNaN(q)) { continue; }
-
-		const cur = quoteCurrency(d && d.pair);
-
-		map[cur] = (map[cur] || 0) + q;
-	}
-
-	for (const k of Object.keys(map)) { map[k] = round2(map[k]); }
-
-	return (map);
 }
 
 
@@ -371,7 +387,7 @@ async function summarizeDeal(deal) {
 
 					if (info.profit != null && !isNaN(Number(info.profit))) {
 
-						summary.unrealizedPnl = round2(Number(info.profit));
+						summary.unrealizedPnl = roundMoney(Number(info.profit), quoteCurrency(deal.pair));
 						summary.inProfit = Number(info.profit) > 0;
 					}
 
@@ -464,7 +480,11 @@ async function getDealsByPair(pair, completedOnly, limit, window) {
 		query['sellData.date'] = range;
 	}
 
-	const r = await runQuery(query, {}, limit);
+	// Order a COMPLETED-deal list by the immutable close date (sellData.date), not runQuery's default
+	// updatedAt — a fleet-wide re-save bumps updatedAt and would scramble "most recent" ordering. An
+	// open/mixed list keeps the updatedAt default (open deals have no sellData.date).
+	const sortOpt = (query.status === STATUS_COMPLETE) ? { 'sort': { 'sellData.date': -1 } } : {};
+	const r = await runQuery(query, sortOpt, limit);
 
 	// runQuery returns at most `limit` deals, so its count is the truncated LIST length — wrong for
 	// "how many deals for pair X" when the pair has more than the cap. Add the TRUE total via a DB count
@@ -510,7 +530,9 @@ async function getRecentDeals(dateFrom, dateTo, limit) {
 		query['sellData.date'] = range;
 	}
 
-	return (await runQuery(query, {}, limit));
+	// Order by the immutable close date so "most recent completed deals" is stable even after a re-save
+	// bumps updatedAt fleet-wide (these are all completed deals, so sellData.date is always present).
+	return (await runQuery(query, { 'sort': { 'sellData.date': -1 } }, limit));
 }
 
 
@@ -659,7 +681,7 @@ async function getPerformanceSummary(dateFrom, dateTo, pair, limit) {
 
 		try {
 
-			const query = { 'status': STATUS_COMPLETE };
+			const query = realizedMatch();
 
 			const range = {};
 
@@ -677,18 +699,22 @@ async function getPerformanceSummary(dateFrom, dateTo, pair, limit) {
 			// and average percent are correct across the whole window — never truncated by the
 			// per-deal scan cap below (which previously made "this year" report only 1000 of
 			// thousands of deals). sellData.profit is the realized percent; profitQuote the money.
-			const agg = (await getDeals(null, null, null, [
+			const agg = await getDeals(null, null, null, [
 				{ '$match': query },
 				{ '$group': {
 					'_id': '$pair',
 					'count':     { '$sum': 1 },
 					'profitSum': { '$sum': { '$toDouble': { '$ifNull': [ '$sellData.profitQuote', 0 ] } } },
 					'pctSum':    { '$sum': { '$toDouble': { '$ifNull': [ '$sellData.profit', 0 ] } } },
-					'wins':      { '$sum': { '$cond': [ { '$gt': [ { '$toDouble': { '$ifNull': [ '$sellData.profit', 0 ] } }, 0 ] }, 1, 0 ] } }
+					'wins':      { '$sum': { '$cond': [ { '$gt': [ { '$toDouble': { '$ifNull': [ '$sellData.profit', 0 ] } }, 0 ] }, 1, 0 ] } },
+					'losses':    { '$sum': { '$cond': [ { '$lt': [ { '$toDouble': { '$ifNull': [ '$sellData.profit', 0 ] } }, 0 ] }, 1, 0 ] } }
 				} }
-			])) || [];
+			]);
+			// undefined from getDeals is a swallowed query error, not "no deals" — fail so the tool reports it,
+			// never a confident "$0 / 0 completed deals" during a DB blip (matches the getBotPerformance guard).
+			if (agg === undefined) { throw new Error('Deal data temporarily unavailable (query failed)'); }
 
-			let exactCount = 0, exactWins = 0, exactPctSum = 0;
+			let exactCount = 0, exactWins = 0, exactLosses = 0, exactPctSum = 0;
 			const byCur = {};
 
 			for (const row of agg) {
@@ -696,20 +722,25 @@ async function getPerformanceSummary(dateFrom, dateTo, pair, limit) {
 				const cnt = Number(row.count) || 0;
 				exactCount += cnt;
 				exactWins += Number(row.wins) || 0;
+				exactLosses += Number(row.losses) || 0;
 				exactPctSum += Number(row.pctSum) || 0;
 
 				const ps = Number(row.profitSum);
 				if (!isNaN(ps)) { const cur = quoteCurrency(row._id); byCur[cur] = (byCur[cur] || 0) + ps; }
 			}
 
-			for (const k of Object.keys(byCur)) { byCur[k] = round2(byCur[k]); }
+			for (const k of Object.keys(byCur)) { byCur[k] = roundMoney(byCur[k], k); }
 
 			// A single "total profit" is only meaningful within one currency — summing USD and
 			// USDT (or BTC) profits is nonsense — so total_profit is a number only when every
 			// completed deal shares one quote currency, else null with a per-currency breakdown.
 			const currencies = Object.keys(byCur);
 			const singleCurrency = currencies.length <= 1;
-			const exactLosses = exactCount - exactWins;
+			// A deal that closed at EXACTLY 0 profit is a real break-even outcome, NOT a loss — matching the
+			// canonical Common.computeDealSetStats. Wins are profit > 0, losses profit < 0, and break-even is
+			// whatever remains, so the three buckets always sum to the total and a flat close never inflates
+			// the loss count or drags down the losers' average.
+			const exactBreakEven = Math.max(0, exactCount - exactWins - exactLosses);
 
 			// Sampled scan for the richer per-deal EXTRAS (average duration, best/worst deal,
 			// safety-order totals) that need each deal's orders/timestamps. Capped for memory and
@@ -736,8 +767,10 @@ async function getPerformanceSummary(dateFrom, dateTo, pair, limit) {
 					if (worst == null || pct < Number(worst.profit_percent)) { worst = p; }
 
 					const so = Number(p.safety_orders) || 0;
+					// Break-even (pct === 0) belongs to neither the winners nor the losers bucket, so it never
+					// drags the losers' average safety-orders/percent toward zero.
 					if (pct > 0) { winN++; winSo += so; winPct += pct; }
-					else { loseN++; loseSo += so; losePct += pct; }
+					else if (pct < 0) { loseN++; loseSo += so; losePct += pct; }
 				}
 
 				if (p.safety_orders != null) { soSum += Number(p.safety_orders); }
@@ -757,12 +790,13 @@ async function getPerformanceSummary(dateFrom, dateTo, pair, limit) {
 				'success': true,
 				'error': null,
 				'completed_deals': exactCount,
-				'total_profit': singleCurrency ? round2(byCur[currencies[0]] || 0) : null,
+				'total_profit': singleCurrency ? roundMoney(byCur[currencies[0]] || 0, currencies[0]) : null,
 				'profit_currency': singleCurrency ? (currencies[0] || null) : null,
 				'avg_profit_percent': exactCount ? round2(exactPctSum / exactCount) : null,
 				'win_rate_percent': exactCount ? round2((exactWins / exactCount) * 100) : null,
 				'wins': exactWins,
 				'losses': exactLosses,
+				'break_even': exactBreakEven,
 				'total_safety_orders': soSum,
 				'avg_duration_mins': durN ? round2(durSum / durN / 60000) : null,
 				'best_deal': brief(best),
@@ -877,7 +911,7 @@ async function getTopDeals(scope, metric, limit, direction, window) {
 					if (window.to instanceof Date && !isNaN(window.to.getTime())) { dateClause['$lte'] = window.to; }
 				}
 
-				const q = { 'status': STATUS_COMPLETE, 'sellData.date': dateClause };
+				const q = realizedMatch({ 'sellData.date': dateClause });
 
 				const winEcho = hasWindow
 					? { 'from': dateClause['$gte'] ? dateClause['$gte'].toISOString() : null, 'to': dateClause['$lte'] ? dateClause['$lte'].toISOString() : null }
@@ -935,12 +969,39 @@ async function getTopDeals(scope, metric, limit, direction, window) {
 }
 
 
+// Collapse a { quoteCurrency: amount } map into the file's canonical profit shape: a single scalar
+// total ONLY when every deal shares one quote currency (summing 0.01 BTC and 100 USDT into 100.01 is
+// nonsense), otherwise total_profit: null with a per-currency breakdown and an explanatory note. The
+// same rule getPerformanceSummary/getPortfolioSummary/computeOpenDealsLive use, so the time-series
+// view can never diverge from them. Returns fields to merge onto a bucket/totals object.
+function collapseProfitFields(byCur, subject) {
+
+	const rounded = {};
+	for (const c of Object.keys(byCur || {})) { rounded[c] = roundMoney(byCur[c] || 0, c); }
+
+	const currencies = Object.keys(rounded);
+
+	if (currencies.length <= 1) {
+
+		return { 'total_profit': currencies.length ? rounded[currencies[0]] : 0, 'profit_currency': currencies[0] || null };
+	}
+
+	return {
+		'total_profit': null,
+		'profit_currency': null,
+		'profit_by_currency': rounded,
+		'note': (subject || 'These deals') + ' span multiple quote currencies (' + currencies.join(', ') + '), so there is no single total profit; see profit_by_currency for the per-currency totals. Counts and win rate are across all deals.'
+	};
+}
+
+
 // Completed-deal stats bucketed by calendar period (day / week / month) over a window — the
 // time-SERIES view ("how many deals did I close each day this week", "profit by month this
-// year"). One DB aggregation grouping on the immutable close date (sellData.date, UTC), so it is
-// exact and memory-flat regardless of how many deals match. total_profit is a raw sum per bucket;
-// it is meaningful within a single quote currency (the usual case) — flagged when deals span more.
-async function getDealStatsOverTime(dateFrom, dateTo, groupBy) {
+// year"). One DB aggregation grouping on the immutable close date (sellData.date) and the pair, so it
+// is exact and memory-flat regardless of how many deals match. Profit is bucketed by the pair's quote
+// currency, never summed across currencies: each period (and the grand totals) carries a single
+// total_profit only within one currency, else total_profit: null with a per-currency breakdown.
+async function getDealStatsOverTime(dateFrom, dateTo, groupBy, timezone) {
 
 	const getDeals = getDealsFn();
 
@@ -951,47 +1012,98 @@ async function getDealStatsOverTime(dateFrom, dateTo, groupBy) {
 	const grp = (groupBy === 'month' || groupBy === 'week') ? groupBy : 'day';
 	const fmt = grp === 'month' ? '%Y-%m' : (grp === 'week' ? '%G-W%V' : '%Y-%m-%d');
 
+	// Bucket by the server's LOCAL calendar day/week (the same time basis Common.getDateParts and the AI date
+	// layer use), not UTC — otherwise "deals closed today / this week" could land in the adjacent bucket for an
+	// operator whose server is not on UTC, disagreeing with the local calendar day the rest of the app reports.
+	// An explicit IANA timezone may be passed to override; it falls back to UTC if the runtime can't resolve one.
+	// The zone name is resolved from the Node host's ICU but applied by MongoDB against ITS OWN tzdata, so in a
+	// split-container or remote-Mongo deployment a very new IANA zone known to Node but not to an older MongoDB
+	// could make $dateToString reject; that path is inside the try/catch below and degrades to the error result.
+	let tz = (typeof timezone === 'string' && timezone !== '') ? timezone : 'UTC';
+	if (tz === 'UTC' && !timezone) { try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { tz = 'UTC'; } }
+
 	const dateClause = {};
 	if (dateFrom instanceof Date && !isNaN(dateFrom.getTime())) { dateClause.$gte = dateFrom; }
 	if (dateTo instanceof Date && !isNaN(dateTo.getTime())) { dateClause.$lte = dateTo; }
 
-	const match = { 'status': STATUS_COMPLETE, 'sellData.date': Object.keys(dateClause).length ? dateClause : { '$exists': true } };
+	const match = realizedMatch({ 'sellData.date': Object.keys(dateClause).length ? dateClause : { '$exists': true } });
 
 	try {
 
+		// Group by period AND pair so profit can be bucketed by the pair's quote currency in JS below.
+		// Row count is bounded by (periods x distinct pairs), so this stays memory-flat.
 		const pipeline = [
 			{ '$match': match },
 			{ '$group': {
-				'_id': { '$dateToString': { 'format': fmt, 'date': '$sellData.date', 'timezone': 'UTC' } },
+				'_id': {
+					'period': { '$dateToString': { 'format': fmt, 'date': '$sellData.date', 'timezone': tz } },
+					'pair': '$pair'
+				},
 				'count':  { '$sum': 1 },
 				'profit': { '$sum': { '$toDouble': { '$ifNull': [ '$sellData.profitQuote', 0 ] } } },
-				'wins':   { '$sum': { '$cond': [ { '$gt': [ { '$toDouble': { '$ifNull': [ '$sellData.profit', 0 ] } }, 0 ] }, 1, 0 ] } }
+				'wins':   { '$sum': { '$cond': [ { '$gt': [ { '$toDouble': { '$ifNull': [ '$sellData.profit', 0 ] } }, 0 ] }, 1, 0 ] } },
+				'losses': { '$sum': { '$cond': [ { '$lt': [ { '$toDouble': { '$ifNull': [ '$sellData.profit', 0 ] } }, 0 ] }, 1, 0 ] } }
 			} },
-			{ '$sort': { '_id': 1 } }
+			{ '$sort': { '_id.period': 1 } }
 		];
 
-		const rows = (await getDeals(null, null, null, pipeline)) || [];
+		const rows = await getDeals(null, null, null, pipeline);
+		// undefined ⇒ a swallowed query error, not "no deals in the window" — fail so the tool reports the
+		// outage instead of a confident empty series with zeroed totals (matches the getBotPerformance guard).
+		if (rows === undefined) { throw new Error('Deal data temporarily unavailable (query failed)'); }
 
-		const buckets = rows.map(r => ({
-			'period': r._id,
-			'deals': r.count,
-			'total_profit': round2(Number(r.profit) || 0),
-			'wins': r.wins,
-			'losses': r.count - r.wins,
-			'win_rate_percent': r.count ? round2((r.wins / r.count) * 100) : null
-		}));
+		// Fold the (period, pair) rows into one entry per period. Counts and wins are currency-agnostic
+		// and sum directly; profit is kept per quote currency so it is never summed across currencies.
+		const periods = new Map();   // period -> { deals, wins, losses, byCur }
+		const grandByCur = {};
+		let gDeals = 0, gWins = 0, gLosses = 0;
 
-		// Pre-computed grand totals across all buckets, so "how many deals in total" is answered
-		// from one field rather than the model summing the per-period rows (which it can get wrong).
-		const tDeals = buckets.reduce((a, b) => a + b.deals, 0);
-		const tWins = buckets.reduce((a, b) => a + b.wins, 0);
-		const totals = {
-			'deals': tDeals,
-			'total_profit': round2(buckets.reduce((a, b) => a + b.total_profit, 0)),
-			'wins': tWins,
-			'losses': tDeals - tWins,
-			'win_rate_percent': tDeals ? round2((tWins / tDeals) * 100) : null
-		};
+		for (const r of rows) {
+
+			const period = r._id.period;
+			const cur = quoteCurrency(r._id.pair);
+			const cnt = Number(r.count) || 0;
+			const wins = Number(r.wins) || 0;
+			const losses = Number(r.losses) || 0;
+			const profit = Number(r.profit) || 0;
+
+			let e = periods.get(period);
+			if (!e) { e = { 'deals': 0, 'wins': 0, 'losses': 0, 'byCur': {} }; periods.set(period, e); }
+
+			e.deals += cnt;
+			e.wins += wins;
+			e.losses += losses;
+			e.byCur[cur] = (e.byCur[cur] || 0) + profit;
+
+			gDeals += cnt;
+			gWins += wins;
+			gLosses += losses;
+			grandByCur[cur] = (grandByCur[cur] || 0) + profit;
+		}
+
+		const buckets = Array.from(periods.keys()).sort().map(period => {
+
+			const e = periods.get(period);
+
+			return Object.assign({
+				'period': period,
+				'deals': e.deals,
+				'wins': e.wins,
+				'losses': e.losses,
+				'break_even': Math.max(0, e.deals - e.wins - e.losses),
+				'win_rate_percent': e.deals ? round2((e.wins / e.deals) * 100) : null
+			}, collapseProfitFields(e.byCur, 'Deals closed in this period'));
+		});
+
+		// Pre-computed grand totals, so "how many deals in total" is answered from one field rather
+		// than the model summing the per-period rows (which it can get wrong).
+		const totals = Object.assign({
+			'deals': gDeals,
+			'wins': gWins,
+			'losses': gLosses,
+			'break_even': Math.max(0, gDeals - gWins - gLosses),
+			'win_rate_percent': gDeals ? round2((gWins / gDeals) * 100) : null
+		}, collapseProfitFields(grandByCur, 'The matched deals'));
 
 		result = { 'success': true, 'error': null, 'group_by': grp, 'totals': totals, 'buckets': buckets, 'periods': buckets.length };
 	}
@@ -1050,8 +1162,10 @@ async function compareDealOutcome(dealId, baselineLimit) {
 
 	// Baseline = the OPPOSITE outcome on the same pair (if the target lost, compare to winners).
 	const wantProfit = !targetWon;
-	const q = { 'status': STATUS_COMPLETE, 'pair': target.pair, 'sellData.date': { '$exists': true }, 'dealId': { '$ne': target.dealId } };
-	q['sellData.profit'] = wantProfit ? { '$gt': 0 } : { '$lte': 0 };
+	const q = realizedMatch({ 'pair': target.pair, 'sellData.date': { '$exists': true }, 'dealId': { '$ne': target.dealId } });
+	// A losing baseline is strictly profit < 0; a break-even close (exactly 0) is neither a win nor a loss
+	// (matching the win/loss/break-even bucketing elsewhere), so it must not pad the "losing deals" contrast.
+	q['sellData.profit'] = wantProfit ? { '$gt': 0 } : { '$lt': 0 };
 
 	const cap = Math.min(Math.max(parseInt(baselineLimit, 10) || 5, 1), 10);
 	const baseDocs = (await getDeals(q, { 'sort': { 'sellData.date': -1 }, 'limit': cap })) || [];
@@ -1098,7 +1212,7 @@ async function getBotPerformance(dateFrom, dateTo, order) {
 
 		try {
 
-			const match = { 'status': STATUS_COMPLETE };
+			const match = realizedMatch();
 			const range = {};
 			if (dateFrom instanceof Date && !isNaN(dateFrom.getTime())) { range.$gte = dateFrom; }
 			if (dateTo instanceof Date && !isNaN(dateTo.getTime())) { range.$lte = dateTo; }
@@ -1163,49 +1277,61 @@ async function getBotPerformance(dateFrom, dateTo, order) {
 			}
 
 			let anyMixed = false;
+			const allCurrencies = new Set();
 
 			let bots = Object.keys(byBot).map(name => {
 				const b = byBot[name];
 				const curs = Object.keys(b.byCur);
 				const single = curs.length <= 1;
 				if (!single) { anyMixed = true; }
-				const rankProfit = curs.reduce((a, k) => a + b.byCur[k], 0);   // raw sum for ranking (same as the dashboard)
+				curs.forEach(k => allCurrencies.add(k));
+				const rankProfit = curs.reduce((a, k) => a + b.byCur[k], 0);   // raw sum, only meaningful within one currency
 
 				const row = {
 					'botName': name,
 					'completed_deals': b.deals,
-					'total_profit': single ? round2(b.byCur[curs[0]] || 0) : null,
+					'total_profit': single ? roundMoney(b.byCur[curs[0]] || 0, curs[0]) : null,
 					'profit_currency': single ? (curs[0] || null) : null,
 					'win_rate_percent': b.deals ? round2(b.wins / b.deals * 100) : 0,
 					'avg_profit_percent': b.deals ? round2(b.pctSum / b.deals) : 0,
 					'avg_duration_mins': b.durN ? Math.round(b.durSum / b.durN) : 0,
 					'avg_safety_orders': b.deals ? round2(b.safetySum / b.deals) : 0,
-					'_rankProfit': rankProfit
+					'_rankProfit': rankProfit,
+					'_rankPct': b.deals ? (b.pctSum / b.deals) : 0
 				};
 
-				if (!single) { const m = {}; curs.forEach(k => { m[k] = round2(b.byCur[k]); }); row.profit_by_currency = m; }
+				if (!single) { const m = {}; curs.forEach(k => { m[k] = roundMoney(b.byCur[k], k); }); row.profit_by_currency = m; }
 
 				return row;
 			});
 
-			const ord = String(order || 'most_profitable');
-			bots.sort((a, b) => ord === 'most_active' ? (b.completed_deals - a.completed_deals) : ord === 'least_profitable' ? (a._rankProfit - b._rankProfit) : (b._rankProfit - a._rankProfit));
+			// Rank by profit AMOUNT only when the whole set shares ONE quote currency (then the sum is
+			// comparable). When bots span different quote currencies, a raw summed amount is meaningless
+			// (0.5 BTC + 5000 USDT is not 5000.5), so rank by the currency-agnostic average profit percent
+			// instead — the same approach getPairPerformance uses — so best_bot/worst_bot stay honest.
+			const uniformCurrency = allCurrencies.size <= 1;
+			const rankOf = (r) => uniformCurrency ? r._rankProfit : r._rankPct;
 
-			const bestBot = bots.length ? bots.slice().sort((a, b) => b._rankProfit - a._rankProfit)[0].botName : null;
-			const worstBot = bots.length ? bots.slice().sort((a, b) => a._rankProfit - b._rankProfit)[0].botName : null;
+			const ord = String(order || 'most_profitable');
+			bots.sort((a, b) => ord === 'most_active' ? (b.completed_deals - a.completed_deals) : ord === 'least_profitable' ? (rankOf(a) - rankOf(b)) : (rankOf(b) - rankOf(a)));
+
+			const bestBot = bots.length ? bots.slice().sort((a, b) => rankOf(b) - rankOf(a))[0].botName : null;
+			const worstBot = bots.length ? bots.slice().sort((a, b) => rankOf(a) - rankOf(b))[0].botName : null;
 
 			// Capture the true count BEFORE trimming the presented rows, so bot_count reflects all bots, not
 			// the display cap of 20.
 			const botCount = bots.length;
 
-			// Drop the internal ranking field from the presented rows.
-			bots = bots.slice(0, 20).map(b => { const { _rankProfit, ...rest } = b; return rest; });
+			// Drop the internal ranking fields from the presented rows.
+			bots = bots.slice(0, 20).map(b => { const { _rankProfit, _rankPct, ...rest } = b; return rest; });
 
 			result = { 'success': true, 'error': null, 'bot_count': botCount, 'bots': bots, 'best_bot': bestBot, 'worst_bot': worstBot };
 
-			if (anyMixed) {
+			if (anyMixed || !uniformCurrency) {
 
-				result.note = 'One or more bots traded deals in multiple quote currencies; for those, total_profit is null and profit_by_currency gives the per-currency totals. Ranking uses the raw summed profit.';
+				result.note = uniformCurrency
+					? 'One or more bots traded deals in multiple quote currencies; for those, total_profit is null and profit_by_currency gives the per-currency totals.'
+					: 'Bots traded across different quote currencies, which cannot be summed into one comparable amount, so best/worst and ordering use each bot\'s average profit percent (currency-agnostic); per-currency totals are in profit_by_currency.';
 			}
 		}
 		catch (e) { result = { 'success': false, 'error': e.message, 'bots': [] }; }
@@ -1531,10 +1657,14 @@ function computeAvailableBalances() {
 				const v = b[cur];
 				if (v && typeof v === 'object' && Number(v.free) > 0) {
 
-					available[cur] = round2((available[cur] || 0) + Number(v.free));
+					// Accumulate the RAW free balance; round once at the end (below). Rounding on every
+					// incremental add can drift a cent when summing many balances of the same currency.
+					available[cur] = (available[cur] || 0) + Number(v.free);
 				}
 			}
 		}
+
+		for (const cur of Object.keys(available)) { available[cur] = roundMoney(available[cur], cur); }
 	}
 
 	return (available);
@@ -1569,7 +1699,7 @@ async function getPortfolioSummary() {
 
 				for (const o of orders) {
 
-					const amt = Number(o && (o.amount != null ? o.amount : o.sum));
+					const amt = Number(o && o.amount != null ? o.amount : 0);   // per-order cost only; never o.sum (a cumulative running total that would overcount when summed across orders)
 
 					if (isNaN(amt)) { continue; }
 
@@ -1583,7 +1713,7 @@ async function getPortfolioSummary() {
 			const singleCur = curs.size <= 1;
 			const deployedTotal = Object.values(deployedByCur).reduce((a, b) => a + b, 0);
 			const committedTotal = Object.values(committedByCur).reduce((a, b) => a + b, 0);
-			const roundMap = (m) => { const out = {}; for (const k of Object.keys(m)) { out[k] = round2(m[k]); } return out; };
+			const roundMap = (m) => { const out = {}; for (const k of Object.keys(m)) { out[k] = roundMoney(m[k], k); } return out; };
 
 			// Available funds: the free balance per currency from the cache, summed
 			// across exchanges. Never a live exchange call.
@@ -1599,8 +1729,8 @@ async function getPortfolioSummary() {
 				'open_deals': (docs || []).length,
 				// Single scalar ONLY when every open deal shares one quote currency (the common case);
 				// otherwise null with the per-currency breakdowns below.
-				'deployed_funds': singleCur ? round2(deployedTotal) : null,
-				'max_committed_if_all_safety_orders_fill': singleCur ? round2(committedTotal) : null,
+				'deployed_funds': singleCur ? roundMoney(deployedTotal, [ ...curs ][0]) : null,
+				'max_committed_if_all_safety_orders_fill': singleCur ? roundMoney(committedTotal, [ ...curs ][0]) : null,
 				'quote_currency': singleCur ? ([ ...curs ][0] || null) : null,
 				'filled_orders': filledOrders,
 				'available_funds': availEmpty ? null : available
@@ -1647,7 +1777,7 @@ async function getPairPerformance(dateFrom, dateTo, limit, topN, order) {
 
 		try {
 
-			const query = { 'status': STATUS_COMPLETE };
+			const query = realizedMatch();
 
 			const range = {};
 
@@ -1683,36 +1813,48 @@ async function getPairPerformance(dateFrom, dateTo, limit, topN, order) {
 				return {
 					'pair': row._id,
 					'deals': deals,
-					'total_profit': round2(Number(row.profitSum) || 0),
+					'total_profit': roundMoney(Number(row.profitSum) || 0, quoteCurrency(row._id)),
 					'avg_profit_percent': deals ? round2((Number(row.pctSum) || 0) / deals) : 0,
 					'win_rate_percent': deals ? round2((Number(row.wins) || 0) / deals * 100) : 0
 				};
 			});
 
-			// Single best/worst by profit, always included so "best and worst pair" is
-			// answerable in one call regardless of the requested ordering or cap.
+			// Each pair's total_profit is in ITS OWN quote currency. When the pairs span more than one quote
+			// currency, comparing raw amounts across them is meaningless (0.5 BTC is not less than 100 USDT), so
+			// rank the profit-based selections by avg_profit_percent — a currency-agnostic measure — and flag it.
+			// Deal-count ordering ('most_active') is currency-agnostic and unaffected.
+			const quoteCurs = new Set(all.map(p => quoteCurrency(p.pair)));
+			const multiCurrency = quoteCurs.size > 1;
+			const profitKey = multiCurrency ? 'avg_profit_percent' : 'total_profit';
+
+			// Single best/worst, always included so "best and worst pair" is answerable in one call
+			// regardless of the requested ordering or cap.
 			let bestPair = null;
 			let worstPair = null;
 
 			for (const p of all) {
 
-				if (bestPair == null || p.total_profit > bestPair.total_profit) { bestPair = p; }
-				if (worstPair == null || p.total_profit < worstPair.total_profit) { worstPair = p; }
+				if (bestPair == null || p[profitKey] > bestPair[profitKey]) { bestPair = p; }
+				if (worstPair == null || p[profitKey] < worstPair[profitKey]) { worstPair = p; }
 			}
 
-			// Ordering: most active (by deal count), least profitable (asc), or most
-			// profitable (desc, default).
+			// Ordering: most active (by deal count), least profitable (asc), or most profitable (desc, default).
 			const sorter = (order === 'most_active')
 				? ((a, b) => b.deals - a.deals)
 				: (order === 'least_profitable')
-					? ((a, b) => a.total_profit - b.total_profit)
-					: ((a, b) => b.total_profit - a.total_profit);
+					? ((a, b) => a[profitKey] - b[profitKey])
+					: ((a, b) => b[profitKey] - a[profitKey]);
 
 			const orderName = (order === 'most_active') ? 'most_active' : (order === 'least_profitable') ? 'least_profitable' : 'most_profitable';
 
 			const pairs = all.slice().sort(sorter).slice(0, cap);
 
 			result = { 'success': true, 'error': null, 'order': orderName, 'pairs': pairs, 'best_pair': bestPair, 'worst_pair': worstPair, 'count': all.length, 'shown': pairs.length };
+
+			if (multiCurrency) {
+
+				result.note = 'These pairs span multiple quote currencies, so best/worst and the profit ordering use average profit percent (a currency-agnostic measure); each pair\'s total_profit is in its own quote currency and is never compared across currencies.';
+			}
 		}
 		catch (e) {
 
@@ -1731,7 +1873,7 @@ async function getPairPerformance(dateFrom, dateTo, limit, topN, order) {
 // different one. Distance to the next safety order comes from the deal's own order
 // ladder. A deal without a live tracker snapshot is flagged priceStale so a number
 // is never shown as live when it is not. Single exit.
-async function computeOpenDealsLive(limit) {
+async function computeOpenDealsLive(limit, trackersSnapshot) {
 
 	const getDeals = getDealsFn();
 
@@ -1751,7 +1893,9 @@ async function computeOpenDealsLive(limit) {
 
 			const docs = await getDeals({ 'status': STATUS_ACTIVE }, { 'limit': capped, 'sort': { 'updatedAt': -1 } });
 
-			const trackers = trackerFn ? ((await trackerFn()) || {}) : {};
+			// Reuse a caller-provided tracker snapshot when given (e.g. getOpenRiskSummary already holds one), so
+			// the whole in-memory tracker is deep-cloned ONCE per request instead of a second time here.
+			const trackers = trackersSnapshot || (trackerFn ? ((await trackerFn()) || {}) : {});
 
 			let totalUnrealized = 0;
 			const unrealizedByCur = {};   // quote currency -> summed unrealized P/L (never mixed into one scalar)
@@ -1791,7 +1935,7 @@ async function computeOpenDealsLive(limit) {
 					// so they match the deals view rather than a second computation here.
 					if (info.profit != null && !isNaN(Number(info.profit))) {
 
-						row.unrealizedPnl = round(Number(info.profit), 2);
+						row.unrealizedPnl = roundMoney(Number(info.profit), dealCur);
 						row.inProfit = Number(info.profit) > 0;
 						totalUnrealized += Number(info.profit);
 						unrealizedByCur[dealCur] = (unrealizedByCur[dealCur] || 0) + Number(info.profit);
@@ -1894,6 +2038,11 @@ async function computeOpenDealsLive(limit) {
 					'targetPrice': r.targetPrice != null ? r.targetPrice : null,
 					'safetyOrdersUsed': r.safetyOrdersUsed != null ? r.safetyOrdersUsed : null,
 					'nextSafetyOrderPrice': r.nextSafetyOrderPrice != null ? r.nextSafetyOrderPrice : null,
+					// How far (%) the price sits above its next safety-order trigger, with a ready flag when it
+					// would fire. Carried here so this single per-deal list answers "which deal is closest to
+					// placing a safety order" — the capability the removed worst-first `deals` array used to hold.
+					'pctToNextSafetyOrder': r.pctToNextSafetyOrder != null ? r.pctToNextSafetyOrder : null,
+					'nextSafetyOrderReady': r.nextSafetyOrderReady === true,
 					'priceStale': r.priceStale === true
 				}));
 
@@ -1905,7 +2054,7 @@ async function computeOpenDealsLive(limit) {
 				'stale': stale,
 				// A single unrealized-P/L total ONLY when every open deal shares one quote currency; otherwise
 				// null with the per-currency breakdown, so different currencies are never summed into one figure.
-				'totalUnrealized': singleCur ? round2(totalUnrealized) : null,
+				'totalUnrealized': singleCur ? roundMoney(totalUnrealized, curKeys[0]) : null,
 				'unrealized_currency': singleCur ? (curKeys[0] || null) : null,
 				'inProfit': inProfitCount,
 				'underwater': underwaterCount,
@@ -1915,15 +2064,29 @@ async function computeOpenDealsLive(limit) {
 			};
 
 			if (!singleCur) {
-				const m = {}; for (const k of curKeys) { m[k] = round2(unrealizedByCur[k]); }
+				const m = {}; for (const k of curKeys) { m[k] = roundMoney(unrealizedByCur[k], k); }
 				result.unrealizedByCurrency = m;
 				result.note = 'Open deals span multiple quote currencies, so there is no single total unrealized P/L (see unrealizedByCurrency). biggestGain/biggestLoss are ranked by unrealized PERCENT, not amount, because amounts in different currencies are not comparable.';
 			}
 		}
 		catch (e) {
 
-			result = { 'success': false, 'error': e.message, 'deals': [], 'priced': 0, 'stale': 0, 'totalUnrealized': 0, 'biggestGain': null, 'biggestLoss': null };
+			// Surface the real cause instead of swallowing it. This path feeds the AI's get_open_deals_status;
+			// a silent throw here made the assistant report "I couldn't pull your live deal data" with no clue
+			// why. Log the message and a short stack so the failing step is visible in the logs.
+			if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') {
+				const st = (e && e.stack) ? ' | ' + String(e.stack).split('\n').slice(0, 4).join(' | ') : '';
+				shareData.Common.logger('computeOpenDealsLive failed (feeds get_open_deals_status): ' + ((e && e.message) ? e.message : e) + st);
+			}
+
+			result = { 'success': false, 'error': (e && e.message) ? e.message : String(e), 'deals': [], 'priced': 0, 'stale': 0, 'totalUnrealized': 0, 'biggestGain': null, 'biggestLoss': null };
 		}
+	}
+	else if (shareData && shareData.Common && typeof shareData.Common.logger === 'function') {
+
+		// getDealsFn() returned null — DCABot.getDeals isn't wired into this DealQuery context. Would also make
+		// every open-deals answer "unavailable"; log it so this distinct cause is not mistaken for a query throw.
+		shareData.Common.logger('computeOpenDealsLive: DCABot.getDeals unavailable (getDealsFn null) — open-deals data cannot be read');
 	}
 
 	return (result);
@@ -1948,35 +2111,27 @@ async function getOpenDealsStatus(limit) {
 
 	const deals = core.deals;
 
-	const ROW_BUDGET = 4200;
-
-	const shown = [];
-	let usedChars = 0;
-
-	for (const r of deals) {
-
-		const sz = JSON.stringify(r).length + 1;
-
-		if (shown.length >= 1 && (usedChars + sz) > ROW_BUDGET) { break; }
-
-		shown.push(r);
-		usedChars += sz;
-	}
-
-	// Pre-ranked "nearest take-profit" list (see computeOpenDealsLive) so a "which deals are
-	// closest to profit / will close soonest" question is answered directly from this field,
-	// rather than the model re-ranking the size-capped deals list by the wrong metric (dollars).
-	// Carries full per-deal detail (price/average/target/safety orders) for EVERY deal, so a "detail on all
-	// deals" answer never has to fall back to the size-capped `deals` array. Capped generously for context
-	// size; the note flags if more deals exist than are listed here.
-	const closest = Array.isArray(core.closestToTakeProfit) ? core.closestToTakeProfit.slice(0, 30) : [];
+	// `closest_to_take_profit` is the SINGLE per-deal source: the ranked (nearest-take-profit first) list with
+	// full live figures for every priced deal it lists. It formerly sat alongside a second, worst-first `deals`
+	// array that duplicated the same per-deal detail in another order — and together the two lists pushed the
+	// serialized result well past the model's size cap for a user with many open deals. The cap then replaced
+	// the ENTIRE result with a truncated {note, partial} stub, which the deterministic renderers read as a
+	// false "live deal data unavailable" abstention. The worst-first array is therefore dropped: ranking by loss
+	// is derivable from this list (it carries unrealizedPnl / unrealizedPct per deal), biggest_gain / biggest_loss
+	// give the authoritative single extremes over ALL open deals, and get_top_deals (direction worst) is the
+	// dedicated full worst-ranking tool. Capped for size; the note flags when more open deals exist than listed.
+	// Sized so the whole serialized result stays under the model's result-size cap (AITools MAX_RESULT_CHARS,
+	// 12000) even at the top of the open-deal range with long pair / deal-id strings, since exceeding it makes
+	// the model receive a truncated stub instead of this data. Each entry carries full per-deal figures; more
+	// open deals than this are summarized by the account-wide totals and the `note` below.
+	const CLOSEST_CAP = 25;
+	const closest = Array.isArray(core.closestToTakeProfit) ? core.closestToTakeProfit.slice(0, CLOSEST_CAP) : [];
 
 	const result = {
 		'success': true,
 		'error': null,
 		'open_deals': deals.length,
 		'open_deals_total': deals.length,
-		'deals_shown': shown.length,
 		'priced_deals': core.priced,
 		'stale_price_deals': core.stale,
 		'open_deals_in_profit': core.inProfit,
@@ -1984,23 +2139,17 @@ async function getOpenDealsStatus(limit) {
 		...openUnrealizedFields(core),
 		'biggest_gain': core.biggestGain,
 		'biggest_loss': core.biggestLoss,
-		'closest_to_take_profit': closest,
-		'deals': shown
+		'closest_to_take_profit': closest
 	};
 
-	// Per-deal detail source for a "how are all my deals doing (in detail)" answer: `closest_to_take_profit`
-	// now carries the REAL price / average / target / safety-order figures for every deal it lists, so there
-	// is no reason to read those from the size-capped `deals` array or to invent them.
-	result.per_deal_detail_note = 'For per-deal detail (price, average, target, safety orders, next safety order, unrealized P/L, % to take-profit) use `closest_to_take_profit` — it carries the REAL figures for every deal listed there. NEVER output 0, 0.000000, null, or any placeholder as a deal\'s price/average/target/safety figure: if a value is null it was not available (e.g. a stale price), so omit that line or say it was not retrieved for that deal — do not print a fabricated number. When the user asks how ALL their deals are doing, or for a detailed breakdown / "tell me more", cover EVERY deal in `closest_to_take_profit` — it is the COMPLETE list of open deals with full figures (ordered by nearness to take-profit), so do NOT stop after the first few nearest-to-profit ones, and always include the biggest_loss and biggest_gain deals by name (the biggest loss is often furthest from take-profit and sorts last).';
+	// Guidance for the model reading this result: `closest_to_take_profit` is the per-deal detail source with
+	// REAL figures; never print a null/0/placeholder for a missing figure; cover every listed deal and name the
+	// biggest_loss / biggest_gain deals in a full breakdown.
+	result.per_deal_detail_note = 'Per-deal figures (price, average, target, safety orders, unrealized P/L, % to take-profit) live in `closest_to_take_profit` — use its REAL values. NEVER print 0, 0.000000, null, or any placeholder for a figure: if a value is null it was not available (e.g. a stale price), so omit that line or say it was not retrieved. For a full "how are all my deals" / breakdown, cover EVERY deal in `closest_to_take_profit` (do not stop after the first few) and name the biggest_loss and biggest_gain deals.';
 
 	if (closest.length < deals.length) {
 
-		result.per_deal_detail_note += ' Only the ' + closest.length + ' deals in `closest_to_take_profit` are listed with detail (of ' + deals.length + ' open); do NOT invent detail for the remaining ' + (deals.length - closest.length) + ' — name them and give only the account-wide figures (total_unrealized_pnl, biggest_gain, biggest_loss) that cover every deal, and suggest asking about a specific deal for its detail.';
-	}
-
-	if (shown.length < deals.length) {
-
-		result.note = 'The `deals` array is capped to the ' + shown.length + ' worst-by-unrealized-loss of ' + deals.length + ' open deals for size — but this is NOT a truncated answer, because the ranked helper fields already cover ALL ' + deals.length + ' open deals: `closest_to_take_profit` is the full detail+ranking list of every deal nearest to taking profit (use it directly for "which deals will close soon / soonest / are most likely to close" AND for per-deal detail), and total_unrealized_pnl / biggest_gain / biggest_loss are computed over every open deal. Answer ranking questions from those fields, not from the capped `deals` array — do not ask for a smaller range.';
+		result.note = '`closest_to_take_profit` lists the ' + closest.length + ' deals nearest take-profit (of ' + deals.length + ' open) with full figures; do NOT invent detail for the rest — name them with the account-wide figures (total_unrealized_pnl, biggest_gain and biggest_loss cover ALL open deals) and offer to look up a specific deal. For a complete worst-first ranking use get_top_deals (direction worst); biggest_loss is the single worst.';
 	}
 
 	return (result);
@@ -2038,23 +2187,28 @@ async function getDealsClosestToTakeProfit(limit) {
 // figures match the deals view) and adds banded underwater counts and the stop-loss
 // state read from the same live tracker. Answers "how much am I underwater", "how many
 // deals are deep in the red", and "which deals are near their stop-loss" in one call.
-// Single exit.
+// Never throws: like its sibling read helpers it returns a { success:false } shape on any error, so a
+// caller on or near the trading path can degrade rather than have an exception propagate into it.
 async function getOpenRiskSummary(nearStopLossPct) {
 
-	// Use the uncapped compute (not getOpenDealsStatus, whose deal list is trimmed for
-	// size) so the underwater band counts cover EVERY open deal, not just those shown.
-	const core = await computeOpenDealsLive(DEALS_SCAN_LIMIT);
-
-	if (!core || core.success !== true) {
-
-		return { 'success': false, 'error': (core && core.error) || 'Deal data not available' };
-	}
+	try {
 
 	const trackerFn = (shareData && shareData.DCABot && typeof shareData.DCABot.getDealTracker === 'function')
 		? shareData.DCABot.getDealTracker
 		: null;
 
+	// Clone the live tracker ONCE and reuse it both for the open-deal figures (passed into computeOpenDealsLive)
+	// and the stop-loss reads below — computeOpenDealsLive would otherwise deep-clone the whole tracker again.
 	const trackers = trackerFn ? ((await trackerFn()) || {}) : {};
+
+	// Use the uncapped compute (not getOpenDealsStatus, whose deal list is trimmed for
+	// size) so the underwater band counts cover EVERY open deal, not just those shown.
+	const core = await computeOpenDealsLive(DEALS_SCAN_LIMIT, trackers);
+
+	if (!core || core.success !== true) {
+
+		return { 'success': false, 'error': (core && core.error) || 'Deal data not available' };
+	}
 
 	const round = round2;   // reuse the file's canonical 2-dp rounder (display only)
 
@@ -2132,6 +2286,9 @@ async function getOpenRiskSummary(nearStopLossPct) {
 		'near_stop_loss_threshold_pct': nearPct,
 		'near_stop_loss': nearStopLoss.slice(0, 15)
 	};
+
+	}
+	catch (e) { return { 'success': false, 'error': (e && e.message) || 'Risk data not available' }; }
 }
 
 
@@ -2282,7 +2439,7 @@ async function getExposureSummary(groupBy) {
 
 				for (const o of orders) {
 
-					const amt = Number(o && (o.amount != null ? o.amount : o.sum));
+					const amt = Number(o && o.amount != null ? o.amount : 0);   // per-order cost only; never o.sum (a cumulative running total that would overcount when summed across orders)
 
 					if (isNaN(amt)) { continue; }
 
@@ -2298,26 +2455,31 @@ async function getExposureSummary(groupBy) {
 
 				const b = buckets[k];
 				const avail = (available && available[b.quote_currency] != null) ? available[b.quote_currency] : null;
-				const additional = round2(b.max_if_all_fill - b.deployed_now);
+				const additional = roundMoney(b.max_if_all_fill - b.deployed_now, b.quote_currency);
 
 				const row = {
 					'group': b.key,
 					'quote_currency': b.quote_currency,
 					'open_deals': b.open_deals,
-					'deployed_now': round2(b.deployed_now),
-					'max_if_all_fill': round2(b.max_if_all_fill),
+					'deployed_now': roundMoney(b.deployed_now, b.quote_currency),
+					'max_if_all_fill': roundMoney(b.max_if_all_fill, b.quote_currency),
 					'additional_needed_if_all_fill': additional,
 					'available_funds': avail
 				};
 
 				if (avail != null) {
 
-					row.headroom_after_all_fill = round2(avail - additional);
+					row.headroom_after_all_fill = roundMoney(avail - additional, b.quote_currency);
 					row.potential_shortfall = (avail - additional) < 0;
 				}
 
 				return row;
-			}).sort((a, b) => b.max_if_all_fill - a.max_if_all_fill);
+			// Group rows by quote currency, then order by magnitude WITHIN each currency. Sorting the raw
+			// max_if_all_fill across currencies would compare, say, a BTC-denominated exposure against a
+			// USDT one (0.5 vs 5000) — not meaningful. Same-currency rows stay comparable and adjacent.
+			}).sort((a, b) => a.quote_currency === b.quote_currency
+				? (b.max_if_all_fill - a.max_if_all_fill)
+				: String(a.quote_currency || '').localeCompare(String(b.quote_currency || '')));
 
 			result = {
 				'success': true,
@@ -2358,6 +2520,9 @@ async function reconcileDeal(dealId) {
 
 		const num = (v) => { const n = Number(v); return isNaN(n) ? null : n; };
 		const r2 = (v) => (v == null ? null : round2(v));
+		// Money values are rounded FOR THIS DEAL'S quote currency (crypto quotes keep sub-cent precision),
+		// matching summarizeDeal/computeOpenDealsLive; r2 stays for percentages.
+		const rMoney = (v) => (v == null ? null : roundMoney(v, quoteCurrency(deal.pair)));
 
 		const orders = ordersToArray(deal.orders);
 		const filled = orders.filter(o => o && (o.filled === 1 || o.filled === true));
@@ -2421,7 +2586,7 @@ async function reconcileDeal(dealId) {
 				endPoint = o.date_end ? new Date(o.date_end) : null;
 				outcome = {
 					'sellPrice': o.price != null ? num(o.price) : null,
-					'profitQuote': o.profit != null ? r2(num(o.profit)) : null,
+					'profitQuote': o.profit != null ? rMoney(num(o.profit)) : null,
 					'profitPercent': o.profit_percent != null ? r2(num(o.profit_percent)) : null,
 					'profitCurrency': o.profit_currency || null,
 					'profitable': o.profit_percent != null ? Number(o.profit_percent) > 0 : null
@@ -2438,7 +2603,7 @@ async function reconcileDeal(dealId) {
 				const cur = num(info.price_last);
 				live = {
 					'currentPrice': cur,
-					'unrealizedPnl': info.profit != null ? r2(num(info.profit)) : null,
+					'unrealizedPnl': info.profit != null ? rMoney(num(info.profit)) : null,
 					'unrealizedPct': info.profit_percentage != null ? r2(num(info.profit_percentage)) : null,
 					'pctToTakeProfit': (targetPrice && cur) ? r2((targetPrice - cur) / cur * 100) : null
 				};

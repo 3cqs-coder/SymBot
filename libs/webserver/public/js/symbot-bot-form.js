@@ -97,7 +97,7 @@
 
 		if (content.balance < content.max_funds) {
 
-			contentAdd += '<b style="color: red;">Your current balance does not have enough funds for all DCA orders</b><br><br>';
+			contentAdd += '<b style="color: var(--color-danger);">Your current balance does not have enough funds for all DCA orders</b><br><br>';
 		}
 
 		contentAdd += '<div style="position: relative; display: inline-block; text-align: left;">';

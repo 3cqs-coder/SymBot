@@ -90,16 +90,19 @@ function SqliteDriver(opts) {
 	}
 
 
-	// Newest backup file, or null.
-	function latestBackup() {
+	// All backup files, newest first (empty array on error). Used by recovery so it can fall through to an
+	// older good snapshot when the newest is itself damaged.
+	function allBackups() {
 		try {
-			if (!backupDir || !fs.existsSync(backupDir)) { return null; }
-			const files = fs.readdirSync(backupDir).filter(f => f.endsWith('.db')).map(f => path.join(backupDir, f))
+			if (!backupDir || !fs.existsSync(backupDir)) { return []; }
+			return fs.readdirSync(backupDir).filter(f => f.endsWith('.db')).map(f => path.join(backupDir, f))
 				.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-			return files[0] || null;
 		}
-		catch (e) { return null; }
+		catch (e) { return []; }
 	}
+
+	// Newest backup file, or null.
+	function latestBackup() { return allBackups()[0] || null; }
 
 
 	// Open the database, recovering automatically from corruption. Order of recovery:
@@ -143,9 +146,10 @@ function SqliteDriver(opts) {
 		}
 		catch (e) { log('salvage failed: ' + e.message); try { fs.unlinkSync(dbPath); } catch (e2) {} }
 
-		// 3. Restore the newest good backup.
-		const backup = latestBackup();
-		if (backup) {
+		// 3. Restore the newest GOOD backup — try each snapshot newest→oldest, not just the single newest, so a
+		// truncated newest snapshot (e.g. a crash mid VACUUM INTO) can't force a clean start while older, intact
+		// backups still sit in the directory.
+		for (const backup of allBackups()) {
 			try {
 				fs.copyFileSync(backup, dbPath);
 				const d = openHardened(dbPath);
@@ -153,7 +157,7 @@ function SqliteDriver(opts) {
 				try { d.close(); } catch (e) {}
 				try { fs.unlinkSync(dbPath); } catch (e) {}
 			}
-			catch (e) { log('restore-from-backup failed: ' + e.message); }
+			catch (e) { log('restore-from-backup failed for ' + backup + ': ' + e.message); }
 		}
 
 		// 4. Start clean (last resort — never crash).
@@ -249,7 +253,7 @@ function SqliteDriver(opts) {
 		const out = [];
 		try {
 			if (backupDir && fs.existsSync(backupDir)) {
-				fs.readdirSync(backupDir).filter(f => /^hub-\d+\.db$/.test(f)).forEach(f => {
+				fs.readdirSync(backupDir).filter(f => /^hub-\d+(?:-\d+)?\.db$/.test(f)).forEach(f => {
 					const p = path.join(backupDir, f);
 					const st = fs.statSync(p);
 					out.push({ name: f, size: st.size, modified: st.mtime });
@@ -272,7 +276,7 @@ function SqliteDriver(opts) {
 			if (!dbPath || !backupDir) { result = { success: false, error: 'No database path' }; }
 			else {
 				const base = path.basename(String(fileName || ''));
-				if (!/^hub-\d+\.db$/.test(base)) { result = { success: false, error: 'Invalid backup file' }; }
+				if (!/^hub-\d+(?:-\d+)?\.db$/.test(base)) { result = { success: false, error: 'Invalid backup file' }; }
 				else {
 					const src = path.join(backupDir, base);
 					if (!fs.existsSync(src)) { result = { success: false, error: 'Backup not found' }; }

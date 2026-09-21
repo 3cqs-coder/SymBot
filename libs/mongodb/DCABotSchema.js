@@ -56,10 +56,16 @@ const DealSchema = new Schema({
 //   { botId, pair, status }  — getDeals({ botId, pair, status: 0 }) active-deal count per pair (deal-start path)
 //   { status }               — status-only scans (e.g. all active / all completed)
 //   { sellData.date, status }— the circuit-breaker close-date range sum and the close-date range reports
+//   { status, pair, sellData.date }
+//                            — pair-filtered completed-deal reports (per-pair performance, a pair-scoped
+//                              performance summary, and getDealsByPair for a completed pair) match on
+//                              status + pair and window/sort on the close date; the only other pair index
+//                              is botId-prefixed, so without this those reads scan more than they need.
 DealSchema.index({ status: 1 });
 DealSchema.index({ botId: 1, status: 1 });
 DealSchema.index({ botId: 1, pair: 1, status: 1 });
 DealSchema.index({ 'sellData.date': 1, status: 1 });
+DealSchema.index({ status: 1, pair: 1, 'sellData.date': -1 });
 
 
 module.exports = {

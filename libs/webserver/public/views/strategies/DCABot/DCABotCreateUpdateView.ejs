@@ -10,7 +10,7 @@
 
 	let formAction = '<%- formAction %>';
 	let pairButtons = <%- '[' + appData.bots['pair_buttons'].map(button => `'${button}'`).join(',') + ']'; %>;
-	const startConditionsMeta = <%- JSON.stringify(appData.bots['start_conditions_metadata'] || {}) %>;
+	const startConditionsMeta = <%- JSON.stringify(appData.bots['start_conditions_metadata'] || {}).replace(/</g, '\\u003c') %>;
 
 	function formToJson(form) {
 
@@ -124,7 +124,7 @@
 										ok: {
 
 											btnClass: 'btn-default',
-											text: '<div style="color: #4aa602;">' + botText + '</div>',
+											text: '<div style="color: var(--color-success);">' + botText + '</div>',
 											action: function () {
 
 												confirmStart = true;
@@ -136,7 +136,7 @@
 									 	cancel: {
 
 									 		btnClass: 'btn-default',
-										 	text: '<div style="color: #000000;">Cancel</div>',	
+										 	text: '<div style="color: var(--color-neutral);">Cancel</div>',	
 										 	action: function () { }
 									 	}
 									 }

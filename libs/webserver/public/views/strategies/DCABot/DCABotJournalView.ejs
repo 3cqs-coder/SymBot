@@ -179,8 +179,14 @@
 			['Worst', s.worst ? (escapeHtml(s.worst.pair) + '<span class="journal-stat-sub">' + s.worst.profit_percent + '%</span>') : '—']
 		];
 
+		// When no date range is set, the stats cover only the last N days (bounded so the default view does not
+		// scan the whole history). Tell the user and point them at the date filter for a specific period.
+		const windowNote = s.default_window_days
+			? '<div class="journal-stat" style="flex-basis:100%; font-size:var(--fs-body); opacity:0.7;">Showing the last ' + s.default_window_days + ' days &mdash; set a date range above for a specific period.</div>'
+			: '';
+
 		$('#journalStats').html(
-			cells.map(c => '<div class="journal-stat"><div class="journal-stat-label">' + c[0] + '</div><div class="journal-stat-val">' + c[1] + '</div></div>').join('')
+			cells.map(c => '<div class="journal-stat"><div class="journal-stat-label">' + c[0] + '</div><div class="journal-stat-val">' + c[1] + '</div></div>').join('') + windowNote
 		).show();
 
 		// Mood correlation — only meaningful once some deals are tagged.
@@ -284,7 +290,7 @@
 		const chips = journalMoods.map(m => {
 
 			const active = m.id === currentMood ? ' active' : '';
-			return '<span class="journal-mood-chip' + active + '" data-dealid="' + dealId + '" data-pair="' + escapeHtml(pair) + '" data-mood="' + m.id + '" title="' + escapeHtml(m.label) + '">' + m.emoji + '</span>';
+			return '<span class="journal-mood-chip' + active + '" role="button" tabindex="0" aria-label="' + escapeHtml(m.label) + '" data-dealid="' + dealId + '" data-pair="' + escapeHtml(pair) + '" data-mood="' + m.id + '" title="' + escapeHtml(m.label) + '">' + m.emoji + '</span>';
 		}).join('');
 
 		return '<div class="journal-mood-row"><span class="journal-mood-label">How did it go?</span>' + chips + '</div>';
@@ -312,7 +318,7 @@
 
 			const narrativeBlock = e.narrative
 				? '<div class="journal-narrative"><span class="journal-narrative-label">AI reflection</span>' +
-				  '<span class="journal-narrative-del" data-dealid="' + e.deal_id + '" data-pair="' + escapeHtml(e.pair) + '" title="Delete reflection">&times;</span>' +
+				  '<span class="journal-narrative-del" role="button" tabindex="0" aria-label="Delete reflection" data-dealid="' + e.deal_id + '" data-pair="' + escapeHtml(e.pair) + '" title="Delete reflection">&times;</span>' +
 				  escapeHtml(e.narrative) + '</div>'
 				: '';
 
@@ -468,7 +474,7 @@
 
 							$narr.html(
 								'<span class="journal-narrative-label">AI reflection</span>' +
-								'<span class="journal-narrative-del" data-dealid="' + dealId + '" data-pair="' + escapeHtml(pair) + '" title="Delete reflection">&times;</span>' +
+								'<span class="journal-narrative-del" role="button" tabindex="0" aria-label="Delete reflection" data-dealid="' + dealId + '" data-pair="' + escapeHtml(pair) + '" title="Delete reflection">&times;</span>' +
 								escapeHtml(res.data)
 							);
 							$btn.text('Regenerate AI reflection');
@@ -589,6 +595,12 @@
 		$(document).on('click', '.journal-note-del', function() { deleteJournalPart($(this).attr('data-dealid'), $(this).attr('data-pair'), 'note'); });
 		$(document).on('click', '.journal-narrative-del', function() { deleteJournalPart($(this).attr('data-dealid'), $(this).attr('data-pair'), 'narrative'); });
 		$(document).on('click', '.journal-mood-chip', function() { saveMood($(this).attr('data-dealid'), $(this).attr('data-mood'), $(this)); });
+
+		// Keyboard access for the role="button" spans (mood chips + delete-reflection ×): Enter/Space activate
+		// them, mirroring the click handlers above (WCAG 2.1.1).
+		$(document).on('keydown', '.journal-mood-chip, .journal-narrative-del', function(e) {
+			if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); $(this).trigger('click'); }
+		});
 	});
 
 </script>
@@ -608,8 +620,8 @@
 
 			<div class="journal-filters">
 				<span>Bot: <select id="journalBotFilter" class="form-field" style="width: 140px;"><option value="all">All bots</option></select></span>
-				<span>From: <input type="date" id="journalFrom" class="form-field"></span>
-				<span>To: <input type="date" id="journalTo" class="form-field"></span>
+				<span>From: <input type="date" id="journalFrom" class="form-field" style="width: auto; min-width: 150px;"></span>
+				<span>To: <input type="date" id="journalTo" class="form-field" style="width: auto; min-width: 150px;"></span>
 				<button type="button" id="journalRefresh" class="btnAll">Apply</button>
 				<button type="button" id="journalExportBtn" class="btnAll" title="Download the deals shown here (bot + date filters applied) as a CSV summary — one row per closed deal.">Export CSV</button>
 			</div>
