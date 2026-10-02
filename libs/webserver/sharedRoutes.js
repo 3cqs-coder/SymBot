@@ -45,6 +45,58 @@ function register(router, deps) {
 	});
 
 
+	// ── Credential self-test ──────────────────────────────────────────────────
+	// Lets the presented caller confirm its key works and see exactly what it may do, without exposing any
+	// secret. Authenticated-only with NO capability — a caller is inspecting its OWN principal — so it is left
+	// unmapped in RoutePermissions.RULES (an authenticated request is allowed there) and the inline isAuthed
+	// gate governs, mirroring /readme.md. Shared here so the instance and Hub answer identically, and a
+	// Hub-scoped key can self-test too. A strong onboarding aid: a client verifies its key and scopes before
+	// sending a live signal.
+	router.get('/api/whoami', async (req, res) => {
+
+		res.set('Cache-Control', 'no-store');
+
+		if (!isAuthed(req)) { denyUnauthorized(req, res); return; }
+
+		try {
+
+			const p = req.principal || null;
+
+			const out = {
+				success:      true,
+				valid:        true,
+				kind:         (p && p.kind) || 'user',
+				capabilities: (p && Array.isArray(p.capabilities)) ? p.capabilities.slice() : [],
+				rate_limit:   (p && p.rateLimit != null) ? p.rateLimit : null
+			};
+
+			// Enrich a scoped API key with its own non-secret metadata (name, expiry, whether it is IP-scoped,
+			// signing mode), looked up by id from the key store. Best-effort: any lookup issue leaves the core
+			// principal answer intact. Never includes a secret — publicView omits the hash.
+			if (p && p.kind === 'apikey' && p.apiKeyId && shareData.ApiKeys && typeof shareData.ApiKeys.list === 'function') {
+
+				try {
+
+					const keys = await shareData.ApiKeys.list();
+					const mine = Array.isArray(keys) ? keys.find(k => k && k.key_id === p.apiKeyId) : null;
+
+					if (mine) {
+
+						out.name       = mine.name || '';
+						out.expires_at = mine.expires_at || null;
+						out.ip_scoped  = (Array.isArray(mine.ip_allowlist) && mine.ip_allowlist.length > 0);
+						out.signing    = mine.signing || 'bearer';
+					}
+				}
+				catch (e) { /* enrichment is best-effort; the core answer above still returns */ }
+			}
+
+			res.status(200).json(out);
+		}
+		catch (e) { sendErr(res, e); }
+	});
+
+
 	// ── Authentication ────────────────────────────────────────────────────────
 	// Login page + submit — identical on both surfaces except the isHub render flag and the isHub argument to
 	// verifyLogin, both supplied via deps. Registered here so the two can never drift. isHub is always passed

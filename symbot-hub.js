@@ -38,6 +38,7 @@ process.emitWarning = (warning, ...rest) => {
 
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const Common = require(__dirname + '/libs/app/Common.js');
+const FileLock = require(__dirname + '/libs/app/FileLock.js');
 const System = require(__dirname + '/libs/app/System.js');
 const MarketData = require(__dirname + '/libs/app/MarketData.js');
 const Mailer = require(__dirname + '/libs/app/Mailer.js');
@@ -75,6 +76,14 @@ const workerMap = new Map();
 
 let shareData;
 
+// Cross-process singleton guard (Phase 1). Held for the Hub process's whole lifetime so a SECOND Hub started
+// against the SAME hub config + data dir refuses to boot rather than spawning a duplicate worker for every
+// server_id — i.e. two DCA engines trading one exchange account. The in-memory duplicate guard (isServerIdInUse)
+// only sees this process, so it cannot catch a second Hub; the file lock is the one thing visible across
+// processes. A legitimate second Hub with its own --hub-config / --hub-data-dir keys a DIFFERENT lock and is
+// unaffected. Set on successful acquire in startHub(); released in shutDown() and, as a backstop, on 'exit'.
+let hubGuard = null;
+
 
 
 // Graceful shutdown + the uncaughtException/unhandledRejection handlers (log and keep the Hub — and with it
@@ -95,6 +104,12 @@ async function startHub() {
 	let success = true;
 
 	initSignalHandlers();
+
+	// Refuse to start a second Hub for the same (hub config, hub data dir) — the pair that identifies which
+	// instances and which SQLite database this Hub owns. On a live conflict startGuard logs and exits(1); on any
+	// other (infrastructure) error it fails OPEN and continues without protection rather than blocking boot.
+	const hubLockKey = 'hub:' + hubConfigFile + '|' + require('path').resolve(hubDataDir);
+	hubGuard = await FileLock.startGuard({ key: hubLockKey, role: 'Hub', logger: function (m) { Hub.logger('error', m); } });
 
 	let hubData = await Common.getConfig(hubConfigFile);
 
@@ -187,7 +202,12 @@ async function startHub() {
 							'worker_data': { 'name': 'hub' },
 							'console_log': true,
 							'api_enabled': true,   // the Hub API accepts scoped keys (resolved via HubStore)
-							'max_log_days': (maxLogDays != undefined && maxLogDays != null && maxLogDays > 0) ? maxLogDays : 10
+							'max_log_days': (maxLogDays != undefined && maxLogDays != null && maxLogDays > 0) ? maxLogDays : 10,
+							// OPT-IN per-instance V8 heap cap (MB) from hub.json. When set, each instance worker is
+							// spawned with this maxOldGenerationSizeMb, so one instance's heap OOM becomes an error on
+							// THAT worker (crash-restarted) instead of aborting the whole Hub and every instance.
+							// Unset (default) keeps the no-cap behavior; a per-instance max_old_gen_mb overrides it.
+							'instance_max_old_gen_mb': (hubData['data'] && hubData['data']['instance_max_old_gen_mb'] != null) ? hubData['data']['instance_max_old_gen_mb'] : null
 						},
 					'Common': Common,
 					'System': System,
@@ -352,7 +372,15 @@ async function startHub() {
 	// Start the central self-policing watchdog now that routes and the audit trail are wired: a verbose boot
 	// sweep now (findings recorded to the Hub audit log) plus continuous, quiet monitoring on a self-unref'd
 	// interval for the life of the process.
-	try { WebServer.startWatchdogMonitor('hub'); }
+	// Record the Hub startup time BEFORE starting the watchdog, so the liveness check's startup grace is
+	// guaranteed regardless of the order of the calls below or microtask timing (instances are spawned by
+	// HubMain.start further down, and take time to come online — the grace must already be in effect).
+	HubMain.markStarted();
+
+	// Pass an onFindings hook so alert-worthy findings (a dead-but-enabled instance, orphaned/duplicate/
+	// half-started deals) escalate from a buried audit line to a visible operator alert on the Hub dashboard,
+	// deduped per condition. Best-effort — wrapped so it can never disturb the sweep.
+	try { WebServer.startWatchdogMonitor('hub', function (findings) { try { HubMain.alertOnWatchdogFindings(shareData, findings); } catch (e) {} }); }
 	catch (e) { Hub.logger('error', 'Watchdog monitor start skipped: ' + e.message); }
 
 	HubMain.start(configs);
@@ -407,6 +435,10 @@ async function shutDown() {
 
 		// Signal Main to suppress crash-restart logic during intentional shutdown
 		HubMain.setShuttingDown();
+
+		// Release the singleton lock now (best-effort) so an immediate restart re-acquires without waiting for the
+		// TTL to age it out. The 'exit' backstop still fires on the forced/timed-out paths below.
+		if (hubGuard) { try { await hubGuard.release(); } catch (e) {} }
 
 		const terminationPromises = [];
 

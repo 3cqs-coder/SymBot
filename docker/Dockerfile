@@ -8,11 +8,15 @@ FROM node:22.15 AS builder
 # Set working directory
 WORKDIR /usr/src/app
 
-# Process package.json / *lock.json first (leverage Docker cache)
-COPY package*.json ./
+# Copy ONLY the manifest first (leverage Docker cache). Copying package.json alone — not package*.json — means
+# npm never reads a stray context lockfile, so the install always resolves from package.json's version ranges,
+# matching non-Docker installs.
+COPY package.json ./
 
-# Install only PROD dependencies
-RUN npm install --omit=dev
+# Install only PROD dependencies. --no-package-lock so npm does not WRITE a package-lock.json into the image:
+# SymBot uses no lockfile (npm install, never npm ci), and this keeps the image consistent with that without an
+# extra config file to maintain. (The repo's .gitignore + Dockerfile.dockerignore keep a stray one out too.)
+RUN npm install --omit=dev --no-package-lock
 
 # Copy app contents into working directory
 COPY . .

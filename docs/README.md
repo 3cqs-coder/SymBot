@@ -186,7 +186,7 @@ Mongo Express is also installed as an optional visual admin UI for MongoDB, reac
 
 ### Data persistence and upgrades
 
-SymBot's state is stored in named Docker volumes rather than inside the container image, so it survives container restarts and upgrades. The bundled MongoDB keeps its data in the `mongo-data` volume, and the SymBot container persists your configuration (`config/`, including your encrypted secrets and this instance's identity), the Hub database and runtime state (`data/`), your System backups (`backups/`), uploads, logs, rollback snapshots, and your login sessions (`sessions/`, which holds the session secret — persisting it means a rebuild doesn't sign a new secret and log everyone out). Only the application code is replaced when the image is rebuilt.
+SymBot's state is stored in named Docker volumes rather than inside the container image, so it survives container restarts and upgrades. The bundled MongoDB keeps its data in the `mongo-data` volume. The SymBot container persists your configuration (`config/`, including your encrypted secrets and this instance's identity), the Hub database and runtime state (`data/`), your System backups (`backups/`), uploads, logs, rollback snapshots, and your login sessions (`sessions/`). Persisting `sessions/` matters because it holds the session secret: keeping it means a rebuild doesn't sign a new secret and log everyone out. Only the application code is replaced when the image is rebuilt.
 
 To upgrade a Docker install, update the SymBot files (for example with `git pull`) and rebuild from the `docker` directory:
 
@@ -226,7 +226,15 @@ In the Hub, several SymBot instances run together inside one program, which make
 
 Because the instances share one program, these Attributed figures will normally add up to less than the program's total memory — the difference is shared runtime, buffers, and allocator overhead that isn't tied to any single instance. After an upgrade, an instance that has not yet restarted reports only its heap until it does.
 
+Optionally, you can cap each instance's memory. Because the instances share one program, a single instance that runs away with memory could otherwise take down the whole Hub. Set `instance_max_old_gen_mb` in `hub.json` to a size in megabytes, and each instance is given that heap limit. If one instance ever exceeds it, only that instance is stopped and automatically restarted, rather than the whole Hub going down. This is off by default so nothing changes unless you choose a cap. Pick a value comfortably above what a healthy instance uses (watch the Memory column to gauge it), because a cap set too low will keep restarting a busy instance. A single instance can override the shared value with its own `max_old_gen_mb`, and any value below 256 is ignored as a safeguard.
+
 Alongside memory, the view shows a single Host load figure in the "Managed Instances" header rather than repeating it on every row — because CPU load is host-level and identical for every instance sharing a machine. It reflects how busy the underlying server is. The figure is a percentage of CPU cores (color-coded green/amber/red, the same convention as the System Health card and portfolio Risk %), with the raw 1/5/15-minute averages and core count beside it. It appears once at least one online instance is reporting it, so instances that predate this feature don't contribute a load reading until they restart on the newer version.
+
+### Instance Health Alerts
+
+If an instance crashes, the Hub automatically restarts it with an increasing back-off delay. If it keeps crashing and reaches the restart-attempt limit, the Hub stops trying — at that point the instance's open deals are no longer being managed until you step in. A background integrity sweep also runs continuously and watches for a few conditions that mean deals may be unmanaged or inconsistent: an instance that has stopped and is no longer being restarted, an open deal that references a bot which no longer exists, more than one open deal on the same pair, or a deal that has sat with no filled orders (a half-started deal holding a pair slot).
+
+When any of these is found, the Hub raises a notification on its dashboard — in addition to recording it in the audit log — so a problem that used to be buried in the logs becomes visible. To avoid flooding you, a condition that persists across sweeps is alerted at most once within a cooldown window rather than on every sweep. These alerts are informational: the Hub never automatically closes, cancels, or dumps a deal in response — that decision is always left to you.
 
 ### Starting SymBot Hub
 
@@ -256,6 +264,12 @@ Once SymBot Hub is running, it is recommended to update your process manager to 
 If your process manager, such as [pm2](#pm2-id), has maximum memory restart parameters configured, you may need to increase the limit, as SymBot Hub will consume more resources as the number of instances grows.
 
 Lastly, be aware that exchanges often impose connection limits, and if you're using services like Telegram, 3CQS signals, or other providers requiring API keys, there may also be restrictions on the number of connections allowed per IP address or API key. To stay within these limits, you may need to disable certain services on specific instances.
+
+### Single-instance safety
+
+To protect against accidentally running two trading engines against the same exchange account, SymBot Hub and standalone SymBot each refuse to start a duplicate of themselves. If you start a second Hub that points at the same Hub configuration and data directory — or a second standalone instance on the same installation — it detects the copy already running and exits with a clear message naming the process (its PID) that already holds it, instead of opening a duplicate engine. This is a common cause of double orders after a restart that raced the previous process, or a manual start on top of one a process manager already launched.
+
+If a previous run was killed uncleanly (a crash, a forced kill, or a power loss), its lock is detected as stale and reclaimed automatically, so a legitimate restart is never blocked — allow up to about 30 seconds for a hard-killed process to age out before it can be replaced. A separate Hub that you deliberately run with its own `--hub-config` and `--hub-data-dir` is treated as independent and starts normally, so intentional multi-Hub setups are unaffected.
 
 ## Upgrading
 
@@ -409,7 +423,7 @@ These files are located in the `config` directory
 	- **Exchange settings via the web interface** — navigate to **Configuration → Exchange** to:
 		- Select your exchange from a full list of supported exchanges
 		- Enter or update your API Key, Secret, Passphrase, and Password (credentials are write-only and never displayed once saved). They are encrypted at rest in the bot configuration file — never stored in plain text — and are decrypted only in memory at the moment SymBot connects to the exchange. If the configuration password is ever changed, the exchange credentials are automatically re-encrypted under the new password alongside the other stored secrets. An existing installation whose keys were previously stored in plain text is encrypted automatically on the next start (and if the credentials are edited directly in the file, they are encrypted on the following start as well).
-		- **Set the key's permissions safely on the exchange.** When you create the API key on your exchange's website, grant only what SymBot needs: enable trading (usually called "spot" trading), and — importantly — leave **withdrawals disabled**, so the key can never move funds off your account even if it were exposed. If your exchange lets you restrict a key to specific IP addresses, add your SymBot server's address for an extra layer of safety.
+		- Set the key's permissions safely on the exchange. When you create the API key on your exchange's website, grant only what SymBot needs: enable trading (usually called "spot" trading), and — importantly — leave **withdrawals disabled**, so the key can never move funds off your account even if it were exposed. If your exchange lets you restrict a key to specific IP addresses, add your SymBot server's address for an extra layer of safety.
 		- Set the exchange fee percentage
 		- Set the sandbox wallet balance used for paper trading
 		- Set the default trading mode for **new** bots — Sandbox (paper trading) or Live — with password confirmation to prevent accidental changes. Like the exchange setting, this is the default for newly created bots only: existing bots keep the mode they were created with (shown in the Sandbox column of the Manage Bots view), so changing the default never flips a running bot between paper and live, and a running deal always finishes in the mode it started in. To run paper and live at the same time, create separate bots — or separate Hub instances — in each mode rather than switching one bot back and forth.
@@ -584,7 +598,7 @@ SymBot writes logs to three places: the console, dated files under each instance
 
 The scrubbing is central — it runs inside the single logging function every subsystem uses, so nothing can bypass it. It removes values by both shape and field name: SymBot API keys (the secret half only — the short non-secret prefix is kept so you can still tell keys apart), passwords and passphrases, exchange secrets, bearer tokens, Telegram bot tokens, and any credential embedded in a URL (a `user:pass@host`, or a `?token=…` on a notification webhook). Each becomes `[REDACTED]`. Ordinary content — prices, deal and bot IDs, error messages — is left untouched.
 
-As a backstop, the [self-policing watchdog](#audit-log) also samples the recent logs and warns (in the audit log) if any line still looks like it holds an unredacted credential — so a gap in the scrubbing surfaces immediately rather than sitting unnoticed in a log you might share. The warning names the *shape* it found and the line count only; it never repeats the value.
+As a backstop, the [self-policing watchdog](#watchdog) also samples the recent logs and warns (in the audit log) if any line still looks like it holds an unredacted credential — so a gap in the scrubbing surfaces immediately rather than sitting unnoticed in a log you might share. The warning names the *shape* it found and the line count only; it never repeats the value.
 
 One value is shown but never stored: on a brand-new install SymBot prints an auto-generated API key to the console once so you can copy it. That console line is deliberately kept out of the log file and the web stream — save it then, or generate a scoped key under **Access Control → API Keys**.
 
@@ -1397,7 +1411,7 @@ It calls whatever tools a question needs, across these areas:
 - Summarize genuine errors across all deals (real problems only, not routine events like finished deals).
 - Count how many times SymBot restarted.
 - Search the logs in plain language — it understands concepts like "insufficient funds", "circuit breaker", or "canceled", expands them to the phrases SymBot actually logs, and returns a line or two of surrounding context so an event on a neighboring line (such as a funds warning) is still tied back to its deal.
-- Search the logs by time — ask "find logs around 10:43 PM", "what happened around 6:25 AM today?", or "show me events between 6:00 AM and 7:00 AM", and it reads the clock time in your own timezone, converts it correctly, and lists the real log lines from that window. A precise time or a named day (today/yesterday) searches that one moment; a looser time of day with no day — "any errors around 5pm?", "errors between 11am and 8pm?" — searches that time of day across the last few days, so a recurring pattern is not missed. It also understands relative days like "two days ago", "three days ago", or "yesterday and the day before", resolves them in your timezone, and tells you the exact date it searched. You can widen either dimension in the question: say "over the last week" or "over the last 5 days" to change how many days it looks back, and "within an hour" or "within 15 minutes" to change how wide the window around the time is.
+- Search the logs by time. Ask "find logs around 10:43 PM", "what happened around 6:25 AM today?", or "show me events between 6:00 AM and 7:00 AM". It reads the clock time in your own timezone, converts it correctly, and lists the real log lines from that window. A precise time or a named day (today/yesterday) searches that one moment. A looser time of day with no day — "any errors around 5pm?", "errors between 11am and 8pm?" — searches that time of day across the last few days, so a recurring pattern is not missed. It also understands relative days like "two days ago", "three days ago", or "yesterday and the day before"; it resolves them in your timezone and tells you the exact date it searched. You can also widen either dimension in the question. Say "over the last week" or "over the last 5 days" to change how many days it looks back, and "within an hour" or "within 15 minutes" to change how wide the window around the time is.
 - List your bots and their settings, report the circuit-breaker status, name the exchange(s) you trade on (live or sandbox), and read your cached account balances.
 - When a question needs deeper reasoning than a lookup, consult a stronger model for a judgment on the figures already gathered.
 
@@ -1913,13 +1927,39 @@ A webhook that opens or modifies a deal can be made safely retryable so a networ
 - An **`idempotency_key`** field in the JSON body, or
 - A **`signal_id`** field in the JSON body — a repeated signal id is treated as the same request
 
-If SymBot sees the same key again within 5 minutes, it skips reprocessing and returns HTTP `200` with `{ "success": true, "duplicate": true }` instead of opening a second deal. Send a fresh key per distinct action. De-duplication applies to the **`/webhook/…`** path (where replayed alerts occur); a direct `/api/…` call is not de-duplicated.
+If SymBot sees the same key again within 5 minutes, it skips reprocessing and returns HTTP `200` with `{ "success": true, "duplicate": true }` instead of opening a second deal. Send a fresh key per distinct action. De-duplication applies to the **`/webhook/…`** signal path (where replayed alerts occur) and to the direct **deal-start** and **add-funds** REST endpoints (`POST /api/bots/{botId}/start_deal`, `POST /api/{deals|bots}/{id}/add_funds`), so a retried open/fund request after a network timeout returns the duplicate acknowledgement instead of acting twice. Other direct `/api/…` calls are not de-duplicated.
 
 ```bash
 curl -i -X POST \
   -H 'Content-Type: application/json' \
   -d '{ "apiToken": "{API-TOKEN}", "pair": "BTC/USD", "idempotency_key": "alert-2026-08-14-0001" }' \
   http://127.0.0.1:3000/webhook/api/bots/{botId}/start_deal
+```
+
+#### Credential self-test
+
+`GET /api/whoami` reports what the presented credential is and what it may do, without exposing any secret — a quick way to confirm a key works and to see its scope before sending a live signal. It needs only a valid authenticated credential (no specific capability).
+
+For a scoped API key the response also includes the key's non-secret metadata:
+
+```json
+{
+  "success": true,
+  "valid": true,
+  "kind": "apikey",
+  "capabilities": ["deal.create"],
+  "rate_limit": 60,
+  "name": "TradingView entry key",
+  "expires_at": "2027-01-01T00:00:00.000Z",
+  "ip_scoped": true,
+  "signing": "bearer"
+}
+```
+
+The owner session and the legacy key return `"kind": "user"` with the full capability set and `"rate_limit": null`. No key material is ever returned.
+
+```bash
+curl -s -H 'api-key: {API-KEY}' http://127.0.0.1:3000/api/whoami
 ```
 
 ### Errors
@@ -2150,13 +2190,30 @@ A convenience endpoint that routes to the per-action handlers from a single URL,
 
 | Name | Type | Mandatory | Values (default) | Description |
 |----------|----------|---------------|----------------------|-----------------|
-| action   | string   | YES           | entry, add_funds, close, panic_sell | Command to perform. `close_all` is accepted as an alias of `panic_sell` |
+| action   | string   | YES           | entry, add_funds, close, panic_sell | Command to perform. `close_all` is accepted as an alias of `panic_sell` — like `panic_sell` it closes the single resolved deal (by `deal_id`, or the bot's one active deal), not every deal on the bot |
 | pair     | string   | NO            |                      | Only required for multi-pair bots |
 | volume   | number   | NO            |                      | Amount for the `add_funds` action |
 | signalId | string   | NO            |                      | Optional identifier for the signal (used on `entry`) |
+| deal_id  | string   | NO            |                      | Target a SPECIFIC deal for `add_funds` / `close` / `panic_sell` (useful when a bot runs several active deals). The deal must be active and belong to this bot, or the action is refused. Omit to act on the bot's single active deal (optionally narrowed by `pair`) |
+| dry_run  | boolean  | NO            | false                | When true, validates the signal and returns what it *would* do, without executing — no deal is started, funded, or closed. Useful for testing an integration |
+| timestamp | number  | NO            |                      | Optional epoch time (seconds or milliseconds). When the instance's `webhook.max_age_seconds` is set, a signal older than that window (or too far in the future) is rejected, guarding against a delayed or replayed alert |
 
 ```
 POST /api/signal/{botId}
+```
+
+Every field above is opt-in and additive: a signal that omits them behaves exactly as before. `action`, `deal_id`, `dry_run`, and the batched `actions` array (below) work on both the direct endpoint and its webhook form. The **staleness** check (`timestamp` + `webhook.max_age_seconds`) and the **duplicate** check (`Idempotency-Key` header, or an `idempotency_key` / `signal_id` field) run on the webhook passthrough form — `POST /webhook/api/signal/{botId}` — where delayed or replayed alerts occur; a direct authenticated `POST /api/signal/{botId}` call is trusted and not staleness- or duplicate-checked.
+
+**Batched actions.** Instead of a single `action`, the body may carry an `actions` array (up to 10) to run several commands against the same bot in one request. They execute in order and the response reports each one's result in a `results` array; overall `success` is true only when every sub-action succeeds. A top-level `dry_run` applies to all of them. Each sub-action is gated independently (capability, deal ownership, active-deal check), so one failing does not stop the others — which means an earlier action may already have executed when a later one fails. **Always inspect each entry in `results`**; do not treat an aggregate `success:false` as "nothing happened."
+
+```json
+{
+  "apiToken": "{API-TOKEN}",
+  "actions": [
+    { "action": "add_funds", "deal_id": "BTC_USD-…", "volume": 25 },
+    { "action": "close", "pair": "ETH/USD" }
+  ]
+}
 ```
 
 
@@ -2793,7 +2850,7 @@ Tip: set Max Safety Orders to `0` for a fully signal-driven bot (every safety or
 
 Two placeholders appear in the generated messages: `{{ticker}}` is filled in automatically by TradingView with the chart's symbol — leave it exactly as-is. `{{YOUR_TOKEN}}` is yours to replace with a credential; it is *not* a TradingView variable.
 
-For that credential, use a **scoped API key**, created under **Access Control → [API Keys](#api-keys)**. When you create the key, tick **Start deals** — that single permission covers both the entry and add-funds signals; also tick **Close / cancel deals** if your alerts send the `close` or `panic_sell` commands. (In the key's permission list these appear under friendly names; they map to the `deal.create` and `deal.close` capabilities, which is what you'd name when scripting.) This is the recommended choice: a scoped key can be limited to exactly what a signal needs and revoked or rotated on its own without disturbing anything else. The signal webhook accepts it either in an `api-key`/`api-token` header (as the Signal Bot panel's own copy uses) or in the `apiToken` field of the message body (for senders like TradingView that cannot set custom headers). The legacy per-instance webhook token is still accepted (this is what the Fill in my token toggle inserts), but because it follows your main API key, regenerating that key changes it and so changes every signal setup at once — one more reason to prefer a scoped key per signal source.
+For that credential, use a **scoped API key**, created under **Access Control → [API Keys](#api-keys)**. When you create the key, tick **Start deals**. That single permission covers both the entry and add-funds signals. Also tick **Close / cancel deals** if your alerts send the `close` or `panic_sell` commands. (In the key's permission list these appear under friendly names; they map to the `deal.create` and `deal.close` capabilities, which is what you'd name when scripting.) A scoped key is the recommended choice, because it can be limited to exactly what a signal needs and revoked or rotated on its own without disturbing anything else. The signal webhook accepts it either in an `api-key`/`api-token` header (as the Signal Bot panel's own copy uses) or in the `apiToken` field of the message body (for senders like TradingView that cannot set custom headers). The legacy per-instance webhook token is still accepted, and this is what the Fill in my token toggle inserts. But because it follows your main API key, regenerating that key changes it and so changes every signal setup at once. That is one more reason to prefer a scoped key per signal source.
 
 You do not have to worry about the exact symbol format. TradingView sends the chart symbol in its own style (for example `BTCUSD`, or `COINBASE:BTC-USD`), and SymBot matches that back to the bot's configured pair (`BTC/USD`) automatically, so a multi-pair alert using `{{ticker}}` finds the right pair without any hand-formatting. The match is exact and unambiguous: a ticker is only accepted when it maps to exactly one of the bot's own configured pairs, and an unrecognized symbol is rejected rather than guessed at.
 

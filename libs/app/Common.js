@@ -5337,6 +5337,7 @@ module.exports = {
 	stripAnsi,
 	ansiToHtml,
 	renameWithRetry,   // Windows-robust atomic-rename helper (exported for unit testing)
+	sleepSync,         // synchronous pause injected into renameWithRetry's Windows retry backoff
 	withTimeout,
 	// Notification routing catalog/defaults for the config UI (the router itself is used internally
 	// by sendNotification). Pass-throughs so views/routes reach them via the always-present Common.

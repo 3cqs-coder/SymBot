@@ -4281,7 +4281,7 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 
 				used.push(leaked.name);
 				const _traceT0 = getToolsConfig().trace ? Date.now() : 0;
-				const result = await aiTools.execute(leaked.name, leaked.args, { onActivity, timezone });
+				const result = await aiTools.execute(leaked.name, leaked.args, { onActivity, timezone, question });
 				if (getToolsConfig().trace) {
 					let argStr = ''; try { argStr = JSON.stringify(leaked.args || {}); } catch (e) { argStr = '?'; }
 					shareData.Common.logger('AI trace [' + (room || '?') + ']: ' + leaked.name + ' (text) args=' + argStr.slice(0, 300) + ' → ' + (Date.now() - _traceT0) + 'ms ' + summarizeToolResult(result));
@@ -4409,7 +4409,7 @@ async function runToolLoop({ room, messages, model, maxIterations, abortSignal, 
 		const traceOn = getToolsConfig().trace;
 		const executed = await Promise.all(toolCalls.map(async (tc) => {
 			const t0 = traceOn ? Date.now() : 0;
-			const result = await aiTools.execute(tc.name, tc.args, { onActivity, timezone });
+			const result = await aiTools.execute(tc.name, tc.args, { onActivity, timezone, question });
 			// Diagnostic trace (opt-in): show exactly which tool ran, with what arguments, how long it took,
 			// and how its result came out — the single most useful signal when an answer looks wrong.
 			if (traceOn) {

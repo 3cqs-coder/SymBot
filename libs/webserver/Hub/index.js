@@ -456,9 +456,9 @@ async function start(port) {
 // Start the continuous, autonomous watchdog on the Hub: a verbose boot sweep plus a self-unref'd, quiet
 // periodic sweep for the life of the process. Non-blocking — mirrors the instance web server exactly. The
 // monitor lives in the Watchdog engine; this only supplies the Hub's router + label as an opaque context.
-function startWatchdogMonitor(label) {
+function startWatchdogMonitor(label, onFindings) {
 
-	return shareData.Watchdog.startMonitor(shareData, { router: router, label: label || 'hub' });
+	return shareData.Watchdog.startMonitor(shareData, { router: router, label: label || 'hub', onFindings: onFindings });
 }
 
 

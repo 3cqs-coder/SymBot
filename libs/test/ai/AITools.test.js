@@ -299,5 +299,56 @@ console.log('\nDispatch:');
 		shareData.DCABot.getDealTracker = savedTracker;
 	}
 
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Deal-scope redirect: a fleet-wide log/error tool asked about a SPECIFIC deal is answered from that deal's
+	// own events, so it can never report a different pair's errors (the production bug where "errors on <VELO>"
+	// returned KAIO's InsufficientFunds). Question-driven and deterministic.
+	console.log('\nDeal-scope redirect for log/error tools:');
+
+	{
+		const LogScanMod = require('../../queries/LogScan.js');
+		const savedGetDealEvents = LogScanMod.getDealEvents;
+		LogScanMod.getDealEvents = async (dealId) => ({
+			lines: [ '2026-10-02T15:25:43Z BUY ERROR Orderbook is in limit only mode — deal ' + dealId ],
+			matchCount: 1,
+			truncated: true
+		});
+
+		const DEAL = 'VELO_USD-4E4515P-1790830516';
+
+		try {
+			await testAsync('a fleet-wide error tool asked about a specific deal is redirected to that deal', async () => {
+				const r = await aiTools.execute('summarize_recent_errors', {}, { question: 'Check the logs for errors on ' + DEAL, timezone: 'UTC' });
+				assert.strictEqual(r.scoped_to_deal, true, 'result is scoped to the deal');
+				assert.strictEqual(r.deal_id, DEAL, 'scoped to the deal id named in the question');
+				assert.ok(Array.isArray(r.matches) && r.matches.some(l => /limit only mode/.test(l)), 'returns that deal\'s own error line');
+				assert.ok(/scoped to deal/.test(r.note) && /never contains any other deal or pair/.test(r.note), 'the note makes the deal scoping explicit');
+			});
+
+			await testAsync('analyze_logs is also redirected when the question names a deal', async () => {
+				const r = await aiTools.execute('analyze_logs', { terms: 'errors' }, { question: 'errors on ' + DEAL + '?', timezone: 'UTC' });
+				assert.strictEqual(r.scoped_to_deal, true, 'analyze_logs scoped to the named deal');
+			});
+
+			await testAsync('a log tool with NO deal named runs the normal fleet-wide path', async () => {
+				const r = await aiTools.execute('summarize_recent_errors', {}, { question: 'any errors today?', timezone: 'UTC' });
+				assert.notStrictEqual(r && r.scoped_to_deal, true, 'not scoped when no deal is named');
+			});
+
+			await testAsync('two named deals are ambiguous → not auto-scoped', async () => {
+				const r = await aiTools.execute('summarize_recent_errors', {}, { question: 'errors on ' + DEAL + ' and BTC_USD-ABCDE12-1790000000?', timezone: 'UTC' });
+				assert.notStrictEqual(r && r.scoped_to_deal, true, 'ambiguous scope → fleet-wide path');
+			});
+
+			await testAsync('a non-log tool is not affected by a deal in the question', async () => {
+				const r = await aiTools.execute('get_deal', { deal_id: DEAL }, { question: 'errors on ' + DEAL, timezone: 'UTC' });
+				assert.notStrictEqual(r && r.scoped_to_deal, true, 'get_deal is not a fleet-wide log tool; no redirect');
+			});
+		}
+		finally {
+			LogScanMod.getDealEvents = savedGetDealEvents;
+		}
+	}
+
 	console.log('\n' + passed + ' checks passed');
 })();

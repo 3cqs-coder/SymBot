@@ -33,17 +33,19 @@
   // Per-command color so the four cards are easy to tell apart at a glance:
   // entry = green (open), add_funds = blue (add), close = amber (graceful),
   // panic_sell = red (danger). Tints are low-opacity so they read in both themes.
+  // Theme-aware semantic tokens (not hard-coded hex) so these command accents match Signal Activity and the
+  // deals table in BOTH light and dark themes and adapt with the theme, instead of a fixed palette.
   const _cmdColors = {
-    'entry':      { 'border': '#4aa602', 'bg': 'rgba(74,166,2,0.09)' },
-    'add_funds':  { 'border': '#2a7fd0', 'bg': 'rgba(42,127,208,0.09)' },
-    'close':      { 'border': '#c8961e', 'bg': 'rgba(200,150,30,0.10)' },
-    'panic_sell': { 'border': '#d23c3c', 'bg': 'rgba(210,60,60,0.10)' }
+    'entry':      { 'border': 'var(--color-success)', 'bg': 'var(--color-success-soft)' },
+    'add_funds':  { 'border': 'var(--link-color)',    'bg': 'var(--link-color-soft)' },
+    'close':      { 'border': 'var(--color-warning)', 'bg': 'var(--color-warning-soft)' },
+    'panic_sell': { 'border': 'var(--color-danger)',  'bg': 'var(--color-danger-soft)' }
   };
 %>
 
 <div id="signalBotBox" class="signal-bot-box" style="margin: 0 0 22px 0; text-align: left; border: 1px solid rgba(128,128,128,0.35); border-radius: 8px; padding: 18px 22px;">
 
-	<div id="signalBotSavedNote" style="display: none; margin-bottom: 14px; padding: 10px 14px; border-radius: 6px; border: 1px solid rgba(74,166,2,0.5); background: rgba(74,166,2,0.10);">
+	<div id="signalBotSavedNote" style="display: none; margin-bottom: 14px; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--color-success); background: var(--color-success-soft);">
 		<b>Bot saved.</b> Copy an alert below into your TradingView alert (or any webhook source).
 	</div>
 
@@ -78,7 +80,7 @@
 	</details>
 
 <% if (!_webhookOn) { %>
-	<div style="margin-top: 14px; padding: 12px 14px; border-radius: 6px; border: 1px solid rgba(200,120,0,0.5); background: rgba(200,120,0,0.08);">
+	<div style="margin-top: 14px; padding: 12px 14px; border-radius: 6px; border: 1px solid var(--color-warning); background: var(--color-warning-soft);">
 		<b>Heads up:</b> webhooks are currently <b>disabled</b>, so these alerts will be rejected
 		until you enable them on the Config page.
 	</div>

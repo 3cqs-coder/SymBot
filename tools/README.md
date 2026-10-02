@@ -30,6 +30,9 @@ curl -H "api-key: symb_live_xxxx" http://localhost:3000/api/deals
 curl -H "Authorization: Bearer symb_live_xxxx" http://localhost:3000/api/deals
 ```
 
+To confirm a key works and see the capabilities it was granted, call `GET /api/whoami` with it — a quick
+self-test before wiring the key into an integration.
+
 For the WebSocket API, pass the key as the `api-key` handshake header (see
 [websocket-client/](websocket-client/)).
 
@@ -49,8 +52,10 @@ A header-capable sender may instead pass the same value as an `api-token`/`api-k
 
 Because the webhook changes money, it accepts an optional `Idempotency-Key` header (or a
 `signal_id` / `idempotency_key` body field) so a retried signal is ignored rather than opening or
-funding a deal twice — see [signal-bot/](signal-bot/). The read-only WebSocket API has no
-state-changing actions, so idempotency does not apply there.
+funding a deal twice. It can also drop a *late* signal: if the bot has `webhook.max_age_seconds`
+set, a signal older than that — carrying a `timestamp` body field or `X-Signal-Timestamp` header —
+is rejected as stale. Both are opt-in and demonstrated in [signal-bot/](signal-bot/). The read-only
+WebSocket API has no state-changing actions, so neither applies there.
 
 > Both credentials are sensitive. Keep them out of source control, and revoke/rotate on any
 > suspected exposure. Every key/user change and state-changing action is recorded in the audit

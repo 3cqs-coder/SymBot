@@ -55,7 +55,8 @@
 
 :root {
 
-	--link-color: #008aeb;
+	--link-color: #0062b8;
+	--link-color-soft: rgba(0, 98, 184, 0.10);
 	--table-content-color: #3e3e3e;
 	--table-background-color: #e2e2e2;
 	--table-background-hover-color: #d6d6d6;
@@ -99,7 +100,7 @@
 	--radius-input: 6px;
 	--card-pad:     18px 20px;
 	--card-gap:     18px;
-	--label-color:  #7a7a7a;
+	--label-color:  #6f6f6f;
 	/* Semantic colors (--color-success / --color-danger / --color-warning and their -soft and
 	   -neutral companions) are defined ONCE, in the shell token block further down this file, so
 	   there is a single source of truth for both themes. Do not redeclare them here. */
@@ -110,6 +111,7 @@
 [data-theme="dark"] {
 
 	--link-color: #5bc4f5;
+	--link-color-soft: rgba(91, 196, 245, 0.14);
 	--table-content-color: #b8b8b8;
 	--table-background-color: #222222;
 	--table-background-hover-color: #333333;
@@ -1430,13 +1432,13 @@ table#ordersTable tr:not(:first-child):hover {
 
 #alertMessage {
 
-	color: #da1f38;
+	color: var(--color-danger);
 }
 
 
 #formResult {
 
-	color: #da1f38;
+	color: var(--color-danger);
 }
 
 
@@ -1552,7 +1554,7 @@ table#botsDeals, table#hubDeals, table#hubBots {
 
 	position: relative;
 	font-size: var(--fs-body);
-	color: #e7e7e7;
+	color: var(--table-content-color);
 	width: auto;
 	min-width: 100%;
 	border-collapse: collapse;
@@ -1568,6 +1570,11 @@ table#botsDeals th, table#hubDeals th, table#hubBots th {
 	font-size: var(--fs-subhead);
 	text-align: left;
 	background: #3d3d3d;
+	/* The header background is dark in BOTH themes, so its text must be light in both. Set it explicitly here
+	   rather than inheriting the table's body color (which is dark in light mode) — otherwise the light-mode
+	   header text would be dark-on-dark and invisible. */
+	color: #c8c8c8;
+	border-bottom: 1px solid #4a4a4a;
 }
 
 [data-theme="dark"] table#botsDeals th,
@@ -2645,12 +2652,14 @@ table#botsDeals td.profit-positive,
 table#hubDeals td.profit-positive,
 #totalProfit.profit-positive {
 	color: var(--profit-up) !important;
+	font-weight: var(--fw-medium);
 }
 
 table#botsDeals td.profit-negative,
 table#hubDeals td.profit-negative,
 #totalProfit.profit-negative {
 	color: var(--profit-down) !important;
+	font-weight: var(--fw-medium);
 }
 
 
@@ -3057,22 +3066,28 @@ body.popout-body #chatInputContainer {
 	--nav-item-active-text: #ffffff;
 	--nav-ic: #8a8a94;
 
-	/* Semantic colors — replace hard-coded hex scattered through view markup.
-	   Referenced via var() so both themes and future retinting are one place. */
-	--color-danger: #d80f08;
-	--color-danger-soft: rgba(216, 15, 8, 0.10);
-	--color-success: #16a34a;
-	--color-success-soft: rgba(22, 163, 74, 0.12);
-	--color-warning: #e0891b;
-	--color-warning-soft: rgba(224, 137, 27, 0.15);
+	/* Semantic colors — replace hard-coded hex scattered through view markup, referenced via var() so both
+	   themes and future retinting are one place. The goal is a TRUE, vivid trading palette (green = go, red =
+	   stop) that also stays readable: each value is the most saturated green/red/amber/blue that still meets
+	   WCAG AA (>=4.5:1) as TEXT on the worst-case light surface — the light table background #e2e2e2 (a bright
+	   green or the earlier pink-red failed there at ~2.1–2.8:1). Amber is inherently luminous, so on the light
+	   surface it lands at AA-large (~3.6:1) — acceptable for a warning accent. Dark-theme values are the vivid
+	   bright equivalents, which clear AA comfortably on the dark surface. */
+	--color-danger: #c1121f;
+	--color-danger-soft: rgba(193, 18, 31, 0.10);
+	--color-success: #0a7028;
+	--color-success-soft: rgba(10, 112, 40, 0.12);
+	--color-warning: #a86400;
+	--color-warning-soft: rgba(168, 100, 0, 0.15);
 	--color-neutral: var(--content-box-color);
 
-	/* Profit / loss and portfolio-risk colors. Kept as their own tokens (not the generic success/danger)
-	   because the trading green/red are intentionally tuned for the money columns, but single-sourced here so
-	   the profit cells, the total, the portfolio-risk bar, and available-funds all track one value per theme
-	   instead of the same hex being repeated across a dozen rules that then drift. */
-	--profit-up: #1a9f00;
-	--profit-down: #d82715;
+	/* Profit / loss and portfolio-risk colors. Now ALIASED to the semantic success/danger tokens so the money
+	   columns, the total, the portfolio-risk bar, and available-funds use the SAME green/red as the rest of the
+	   app (Signal Activity, badges, banners) — previously a separately-tuned set here diverged visibly from the
+	   semantic set in both themes. Kept as their own names so the many rules that reference them need no change
+	   and a future re-tune has one seam. --profit-mid stays independent (portfolio-risk amber, not a green/red). */
+	--profit-up: var(--color-success);
+	--profit-down: var(--color-danger);
 	--profit-mid: #a85f00;
 
 	/* Amber accent stripe on a system/status message in the AI chat. One token so the main chat view and the
@@ -3097,16 +3112,18 @@ body.popout-body #chatInputContainer {
 	--nav-border: #262629;
 
 	/* Dark-theme semantic color tweaks (brighter for contrast on dark) */
-	--color-danger: #f87171;
-	--color-danger-soft: rgba(248, 113, 113, 0.12);
-	--color-success: #4ade80;
-	--color-success-soft: rgba(74, 222, 128, 0.12);
+	--color-danger: #ff4d4d;
+	--color-danger-soft: rgba(255, 77, 77, 0.14);
+	--color-success: #22c55e;
+	--color-success-soft: rgba(34, 197, 94, 0.14);
 	--color-warning: #fbbf24;
 	--color-warning-soft: rgba(251, 191, 36, 0.15);
 
-	/* Dark-theme profit / portfolio-risk colors (brighter for contrast on dark). */
-	--profit-up: #3ec43e;
-	--profit-down: #f05040;
+	/* Dark-theme profit colors alias the semantic tokens (see :root) so green/red match app-wide in dark mode
+	   too; the dark success/danger values already meet WCAG AA on the dark table background. --profit-mid stays
+	   independent (portfolio-risk amber). */
+	--profit-up: var(--color-success);
+	--profit-down: var(--color-danger);
 	--profit-mid: #ffb700;
 	/* --color-neutral is defined at :root as var(--content-box-color). The dark override of
 	   --content-box-color lives on the body-level [data-theme="dark"] selector, NOT on :root, so the
@@ -3618,8 +3635,9 @@ body.has-shell .jconfirm { z-index: 100000 !important; position: fixed !importan
 }
 /* Confirm-dialog buttons (jconfirm) sit on a light button surface in BOTH themes.
    The action text is set inline to semantic color vars, which in dark mode become
-   light tints (e.g. --color-danger #f87171, --color-neutral #b8b8b8) that are
-   low-contrast — sometimes nearly invisible — on that light button. Force darker,
+   bright/light tints (e.g. --color-danger #ff4d4d, --color-neutral #b8b8b8) tuned
+   for the DARK app surface and low-contrast — sometimes nearly invisible — on that
+   light button. Force darker,
    saturated, readable label colors for every semantic variant so the pause,
    disable-bot, delete-bot, and confirm dialogs read correctly in both themes.
    Not scoped to the app shell: the popout chat window (body.popout-body) shows the
@@ -4376,8 +4394,8 @@ body.has-shell #contentBox .transaction-export-disclaimer {
 	background-color: rgba(128,128,128,0.15);
 }
 .system-health-status.ok {
-	color: #0e9f6e;
-	background-color: rgba(20,184,166,0.14);
+	color: var(--color-success);
+	background-color: var(--color-success-soft);
 }
 .system-health-grid {
 	display: grid;

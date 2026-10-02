@@ -1663,6 +1663,52 @@ async function resolveActiveDealId(botId, pair) {
 }
 
 
+// Money-path isolation gate for a signal that targets a SPECIFIC deal by id (backlog #116 Tier 2). A signal to
+// /api/signal/:botId may name a deal via `deal_id` (or `dealId`) in the body — useful when a bot runs multiple
+// active deals, where resolveActiveDealId refuses ("specify a pair or use the deal id endpoint"). Opt-in: with
+// no id the existing bot+pair resolution is untouched. When an id IS given it MUST be an ACTIVE deal owned by
+// THIS signal's bot, or the action is refused (fail closed) — the per-deal handlers act on getDeals({dealId})
+// without re-checking ownership, which is safe on the explicit /api/deals/:dealId endpoints (own deal.*
+// capability) but NOT on the bot-scoped signal route, so a bot-scoped signal must never reach another bot's
+// deal by id. On success it pins req.params.dealId so the existing handler's dealId path runs byte-for-byte
+// unchanged. Inputs are string-coerced so a Mongo-operator object can never reach the find filter (it matches
+// nothing → a clean "not found"). Single exit.
+async function resolveSignalDealTarget(req) {
+
+	const rawId = (req && req.body && (req.body.deal_id != null ? req.body.deal_id : req.body.dealId));
+
+	let result = { 'success': true };
+
+	if (rawId != undefined && rawId != null && rawId !== '') {
+
+		const dealId = String(rawId);
+		const botId = String((req.params && req.params.botId) || (req.body && req.body.botId) || '');
+
+		const deals = await shareData.DCABot.getDeals({ 'dealId': dealId });
+
+		if (!deals || deals.length === 0) {
+
+			result = { 'success': false, 'error': 'Deal ID ' + dealId + ' not found' };
+		}
+		else if (String(deals[0].botId) !== botId) {
+
+			result = { 'success': false, 'error': 'Deal ID ' + dealId + ' does not belong to bot ' + botId };
+		}
+		else if (deals[0].status != 0) {
+
+			result = { 'success': false, 'error': 'Deal ID ' + dealId + ' is not active' };
+		}
+		else {
+
+			req.params = req.params || {};
+			req.params.dealId = dealId;
+		}
+	}
+
+	return result;
+}
+
+
 async function apiPanicSellDeal(req, res, sendResponse = true) {
 
 	let success = true;
@@ -1846,7 +1892,16 @@ async function apiCloseDeal(req, res, sendResponse = true) {
  *   action: "entry" | "add_funds" | "close" | "panic_sell"
  *   ("close_all" is accepted as an alias of the emergency panic_sell.)
  */
-async function apiSignalDispatch(req, res) {
+// Self-contained truthy test for a signal boolean flag (e.g. dry_run). Deliberately NOT routed through
+// Common.convertBoolean: a safety flag whose contract is "nothing executes" must never depend on an external
+// helper being wired — a missing helper would otherwise make the guard fail toward EXECUTION. Accepts the
+// documented forms only (true / 'true' / 1 / '1'); anything else is false.
+function signalFlagTrue(v) {
+	return v === true || v === 1 || v === '1' || (typeof v === 'string' && v.trim().toLowerCase() === 'true');
+}
+
+
+async function dispatchSingleAction(req, res) {
 
 	const action = (req.body && req.body.action != undefined && req.body.action != null)
 		? String(req.body.action).trim().toLowerCase()
@@ -1900,8 +1955,147 @@ async function apiSignalDispatch(req, res) {
 		return resObj;
 	}
 
+	// When a signal names a specific deal (deal_id/dealId), verify it is an active deal owned by THIS bot and
+	// pin it as req.params.dealId so the handler acts on exactly that deal. Fail closed if the deal is unknown,
+	// inactive, or owned by another bot. Only for actions that target an existing deal; `entry` opens a new one.
+	// Read-only (a getDeals lookup), so it is safe on a dry run too and validates the target before executing.
+	const DEAL_TARGET_ACTIONS = { 'add_funds': true, 'close': true, 'panic_sell': true, 'close_all': true };
+
+	if (DEAL_TARGET_ACTIONS[action]) {
+
+		const target = await resolveSignalDealTarget(req);
+
+		if (!target.success) {
+
+			const resObj = { 'date': new Date(), 'success': false, 'data': target.error };
+			if (res && typeof res.send === 'function') { res.send(resObj); }
+			return resObj;
+		}
+	}
+
+	// Opt-in DRY RUN: validate and report what this signal WOULD do — its resolved action and target — WITHOUT
+	// executing it. Placed AFTER the unknown-action and capability checks (so a dry run is still refused for an
+	// unknown action or a key lacking the action's permission) and strictly BEFORE the handler call below, so
+	// no deal is ever started, funded, closed, or panic-sold on a dry run. A support/onboarding aid; entirely
+	// opt-in — absent → normal execution, so default behavior is unchanged.
+	if (req && req.body && signalFlagTrue(req.body.dry_run)) {
+
+		const b = req.body;
+
+		const resObj = {
+			'date': new Date(),
+			'success': true,
+			'dry_run': true,
+			'data': 'Dry run — the signal is valid and authorized; nothing was executed.',
+			'would': {
+				'action': action,
+				'botId': (req.params && req.params.botId) || null,
+				'dealId': (req.params && req.params.dealId) || b.deal_id || b.dealId || null,
+				'pair': b.pair || null,
+				'signal_id': b.signal_id || null
+			}
+		};
+
+		if (res && typeof res.send === 'function') { res.send(resObj); }
+
+		return resObj;
+	}
+
 	// Forward to the existing handler; it sends the response itself.
 	return handler(req, res);
+}
+
+
+// Public entry for the signal route. A single-action signal (the common case) is dispatched exactly as before.
+// A BATCH — an `actions` array in the body — runs each sub-action IN ORDER against the same bot and returns one
+// aggregated response. Batching is a thin wrapper: each sub-action is handed to the unchanged single-action
+// path (dispatchSingleAction), so it gets the identical capability check, deal-target resolution, dry-run
+// handling and handler dispatch. Opt-in and additive — a body with no `actions` array behaves exactly as
+// before. Single exit.
+async function apiSignalDispatch(req, res) {
+
+	if (req && req.body && Array.isArray(req.body.actions)) {
+
+		return dispatchBatch(req, res);
+	}
+
+	return dispatchSingleAction(req, res);
+}
+
+
+// Cap on how many sub-actions one alert may carry, so a single request can't drive an unbounded run of trades.
+const SIGNAL_BATCH_MAX = 10;
+
+// Run a batch of signal sub-actions in order. Each sub-action reuses the single-action path unchanged by giving
+// it a CAPTURING response (so it never writes to the real socket) and its OWN cloned params (so one sub-action
+// pinning a dealId can't leak into the next). Continue-on-error: every sub-action is attempted and its result
+// recorded, because each is independently gated (capability, ownership, active-deal check), so a re-run of an
+// already-completed action is refused rather than repeated. A top-level `dry_run` propagates to every
+// sub-action (a sub-action may override it). One aggregated response reports per-action results; overall
+// success is true only when every sub-action succeeded. Single exit.
+async function dispatchBatch(req, res) {
+
+	const actions = req.body.actions;
+
+	let resObj;
+
+	if (actions.length === 0 || actions.length > SIGNAL_BATCH_MAX) {
+
+		resObj = { 'date': new Date(), 'success': false, 'batch': true, 'data': (actions.length === 0 ? 'Empty batch — provide at least one action.' : 'Batch too large — at most ' + SIGNAL_BATCH_MAX + ' actions per request.') };
+
+		if (res && typeof res.send === 'function') { res.send(resObj); }
+
+		return resObj;
+	}
+
+	const results = [];
+
+	for (let i = 0; i < actions.length; i++) {
+
+		const sub = actions[i] || {};
+
+		// A per-sub-action request: shared auth/headers and the URL's botId, a CLONED params (so a pinned dealId
+		// never leaks across sub-actions), and the sub-action's own body with the top-level dry_run inherited
+		// unless the sub overrides it.
+		const subReq = {
+			'params': Object.assign({}, req.params),
+			'headers': req.headers,
+			'principal': req.principal,
+			'body': Object.assign({ 'dry_run': req.body.dry_run }, sub)
+		};
+
+		// A capturing response — the sub-action's single-action path writes to THIS instead of the real socket,
+		// so nothing is sent per sub-action; we read back what it would have sent. It implements every response
+		// method the handlers use: send AND json (apiStartDeal replies with res.json), status, and no-op set/end,
+		// plus a headersSent getter, so any handler variant is captured rather than throwing on a missing method.
+		let capStatus = 200;
+		let capBody = null;
+		const capRes = {
+			'status': function (c) { capStatus = c; return this; },
+			'send':   function (o) { capBody = o; return this; },
+			'json':   function (o) { capBody = o; return this; },
+			'set':    function () { return this; },
+			'end':    function () { return this; },
+			get headersSent() { return false; }
+		};
+
+		let out;
+
+		try { out = await dispatchSingleAction(subReq, capRes); }
+		catch (e) { out = { 'success': false, 'data': 'Sub-action error: ' + ((e && e.message) ? e.message : e) }; capStatus = 500; }
+
+		const body = (capBody != null) ? capBody : out;
+
+		results.push({ 'index': i, 'action': (sub && sub.action) || null, 'status': capStatus, 'result': body });
+	}
+
+	const allOk = results.every(r => r.result && r.result.success !== false);
+
+	resObj = { 'date': new Date(), 'success': allOk, 'batch': true, 'count': results.length, 'results': results };
+
+	if (res && typeof res.send === 'function') { res.send(resObj); }
+
+	return resObj;
 }
 
 

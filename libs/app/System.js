@@ -1261,7 +1261,16 @@ async function restoreConfigFromBackup(dir, configDir) {
 				try { fs.unlinkSync(s.tmp); } catch (_) {}
 				continue;
 			}
-			fs.renameSync(s.tmp, s.dest);
+			// Publish the staged config over the live file. Prefer the shared Windows-robust helper (same as
+			// saveConfig): on POSIX this is a single atomic rename, and on Windows it rides out a transient
+			// EPERM/EBUSY lock (a concurrent reader or antivirus) instead of aborting the whole restore/update.
+			// Fall back to a plain rename if the helper isn't wired, so the restore never fails for lack of it.
+			if (shareData.Common && typeof shareData.Common.renameWithRetry === 'function' && typeof shareData.Common.sleepSync === 'function') {
+				shareData.Common.renameWithRetry(fs.renameSync, shareData.Common.sleepSync, process.platform === 'win32', s.tmp, s.dest, 5);
+			}
+			else {
+				fs.renameSync(s.tmp, s.dest);
+			}
 		}
 	}
 	catch (e) {

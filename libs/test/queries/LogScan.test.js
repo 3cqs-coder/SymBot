@@ -229,6 +229,33 @@ function ok(c, m) { assert.ok(c, m); passed++; }
 	ok(incReg.by_category.network === 2, 'NetworkError + RequestTimeout roll up into the network category');
 	ok(incReg.by_category.order === 1 && incReg.by_category.funds === 1, 'order and funds categories are counted from the registry');
 
+	// ── Recent-tail scan for an OVERSIZED file. A deal-id / error lookup reads only the most recent bytes, so it
+	//    finds recent errors fast on a huge day log (a busy real instance writes 100MB+/day, mostly per-tick
+	//    noise) instead of blowing the per-tool timeout. It drops the partial first line, reports truncated with
+	//    reason 'tail', and — crucially — does NOT fabricate "no errors" from a partial scan: it finds the real
+	//    recent error. A tailBytes larger than the file reads the whole file (small logs are unaffected). ──
+	{
+		const bigFile = path.join(TMP, 'logs', '2027-06-01.log');
+		const filler = [];
+		for (let i = 0; i < 5000; i++) { filler.push('2027-06-01T10:00:00.000Z Pair: X/USD Last Price: $1 DCA Price: $1 routine tick'); }
+		fs.writeFileSync(bigFile,
+			'2027-06-01T09:00:00.000Z DEAL_A-1 OLD error near the start\n' +
+			filler.join('\n') + '\n' +
+			'2027-06-01T23:59:00.000Z DEAL_A-1 RECENT buy error near the end\n');
+		const sz = fs.statSync(bigFile).size;
+
+		const tail = await LogScan.scanFile(bigFile, [ 'DEAL_A-1' ], { tailBytes: 4096, maxLines: 50, deadlineAt: Date.now() + 15000 });
+		const tailText = tail.lines.join('\n');
+		ok(tail.truncated === true && tail.stoppedReason === 'tail', 'an oversized tail scan is flagged truncated with reason "tail"');
+		ok(/RECENT buy error near the end/.test(tailText), 'the tail scan finds the RECENT error at the end of a huge file');
+		ok(!/OLD error near the start/.test(tailText), 'the tail scan does NOT read the old line at the start (reads only the tail)');
+		ok(tail.bytesRead < sz, 'the tail scan reads only the recent bytes, not the whole file');
+
+		const full = await LogScan.scanFile(bigFile, [ 'DEAL_A-1' ], { tailBytes: sz + 1024, maxLines: 50 });
+		ok(full.stoppedReason !== 'tail', 'a tailBytes larger than the file does not trigger a tail (whole file scanned)');
+		ok(/OLD error near the start/.test(full.lines.join('\n')), 'the whole-file scan includes the early line');
+	}
+
 	try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) {}
 
 	console.log('LogScan: ' + passed + ' assertions passed');

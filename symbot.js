@@ -15,6 +15,7 @@
 // IPv6). Both MUST run before any network-using require below so mongoose/ccxt/undici inherit the DNS order
 // and an unsupported runtime is caught first. Full rationale lives in libs/app/Bootstrap.js.
 const Bootstrap = require(__dirname + '/libs/app/Bootstrap.js');
+const FileLock = require(__dirname + '/libs/app/FileLock.js');
 Bootstrap.enforceNodeVersion(__dirname, 'SymBot');
 Bootstrap.preferDnsOrder();
 
@@ -64,6 +65,16 @@ let parentPortReference;
 let appDataConfig;
 let gotSigInt = false;
 let shutdownTimeout = 2000;
+
+// True only for a real standalone launch (`node symbot.js`). When the Hub spawns an instance it re-executes
+// symbot-hub.js and REQUIRES this file inside a worker thread, so require.main is the Hub, not this module — the
+// singleton guard below must NOT run there (worker threads share the Hub's pid, and the Hub already holds its own
+// lock; a per-thread process lock would also collide with the terminate-without-ack and crash-restart paths).
+const IS_STANDALONE = require.main === module;
+// Cross-process singleton guard (Phase 1) for a standalone instance: refuse a SECOND `node symbot.js` on the same
+// install (which shares one config + database = one exchange account). Set on acquire in start(); released in
+// shutDown() and, as a backstop, on 'exit'. Null when running under the Hub or when acquisition fails open.
+let instanceGuard = null;
 
 
 // Read a `--name value` or `--name=value` command-line argument, or null if absent. SymBot is
@@ -1043,6 +1054,27 @@ async function start(args) {
 		return;
 	}
 
+	// Standalone-only singleton guard: refuse a SECOND `node symbot.js` for the SAME configuration so two engines
+	// can't trade one account. The identity is the (app, bot, server) config trio — the same thing that selects an
+	// instance's database — so a deliberately different standalone instance (its own --app-config/--bot-config/
+	// --server-config, hence its own account) keys a DIFFERENT lock and starts normally. Never runs under the Hub
+	// (IS_STANDALONE is false in a worker thread). Skipped for the one-shot maintenance subcommands (reset /
+	// rollback / config / corpus), which do not run the trading engine and must not be refused just because a live
+	// instance holds the lock. On a live conflict startGuard logs and exits(1); on an infrastructure error it fails
+	// open so a filesystem hiccup never blocks boot.
+	const maintenanceVerb = (process.argv[2] || '').toLowerCase();
+	const isMaintenanceRun = maintenanceVerb === 'reset' || maintenanceVerb === 'rollback' || maintenanceVerb === 'config' || maintenanceVerb === 'corpus';
+
+	if (IS_STANDALONE && !isMaintenanceRun) {
+
+		const appCfg    = getCliArg('app-config')    || 'app.json';
+		const botCfg    = getCliArg('bot-config')    || 'bot.json';
+		const serverCfg = getCliArg('server-config') || 'server.json';
+		const instanceLockKey = 'instance:' + appCfg + '|' + botCfg + '|' + serverCfg;
+
+		instanceGuard = await FileLock.startGuard({ key: instanceLockKey, role: 'SymBot instance', logger: function (m) { Common.logger(m, true); } });
+	}
+
 	if (args && args.length > 0) {
 
 		for (let i = 0; i < args.length; i++) {
@@ -1108,6 +1140,11 @@ function shutDown(exitCode) {
 		const code = (typeof exitCode === 'number' && isFinite(exitCode)) ? exitCode : 0;
 
 		Common.logger(code === 0 ? 'Received kill signal. Shutting down gracefully.' : ('Shutting down (exit code ' + code + ').'), true);
+
+		// Release the singleton lock (standalone only; no-op under the Hub) so an immediate restart re-acquires
+		// without waiting out the TTL. Synchronous because shutDown exits on a timer; the 'exit' backstop covers
+		// any path that skips this.
+		if (instanceGuard) { try { instanceGuard.releaseSync(); } catch (e) {} }
 
 		if (appDataConfig != undefined && appDataConfig != null && appDataConfig != '') {
 

@@ -30,6 +30,11 @@ const MAX_RESULT_CHARS = 12000;
 const DEFAULT_DEAL_LIMIT = 15;
 const DEFAULT_LOG_LINES = 80;
 
+// A deal id is an exact identifier (e.g. XRP_USD-4E4515P-1790830516): underscore pair, a short base-36 token,
+// and a 6+ digit epoch. When a log query names one, searching for that specific id via the recent-tail deal
+// path is both correct (scoped to the deal) and fast on a huge day log — far better than a generic phrase scan.
+const DEAL_ID_RE = /\b[A-Z0-9]{1,12}_[A-Z0-9]{2,10}-[A-Z0-9]{4,12}-\d{6,}\b/;
+
 // A chat tool answers with counts/totals plus a REPRESENTATIVE sample of raw lines/rows — never a
 // full dump, which only bloats the result and can trip the size guard (yielding an unusable
 // {note,partial}). Cap the raw list a tool hands back to this many, and report the true total
@@ -576,27 +581,45 @@ const TOOL_HANDLERS = [
 		handler: async (args) => {
 			const raw = String(args.query || '').trim();
 
-			// Explicit multi-term queries split on comma or pipe.
-			let needles = raw.split(/[|,]/).map(s => s.trim()).filter(Boolean);
-
-			// Expand any recognized concept into the phrases SymBot really logs.
-			const lc = raw.toLowerCase();
-			for (const concept of Object.keys(LOG_CONCEPTS)) {
-				if (lc.includes(concept)) { needles.push(...LOG_CONCEPTS[concept]); }
-			}
-
-			// De-duplicate; fall back to the raw query when nothing expanded.
-			needles = Array.from(new Set(needles.length ? needles : [ raw ])).filter(Boolean);
-
 			const context = (args.context != null && !isNaN(parseInt(args.context, 10))) ? args.context : 1;
+			const dates = datesFor(args);
+			const inst = await instanceName();
 
-			const r = await LogScan.scanLogs({
-				needles,
-				dates: datesFor(args),
-				instanceName: await instanceName(),
-				maxLines: DEFAULT_LOG_LINES,
-				context
-			});
+			let needles;
+			let r;
+
+			const dealIdMatch = raw.match(DEAL_ID_RE);
+
+			if (dealIdMatch) {
+
+				// A deal id is an exact identifier: look up THAT deal via the recent-tail deal path — scoped to the
+				// deal's own lines and fast on a huge day log — instead of a generic phrase scan that would return
+				// every error in the file (or time out). The deal's errors come back among its own events.
+				needles = [ dealIdMatch[0] ];
+				r = await LogScan.getDealEvents(dealIdMatch[0], dates, inst, DEFAULT_LOG_LINES);
+			}
+			else {
+
+				// Explicit multi-term queries split on comma or pipe.
+				needles = raw.split(/[|,]/).map(s => s.trim()).filter(Boolean);
+
+				// Expand any recognized concept into the phrases SymBot really logs.
+				const lc = raw.toLowerCase();
+				for (const concept of Object.keys(LOG_CONCEPTS)) {
+					if (lc.includes(concept)) { needles.push(...LOG_CONCEPTS[concept]); }
+				}
+
+				// De-duplicate; fall back to the raw query when nothing expanded.
+				needles = Array.from(new Set(needles.length ? needles : [ raw ])).filter(Boolean);
+
+				r = await LogScan.scanLogs({
+					needles,
+					dates,
+					instanceName: inst,
+					maxLines: DEFAULT_LOG_LINES,
+					context
+				});
+			}
 
 			// Keep the result within the model's size budget: a busy log can match far more
 			// lines than fit, and an over-budget result gets truncated to nothing. Show the
@@ -1669,6 +1692,49 @@ const TOOL_TIMEOUT_OVERRIDES = { explore: 360000 };
 // really a deal id worth folding into `deal_id`.
 const DEAL_ID_SHAPE = /^[A-Z0-9]{1,12}_[A-Z0-9]{2,10}-[A-Z0-9]{4,12}-\d{6,}$/;
 
+// Fleet-wide log/error tools: they scan EVERY deal's lines, so asked "errors on <deal id>" they can surface a
+// DIFFERENT pair's errors (the loudest in the file) rather than the deal asked about. When the user's question
+// names one specific deal, these are redirected (in execute) to that deal's own events via the recent-tail path,
+// so the answer can only be about that deal — or empty — never another pair. (get_deal_events is already
+// deal-scoped; list_audit_events is audit, not deal logs — both excluded.)
+const LOG_SCOPE_TOOLS = new Set([ 'search_logs', 'analyze_logs', 'get_events_in_window', 'find_incident', 'scan_price_anomalies', 'analyze_error_baseline', 'summarize_recent_errors' ]);
+
+// Non-anchored, global variant used to find a deal id INSIDE free text (the user's question).
+const DEAL_ID_FIND_RE = /\b[A-Z0-9]{1,12}_[A-Z0-9]{2,10}-[A-Z0-9]{4,12}-\d{6,}\b/g;
+
+// The single deal id named in the question, or null when none — or more than one — is present (ambiguous, so
+// the fleet-wide tool runs unchanged). Pure.
+function extractQuestionDealId(question) {
+
+	if (!question || typeof question !== 'string') { return null; }
+	const ids = Array.from(new Set(question.match(DEAL_ID_FIND_RE) || []));
+	return ids.length === 1 ? ids[0] : null;
+}
+
+// Deal-scoped answer for a log/error tool: that deal's own recent events (errors included), via getDealEvents's
+// recent-tail path (fast on a huge log). The note makes the scoping explicit so the model reports only this deal
+// and treats an empty result as "no such events for this deal", never as another pair's errors. Never throws
+// here — it runs inside execute's timeout/try guard like any handler.
+async function dealScopedLogLookup(dealId, callArgs) {
+
+	const r = await LogScan.getDealEvents(dealId, datesFor(callArgs), await instanceName(), DEFAULT_LOG_LINES);
+	const all = (r && Array.isArray(r.lines)) ? r.lines : [];
+	const lines = all.length > RESULT_LINE_CAP ? capLines(all) : all;
+
+	return {
+		'deal_id': dealId,
+		'scoped_to_deal': true,
+		'matches': lines,
+		'shown': lines.length,
+		'match_count': (r && r.matchCount != null) ? r.matchCount : lines.length,
+		'truncated': !!(r && r.truncated),
+		'note': 'The question names a specific deal, so this is scoped to deal ' + dealId + ' ONLY — its own log '
+			+ 'events, errors included' + (r && r.truncated ? ' (most recent portion of a large log)' : '') + '. It '
+			+ 'never contains any other deal or pair. If there are no matching lines, this deal has no such logged '
+			+ 'events' + (r && r.truncated ? ' in the recent portion scanned' : '') + ' — do not substitute another pair.'
+	};
+}
+
 async function execute(name, args, ctx) {
 
 	// Enum-lock the emitted name onto a canonical tool (exact / alias / formatting variant) before
@@ -1708,10 +1774,16 @@ async function execute(name, args, ctx) {
 
 	try {
 
+		// Deal-scope redirect (see LOG_SCOPE_TOOLS): when the user's question names one specific deal, a
+		// fleet-wide log/error tool is answered from THAT deal's own events instead — so it can never report a
+		// different pair's errors. Question-driven and deterministic, mirroring the deal-id synonym repair above;
+		// it runs inside the same timeout/try guard as any handler.
+		const redirectDeal = LOG_SCOPE_TOOLS.has(name) ? extractQuestionDealId(ctx && ctx.question) : null;
+
 		// Per-tool timeout: a slow log scan or DB query must not hang the whole turn.
 		// A late rejection from the losing promise is swallowed so it cannot crash later.
 		// `ctx` (optional) carries a keep-alive the explore sub-agent forwards; ordinary handlers ignore it.
-		const handlerPromise = Promise.resolve().then(() => tool.handler(callArgs, ctx));
+		const handlerPromise = Promise.resolve().then(() => redirectDeal ? dealScopedLogLookup(redirectDeal, callArgs) : tool.handler(callArgs, ctx));
 		handlerPromise.catch(() => {});
 
 		const timeoutMs = TOOL_TIMEOUT_OVERRIDES[name] || TOOL_TIMEOUT_MS;

@@ -804,17 +804,24 @@ async function gatherData(route) {
 
 				const logs = await LogScan.getDealEvents(dealId, dates, instanceName, MAX_LOG_LINES);
 
-				// Say so explicitly when nothing was found. A deal id is an exact
-				// identifier, so an empty result here is reliable: nothing was logged
-				// for this deal in the dates searched. That is different from having
-				// searched for a phrase that might be worded differently.
-				sections.push(logs.lines.length
-					? renderLogLines('LOG EVENTS (' + dealId + '):', logs.lines)
-					// Stated as a fact, not explained. The long version of this note ran to
-					// more than half the length of the deal itself, and a paragraph of
-					// caveat sitting beside the data was read as material to draw on —
-					// producing invented events that were never logged.
-					: 'LOG EVENTS: none for this deal on ' + dates.join(', ') + '.\n');
+				// A deal id is an exact identifier, so a result from a COMPLETE scan is reliable: an empty
+				// result means nothing was logged for this deal in the dates searched. But on a very large
+				// day log a deal lookup reads only the recent TAIL (logs.truncated) to stay inside the tool
+				// timeout, so there an empty or partial result is NOT proof of absence. Say so plainly, or the
+				// assistant reads "none" as a fact and wrongly reports no errors. One short factual line only
+				// (a long caveat gets mined as data and produces invented events).
+				const partial = logs.truncated === true;
+
+				if (logs.lines.length) {
+
+					sections.push(renderLogLines('LOG EVENTS (' + dealId + (partial ? ', most recent portion of a large log' : '') + '):', logs.lines));
+				}
+				else {
+
+					sections.push(partial
+						? 'LOG EVENTS: none found in the recent portion scanned; the log is large, so older entries were not read.\n'
+						: 'LOG EVENTS: none for this deal on ' + dates.join(', ') + '.\n');
+				}
 			}
 		}
 	}

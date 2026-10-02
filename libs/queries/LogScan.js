@@ -65,6 +65,12 @@ const AGG_MAX_FILES = 62;
 // baseline diff runs two scans back-to-back, so it passes each a smaller slice of this budget.
 const SCAN_SOFT_TIME_MS = 15000;
 
+// For a deal-id / recent-error lookup on an OVERSIZED day file, scan only the most recent ~this many bytes: the
+// errors that matter for "what's wrong with this deal" are the recent ones, and a busy day's log is mostly
+// per-tick price-status noise. Small enough that the tail scans comfortably inside the soft deadline, large
+// enough to cover many hours of a deal's history. Only applies when a file exceeds it; small logs scan in full.
+const DEAL_SCAN_TAIL_BYTES = 20 * 1024 * 1024;   // 20 MB
+
 // Routine per-tick status lines. They repeat thousands of times per deal and
 // carry no diagnostic value, so they are dropped unless explicitly requested.
 const NOISE_RE = /Last Price:.*DCA Price:/;
@@ -437,6 +443,7 @@ async function scanFile(filePath, needles, options) {
 
 	let bytesRead = 0;
 	let truncated = false;
+	let stoppedReason = null;
 	let matchCount = 0;
 
 	const matches = (lineBuf) => needleBufs.some(nb => lineBuf.includes(nb));
@@ -538,7 +545,30 @@ async function scanFile(filePath, needles, options) {
 
 	const keep = context > 0 ? keepWithContext : keepMatchOnly;
 
-	const stream = fs.createReadStream(filePath, { 'highWaterMark': READ_CHUNK_BYTES });
+	// Wall-clock safety deadline: a busy real instance can write 100MB+ to one day's log, so a full forward scan
+	// can exceed the per-tool timeout. When a deadline is given, stop cleanly with an honest partial result
+	// instead of a hard timeout. Checked once per chunk below.
+	const deadlineAt = (typeof opts.deadlineAt === 'number' && opts.deadlineAt > 0) ? opts.deadlineAt : 0;
+
+	// Recent-first for an oversized file: when the caller only needs the last `tailBytes` (a deal-id or error
+	// lookup, where RECENT activity is what matters), start reading near the END of a file that exceeds that
+	// size, so the recent lines are found without streaming the whole mostly-noise day. The first emitted line
+	// then begins mid-line (the tail of a line that started before the offset), so it is dropped. Reported as
+	// truncated so the result is never mistaken for a full-day scan.
+	let startOffset = 0;
+	let dropFirstLine = false;
+	const tailBytes = (typeof opts.tailBytes === 'number' && opts.tailBytes > 0) ? opts.tailBytes : 0;
+	if (tailBytes) {
+		try {
+			const sz = (await fs.promises.stat(filePath)).size;
+			if (sz > tailBytes) { startOffset = sz - tailBytes; dropFirstLine = true; truncated = true; stoppedReason = stoppedReason || 'tail'; }
+		}
+		catch (_) {}
+	}
+
+	const stream = fs.createReadStream(filePath, startOffset
+		? { 'highWaterMark': READ_CHUNK_BYTES, 'start': startOffset }
+		: { 'highWaterMark': READ_CHUNK_BYTES });
 
 	let carry = Buffer.alloc(0);
 	let chunkCount = 0;
@@ -562,7 +592,10 @@ async function scanFile(filePath, needles, options) {
 					break;
 				}
 
-				keep(buf.subarray(start, nl));
+				// With a tail offset the first complete line is the partial tail of a line that began before the
+				// offset — drop it so a half-line can never count as a match.
+				if (dropFirstLine) { dropFirstLine = false; }
+				else { keep(buf.subarray(start, nl)); }
 
 				start = nl + 1;
 			}
@@ -579,7 +612,13 @@ async function scanFile(filePath, needles, options) {
 			// can drain microtasks while starving the event loop's timer/IO phase (where the
 			// follow loop's ticks live), so hand control back via setImmediate every few MB.
 			// The scan resumes on the next macrotask; trading keeps running throughout.
-			if ((++chunkCount % 8) === 0) { await new Promise(resolve => setImmediate(resolve)); }
+			if ((++chunkCount % 8) === 0) {
+				// Blew the soft deadline? Stop here with an honest partial rather than a hard tool timeout. Checked
+				// at the yield boundary (every ~8MB), so a file always makes progress first and a tiny file is
+				// never cut off before its lines are read.
+				if (deadlineAt && Date.now() > deadlineAt) { truncated = true; stoppedReason = stoppedReason || 'time'; break; }
+				await new Promise(resolve => setImmediate(resolve));
+			}
 		}
 
 		// Final line when the file does not end with a newline.
@@ -593,7 +632,7 @@ async function scanFile(filePath, needles, options) {
 		stream.destroy();
 	}
 
-	return ({ 'lines': lines, 'bytesRead': bytesRead, 'truncated': truncated, 'matchCount': matchCount, 'buckets': buckets, 'dayBuckets': dayBuckets, 'bucketExamples': bucketExamples });
+	return ({ 'lines': lines, 'bytesRead': bytesRead, 'truncated': truncated, 'stoppedReason': stoppedReason, 'matchCount': matchCount, 'buckets': buckets, 'dayBuckets': dayBuckets, 'bucketExamples': bucketExamples });
 }
 
 
@@ -653,6 +692,9 @@ async function scanLogs(params) {
 		// per-tool timeout — it stops cleanly with an honest partial result instead.
 		const startedAt = Date.now();
 		const softMs = (typeof opts.softTimeMs === 'number' && opts.softTimeMs > 0) ? opts.softTimeMs : SCAN_SOFT_TIME_MS;
+		// Absolute deadline shared by every file, so a single oversized file is also cut off mid-scan (the
+		// per-file loop below only re-checks the clock BETWEEN files, which cannot interrupt one 100MB+ file).
+		const deadlineAt = startedAt + softMs;
 
 		for (const name of wanted) {
 
@@ -670,7 +712,7 @@ async function scanLogs(params) {
 
 				try {
 
-					const scan = await scanFile(resolved.path, needles, { 'maxLines': Math.max(linesBudget, 0), 'includeNoise': opts.includeNoise, 'skipRestarts': opts.skipRestarts, 'context': opts.context, 'tsFrom': opts.tsFrom, 'tsTo': opts.tsTo, 'tsWindows': opts.tsWindows, 'aggregate': opts.aggregate });
+					const scan = await scanFile(resolved.path, needles, { 'maxLines': Math.max(linesBudget, 0), 'includeNoise': opts.includeNoise, 'skipRestarts': opts.skipRestarts, 'context': opts.context, 'tsFrom': opts.tsFrom, 'tsTo': opts.tsTo, 'tsWindows': opts.tsWindows, 'aggregate': opts.aggregate, 'deadlineAt': deadlineAt, 'tailBytes': opts.tailBytes });
 
 					collected.push(...scan.lines);
 					filesScanned.push(name);
@@ -692,6 +734,7 @@ async function scanLogs(params) {
 					if (scan.truncated) {
 
 						truncated = true;
+						if (scan.stoppedReason) { stoppedReason = stoppedReason || scan.stoppedReason; }
 					}
 				}
 				catch (e) {
@@ -734,7 +777,8 @@ async function getDealEvents(dealId, dates, instanceName, maxLines) {
 		'dates': dates,
 		'instanceName': instanceName,
 		'maxLines': maxLines,
-		'skipRestarts': true
+		'skipRestarts': true,
+		'tailBytes': DEAL_SCAN_TAIL_BYTES
 	}));
 }
 
@@ -750,7 +794,8 @@ async function getDealEventsRange(dealId, dates, instanceName, maxLines) {
 		'instanceName': instanceName,
 		'maxLines': maxLines,
 		'maxFiles': Math.min((dates || []).length || 1, 10),
-		'skipRestarts': true
+		'skipRestarts': true,
+		'tailBytes': DEAL_SCAN_TAIL_BYTES
 	}));
 }
 

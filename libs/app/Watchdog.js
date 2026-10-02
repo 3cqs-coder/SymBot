@@ -115,6 +115,14 @@ async function run(shareData, context) {
 	}
 	catch (e) {}
 
+	// Optional remediation/alert hook: after findings are logged + audited, hand them to a caller-supplied
+	// callback (e.g. the Hub escalating alert-worthy findings to an operator notification). Backward-compatible
+	// — callers that pass no onFindings are unaffected. Isolated: a throwing or slow callback can never affect
+	// the sweep, the log/audit trail, or (on an instance) the trading loop.
+	if (findings.length && context && typeof context.onFindings === 'function') {
+		try { await Promise.resolve(context.onFindings(findings, context)); } catch (e) {}
+	}
+
 	return findings;
 }
 
@@ -176,10 +184,12 @@ register('ai_read_only', function () {
 // instance and on the Hub). A trimmed deployment (a partial install, or an image built without docs/)
 // would leave the Help button fetching a 404. Warn-only, so it can never affect trading or startup; it
 // just flags that the guide is missing or empty before a user discovers it.
-register('guide_present', function () {
+register('guide_present', async function () {
 	const guide = path.join(__dirname, '..', '..', 'docs', 'README.md');
 	let ok = false;
-	try { ok = fs.statSync(guide).size > 0; } catch (e) { ok = false; }
+	// Async stat: run() is async and re-runs on the shared instance event loop every periodic sweep, so avoid the
+	// synchronous fs call even though it is only one small stat.
+	try { ok = (await fs.promises.stat(guide)).size > 0; } catch (e) { ok = false; }
 	return ok ? null : { action: 'watchdog.guide_missing', target: 'docs/README.md', detail: 'the in-app Help guide file is missing or empty; the Help panel would fail to load' };
 });
 
@@ -406,16 +416,51 @@ register('instance_liveness', async function (shareData) {
 		}
 		catch (e) { /* if we can't read it, err toward not flagging */ }
 
-		return evaluateInstanceLiveness(instances, liveIds, pending);
+		// Startup grace: right after a Hub start/restart the fleet is still coming up — instances are spawned
+		// serially with a stagger and each takes time to reach 'online'. An instance that is not yet running in
+		// that window is BOOTING, not down, so suppress liveness findings during it. Without this, whichever
+		// instance is spawned later is falsely flagged as "down" on every restart. A genuinely-down instance is
+		// caught by the next sweep after the grace elapses.
+		let startedAt = 0;
+		try {
+			if (typeof shareData.HubMain.getHubStartedAt === 'function') { startedAt = shareData.HubMain.getHubStartedAt(); }
+		}
+		catch (e) {}
+		if (startedAt && (Date.now() - startedAt) < livenessStartupGraceMs(instances.length)) { return []; }
+
+		// Also excuse instances that have been SPAWNED but not yet reached 'online' (still booting on a manual or
+		// crash restart, or a slow boot) — they are being handled, not down.
+		let spawning = [];
+		try {
+			if (typeof shareData.HubMain.getPendingWorkerInstanceIds === 'function') { spawning = shareData.HubMain.getPendingWorkerInstanceIds(); }
+		}
+		catch (e) {}
+
+		const notDown = new Set([].concat(pending || [], spawning || []));
+
+		return evaluateInstanceLiveness(instances, liveIds, notDown);
 	}
 	catch (e) { return []; }   // fail safe — never a false alarm on a read error
 });
 
 
+// The Hub launches instances serially with a ~1s stagger (startAllWorkers) and each takes real time to reach
+// 'online', so for a window after the Hub starts, an instance that is not yet up is still BOOTING rather than
+// down. This is the length of that startup grace, scaled to the fleet size: a base buffer for online/settle plus
+// the per-instance boot stagger. Pure and exported for unit testing.
+const LIVENESS_STARTUP_BASE_MS = 30000;
+const LIVENESS_STARTUP_PER_INSTANCE_MS = 1000;
+function livenessStartupGraceMs(instanceCount) {
+	const n = (Number.isFinite(instanceCount) && instanceCount > 0) ? Math.floor(instanceCount) : 0;
+	return LIVENESS_STARTUP_BASE_MS + n * LIVENESS_STARTUP_PER_INSTANCE_MS;
+}
+
+
 // Pure liveness decision, factored out (and exported) so it can be unit-tested without a live Hub. Given the
 // configured instances, the set of instance IDs with a live worker, and the IDs currently scheduled for a
-// crash-restart, return a finding for every ENABLED instance that is neither running nor mid-restart. Disabled
-// instances and instances with no id are ignored. No side effects.
+// crash-restart, return a finding for every instance the Hub WOULD AUTO-START (enabled AND start_boot) that is
+// neither running nor mid-restart. Instances that are disabled, that are not set to start on boot, or that have
+// no id are ignored. No side effects.
 function evaluateInstanceLiveness(instances, liveIds, pendingIds) {
 
 	if (!Array.isArray(instances)) { return []; }
@@ -428,7 +473,11 @@ function evaluateInstanceLiveness(instances, liveIds, pendingIds) {
 	for (const cfg of instances) {
 
 		if (!cfg || cfg.id == null) { continue; }
-		if (cfg.enabled === false) { continue; }   // disabled → not expected to be running
+		// "Expected to be running" must mirror what the Hub AUTO-STARTS on boot (startAllWorkers launches an
+		// instance only when it is enabled AND start_boot). An instance that is enabled but has start_boot=false
+		// is intentionally NOT started after a Hub restart — flagging it as down would raise a false "not running"
+		// alarm on every restart for a paper/standby instance the operator starts by hand.
+		if (!(cfg.enabled && cfg.start_boot)) { continue; }
 		if (live.has(cfg.id)) { continue; }         // running
 		if (pending.has(cfg.id)) { continue; }      // mid restart-backoff — being handled
 
@@ -487,4 +536,4 @@ function startMonitor(shareData, context) {
 }
 
 
-module.exports = { register, list, run, runOnce, startMonitor, resolveIntervalMs, DEFAULT_INTERVAL_MS, evaluateInstanceLiveness, isMutatingToolName };
+module.exports = { register, list, run, runOnce, startMonitor, resolveIntervalMs, DEFAULT_INTERVAL_MS, evaluateInstanceLiveness, livenessStartupGraceMs, isMutatingToolName };

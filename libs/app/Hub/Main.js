@@ -32,6 +32,11 @@ let shutDownFunction;
 let shareData;
 
 const crashRestartMap = new Map();
+
+// When the Hub began launching its fleet (set in start()). Instances boot serially with a stagger and take time
+// to reach 'online', so the liveness watchdog uses this to grant a startup grace and not flag an instance that is
+// simply still coming up right after a Hub start/restart.
+let hubStartedAt = 0;
 const CRASH_RESTART_BASE_DELAY_MS  = 5000;
 const CRASH_RESTART_MAX_DELAY_MS   = 300000; // 5 minutes
 const CRASH_RESTART_MAX_ATTEMPTS   = 10;
@@ -286,6 +291,102 @@ function broadcastLearningPack() {
 }
 
 
+// ── Operator alerting (Phase 2 Tier A) ───────────────────────────────────────────────────────────────
+// The crash supervisor and the Watchdog already DETECT the conditions that leave deals unmanaged — a
+// crash-looping instance the supervisor has given up on, and orphaned / duplicate / half-started deals — but
+// today they only write them to the log + audit trail, where they are easy to miss. These helpers ESCALATE
+// those conditions to the Hub's native operator-facing channel (the dashboard notification push), so a silent
+// give-up becomes a visible alert. Best-effort and NON-BLOCKING: a failure to push or audit can never affect
+// supervision or the trading loop.
+//
+// Deliberately NOT included here: auto-restarting a "dead" instance. The instances the liveness check flags are
+// precisely the ones the supervisor has STOPPED restarting after exhausting its attempt cap — auto-restarting
+// them would fight the crash cap and re-enter the crash loop. The safe response is a loud alert for a human,
+// which is what this provides.
+const OPERATOR_ALERT_COOLDOWN_MS = 30 * 60 * 1000;   // per-condition re-alert cooldown so a persistent finding can't flood every sweep
+const _operatorAlertSeen = new Map();                // dedupeKey -> last-alerted epoch ms
+
+// Watchdog finding actions worth escalating: an enabled instance with no live worker (not mid-restart), and the
+// deal-integrity conditions that mean money is unmanaged.
+const ALERTABLE_WATCHDOG_ACTIONS = new Set([
+	'watchdog.instance_down',          // an enabled instance with no live worker, not mid-restart (instance_liveness check)
+	'watchdog.orphaned_open_deals',    // an open deal references a bot that no longer exists
+	'watchdog.duplicate_open_deals',   // more than one open deal for the same bot + pair
+	'watchdog.deal_missing_orders'     // an open deal older than 10 min with no filled orders — a half-started deal
+]);
+
+// Push a single best-effort operator alert to the Hub dashboard + audit log, deduped by key within a cooldown so
+// a persistent condition alerts once per window rather than every sweep. `share` defaults to the module shareData;
+// `now`/`cooldownMs` are injectable so the dedup is unit-testable. Returns true if it actually alerted.
+function notifyOperator(share, opts) {
+
+	opts = opts || {};
+	share = share || shareData;
+	if (!share || !share.Common) { return false; }
+
+	const subject = opts.subject || 'SymBot Hub alert';
+	const message = opts.message || '';
+	const key = opts.dedupeKey || (subject + '|' + (opts.target || ''));
+	const now = (opts.now != null) ? opts.now : Date.now();
+	const cooldown = (opts.cooldownMs != null) ? opts.cooldownMs : OPERATOR_ALERT_COOLDOWN_MS;
+
+	const last = _operatorAlertSeen.get(key) || 0;
+	if (now - last < cooldown) { return false; }   // deduped — already alerted recently for this condition
+	_operatorAlertSeen.set(key, now);
+
+	const line = '⚠ ' + subject + (message ? ' — ' + message : '');
+
+	// Dashboard push — the Hub's native operator channel. Always attempted; failure is swallowed.
+	try {
+		if (typeof share.Common.sendSocketMsg === 'function') {
+			share.Common.sendSocketMsg({ room: 'notifications', type: 'notification', message: line });
+		}
+	}
+	catch (e) {}
+
+	// Audit at a distinct action so the escalation is recoverable in Access Control → Audit Log.
+	try {
+		if (typeof share.Common.auditEvent === 'function') {
+			share.Common.auditEvent('watchdog', opts.action || 'hub.operator_alert', String(opts.target || ''), line.slice(0, 500));
+		}
+	}
+	catch (e) {}
+
+	return true;
+}
+
+// Escalate the alert-worthy findings from a Watchdog sweep. Deduped per (action, target) so a condition that
+// persists across sweeps alerts once per cooldown, not every interval. Best-effort; never throws. Returns the
+// count actually alerted (the rest were non-alertable or still within their cooldown).
+function alertOnWatchdogFindings(share, findings) {
+
+	if (!Array.isArray(findings) || !findings.length) { return 0; }
+
+	let alerted = 0;
+
+	for (let i = 0; i < findings.length; i++) {
+
+		const f = findings[i];
+		if (!f || !ALERTABLE_WATCHDOG_ACTIONS.has(f.action)) { continue; }
+
+		const did = notifyOperator(share, {
+			subject: 'Instance / deal health finding',
+			message: String(f.action).replace('watchdog.', '') + ': ' + (f.detail || ''),
+			action: f.action,
+			target: f.target,
+			dedupeKey: f.action + '|' + (f.target || '')
+		});
+
+		if (did) { alerted++; }
+	}
+
+	return alerted;
+}
+
+// Test-only: clear the alert dedup memory so a test starts from a clean slate.
+function _resetOperatorAlerts() { _operatorAlertSeen.clear(); }
+
+
 function scheduleRestart(instance, attempt) {
 
 	const instanceId   = instance.id;
@@ -294,6 +395,16 @@ function scheduleRestart(instance, attempt) {
 	if (crashRestartShouldGiveUp(attempt)) {
 
 		shareData.Hub.logger('error', colors.red.bold(`Instance ${instanceName} has exceeded maximum restart attempts (${CRASH_RESTART_MAX_ATTEMPTS}). Giving up.`));
+
+		// Escalate the give-up to a visible operator alert: the instance's open deals are now unmanaged (no safety
+		// orders, no take-profit) until someone intervenes, and a buried error-log line is easy to miss.
+		notifyOperator(shareData, {
+			subject: 'Instance stopped after repeated crashes',
+			message: `${instanceName} exceeded ${CRASH_RESTART_MAX_ATTEMPTS} restart attempts and is no longer being restarted — its open deals are unmanaged until you intervene.`,
+			action: 'hub.restart_cap_exhausted',
+			target: instanceName,
+			dedupeKey: 'restart_cap|' + instanceId
+		});
 
 		crashRestartMap.delete(instanceId);
 
@@ -445,6 +556,25 @@ function processWorkerExit(workerId) {
 }
 
 
+// Resolve the OPT-IN V8 old-generation heap cap (MB) for an instance worker, or null for no cap (the default). A
+// per-instance `max_old_gen_mb` wins over the Hub-global `instance_max_old_gen_mb`. A cap converts a single
+// instance's heap OOM into an ERR_WORKER_OUT_OF_MEMORY on THAT worker (which the crash supervisor then restarts)
+// instead of aborting the entire Hub process and every instance's trading loop at once. Values below a 256 MB
+// floor are ignored (treated as no cap) so a mistyped tiny cap can never instantly kill every worker. Pure and
+// exported for unit testing.
+const WORKER_MIN_OLD_GEN_MB = 256;
+function resolveWorkerMaxOldGenMb(instanceData, appData) {
+
+	const raw = (instanceData && instanceData.max_old_gen_mb != null) ? instanceData.max_old_gen_mb
+		: (appData && appData.instance_max_old_gen_mb != null) ? appData.instance_max_old_gen_mb
+		: null;
+
+	const n = Number(raw);
+	if (!Number.isFinite(n) || n < WORKER_MIN_OLD_GEN_MB) { return null; }
+	return Math.floor(n);
+}
+
+
 function startWorker(instanceData) {
 
 	// Refuse to spawn a second worker for a server_id that already has a live worker. Without this guard a
@@ -475,12 +605,21 @@ function startWorker(instanceData) {
 
 	try {
 
-		worker = new Worker(shareData.appData.hub_filename, {
+		// OPT-IN heap cap: when the operator has configured a per-instance or Hub-global max_old_gen_mb, cap this
+		// worker's V8 old-generation heap so its OOM becomes an ERR_WORKER_OUT_OF_MEMORY on THIS worker (which the
+		// crash supervisor then restarts) instead of aborting the whole Hub process and every instance with it.
+		// Unset (the default) keeps the previous no-cap behavior.
+		const workerOptions = {
 			workerData: {
 				...instanceData,
 				workerId
 			}
-		});
+		};
+
+		const maxOldGenMb = resolveWorkerMaxOldGenMb(instanceData, shareData.appData);
+		if (maxOldGenMb) { workerOptions.resourceLimits = { maxOldGenerationSizeMb: maxOldGenMb }; }
+
+		worker = new Worker(shareData.appData.hub_filename, workerOptions);
 	}
 	catch (err) {
 
@@ -592,6 +731,10 @@ let learningBroadcastTimer = null;
 
 async function start(configs) {
 
+	// Mark the fleet-launch time (unless startHub already marked it before starting the watchdog) so the
+	// liveness watchdog can grant a startup grace while instances come up.
+	if (!hubStartedAt) { hubStartedAt = Date.now(); }
+
 	startAllWorkers(configs);
 
 	// Periodically share the pooled AI-learning pack with every running instance, so a
@@ -618,9 +761,18 @@ module.exports = {
 	// math and the give-up ceiling are money-adjacent, so a regression here must be caught).
 	crashRestartDelay,
 	crashRestartShouldGiveUp,
+	// Operator alerting (Phase 2 Tier A): escalate a supervisor give-up and alert-worthy Watchdog findings to
+	// the Hub's dashboard + audit. Exposed so the dedup/cooldown and finding-filter are unit-tested, and so the
+	// Hub watchdog monitor can pass alertOnWatchdogFindings as its onFindings hook.
+	notifyOperator,
+	alertOnWatchdogFindings,
+	_resetOperatorAlerts,
 	// The single duplicate-engine guard (online + pre-online), exported so its "never two engines on one
 	// exchange account" invariant is locked by a unit test and the two start paths can't silently drift again.
 	isServerIdInUse,
+	// Opt-in per-instance heap-cap resolver (OOM isolation), exported so its default-off + floor behavior is
+	// locked by a unit test.
+	resolveWorkerMaxOldGenMb,
 	CRASH_RESTART_BASE_DELAY_MS,
 	CRASH_RESTART_MAX_DELAY_MS,
 	CRASH_RESTART_MAX_ATTEMPTS,
@@ -664,6 +816,28 @@ module.exports = {
 
 		return Array.from(crashRestartMap.keys());
 	},
+
+	// Read-only: the instance IDs that have been SPAWNED but have not yet reached 'online' (a worker takes real
+	// time to boot — require symbot.js, connect Mongo, etc. — and is promoted from pendingWorkers into workerMap
+	// only on 'online'). The liveness watchdog consults this so it never flags an instance that is still coming
+	// up (at boot, or on a manual/crash restart) as "down". Keyed by workerId; returns the config instance IDs.
+	getPendingWorkerInstanceIds: function() {
+
+		const ids = [];
+		for (const [, info] of pendingWorkers.entries()) {
+			if (info && info.instance && info.instance.id != null) { ids.push(info.instance.id); }
+		}
+		return ids;
+	},
+
+	// Read-only: epoch ms when the Hub began launching its fleet, or 0 before that. The liveness watchdog uses it
+	// to grant a startup grace so an instance that is simply still booting is not flagged as down.
+	getHubStartedAt: function() { return hubStartedAt; },
+
+	// Record the Hub startup time EXPLICITLY. Called from startHub before the watchdog's boot sweep, so the
+	// liveness startup grace never depends on the order of the boot calls or microtask timing. Idempotent — the
+	// first mark wins (start() falls back to marking it only if this was not called).
+	markStarted: function() { if (!hubStartedAt) { hubStartedAt = Date.now(); } },
 
 	init: function(WorkerInit, shareDataInit, shutDown) {
 

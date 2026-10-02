@@ -71,6 +71,82 @@ function webhookIdempotency(reqPath, body, headers) {
 	return result;
 }
 
+
+// ── Webhook staleness guard (opt-in) ─────────────────────────────────────────
+// A caller may stamp a signal with a `timestamp` (a body field, or an `X-Signal-Timestamp` header) so an OLD
+// signal that arrives late — a delayed relay or a replayed alert — can be rejected rather than acted on. This
+// complements idempotency: idempotency drops a DUPLICATE of a signal, staleness drops an old signal firing
+// after the fact. Opt-in twice over — it applies only when a timestamp is supplied AND a positive max-age is
+// configured; a signal with no timestamp, or a max-age of 0 / absent, passes untouched. A small future-skew
+// allowance covers benign clock drift. Fail-open on an unparseable timestamp (treated as "not supplied"), so a
+// malformed value can never drop a real signal — only a value we can positively read as too old or too far in
+// the future is rejected. Pure and dependency-free (mirrors webhookIdempotency). Single exit.
+const STALENESS_FUTURE_SKEW_SEC = 60;
+
+function webhookStaleness(body, headers, maxAgeSec) {
+
+	let result = { stale: false, reason: null, ageSec: null };
+
+	const max = Number(maxAgeSec);
+	if (!(max > 0)) { return result; }   // disabled → never stale
+
+	const raw = (headers && headers['x-signal-timestamp']) || (body && body.timestamp) || null;
+	if (raw == null || raw === '') { return result; }   // no timestamp supplied → opt-out for this request
+
+	let ts = Number(raw);
+	if (!isFinite(ts) || ts <= 0) { return result; }   // unparseable → fail open (never drop a real signal)
+
+	// Accept epoch SECONDS or MILLISECONDS. A seconds value is ~1.7e9 today; treat a value large enough to be
+	// milliseconds (>= 1e12) as ms and normalize to seconds.
+	if (ts >= 1e12) { ts = ts / 1000; }
+
+	const ageSec = (Date.now() / 1000) - ts;
+
+	if (ageSec > max) { result = { stale: true, reason: 'too_old', ageSec: Math.round(ageSec) }; }
+	else if (ageSec < -STALENESS_FUTURE_SKEW_SEC) { result = { stale: true, reason: 'future', ageSec: Math.round(ageSec) }; }
+
+	return result;
+}
+
+
+// ── Direct-endpoint idempotency (opt-in, safe retries) ───────────────────────
+// The webhook signal path already dedupes replayed alerts (see the signal middleware). The DIRECT deal-start /
+// add-funds REST endpoints did not, so a client that retries after a network timeout could open or fund a deal
+// twice. This reuses webhookIdempotency, keyed on the concrete request path (which carries the deal/bot id, so
+// two different deals never collide): when the caller supplies an `Idempotency-Key` header (or an
+// `idempotency_key` / `signal_id` body field), a repeat within the TTL is acknowledged WITHOUT re-processing.
+// Opt-in — a caller that sends no key is unaffected. Returns true (having sent the 200 duplicate response) when
+// the request is a duplicate, so the route returns without dispatching to the money path.
+//
+// Outcome-aware: the key is recorded up front (to block a truly concurrent duplicate), but if THIS attempt then
+// FAILS (the handler answers success:false — e.g. a transient exchange error), the key is forgotten so a genuine
+// retry can re-attempt rather than being masked as a "successful duplicate". A successful outcome keeps the key,
+// so a real retry after a network timeout is deduped. Single exit.
+function directIdempotencyDuplicate(req, res) {
+
+	let duplicate = false;
+
+	const idem = webhookIdempotency(req.path, req.body, req.headers);
+
+	if (idem.duplicate) {
+
+		res.status(200).send({ 'date': new Date(), 'success': true, 'duplicate': true, 'data': 'Duplicate request ignored (idempotency).' });
+		duplicate = true;
+	}
+	else if (idem.key) {
+
+		// This attempt just claimed the key. Wrap the response once so a FAILED outcome releases it (letting a
+		// retry re-attempt); a success keeps it (so the retry is deduped). Handlers reply via send OR json.
+		const _send = res.send.bind(res);
+		const _json = res.json ? res.json.bind(res) : null;
+		const releaseOnFailure = (body) => { try { if (body && body.success === false) { idempotencySeen.delete(idem.key); } } catch (e) {} };
+		res.send = function (body) { res.send = _send; releaseOnFailure(body); return _send(body); };
+		if (_json) { res.json = function (body) { res.json = _json; releaseOnFailure(body); return _json(body); }; }
+	}
+
+	return duplicate;
+}
+
 const routesWebSocket = require(__dirname + '/routesWebSocket.js');
 
 let shareData;
@@ -1053,6 +1129,8 @@ function initRoutes(router, upload) {
 
 		if (isAuthenticated(req)) {
 
+			if (directIdempotencyDuplicate(req, res)) { return; }
+
 			shareData.DCABotManager.apiAddFundsDeal(req, res);
 		}
 		else {
@@ -1198,6 +1276,8 @@ function initRoutes(router, upload) {
 	router.post([ '/api/bots/:botId/start_deal' ], (req, res) => {
 
 		if (isAuthenticated(req)) {
+
+			if (directIdempotencyDuplicate(req, res)) { return; }
 
 			shareData.DCABotManager.apiStartDeal(req, res);
 		}
@@ -2012,6 +2092,23 @@ async function processWebHook(req, res, next) {
 			return;
 		}
 
+		// Opt-in staleness: when a max-age is configured (webhook.max_age_seconds) AND the caller stamped the
+		// signal with a `timestamp`, reject one that is older than the window (or too far in the future), so a
+		// delayed or replayed alert cannot fire late. A signal with no timestamp, or an unset/zero max-age, is
+		// unaffected — this never changes default behavior. Config is read defensively so a missing block disables it.
+		const maxAgeSec = (shareData.appData && shareData.appData.webhook && shareData.appData.webhook.max_age_seconds) || 0;
+		const stale = webhookStaleness(req.body, req.headers, maxAgeSec);
+
+		if (stale.stale) {
+
+			const staleBody = { 'date': new Date(), 'success': false, 'stale': true, 'data': 'Signal rejected: ' + (stale.reason === 'future' ? 'timestamp is in the future' : 'too old') + ' (max age ' + maxAgeSec + 's).' };
+
+			if (signalMeta) { try { shareData.SignalActivity.recordFromResponse(signalMeta, staleBody, 400); } catch (e) {} }
+
+			res.status(400).send(staleBody);
+			return;
+		}
+
 		// Capture the downstream outcome for the activity log without altering it: wrap res.send once so
 		// the recorded row reflects exactly what the action handler returned. One-shot and guarded.
 		if (signalMeta) {
@@ -2025,6 +2122,11 @@ async function processWebHook(req, res, next) {
 					res.send = origSend;   // restore immediately (one-shot; defensive against double calls)
 
 					try { shareData.SignalActivity.recordFromResponse(signalMeta, body, res.statusCode); } catch (e) {}
+
+					// Outcome-aware idempotency (same as the direct endpoints): if this webhook attempt FAILED,
+					// release the recorded key so a genuine retry re-attempts instead of being masked as a
+					// successful duplicate. A success keeps the key so a real retry is deduped.
+					try { if (idem && idem.key && body && body.success === false) { idempotencySeen.delete(idem.key); } } catch (e) {}
 
 					return origSend(body);
 				};
@@ -2153,6 +2255,8 @@ module.exports = {
 	start,
 	processWebSocketApi,
 	webhookIdempotency,
+	webhookStaleness,
+	directIdempotencyDuplicate,
 
 	init: function(obj) {
 

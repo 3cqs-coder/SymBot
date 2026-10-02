@@ -30,7 +30,7 @@ Tests mirror the source tree under `libs/test/`:
 |------|--------|
 | `libs/test/ai/` | AI chat: guardrails, memory/corpus, routing, faithfulness, red-team, aggregation, time-search |
 | `libs/test/queries/` | Read-only query/log tooling (e.g. `LogScan`) |
-| `libs/test/app/` | App-level modules (diagnostics catalog, notifications, scheduling, …) |
+| `libs/test/app/` | App-level modules (diagnostics catalog, notifications, scheduling, the single-instance start guard, Hub operator alerting, …) |
 | `libs/test/scheduledtasks/` | Scheduled-task handlers (performance report, drawdown/resource/error sentinels) |
 | `libs/test/strategies/DCABot/` | Strategy / money-path logic (stop-loss, ladder, guards, retries, …) |
 | `libs/test/webserver/` | Webserver helpers (webhook idempotency, order classification, …) |

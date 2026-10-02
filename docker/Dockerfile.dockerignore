@@ -13,6 +13,12 @@
 # and would break the Alpine runtime. The Dockerfile installs dependencies cleanly inside the image.
 node_modules/
 
+# SymBot uses no committed lockfile — dependencies install from package.json's version ranges (npm install,
+# never npm ci). Exclude any locally generated package-lock.json so a stale lock can never be copied into the
+# build context and pin the image's dependency versions. (The repo's .gitignore keeps it out of the repo the
+# same way; this does the equivalent for the image.)
+package-lock.json
+
 # Runtime / generated state. These are Docker named volumes at runtime, and a fresh volume seeds from the
 # image on first run — so baking a developer's copy in would ship logs, backups, uploads and cached data
 # into a brand-new install. Excluding them means a fresh volume starts empty and the app creates what it
