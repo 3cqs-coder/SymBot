@@ -2062,5 +2062,8 @@ module.exports = {
 	// Tools that intentionally need no learning-corpus coverage (orchestrators/meta-tools), so the
 	// coverage report and the watchdog agree on what counts as "uncovered".
 	NO_CORPUS_NEEDED,
+	// Exported for testing: the deal-id extractor that decides whether a fleet-wide log/error tool is
+	// redirected to a single deal's own events (exactly one id in the question → that id; none/many → null).
+	extractQuestionDealId,
 	init: function (obj) { shareData = obj; }
 };

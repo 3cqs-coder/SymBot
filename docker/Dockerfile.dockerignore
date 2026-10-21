@@ -66,5 +66,12 @@ libs/test/webserver/
 # The local-only working backlog is never shipped.
 symbot-backlog.md
 
+# Internal design, scoping and planning docs are developer-only working material (like the backlog) and are
+# NOT part of the shipped product. Only docs/README.md is served at runtime (the in-app Help guide, via the
+# readme route), so ship that one file and exclude the rest of docs/. This keeps internal cross-references and
+# working notes out of the image, and any NEW design doc added under docs/ is excluded automatically.
+docs/*.md
+!docs/README.md
+
 # Editor / OS cruft that must never ship in the image.
 **/.DS_Store

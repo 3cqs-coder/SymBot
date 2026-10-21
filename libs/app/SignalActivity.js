@@ -701,7 +701,12 @@ async function adoptLegacyRows() {
 				'$cond': [ { '$eq': [ '$duplicate', true ] }, 'duplicate',
 					{ '$cond': [ { '$eq': [ '$success', true ] },
 						{ '$cond': [ { '$and': [ { '$ne': [ '$deal_id', null ] }, { '$ne': [ '$deal_id', '' ] } ] }, 'started', 'processed' ] },
-						'rejected' ] } ] } } } ]
+						'rejected' ] } ] } } } ],
+			// Mongoose 9 requires this opt-in to accept an aggregation-pipeline array as the update (a guard
+			// against an array being passed by mistake). Without it the backfill throws and is skipped — the
+			// outcome still DISPLAYS correctly via deriveOutcome, but the stored value is never set, so filtering
+			// by outcome misses these legacy rows. Setting it restores the one-time backfill.
+			{ 'updatePipeline': true }
 		);
 	}
 	catch (e) {

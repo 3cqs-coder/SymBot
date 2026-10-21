@@ -153,6 +153,28 @@ const CATALOG = {
 		fix: 'Open the Hub and start the listed instance again, and check its recent logs for the error that kept crashing it (for example bad exchange credentials or a config problem) so it stays up. If you meant to stop it, disable it in the Hub so this reminder clears.'
 	},
 
+	// ── Clock accuracy ──
+	'watchdog.clock_skew': {
+		meaning: 'This machine\'s clock is noticeably out of step with the exchange\'s server time. Exchanges reject signed requests (placing orders, reading your balance) when the clock is more than about a second ahead, so a drifted clock can quietly pause buys and sells. A wrong clock also throws off log timestamps, the stale-signal check, and scheduled tasks. This is common on virtual machines and WSL, especially after the host sleeps or hibernates and the clock is not resynced. SymBot auto-corrects the timestamp it sends so trading usually keeps working, but the underlying clock is still wrong and should be fixed.',
+		fix: 'Resync the system clock. On WSL (Ubuntu under Windows) run `sudo hwclock -s`, and keep Windows itself set to sync time automatically; on a normal Linux host make sure an NTP/time-sync service is running. If it keeps drifting after the machine wakes from sleep, update WSL (`wsl --update`) or add a periodic resync.'
+	},
+
+	// ── Delisting / suspended pairs ──
+	'watchdog.delisting_pair': {
+		meaning: 'An OPEN deal is on a pair the exchange is no longer letting SymBot trade normally — it has been delisted or suspended, or put into limit-only mode (a common step before a coin is removed, for example when its network is shutting down). SymBot places market orders, so on such a pair it can neither add to the deal nor sell out of it at market, and once the pair is fully removed the position can be stranded.',
+		fix: 'Check the named pair on the exchange and read its delisting notice for the dates. While the pair still has a market, decide how to exit the deal (for now this is a manual decision — close it in profit if you can, or accept the loss and panic-sell before trading halts). Avoid starting new deals on it; SymBot already refuses to open one on an inactive or limit-only pair.'
+	},
+
+	// ── Singleton-lock hygiene ──
+	'watchdog.orphaned_lock': {
+		meaning: 'A single-instance lock file in data/locks is held by a process ID that is no longer running and has not been refreshed for well past its normal interval — a leftover from a hard crash or power loss. SymBot reclaims such a lock automatically the next time an instance starts, so it normally clears itself; it only matters if that dead process ID has since been reused by an unrelated program, in which case a restart could be refused.',
+		fix: 'If everything is running normally, no action is needed — the next restart reclaims it. If an instance instead refuses to start, saying one is already running when none is, delete the named lock file under data/locks and start again.'
+	},
+	'watchdog.lock_temp_buildup': {
+		meaning: 'An unusual number of leftover temporary lock files have built up in data/locks. These are created briefly while a lock is refreshed or reclaimed and are normally cleaned up on their own; a buildup suggests the process has been crashing repeatedly during that step. They are harmless in themselves.',
+		fix: 'They are swept automatically over time, so no direct action is required. Treat the buildup as a prompt to check the recent logs for why an instance keeps crashing or being killed.'
+	},
+
 	// ── Audit-log tamper evidence ──
 	'watchdog.audit_tampering': {
 		meaning: 'The audit log is sealed as a hash chain — each entry carries a fingerprint of the one before it — so that editing, deleting, or reordering past entries can be detected. This check found a break in that chain: a recorded action appears to have been altered or removed after it was written. On a healthy system this never happens, so it is worth taking seriously; it can also, more rarely, come from the database being edited directly or restored from an inconsistent copy.',

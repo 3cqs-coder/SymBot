@@ -1837,6 +1837,9 @@ The startup sweep's results are recorded in the Audit Log (a clean startup run l
 - No two open deals exist for the same bot and pair (only one is allowed at a time, so a duplicate means the single-deal-start guard was bypassed and the loop would manage both against one pair).
 - No open deal is left stuck with no filled orders after a short grace period (a half-started deal that never actually entered but still holds its bot's slot for that pair).
 - On the Hub, every enabled instance is actually running (an instance that crashed and used up its automatic restart attempts would otherwise sit stopped and silently not trading; instances mid-restart are not flagged).
+- No open deal is on a pair the exchange has delisted, suspended, or put into limit-only mode (SymBot places market orders, so such a pair can no longer be traded normally — the deal should be planned out of before the pair is pulled, and SymBot already refuses to start a new deal on one).
+- No stale single-instance lock files are piling up in the locks directory (a crash can leave one behind; an unusual buildup points at repeated crashes, and a leftover lock from a dead process is surfaced so it can be cleared if it ever blocks a restart).
+- This machine's clock is in step with the exchange's server time (a drifted clock — common on virtual machines and WSL, especially after the host sleeps — gets signed requests like placing orders and reading your balance rejected, which can quietly pause buys and sells; SymBot auto-corrects the timestamp it sends so trading usually keeps working, but the check surfaces the wrong clock so you can fix it, since log timestamps, the stale-signal guard, and scheduled tasks all rely on it).
 - The audit log's tamper-evident hash chain is unbroken (a break means a past entry was altered or removed).
 - The IP allow/block filter can't be spoofed by a forged client-address header when SymBot sits behind a proxy.
 
@@ -1927,7 +1930,7 @@ A webhook that opens or modifies a deal can be made safely retryable so a networ
 - An **`idempotency_key`** field in the JSON body, or
 - A **`signal_id`** field in the JSON body — a repeated signal id is treated as the same request
 
-If SymBot sees the same key again within 5 minutes, it skips reprocessing and returns HTTP `200` with `{ "success": true, "duplicate": true }` instead of opening a second deal. Send a fresh key per distinct action. De-duplication applies to the **`/webhook/…`** signal path (where replayed alerts occur) and to the direct **deal-start** and **add-funds** REST endpoints (`POST /api/bots/{botId}/start_deal`, `POST /api/{deals|bots}/{id}/add_funds`), so a retried open/fund request after a network timeout returns the duplicate acknowledgement instead of acting twice. Other direct `/api/…` calls are not de-duplicated.
+If SymBot sees the same key again within 5 minutes, it skips reprocessing and returns HTTP `200` with `{ "success": true, "duplicate": true }` instead of opening a second deal. Send a fresh key per distinct action. De-duplication applies to the **`/webhook/…`** signal path (where replayed alerts occur) and to the direct **deal-start** and **add-funds** REST endpoints (`POST /api/bots/{botId}/start_deal`, `POST /api/{deals|bots}/{id}/add_funds`), so a retried open/fund request after a network timeout returns the duplicate acknowledgment instead of acting twice. Other direct `/api/…` calls are not de-duplicated.
 
 ```bash
 curl -i -X POST \
@@ -3005,7 +3008,7 @@ It covers every source that drives a bot through a webhook signal — a TradingV
 - Source — the channel the signal arrived on: 3CQS, Signal Bot (a TradingView or webhook alert), API (a manual call), or any other source. New sources appear automatically as they are seen.
 - Bot and Pair — which bot and pair it targeted.
 - Outcome — one of: Started (a deal opened), Processed (the action ran — for example a safety order was added, or a graceful close that was left open because the profit target was not yet met), Rejected (SymBot declined it), or Duplicate (a repeated alert ignored by idempotency).
-- Reason — the plain-language detail: the new deal id, or exactly why it was rejected (a blacklisted pair, a pair limit, an active circuit breaker, insufficient funds, and so on).
+- Reason — the plain-language detail: the new deal id, or exactly why it was rejected (a blacklisted pair, a pair limit, an active circuit breaker, insufficient funds, a pair the exchange has delisted or put in limit-only mode, and so on).
 - Source IP — where the signal came from. An internal 3CQS signal shows as a local address; an external TradingView alert shows its own address.
 - Latency — how long SymBot took to reply to the signal. For an entry signal this includes the wait for the deal to open through the serial deal-start queue (up to about 30 seconds), so a high value usually means signals are queuing during a burst, not a network problem. A summary line above the table shows the average, p95, and max for the current filter and flags how many were slow.
 - Deal ID — the deal the signal opened or acted on.

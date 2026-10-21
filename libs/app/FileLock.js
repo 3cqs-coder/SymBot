@@ -186,7 +186,11 @@ async function refresh(p, nonce, role) {
 		let cur = null;
 		try { cur = JSON.parse(await fsp.readFile(p, 'utf8')); } catch (_) {}
 		if (!cur || cur.nonce !== nonce) { return; } // no longer ours — do not touch a new holder's file
-		const tmp = p + '.beat.' + nonce;
+		// Per-write unique temp suffix so two refreshes (or a refresh racing a stalled earlier one) can never
+		// write the SAME temp and interleave into a torn record that is then renamed into place. Each refresh
+		// renames its own complete temp atomically; the last writer wins with a valid record. The suffix stays
+		// hex so sweepStaleTemps' TEMP_RE still reaps any crash-orphaned temp.
+		const tmp = p + '.beat.' + nonce + crypto.randomBytes(4).toString('hex');
 		await fsp.writeFile(tmp, record(nonce, role));
 		await renameWithRetry(tmp, p);
 	} catch (_) {}
@@ -222,8 +226,15 @@ async function startGuard(options) {
 		acquired = await acquireSingleton(key, { role });
 	} catch (e) {
 		if (e && e.code === 'ALREADY_RUNNING') {
-			logger('FATAL: refusing to start — another ' + role + ' is already running for this configuration. ' + e.message +
-				' If you are certain it is not, stop it (or wait ' + Math.round(TTL_MS / 1000) + 's for a crashed one to age out) and retry.');
+			// Guidance depends on WHERE the holder is. A same-host lock is judged by live-pid, not the TTL, so a
+			// crashed holder whose pid was later reused by an unrelated process never "ages out" — the operator
+			// must delete the lock file. Only a foreign-host lock ages out by TTL. (Pointing at the file also
+			// helps on Windows, where pid reuse is more frequent.)
+			const onThisHost = !!(e.holder && e.holder.host === os.hostname());
+			const guidance = onThisHost
+				? ' If you are certain no ' + role + ' is running, delete the stale lock file and retry: ' + lockPathFor(key)
+				: ' If you are certain it is not, stop it (or wait ' + Math.round(TTL_MS / 1000) + 's for a crashed one on that host to age out) and retry.';
+			logger('FATAL: refusing to start — another ' + role + ' is already running for this configuration. ' + e.message + guidance);
 			exit(1);
 			return null; // reached only when a test injects a non-exiting `exit`
 		}
@@ -232,7 +243,15 @@ async function startGuard(options) {
 	}
 
 	const { p, nonce } = acquired;
-	const beat = setInterval(() => { refresh(p, nonce, role); }, BEAT_MS);
+	// Non-overlapping heartbeat: skip a tick while the previous refresh is still in flight, so a stalled write
+	// (a slow or stuck volume) can never start a second concurrent refresh. refresh() is already self-contained
+	// and swallows its own errors; the guard only prevents pile-up.
+	let beating = false;
+	const beat = setInterval(() => {
+		if (beating) { return; }
+		beating = true;
+		Promise.resolve(refresh(p, nonce, role)).catch(() => {}).finally(() => { beating = false; });
+	}, BEAT_MS);
 	if (beat.unref) { beat.unref(); }
 
 	let released = false;

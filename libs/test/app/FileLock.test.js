@@ -166,6 +166,57 @@ function writeHolder(p, rec) { fs.mkdirSync(require('path').dirname(p), { recurs
 		fs.rmSync(dir, { recursive: true, force: true });
 	});
 
+	// ── Concurrency: the whole reason the module exists — only ONE of several racing acquires may win. The
+	// 'wx' create is atomic, so even started together exactly one gets the lock and the rest are refused. ──
+	await test('concurrent acquires on a free key: exactly one wins, the rest get ALREADY_RUNNING', async () => {
+		const key = uniqueKey('race');
+		const results = await Promise.all([ 0, 1, 2, 3 ].map(() =>
+			FileLock.acquireSingleton(key, { role: 'instance' })
+				.then(h => ({ ok: true, h }))
+				.catch(e => ({ ok: false, code: e && e.code }))
+		));
+		const winners = results.filter(r => r.ok);
+		const refused = results.filter(r => !r.ok);
+		assert.strictEqual(winners.length, 1, 'exactly one acquire resolves');
+		assert.strictEqual(winners[0].h.holder, null, 'the winner holds the fresh lock (holder:null)');
+		assert.ok(refused.length === 3 && refused.every(r => r.code === 'ALREADY_RUNNING'), 'every loser is refused with ALREADY_RUNNING');
+		await FileLock.release(winners[0].h.p, winners[0].h.nonce);
+	});
+
+	// ── refresh (heartbeat): keeps a live holder valid, never resurrects a reclaimed-and-replaced lock ──
+	await test('refresh advances the timestamp and preserves the nonce (a long-lived holder stays valid)', async () => {
+		const key = uniqueKey('beat');
+		const a = await FileLock.acquireSingleton(key, { role: 'instance' });
+		const before = FileLock.readHolder ? await FileLock.readHolder(a.p) : null;
+		await new Promise(r => setTimeout(r, 5));
+		await FileLock.refresh(a.p, a.nonce, 'instance');
+		const after = await FileLock.readHolder(a.p);
+		assert.ok(after && after.nonce === a.nonce, 'nonce preserved after refresh (still our lock)');
+		assert.ok(after.at >= (before ? before.at : 0), 'timestamp advanced (or held) by refresh');
+		await FileLock.release(a.p, a.nonce);
+	});
+
+	await test('refresh with a FOREIGN nonce is a no-op (never touches a successor holder)', async () => {
+		const key = uniqueKey('beat2');
+		const a = await FileLock.acquireSingleton(key, { role: 'instance' });
+		const atBefore = (await FileLock.readHolder(a.p)).at;
+		await new Promise(r => setTimeout(r, 5));
+		await FileLock.refresh(a.p, 'SOME-OTHER-NONCE', 'instance');   // not ours → must do nothing
+		const rec = await FileLock.readHolder(a.p);
+		assert.strictEqual(rec.nonce, a.nonce, 'the real holder nonce is untouched');
+		assert.strictEqual(rec.at, atBefore, 'a foreign-nonce refresh did not rewrite the record');
+		await FileLock.release(a.p, a.nonce);
+	});
+
+	await test('releaseSync removes only our own lock, and is a no-op on a foreign nonce', async () => {
+		const key = uniqueKey('relsync');
+		const a = await FileLock.acquireSingleton(key, { role: 'instance' });
+		FileLock.releaseSync(a.p, 'NOT-OUR-NONCE');                    // must NOT remove a lock we do not own
+		assert.ok(fs.existsSync(a.p), 'foreign-nonce releaseSync leaves the lock in place');
+		FileLock.releaseSync(a.p, a.nonce);                           // our nonce → removes it
+		assert.ok(!fs.existsSync(a.p), 'our-nonce releaseSync removes the lock');
+	});
+
 	console.log('\nFileLock: ' + passed + ' passed' + (failed ? (', ' + failed + ' failed') : ''));
 	process.exit(failed ? 1 : 0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

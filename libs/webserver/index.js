@@ -328,7 +328,18 @@ function initSocket(sessionMiddleware, server) {
 		// Legacy-API-key auth over the socket must honor the API on/off switch, exactly like the HTTP layer
 		// (AuthMiddleware gates on api_enabled). Without this, turning the API off would still admit a legacy
 		// key on the WebSocket. A real user session (principal/sess.loggedIn above) is unaffected.
-		if (!loggedIn && !deprovisioned && apiKey && shareData.appData.api_enabled && (await shareData.Common.validateApiKey(apiKey))) {
+		// Guard the API-key check: if validateApiKey ever rejects, this async connect handler would reject and
+		// leave the client CONNECTED with no listeners (a zombie socket holding a slot) instead of being
+		// cleanly rejected below. Treat a rejection as an invalid key.
+		let legacyKeyOk = false;
+
+		if (!loggedIn && !deprovisioned && apiKey && shareData.appData.api_enabled) {
+
+			try { legacyKeyOk = await shareData.Common.validateApiKey(apiKey); }
+			catch (e) { legacyKeyOk = false; }
+		}
+
+		if (legacyKeyOk) {
 
 			loggedIn = true;
 		}

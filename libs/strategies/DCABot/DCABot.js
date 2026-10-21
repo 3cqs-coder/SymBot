@@ -17,6 +17,7 @@ const Schema = require(pathRoot + '/libs/mongodb/DCABotSchema');
 const DbQueries = require(__dirname + '/DCABotDbQueries.js');
 const PriceGuard = require(__dirname + '/priceGuard.js');
 const StopLoss = require(__dirname + '/stopLoss.js');
+const PairStatus = require(__dirname + '/pairStatus.js');
 
 const Bots = Schema.Bots;
 const Deals = Schema.Deals;
@@ -521,6 +522,37 @@ async function start(dataObj, startId) {
 			await runFollowLoop(config, exchange, dealIdMain);
 		}
 		else {
+
+			// Delisting / suspended-pair guard (backlog #138, Phase 1). Before opening a NEW deal, confirm the
+			// pair is still normally tradable on the exchange. A pair can still return a ticker while the
+			// exchange has marked it inactive or limit-only (a common pre-delisting step — e.g. a network
+			// shutting down), and SymBot places MARKET orders, so a deal started there would immediately fail or
+			// strand funds. Only an EXPLICIT not-tradable/limit-only signal blocks: an unknown or unloaded
+			// market is a fail-OPEN (the ticker above already proved the pair exists), so a valid pair is never
+			// wrongly refused. A resume takes the branch above, so this never blocks exiting a dying pair.
+			// Evaluate inside its own guard that fails OPEN: an unexpected error here must never block an
+			// otherwise-valid start. A refusal is returned ONLY on an explicit not-tradable / limit-only verdict.
+			let startRefusal = null;
+
+			try {
+
+				const startMarket = (exchange && exchange.markets) ? exchange.markets[pair] : null;
+
+				if (startMarket) {
+
+					const pairStatus = PairStatus.evaluatePairTradable(startMarket, pair);
+
+					if (!pairStatus.tradable || pairStatus.limitOnly) { startRefusal = pairStatus.reason; }
+				}
+			}
+			catch (e) { startRefusal = null; /* fail open — never block a start on a metadata read error */ }
+
+			if (startRefusal) {
+
+				Common.logger(colors.bgYellow.bold('Refusing to start a deal — ' + startRefusal));
+
+				return ( { 'success': false, 'data': 'Pair not tradable: ' + startRefusal } );
+			}
 
 			let lastDcaOrderAmount = 0;
 			let lastDcaOrderSize = 0;
@@ -5434,7 +5466,12 @@ async function connectExchange(configObj) {
 	let exchangeNewObj = {};
 	let isErr;
 	let isNew = false;
-	let options = { 'defaultType': 'spot' };
+	// `adjustForTimeDifference: true` makes CCXT sync to the exchange's server time and correct each signed
+	// request's timestamp, so a drifted local clock (a very common WSL / sleep-resume problem) can no longer
+	// get orders and balance reads rejected with Binance's -1021 "timestamp ahead of server time". It only
+	// affects request signing, never order sizing or placement. Default-on and overridable per bot via
+	// config.exchangeOptions (set `adjustForTimeDifference: false` there to opt out).
+	let options = { 'adjustForTimeDifference': true };
 
 	try {
 
@@ -5445,7 +5482,17 @@ async function connectExchange(configObj) {
 
 		if (config.exchangeOptions) {
 
-			options = config.exchangeOptions;
+			// Merge so config wins: the bot's exchangeOptions override the defaults above, never the reverse.
+			options = Object.assign({}, options, config.exchangeOptions);
+		}
+
+		// `defaultType` is a FALLBACK, not a default-object member — applied only when nothing has already set
+		// one. This way 'spot' can NEVER override a market type chosen in config (today via exchangeOptions, and
+		// future-proof for any later field that pre-populates options for futures/margin). SymBot is spot-only
+		// today, so in practice this just stamps 'spot' when the config is silent.
+		if (options.defaultType == null || options.defaultType === '') {
+
+			options.defaultType = 'spot';
 		}
 
 		// Decrypt the stored exchange credentials before they touch the exchange. readSecret is a
@@ -9074,6 +9121,129 @@ async function initApp() {
 }
 
 
+// Throttle forced market reloads per exchange so a short watchdog interval can't hammer the API. Delisting
+// plays out over days, so refreshing status at most every ~10 minutes is plenty.
+const _delistReloadAt = {};
+const DELIST_RELOAD_MS = 10 * 60 * 1000;
+
+// Read-only delisting / suspended-pair scan for the Watchdog (backlog #138, Phase 1). For every OPEN deal it
+// checks the pair against the exchange's CURRENT market metadata and returns a finding when the pair is no
+// longer normally tradable (missing/inactive/trading-disabled) or is limit-only (SymBot places market orders).
+// ALERT-ONLY — it never touches orders. Fully fail-OPEN: any error yields no findings, so a transient exchange
+// hiccup never produces a false alert or breaks the sweep. Reuses the cached exchange connections.
+async function getDelistingFindings() {
+
+	const findings = [];
+
+	try {
+
+		const openDeals = await getDeals({ 'status': 0 });
+
+		if (!Array.isArray(openDeals) || openDeals.length === 0) { return findings; }
+
+		const exCache = new Map();   // exchange name → connected (cached) exchange handle, resolved once per call
+
+		for (const deal of openDeals) {
+
+			try {
+
+				const cfg = deal && deal.config;
+				const pair = deal && deal.pair;
+
+				if (!cfg || !pair || !cfg.exchange) { continue; }
+
+				const exName = cfg.exchange;
+
+				let exchange = exCache.get(exName);
+
+				if (exchange === undefined) {
+
+					exchange = await connectExchange(cfg);
+
+					// Refresh market status so a change since connect is seen — throttled per exchange.
+					if (exchange && typeof exchange.loadMarkets === 'function') {
+
+						const now = Date.now();
+
+						if (now - (_delistReloadAt[exName] || 0) > DELIST_RELOAD_MS) {
+
+							try { await exchange.loadMarkets(true); _delistReloadAt[exName] = now; } catch (e) {}
+						}
+					}
+
+					exCache.set(exName, exchange || null);
+				}
+
+				if (!exchange || !exchange.markets) { continue; }
+
+				const market = exchange.markets[pair] || null;
+				const status = PairStatus.evaluatePairTradable(market, pair);
+
+				if (!status.tradable || status.limitOnly) {
+
+					findings.push({
+						'deal_id': deal.dealId,
+						'pair': pair,
+						'bot': deal.botName || deal.botId || '',
+						'status': status.status,
+						'reason': status.reason
+					});
+				}
+			}
+			catch (e) { /* per-deal: skip one, keep scanning */ }
+		}
+	}
+	catch (e) { /* fail open: no findings on any error */ }
+
+	return findings;
+}
+
+
+// Read-only clock-skew probe for the Watchdog (clock_skew check). For each exchange SymBot is already
+// connected to, it compares the local clock to the exchange's server time and returns the offset in ms
+// (positive = local is AHEAD, the Binance -1021 case). Uses a public fetchTime (no auth, no order impact) and
+// an NTP-style midpoint estimate (local time BEFORE and AFTER the call, averaged) so normal network latency
+// does not read as skew. Each distinct exchange is probed once; fully fail-OPEN (any error → no result).
+async function getClockSkew() {
+
+	const results = [];
+
+	try {
+
+		const exchanges = (shareData.appData && shareData.appData.exchanges) ? shareData.appData.exchanges : {};
+		const seen = new Set();
+
+		for (const hash of Object.keys(exchanges)) {
+
+			try {
+
+				const entry = exchanges[hash];
+				const exchange = entry && entry.exchange;
+				const name = entry && entry.name;
+
+				if (!exchange || !name || seen.has(name)) { continue; }
+				if (!exchange.has || !exchange.has['fetchTime']) { continue; }   // exchange can't report its time → skip
+
+				seen.add(name);
+
+				const t0 = Date.now();
+				const serverMs = await exchange.fetchTime();
+				const t1 = Date.now();
+
+				if (typeof serverMs === 'number' && isFinite(serverMs)) {
+
+					results.push({ 'exchange': name, 'skew_ms': Math.round(((t0 + t1) / 2) - serverMs) });
+				}
+			}
+			catch (e) { /* skip one exchange, keep probing the rest */ }
+		}
+	}
+	catch (e) { /* fail open */ }
+
+	return results;
+}
+
+
 module.exports = {
 
 	colors,
@@ -9121,6 +9291,8 @@ module.exports = {
 	portfolioLossMatchStage,  // exported for testing: the realized-deal $match for the portfolio-loss window
 	getSymbol,
 	getSymbolsAll,
+	getDelistingFindings,
+	getClockSkew,
 	getBalanceTracker,
 	getBalanceCache,
 	checkGlobalPairLimit,

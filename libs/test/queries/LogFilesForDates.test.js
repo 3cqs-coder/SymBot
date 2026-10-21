@@ -38,34 +38,36 @@ function distinctDates(files) {
 	return new Set(files.map(f => f.slice(0, 10))).size;
 }
 
-try {
-	// A day with two logs is returned WHOLE — both files, never a partial day — even though that is 2 files
-	// for a 1-date budget. The cap counts dates, not files.
-	const one = LogFiles([ '2026-08-12' ], 1);
-	ok(one.length === 2 && one.indexOf('2026-08-12.log') >= 0 && one.indexOf('2026-08-12-oldname.log') >= 0, 'both files for a single dual-log day are returned (day never split)');
-	ok(distinctDates(one) === 1, 'still only one distinct date covered');
-
-	// Budget of 2 distinct dates over three requested → covers the two newest dates, all their files, and
-	// stops before the third. Aug 12 (2 files) + Aug 11 (1 file) = 3 files across 2 dates; Aug 10 excluded.
-	const two = LogFiles([ '2026-08-12', '2026-08-11', '2026-08-10' ], 2);
-	ok(distinctDates(two) === 2, 'exactly the date budget (2) worth of distinct dates');
-	ok(two.length === 3, 'all files for both covered dates (2 for Aug 12 + 1 for Aug 11)');
-	ok(two.indexOf('2026-08-10.log') === -1, 'the date beyond the budget is excluded');
-
-	// A generous budget returns everything, de-duped, and never the non-log or the manifest.
-	const all = LogFiles([ '2026-08-12', '2026-08-11', '2026-08-10' ], 10);
-	ok(all.length === 4, 'all four real logs returned when the budget is generous');
-	ok(all.indexOf('notes.txt') === -1 && all.indexOf('.index.json') === -1, 'non-log files and the manifest are never returned');
-
-	// A date with no file simply contributes nothing and does not consume budget.
-	const gap = LogFiles([ '2099-01-01', '2026-08-11' ], 1);
-	ok(gap.length === 1 && gap[0] === '2026-08-11.log', 'an empty date is skipped and the budget is spent on the date that has a log');
-
-	console.log('LogFilesForDates: ' + passed + ' assertions passed');
-}
-catch (e) { console.error('LogFilesForDates FAIL: ' + (e && e.stack || e)); process.exitCode = 1; }
-finally { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) {} }
-
 function LogFiles(dates, maxFiles) { return LogScan.logFilesForDates(dates, maxFiles); }
 
-process.exit(process.exitCode ? 1 : 0);
+(async () => {
+	try {
+		// A day with two logs is returned WHOLE — both files, never a partial day — even though that is 2 files
+		// for a 1-date budget. The cap counts dates, not files.
+		const one = await LogFiles([ '2026-08-12' ], 1);
+		ok(one.length === 2 && one.indexOf('2026-08-12.log') >= 0 && one.indexOf('2026-08-12-oldname.log') >= 0, 'both files for a single dual-log day are returned (day never split)');
+		ok(distinctDates(one) === 1, 'still only one distinct date covered');
+
+		// Budget of 2 distinct dates over three requested → covers the two newest dates, all their files, and
+		// stops before the third. Aug 12 (2 files) + Aug 11 (1 file) = 3 files across 2 dates; Aug 10 excluded.
+		const two = await LogFiles([ '2026-08-12', '2026-08-11', '2026-08-10' ], 2);
+		ok(distinctDates(two) === 2, 'exactly the date budget (2) worth of distinct dates');
+		ok(two.length === 3, 'all files for both covered dates (2 for Aug 12 + 1 for Aug 11)');
+		ok(two.indexOf('2026-08-10.log') === -1, 'the date beyond the budget is excluded');
+
+		// A generous budget returns everything, de-duped, and never the non-log or the manifest.
+		const all = await LogFiles([ '2026-08-12', '2026-08-11', '2026-08-10' ], 10);
+		ok(all.length === 4, 'all four real logs returned when the budget is generous');
+		ok(all.indexOf('notes.txt') === -1 && all.indexOf('.index.json') === -1, 'non-log files and the manifest are never returned');
+
+		// A date with no file simply contributes nothing and does not consume budget.
+		const gap = await LogFiles([ '2099-01-01', '2026-08-11' ], 1);
+		ok(gap.length === 1 && gap[0] === '2026-08-11.log', 'an empty date is skipped and the budget is spent on the date that has a log');
+
+		console.log('LogFilesForDates: ' + passed + ' assertions passed');
+	}
+	catch (e) { console.error('LogFilesForDates FAIL: ' + (e && e.stack || e)); process.exitCode = 1; }
+	finally { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) {} }
+
+	process.exit(process.exitCode ? 1 : 0);
+})();

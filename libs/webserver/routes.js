@@ -159,7 +159,10 @@ function initRoutes(router, upload) {
 
 	router.post([ '/webhook/api/*wildcard' ], (req, res, next) => {
 
-		processWebHook(req, res, next);
+		// Return/catch the promise so an error escaping processWebHook before it responds can never become an
+		// unhandled rejection that hangs the signal request (signal clients would otherwise pile up retries).
+		// Mirrors the Promise.resolve(...).catch(...) guard used on /config.
+		Promise.resolve(processWebHook(req, res, next)).catch(next);
 	});
 
 

@@ -81,6 +81,12 @@ const conversationHistory = new Map();
 // Allows external callers (e.g. socket stopGeneration event) to abort mid-stream.
 const activeGenerations = new Map();
 
+// Map of room → promise of the in-flight generation. Used to SERIALIZE generations per room: a new request
+// for a room aborts and awaits the prior one before touching the shared conversation history, so two
+// concurrent generations (two tabs, a reconnect double-submit, two API clients on one room) can never
+// interleave roomData mutations or leave the stop button pointed at the wrong run.
+const roomGenerations = new Map();
+
 let aiStarted = false;
 
 const cleanupRoomsTimer = setInterval(() => {
@@ -4618,7 +4624,7 @@ const streamChatProvider = async ({ model, stream, messages, abortSignal, onActi
 };
 
 
-const streamChatResponseWithTimeout = async ({ room, model, message, reset, stream, options, footer, purpose }) => {
+const runGenerationWithTimeout = async ({ room, model, message, reset, stream, options, footer, purpose }) => {
 
 	let idleTimeout;
 	let hardTimeout;
@@ -4682,6 +4688,39 @@ const streamChatResponseWithTimeout = async ({ room, model, message, reset, stre
 		// one's controller — that would orphan the running generation from the stop button / disconnect abort.
 		// Mirrors the Hub poll cache's "clear only if it's still mine" guard.
 		if (activeGenerations.get(room) === abortController) { activeGenerations.delete(room); }
+	}
+};
+
+
+// Per-room serializing wrapper: a new generation for a room supersedes any still-running one. Abort the prior
+// run and await it to fully settle (its finally releases its timers and activeGenerations entry) BEFORE this
+// one starts, so the shared conversation history is never mutated by two generations at once and the stop
+// button always targets the current run. Single-user UI gating makes an overlap rare, but two tabs, a socket
+// reconnect double-submit, or two API clients on one room can all reach here concurrently.
+const streamChatResponseWithTimeout = async (args) => {
+
+	const room = args && args.room;
+
+	const prior = roomGenerations.get(room);
+
+	if (prior) {
+
+		try { const c = activeGenerations.get(room); if (c) { c.abort(); } } catch (e) {}
+		try { await prior; } catch (e) {}
+	}
+
+	const runPromise = runGenerationWithTimeout(args);
+
+	roomGenerations.set(room, runPromise);
+
+	try {
+
+		return await runPromise;
+	}
+	finally {
+
+		// Clear only if still ours — a newer generation may have replaced the entry after superseding us.
+		if (roomGenerations.get(room) === runPromise) { roomGenerations.delete(room); }
 	}
 };
 

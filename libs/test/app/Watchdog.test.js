@@ -16,6 +16,12 @@ const noop = { Common: { logger: () => {} } };
 
 	console.log('\nwatchdog registry:');
 
+	// lock_artifacts reads the live data/locks directory, so it depends on machine state this unit test does
+	// not control (a leftover lock from a crashed process would make the clean-sweep assertions flaky). Its
+	// decision logic is covered deterministically by WatchdogLockArtifacts.test.js; neutralize it here so the
+	// sweep-machinery tests below stay environment-independent. register() is idempotent by name.
+	Watchdog.register('lock_artifacts', () => null);
+
 	await test('the three built-in checks are registered', () => {
 		const names = Watchdog.list();
 		[ 'route_gating', 'capability_integrity', 'ai_read_only' ].forEach(n => assert.ok(names.indexOf(n) >= 0, n + ' registered'));

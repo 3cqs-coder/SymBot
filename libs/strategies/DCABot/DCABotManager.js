@@ -705,10 +705,28 @@ async function apiGetDealsHistory(req, res, sendResponse) {
 		query['botId'] = botId;
 	}
 
-	const dealsHistory = await shareData.DCABot.getDeals(query, queryOptions);
-	const dealsArr = await getProcessedDeals(dealsHistory || []);
+	let obj;
 
-	const obj = { date: new Date(), data: dealsArr };
+	try {
+
+		const dealsHistory = await shareData.DCABot.getDeals(query, queryOptions);
+		const dealsArr = await getProcessedDeals(dealsHistory || []);
+
+		obj = { date: new Date(), data: dealsArr };
+	}
+	catch (e) {
+
+		// Display-only path: a rejection must never leave the request hanging (mirrors apiGetActiveDeals).
+		shareData.Common.logger('apiGetDealsHistory failed: ' + ((e && e.message) ? e.message : e));
+
+		if (sendResponse) {
+
+			if (!res.headersSent) { res.status(500).send({ date: new Date(), error: 'Unable to load deal history' }); }
+			return;
+		}
+
+		return { date: new Date(), data: [] };
+	}
 
 	if (sendResponse) {
 
@@ -835,7 +853,20 @@ async function apiExportDealsCsv(req, res) {
 		if (d.journal != undefined && d.journal != null) { savedByDeal[d.dealId] = d.journal; }
 	}
 
-	const processed = await getProcessedDeals(dealsRaw);
+	let processed;
+
+	try {
+
+		processed = await getProcessedDeals(dealsRaw);
+	}
+	catch (e) {
+
+		// getProcessedDeals runs outside the getDeals try above; guard it so a bad row can't hang the export.
+		shareData.Common.logger('Deals export processing error: ' + ((e && e.message) ? e.message : e));
+
+		if (!res.headersSent) { res.status(500).send('Error generating deals export'); }
+		return;
+	}
 
 	const entries = processed.map(d => {
 
@@ -1922,7 +1953,7 @@ async function dispatchSingleAction(req, res) {
 		const resObj = {
 			'date': new Date(),
 			'success': false,
-			'data': 'Unknown or missing action "' + action + '". Valid actions: entry, add_funds, close, panic_sell'
+			'data': 'Unknown or missing action "' + action + '". Valid actions: entry, add_funds, close, panic_sell (close_all is accepted as an alias of panic_sell).'
 		};
 
 		shareData.Common.logger('API Signal Dispatch: ' + JSON.stringify(resObj));
@@ -3217,6 +3248,11 @@ async function getProcessedDeals(deals) {
 
 	for (const deal of deals) {
 
+		// Skip a malformed/legacy record (missing orders array or pair) rather than letting one bad row throw
+		// and abort the whole batch — that would blank the entire Journal / Deals-History / CSV / Dashboard,
+		// all of which funnel through here. A normal closed deal always carries both.
+		if (!deal || !Array.isArray(deal.orders) || !deal.pair) { continue; }
+
 		const sellData = deal.sellData;
 		const orders = deal.orders;
 		const config = deal.config;
@@ -3719,18 +3755,29 @@ async function getSymbolList() {
 
 	if (diffSec > (60 * maxMins)) {
 
-		const exchange = await shareData.DCABot.connectExchange(botConfigData);
+		// Single-flight: if a refresh is already running for this exchange, await it instead of starting a
+		// second concurrent connectExchange + getSymbolsAll. `updated` is still only advanced on success, so a
+		// failed fetch does not suppress the next retry.
+		if (!symbolList[exchangeName]['refreshing']) {
 
-		if (exchange) {
+			symbolList[exchangeName]['refreshing'] = (async () => {
 
-			const symbolData = await shareData.DCABot.getSymbolsAll(exchange);
+				const exchange = await shareData.DCABot.connectExchange(botConfigData);
 
-			if (symbolData.success) {
+				if (exchange) {
 
-				symbolList[exchangeName]['updated'] = new Date();
-				symbolList[exchangeName]['symbols'] = symbolData.symbols;
-			}
+					const symbolData = await shareData.DCABot.getSymbolsAll(exchange);
+
+					if (symbolData.success) {
+
+						symbolList[exchangeName]['updated'] = new Date();
+						symbolList[exchangeName]['symbols'] = symbolData.symbols;
+					}
+				}
+			})().catch(() => {}).finally(() => { symbolList[exchangeName]['refreshing'] = null; });
 		}
+
+		await symbolList[exchangeName]['refreshing'];
 	}
 
 	return symbolList[exchangeName]['symbols'] || [];
@@ -3927,47 +3974,65 @@ async function apiGetJournal(req, res, sendResponse = true) {
 	// Fetch one extra to know whether another page exists.
 	const queryOptions = { sort: { 'sellData.date': -1 }, skip: skip, limit: limit + 1 };
 
-	let dealsRaw = await shareData.DCABot.getDeals(query, queryOptions) || [];
+	let obj;
 
-	// Did we get the extra row? Then there's another page.
-	const hasMore = dealsRaw.length > limit;
+	try {
 
-	if (hasMore) { dealsRaw = dealsRaw.slice(0, limit); }
+		let dealsRaw = await shareData.DCABot.getDeals(query, queryOptions) || [];
 
-	// Map dealId -> saved journal (note/narrative) from the raw deal docs.
-	const savedByDeal = {};
+		// Did we get the extra row? Then there's another page.
+		const hasMore = dealsRaw.length > limit;
 
-	for (const d of dealsRaw) {
+		if (hasMore) { dealsRaw = dealsRaw.slice(0, limit); }
 
-		if (d.journal != undefined && d.journal != null) {
+		// Map dealId -> saved journal (note/narrative) from the raw deal docs.
+		const savedByDeal = {};
 
-			savedByDeal[d.dealId] = d.journal;
+		for (const d of dealsRaw) {
+
+			if (d.journal != undefined && d.journal != null) {
+
+				savedByDeal[d.dealId] = d.journal;
+			}
 		}
-	}
 
-	const processed = await getProcessedDeals(dealsRaw);
+		const processed = await getProcessedDeals(dealsRaw);
 
-	const entries = processed.map(d => {
+		const entries = processed.map(d => {
 
-		const saved = savedByDeal[d.deal_id] || {};
+			const saved = savedByDeal[d.deal_id] || {};
 
-		return {
-			...d,
-			note: typeof saved.note === 'string' ? saved.note : '',
-			narrative: typeof saved.narrative === 'string' ? saved.narrative : '',
-			narrative_at: saved.narrative_at || null,
-			mood: typeof saved.mood === 'string' ? saved.mood : ''
+			return {
+				...d,
+				note: typeof saved.note === 'string' ? saved.note : '',
+				narrative: typeof saved.narrative === 'string' ? saved.narrative : '',
+				narrative_at: saved.narrative_at || null,
+				mood: typeof saved.mood === 'string' ? saved.mood : ''
+			};
+		});
+
+		obj = {
+			'date': new Date(),
+			'ai_enabled': isAiEnabled(),
+			'skip': skip,
+			'limit': limit,
+			'has_more': hasMore,
+			'data': entries
 		};
-	});
+	}
+	catch (e) {
 
-	const obj = {
-		'date': new Date(),
-		'ai_enabled': isAiEnabled(),
-		'skip': skip,
-		'limit': limit,
-		'has_more': hasMore,
-		'data': entries
-	};
+		// Display-only path: a rejection must never leave the request hanging (mirrors apiGetActiveDeals).
+		shareData.Common.logger('apiGetJournal failed: ' + ((e && e.message) ? e.message : e));
+
+		if (sendResponse) {
+
+			if (!res.headersSent) { res.status(500).send({ date: new Date(), error: 'Unable to load journal' }); }
+			return;
+		}
+
+		return { 'date': new Date(), 'ai_enabled': isAiEnabled(), 'skip': skip, 'limit': limit, 'has_more': false, 'data': [] };
+	}
 
 	if (sendResponse) { res.send(obj); }
 	else { return obj; }
@@ -4103,8 +4168,20 @@ async function apiGetJournalStats(req, res) {
 
 	// No projection: getProcessedDeals needs the full deal shape (orders, config,
 	// sellData, etc.). This mirrors how the dashboard loads deals for its stats.
-	const dealsRaw = await shareData.DCABot.getDeals(query, { sort: { 'sellData.date': -1 } }) || [];
-	const deals = await getProcessedDeals(dealsRaw);
+	let dealsRaw, deals;
+
+	try {
+
+		dealsRaw = await shareData.DCABot.getDeals(query, { sort: { 'sellData.date': -1 } }) || [];
+		deals = await getProcessedDeals(dealsRaw);
+	}
+	catch (e) {
+
+		// Display-only path: a rejection must never leave the request hanging (mirrors apiGetActiveDeals).
+		shareData.Common.logger('apiGetJournalStats failed: ' + ((e && e.message) ? e.message : e));
+		if (!res.headersSent) { res.status(500).send({ date: new Date(), error: 'Unable to load journal stats' }); }
+		return;
+	}
 
 	// Map saved mood back onto each processed deal.
 	const moodByDeal = {};

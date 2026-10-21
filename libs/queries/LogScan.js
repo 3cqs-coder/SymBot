@@ -21,6 +21,7 @@
 
 
 const fs = require('fs');
+const fsp = fs.promises;
 const path = require('path');
 
 
@@ -257,7 +258,7 @@ function getLogDir() {
 
 // Resolve a log file name to an absolute path, or explain why it was refused.
 // Single exit: every rejection sets result and falls through.
-function resolveLogFile(fileName) {
+async function resolveLogFile(fileName) {
 
 	const logDir = getLogDir();
 
@@ -278,7 +279,7 @@ function resolveLogFile(fileName) {
 			try {
 
 				// lstat, not stat: a symlink must be rejected rather than followed.
-				stat = fs.lstatSync(full);
+				stat = await fsp.lstat(full); // async: no blocking stat per file on the shared trading event loop
 			}
 			catch (e) {
 
@@ -304,10 +305,10 @@ function resolveLogFile(fileName) {
 // that happens to have two logs after a rename is never split into a partial day just to hit the cap.
 // Returns basenames in the order dates were requested (newest-first). One directory read serves all dates.
 // Never throws.
-function logFilesForDates(dates, maxFiles) {
+async function logFilesForDates(dates, maxFiles) {
 
 	let dirFiles = [];
-	try { dirFiles = fs.readdirSync(getLogDir()); }
+	try { dirFiles = await fsp.readdir(getLogDir()); }
 	catch (e) { dirFiles = []; }
 
 	const out = [];
@@ -658,7 +659,7 @@ async function scanLogs(params) {
 	}
 	else {
 
-		const wanted = logFilesForDates(dates, maxFiles);
+		const wanted = await logFilesForDates(dates, maxFiles);
 
 		// When aggregating (a count or group_by), the totals must stay correct across EVERY
 		// file: the shared line SAMPLE filling up must not stop later files from being scanned
@@ -706,7 +707,7 @@ async function scanLogs(params) {
 			// Soft deadline: stop before the tool timeout so what we already reduced is returned.
 			if (filesScanned.length > 0 && (Date.now() - startedAt) > softMs) { truncated = true; stoppedReason = stoppedReason || 'time'; break; }
 
-			const resolved = resolveLogFile(name);
+			const resolved = await resolveLogFile(name);
 
 			if (resolved.success) {
 
@@ -1325,13 +1326,13 @@ async function scanPriceAnomalies(params) {
 	const filesScanned = [];
 	let ticks = 0, anomalies = 0, truncated = false, failure = null;
 
-	for (const name of logFilesForDates(dates, maxFiles)) {
+	for (const name of await logFilesForDates(dates, maxFiles)) {
 
 		// The flagged-line sample is capped ACROSS files — once it is full, later files are
 		// still scanned for accurate anomaly COUNTS but keep no more sample lines.
 		const remaining = lineCap - flagged.length;
 
-		const resolved = resolveLogFile(name);
+		const resolved = await resolveLogFile(name);
 		if (!resolved.success) { continue; }
 
 		try {

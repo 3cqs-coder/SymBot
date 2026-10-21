@@ -32,6 +32,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const FileLock = require('./FileLock.js');
 const Authz = require('./Authz.js');
 const RoutePermissions = require('./RoutePermissions.js');
 const AITools = require('./../ai/AITools.js');
@@ -503,6 +505,175 @@ function evaluateInstanceLiveness(instances, liveIds, pendingIds) {
 // positive number of seconds). A value <= 0, absent, or non-numeric falls back to the default.
 const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;   // 15 minutes
 
+// Lock-directory artifact assessment (PURE, exported for tests). `entries` describes what data/locks holds:
+//   [{ name, isLock, isTemp, mtimeMs, holder }]  — holder is the parsed { pid, host, at } for a .lock, else null.
+// Detect-and-alert ONLY: it never deletes anything and never touches orders. It flags two operationally useful
+// conditions:
+//   1. A buildup of crash-orphaned reclaim/heartbeat temp files beyond a small bound → repeated crashes during
+//      lock refresh/reclaim (harmless, swept automatically, but worth surfacing when unusually high).
+//   2. A same-host .lock whose owning pid is NOT alive and which is well past the TTL → an orphaned singleton
+//      lock. A normal restart reclaims it; but if the dead pid was reused by an unrelated process, FileLock's
+//      same-host liveness check keeps the lock and a restart is refused — so surface it for the operator.
+// `opts`: { tempStaleMs, tempCountMax, lockStaleMs, isAlive, host } — isAlive/host injected for testability.
+function evaluateLockArtifacts(entries, now, opts) {
+
+	opts = opts || {};
+
+	const tempStaleMs  = (opts.tempStaleMs  != null) ? opts.tempStaleMs  : (5 * 60 * 1000);
+	const tempCountMax = (opts.tempCountMax != null) ? opts.tempCountMax : 5;
+	const lockStaleMs  = (opts.lockStaleMs  != null) ? opts.lockStaleMs  : (FileLock.TTL_MS * 4);
+	const isAlive      = (typeof opts.isAlive === 'function') ? opts.isAlive : FileLock.isProcessAlive;
+	const host         = opts.host || os.hostname();
+
+	const list = Array.isArray(entries) ? entries : [];
+	const findings = [];
+
+	const staleTemps = list.filter(e => e && e.isTemp && (now - (e.mtimeMs || 0)) > tempStaleMs);
+
+	if (staleTemps.length > tempCountMax) {
+
+		findings.push({
+			action: 'watchdog.lock_temp_buildup',
+			target: String(staleTemps.length),
+			detail: staleTemps.length + ' stale lock temp file(s) in the locks directory — a sign of repeated crashes during lock refresh/reclaim. They are harmless and swept automatically, but the count is unusually high.'
+		});
+	}
+
+	list.forEach(e => {
+
+		if (!e || !e.isLock || !e.holder) { return; }
+
+		const h = e.holder;
+
+		if (h.host === host && h.pid && !isAlive(h.pid) && (now - (h.at || 0)) > lockStaleMs) {
+
+			findings.push({
+				action: 'watchdog.orphaned_lock',
+				target: e.name || '',
+				detail: 'A singleton lock on this host is held by pid ' + h.pid + ', which is no longer running, and has not refreshed in over ' + Math.round((now - (h.at || 0)) / 1000) + 's. A normal restart reclaims it automatically; if a restart is instead refused and no instance is running, delete the stale lock file to let one start.'
+			});
+		}
+	});
+
+	return findings;
+}
+
+// Orphaned-lock / temp-buildup monitor. Cheap (one readdir of data/locks plus a small stat per artifact),
+// async, never throws. Reuses FileLock's own locksDir / readHolder / isProcessAlive so the reclaim rules stay
+// in one place.
+register('lock_artifacts', async function () {
+
+	let dir;
+	try { dir = FileLock.locksDir(); } catch (e) { return null; }
+
+	let names;
+	try { names = await fs.promises.readdir(dir); } catch (e) { return null; } // no locks dir yet → nothing to check
+
+	const now = Date.now();
+	const entries = [];
+
+	for (const name of names) {
+
+		const isLock = /\.lock$/.test(name);
+		const isTemp = /\.(reclaim|beat)\.[0-9a-f]+$/.test(name);
+
+		if (!isLock && !isTemp) { continue; }
+
+		const full = path.join(dir, name);
+
+		let mtimeMs = 0;
+		try { mtimeMs = (await fs.promises.stat(full)).mtimeMs; } catch (e) {}
+
+		let holder = null;
+		if (isLock) { try { holder = await FileLock.readHolder(full); } catch (e) {} }
+
+		entries.push({ name: name, isLock: isLock, isTemp: isTemp, mtimeMs: mtimeMs, holder: holder });
+	}
+
+	return evaluateLockArtifacts(entries, now);
+});
+
+
+// Delisting / suspended-pair monitor (backlog #138, Phase 1). Alerts when an OPEN deal's pair is no longer
+// normally tradable on the exchange (removed / inactive / trading-disabled) or has gone limit-only (SymBot
+// places market orders, so limit-only means it can neither add to nor market-exit the deal). The exchange and
+// market lookup lives in the instance-only read-only helper DCABot.getDelistingFindings — absent on the Hub
+// (no exchange connection) and in unit tests, so this check is a clean no-op there. Detect-and-alert only;
+// never acts on orders. The exit itself is a later, money-path phase (see backlog #138 / #1).
+register('delisting_watch', async function (shareData) {
+
+	const DCABot = shareData && shareData.DCABot;
+	if (!DCABot || typeof DCABot.getDelistingFindings !== 'function') { return null; }
+
+	const hits = await DCABot.getDelistingFindings();
+	if (!Array.isArray(hits) || hits.length === 0) { return null; }
+
+	return hits.map(function (h) {
+		return {
+			action: 'watchdog.delisting_pair',
+			target: (h && (h.pair || h.deal_id)) || '',
+			detail: 'open deal ' + ((h && h.deal_id) || '') + ' on ' + ((h && h.pair) || '') + ((h && h.bot) ? ' (' + h.bot + ')' : '') + ': ' + ((h && h.reason) || 'the pair is no longer normally tradable') + '. SymBot places market orders, so plan an exit while the pair still trades.'
+		};
+	});
+});
+
+
+// Clock-skew assessment (PURE, exported for tests). Given the local-minus-exchange offset in ms, decides
+// whether it is large enough to matter. A signed request is rejected by the exchange when the clock is more
+// than ~1s AHEAD of server time (Binance -1021), and a wrong clock also skews log timestamps, the webhook
+// staleness guard, and schedule timing — so the default threshold is 1000ms in either direction. Returns null
+// when within tolerance.
+function evaluateClockSkew(skewMs, warnMs) {
+
+	const n = Number(skewMs);
+	const limit = (warnMs != null && isFinite(warnMs) && warnMs > 0) ? warnMs : 1000;
+
+	if (!isFinite(n) || Math.abs(n) <= limit) { return null; }
+
+	const ahead = n > 0;
+
+	return {
+		ahead: ahead,
+		severe: Math.abs(n) > (limit * 3),
+		detail: 'the system clock is about ' + Math.round(Math.abs(n)) + 'ms ' + (ahead ? 'AHEAD of' : 'behind') + ' exchange server time'
+	};
+}
+
+// Clock-skew monitor. A drifted local clock (common on WSL / after sleep-resume) gets signed requests rejected
+// by the exchange (Binance -1021) and misfires staleness / schedule timing. The exchange time probe lives in
+// the instance-only read-only DCABot.getClockSkew — absent on the Hub and in tests, so this is a clean no-op
+// there. Detect-and-alert only. (SymBot also auto-corrects the request timestamp via adjustForTimeDifference,
+// so this surfaces the ROOT cause — fix the clock — rather than silently papering over it.)
+register('clock_skew', async function (shareData) {
+
+	const DCABot = shareData && shareData.DCABot;
+	if (!DCABot || typeof DCABot.getClockSkew !== 'function') { return null; }
+
+	const warnMs = (shareData.appData && Number(shareData.appData.clock_skew_warn_ms) > 0) ? Number(shareData.appData.clock_skew_warn_ms) : 1000;
+
+	const skews = await DCABot.getClockSkew();
+	if (!Array.isArray(skews) || skews.length === 0) { return null; }
+
+	const findings = [];
+
+	for (const s of skews) {
+
+		const v = evaluateClockSkew(s && s.skew_ms, warnMs);
+
+		if (v) {
+
+			findings.push({
+				action: 'watchdog.clock_skew',
+				target: (s && s.exchange) || '',
+				detail: ((s && s.exchange) || 'exchange') + ': ' + v.detail + '. Signed requests (orders, balance) are rejected when the clock is more than ~1s off — resync the system clock (on WSL run `sudo hwclock -s`, otherwise fix NTP).'
+			});
+		}
+	}
+
+	return findings.length ? findings : null;
+});
+
+
 function resolveIntervalMs(shareData) {
 
 	const secs = (shareData && shareData.appData) ? Number(shareData.appData.watchdog_interval_secs) : NaN;
@@ -536,4 +707,4 @@ function startMonitor(shareData, context) {
 }
 
 
-module.exports = { register, list, run, runOnce, startMonitor, resolveIntervalMs, DEFAULT_INTERVAL_MS, evaluateInstanceLiveness, livenessStartupGraceMs, isMutatingToolName };
+module.exports = { register, list, run, runOnce, startMonitor, resolveIntervalMs, DEFAULT_INTERVAL_MS, evaluateInstanceLiveness, livenessStartupGraceMs, isMutatingToolName, evaluateLockArtifacts, evaluateClockSkew };

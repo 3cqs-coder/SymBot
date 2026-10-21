@@ -146,6 +146,19 @@ async function initApp() {
 
 	app.use('/', router);
 
+	// Terminal error handler — MUST be registered last — gives the Hub the same safety net the instance web
+	// server has: an unwrapped throw/reject in a Hub route (e.g. the /instance/:appId proxy) is logged via the
+	// Hub logger and answered with a clean 500 in the standard shape, instead of falling through to Express's
+	// default finalhandler (which logs to stderr and returns a non-standard body).
+	app.use(function(err, req, res, next) {
+
+		try { shareData.Hub.logger('error', 'Web Server Error: ' + (err && err.stack ? err.stack : err)); } catch (e) {}
+
+		if (res.headersSent) { return next(err); }
+
+		sendErr(res, 'Internal server error', 500);
+	});
+
 	return { sessionMiddleware };
 }
 

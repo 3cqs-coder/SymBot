@@ -100,6 +100,11 @@ ok(G('x') === 30000 && G(-5) === 30000, 'invalid/negative count → base buffer,
 		};
 	}
 
+	// lock_artifacts reads the live data/locks directory, so it depends on machine state this unit test does
+	// not control; a leftover lock from a crashed process would make the clean-sweep assertion flaky. Its logic
+	// is covered deterministically by WatchdogLockArtifacts.test.js; neutralize it here (idempotent by name).
+	Watchdog.register('lock_artifacts', () => null);
+
 	const bootSink = { logs: [], audits: [] };
 	await Watchdog.run(makeShareData(bootSink), { label: 'test', periodic: false });
 	const bootOk = bootSink.audits.some((a) => a === 'watchdog.ok') || bootSink.logs.some((l) => /all integrity checks passed/.test(l));

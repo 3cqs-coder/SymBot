@@ -1275,17 +1275,29 @@ async function fetchURL(data) {
 
 	if (success) {
 
-		res = await response.text();
-
 		try {
 
-			res = JSON.parse(res);
-
-			isJSON = true;
+			res = await response.text();
 		}
-		catch(e) {
+		catch (e) {
 
-			isJSON = false;
+			// A body that stalls or truncates after the headers arrive would otherwise reject fetchURL instead
+			// of returning its normal result shape. Mark the fetch unsuccessful rather than throwing.
+			success = false;
+		}
+
+		if (success) {
+
+			try {
+
+				res = JSON.parse(res);
+
+				isJSON = true;
+			}
+			catch(e) {
+
+				isJSON = false;
+			}
 		}
 	}
 
@@ -1968,7 +1980,10 @@ async function logger(data, consoleLog) {
 	const instanceName = await getInstanceName();
 
 	if (typeof data !== 'string') {
-		data = JSON.stringify(data);
+		// A circular object (a ccxt/exchange/socket handle embedded in an error payload) would throw here, and
+		// logger runs fire-and-forget on the trading path, so an unguarded throw becomes an unhandled rejection.
+		try { data = JSON.stringify(data); }
+		catch (e) { try { data = require('util').inspect(data, { depth: 3 }); } catch (e2) { data = String(data); } }
 	}
 
 	// Scrub any credential before the line reaches the file, console, or browser stream.
@@ -2006,12 +2021,18 @@ async function logger(data, consoleLog) {
 
 	if (shareData && shareData.WebServer) {
 
-		sendSocketMsg({
+		// Fire-and-forget, but guarded like sendNotification: a synchronous throw from the emit (or a rejected
+		// promise) must never bubble out of the logger on the trading path.
+		try {
 
-			'room': 'logs',
-			'type': 'log',
-			'message': ansiToHtml(logDataOrig)
-		});
+			Promise.resolve(sendSocketMsg({
+
+				'room': 'logs',
+				'type': 'log',
+				'message': ansiToHtml(logDataOrig)
+			})).catch(() => {});
+		}
+		catch (e) {}
 	}
 }
 
@@ -3891,7 +3912,23 @@ function adjustDecimals(value, ...arr) {
 	const flattenedArr = arr.flat();
 
 	const decimalPlaces = flattenedArr
-		.map(v => (isNaN(Number(v)) ? 0 : (String(v).split('.').length > 1 ? String(v).split('.')[1].length : 0)))
+		.map(v => {
+
+			if (isNaN(Number(v))) { return 0; }
+
+			const s = String(v);
+
+			// Non-exponential form: keep the EXACT literal decimal count (byte-for-byte unchanged behavior,
+			// including any trailing zeros in a string input). Only the exponential case changes.
+			if (s.indexOf('e') === -1 && s.indexOf('E') === -1) {
+
+				return s.split('.').length > 1 ? s.split('.')[1].length : 0;
+			}
+
+			// Exponential form (a sub-1e-6 value stringifies as e.g. "2e-7"): the naive split counts 0 and would
+			// collapse a fractional money-path amount/target to an integer. countDecimals is exponential-safe.
+			return countDecimals(v);
+		})
 		.filter(v => v > 0);
 
 	const maxDecimals = decimalPlaces.length > 0 ? Math.max(...decimalPlaces) : 0;
@@ -3902,7 +3939,22 @@ function adjustDecimals(value, ...arr) {
 
 function getPrecision(arr) {
 
-	return 10 ** -Math.max(...arr.map(n => (n.toString().split('.')[1] || '').length));
+	// Guard an empty/invalid array: Math.max() of nothing is -Infinity, so 10 ** -(-Infinity) = Infinity, which
+	// would poison downstream quantity rounding. Fall back to whole-unit precision (0 places → 1).
+	if (!Array.isArray(arr) || arr.length === 0) { return 10 ** -0; }
+
+	const places = arr.map(n => {
+
+		const s = (n === null || n === undefined) ? '' : n.toString();
+
+		// Non-exponential: exact literal count (byte-for-byte unchanged). Exponential (sub-1e-6): count robustly
+		// so a high-precision quantity is not treated as whole units.
+		if (s.indexOf('e') === -1 && s.indexOf('E') === -1) { return (s.split('.')[1] || '').length; }
+
+		return countDecimals(n);
+	});
+
+	return 10 ** -Math.max(...places);
 }
 
 

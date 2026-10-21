@@ -2840,7 +2840,9 @@ table#hubDeals td.profit-negative,
 }
 
 [data-theme="dark"] .menu-icon {
-	color: #606060;
+	/* Brighten on the dark nav rather than darken: a decorative guide glyph should read at least as clearly
+	   in dark mode as in light (the old #606060 on the ~#141416 nav was nearly invisible). */
+	color: #9a9aa2;
 }
 
 /* ─── AI Chat pop-out window ───────────────────────────────────────────────── */
@@ -3626,13 +3628,8 @@ body.has-shell .ui-widget-overlay { z-index: 99990 !important; position: fixed !
 body.has-shell .ui-dialog,
 body.has-shell .jconfirm { z-index: 100000 !important; position: fixed !important; }
 
-/* Confirm/alert dialogs (jquery-confirm) are opened with a fixed boxWidth of '50%' in ~30 call sites, and the
-   vendored jquery-confirm.min.css carries no media queries — so on a phone the box is ~half the viewport
-   (~187px on a 375px screen), cramped enough that button labels wrap. Widen the box on small screens so the
-   dialog is comfortably readable and its buttons fit. One place, applies to every confirm/alert dialog. */
-@media (max-width: 600px) {
-	.jconfirm .jconfirm-box { width: 94% !important; max-width: 94% !important; }
-}
+/* (The small-screen jconfirm box width is set once in the max-width:600px block further down — 92vw. An
+   earlier duplicate here set 94% and was overridden by that later rule, so it was removed as dead code.) */
 /* Confirm-dialog buttons (jconfirm) sit on a light button surface in BOTH themes.
    The action text is set inline to semantic color vars, which in dark mode become
    bright/light tints (e.g. --color-danger #ff4d4d, --color-neutral #b8b8b8) tuned
@@ -4250,8 +4247,10 @@ body.has-shell .hub-dash-sandbox-badge {
 	font-size: 0.65rem;
 	padding: 2px 6px;
 	border-radius: 4px;
-	background-color: rgba(224, 137, 27, 0.15);
-	color: var(--color-warning);
+	/* Solid amber on near-black (matching the non-shell .hub-dash-sandbox-badge) so this small 0.65rem badge
+	   meets WCAG AA in light mode. The previous amber-text-on-amber-tint was ~4.1:1, under AA for small text. */
+	background-color: #e6a800;
+	color: #1a1a1a;
 	letter-spacing: 0.04em;
 }
 
