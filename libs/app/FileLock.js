@@ -26,6 +26,7 @@ const crypto = require('crypto');
 const TTL_MS = 30 * 1000;    // a lock not refreshed within this is stale (a crashed or reused-pid holder)
 const BEAT_MS = 10 * 1000;   // a held lock refreshes its timestamp this often, so a live long-lived instance stays valid
 const BIRTH_GRACE_MS = 2500; // how long acquire rides out a torn/just-born file or a stale-reclaim race before giving up
+const BOOT_STALE_MARGIN_MS = 60 * 1000; // a same-host lock stamped more than this before the last boot is definitely stale
 const IS_WINDOWS = process.platform === 'win32';
 
 // The install root (…/SymBot), two levels up from libs/app — the same anchor Common.js uses. Lock files live under
@@ -55,20 +56,58 @@ function isProcessAlive(pid) {
 	catch (e) { return e && e.code === 'EPERM'; }
 }
 
-// Is a holder record stale — i.e. safe to reclaim? On THIS host the pid is AUTHORITATIVE: a live holder is never
-// stale (even if its heartbeat lagged past the TTL during an event-loop stall, a laptop suspend/resume, or a long
-// GC pause), and a dead pid is immediately reclaimable. This is the money-safe ordering — never steal a lock whose
-// owning process is still alive on this machine, since that would put two engines on one account. A holder on a
-// DIFFERENT host cannot have its pid probed, so it is aged out by the TTL alone.
+// System boot time as epoch ms, or null when it cannot be determined. A lock whose `at` predates this could not
+// have been written by any currently-running process — every process died at the last reboot. Exported for tests.
+function bootTimeMs() {
+	try {
+		const up = os.uptime();
+		if (typeof up === 'number' && isFinite(up) && up > 0) { return Date.now() - Math.round(up * 1000); }
+	}
+	catch (e) {}
+	return null;
+}
+
+// Is a holder record stale — i.e. safe to reclaim? Two same-host reclaim paths, ordered money-safe (NEVER steal a
+// lock whose owning process is still alive on this machine — that would put two engines on one exchange account):
 //
-// Accepted cost: if a hard-killed holder's pid is later REUSED by an unrelated live process on this host, its
-// leftover lock is not auto-reclaimed and must be cleared manually (or waited out until that unrelated process
-// exits and a later start sees the pid dead). This is rare — especially on Linux's large pid space — and is far
-// preferable to the alternative (a TTL that ages out a genuinely-alive holder and lets a duplicate engine start).
-function stale(held) {
+//   1. BOOT-TIME reclaim: a lock stamped clearly before this machine last booted cannot belong to a running
+//      process (everything died at the reboot / power loss), so it is reclaimed REGARDLESS of pid liveness. This
+//      auto-heals the confirmed power-outage wedge: after a reboot the old holder's pid can be REUSED by an
+//      unrelated live process, which would otherwise make a dead holder look alive and refuse the restart. A
+//      genuinely-live holder heartbeats every BEAT_MS, so its `at` is always well AFTER boot; the
+//      BOOT_STALE_MARGIN_MS cushion absorbs os.uptime() granularity and clock jitter, so a live holder is never
+//      falsely reclaimed here.
+//   2. PID-authoritative otherwise: a live pid is never stale (even if its heartbeat lagged past the TTL during an
+//      event-loop stall, a suspend/resume, or a long GC pause); a dead pid is reclaimable.
+//
+// A holder on a DIFFERENT host cannot have its pid probed or its boot compared, so it is aged out by the TTL.
+//
+// Residual (now rare): only if a full reboot completes within BOOT_STALE_MARGIN_MS of the lock's last heartbeat
+// AND the old pid is reused does path 1 miss and path 2 see the pid "alive" — a reboot (firmware + OS + service
+// start) takes far longer than that margin in practice, so the wedge is healed.
+//
+// `opts` ({ bootMs, isAlive, host, now }) is a test seam; production calls stale(held) and uses the live values.
+function stale(held, opts) {
 	if (!held) { return true; }
-	if (held.host === os.hostname() && held.pid) { return !isProcessAlive(held.pid); }
-	return (Date.now() - (held.at || 0) > TTL_MS);   // foreign host: pid unprobeable, age out by TTL
+
+	opts = opts || {};
+	const host  = opts.host || os.hostname();
+	const alive = (typeof opts.isAlive === 'function') ? opts.isAlive : isProcessAlive;
+
+	if (held.host === host && held.pid) {
+
+		const bootMs = (opts.bootMs !== undefined) ? opts.bootMs : bootTimeMs();
+
+		if (bootMs != null && Number(held.at) > 0 && Number(held.at) < (bootMs - BOOT_STALE_MARGIN_MS)) {
+
+			return true;   // predates this boot by a clear margin → definitely stale (holder died at the reboot)
+		}
+
+		return !alive(held.pid);
+	}
+
+	const now = (opts.now !== undefined) ? opts.now : Date.now();
+	return (now - (held.at || 0) > TTL_MS);   // foreign host: pid unprobeable, age out by TTL
 }
 
 // Atomic rename with a brief Windows retry. POSIX rename(2) atomically replaces the destination and never fails
@@ -286,7 +325,7 @@ async function startGuard(options) {
 }
 
 module.exports = {
-	TTL_MS, BEAT_MS, BIRTH_GRACE_MS, TEMP_STALE_MS,
-	locksDir, lockPathFor, record, isProcessAlive, stale, readHolder, sweepStaleTemps,
+	TTL_MS, BEAT_MS, BIRTH_GRACE_MS, TEMP_STALE_MS, BOOT_STALE_MARGIN_MS,
+	locksDir, lockPathFor, record, isProcessAlive, bootTimeMs, stale, readHolder, sweepStaleTemps,
 	acquireSingleton, refresh, release, releaseSync, startGuard
 };

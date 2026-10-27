@@ -89,7 +89,9 @@ function writeHolder(p, rec) { fs.mkdirSync(require('path').dirname(p), { recurs
 	//    TTL (an event-loop stall / suspend-resume) must NOT be judged stale, or a duplicate engine could steal it ──
 	await test('a same-host ALIVE holder with a stale timestamp is NOT stale (money-safe: never steal a live lock)', async () => {
 		const alivePastTtl = { v: 1, pid: process.pid, host: os.hostname(), at: Date.now() - (FileLock.TTL_MS + 60000), nonce: 'x', role: 'hub' };
-		assert.strictEqual(FileLock.stale(alivePastTtl), false, 'a live same-host pid is never stale, even past the TTL');
+		// Inject a bootMs BEFORE the lock's at so the boot-time reclaim path is skipped and this deterministically
+		// exercises the pid-authoritative rule (independent of the test machine's actual uptime).
+		assert.strictEqual(FileLock.stale(alivePastTtl, { bootMs: alivePastTtl.at - 60000 }), false, 'a live same-host pid is never stale, even past the TTL');
 
 		// And behaviorally: a live holder past the TTL still refuses a second acquire (not reclaimed).
 		const key = uniqueKey('livestall');
@@ -106,6 +108,34 @@ function writeHolder(p, rec) { fs.mkdirSync(require('path').dirname(p), { recurs
 		assert.strictEqual(FileLock.stale({ pid: 2147483000, host: os.hostname(), at: Date.now() }), true, 'dead same-host pid → stale even with a fresh at');
 		assert.strictEqual(FileLock.stale({ pid: process.pid, host: 'other-host', at: Date.now() }), false, 'fresh foreign-host holder → not stale');
 		assert.strictEqual(FileLock.stale({ pid: process.pid, host: 'other-host', at: Date.now() - (FileLock.TTL_MS + 5000) }), true, 'aged foreign-host holder → stale');
+	});
+
+	// ── Boot-time reclaim (#132): a lock that predates the last boot is stale even if its pid now looks alive
+	// (PID reuse after a reboot / power outage), while a live post-boot holder is never stolen. ──
+	await test('BOOT-TIME reclaim: a same-host lock stamped before the last boot is stale even with a (reused) live pid', async () => {
+		const boot = 1700000000000;   // a fixed "boot" instant for determinism
+		const preBoot = { v: 1, pid: process.pid, host: os.hostname(), at: boot - (10 * 60 * 1000), nonce: 'x', role: 'hub' };
+		assert.strictEqual(FileLock.stale(preBoot, { bootMs: boot, isAlive: () => true }), true, 'pre-boot lock + (reused) live pid → stale');
+		assert.strictEqual(FileLock.stale({ ...preBoot, at: boot - (FileLock.BOOT_STALE_MARGIN_MS + 1000) }, { bootMs: boot, isAlive: () => true }), true, 'just beyond the boot margin → stale');
+	});
+
+	await test('BOOT-TIME reclaim NEVER steals a live post-boot holder (money-safe), and stays pid-authoritative inside the margin', async () => {
+		const boot = 1700000000000;
+		const postBoot = { v: 1, pid: process.pid, host: os.hostname(), at: boot + 5000, nonce: 'x', role: 'hub' };
+		assert.strictEqual(FileLock.stale(postBoot, { bootMs: boot, isAlive: () => true }), false, 'post-boot live holder → not stale');
+
+		// Within the safety margin before boot: boot check does NOT fire; falls back to pid authority.
+		const nearBoot = { ...postBoot, at: boot - (FileLock.BOOT_STALE_MARGIN_MS - 5000) };
+		assert.strictEqual(FileLock.stale(nearBoot, { bootMs: boot, isAlive: () => true }), false, 'within the margin + live pid → not reclaimed');
+		assert.strictEqual(FileLock.stale(nearBoot, { bootMs: boot, isAlive: () => false }), true, 'within the margin + dead pid → stale');
+
+		// A FRESH lock against the REAL boot time is always post-boot → never stolen from a live pid (any machine).
+		assert.strictEqual(FileLock.stale({ v: 1, pid: process.pid, host: os.hostname(), at: Date.now(), nonce: 'x' }, { isAlive: () => true }), false, 'fresh live holder vs real boot time → not stale');
+	});
+
+	await test('bootTimeMs returns null or a past epoch (never in the future)', () => {
+		const b = FileLock.bootTimeMs();
+		assert.ok(b === null || (typeof b === 'number' && b > 0 && b <= Date.now()), 'bootTimeMs is null or a past epoch ms');
 	});
 
 	// ── Different configuration → different key → both instances acquire (no false refusal of a distinct account) ──
