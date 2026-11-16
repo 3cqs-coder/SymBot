@@ -58,6 +58,8 @@ const RULES = [
 	{ m: 'POST',   re: /^\/api\/signal\/[^/]+$/,                    cap: 'deal.create' },
 	// Deals — pause / close / cancel / emergency
 	{ m: 'POST',   re: /^\/api\/deals\/[^/]+\/pause$/,              cap: 'deal.pause' },
+	{ m: 'POST',   re: /^\/api\/(deals|bots)\/[^/]+\/pause_averaging$/,  cap: 'deal.pause' },
+	{ m: 'POST',   re: /^\/api\/(deals|bots)\/[^/]+\/resume_averaging$/, cap: 'deal.pause' },
 	{ m: 'POST',   re: /^\/api\/deals\/[^/]+\/cancel$/,             cap: 'deal.close' },
 	{ m: 'POST',   re: /^\/api\/(deals|bots)\/[^/]+\/panic_sell$/,  cap: 'deal.close' },
 	{ m: 'POST',   re: /^\/api\/(deals|bots)\/[^/]+\/close$/,       cap: 'deal.close' },
@@ -258,9 +260,12 @@ const ACTION_CAPS = {
 	},
 	deal: {
 		'cancel':      'deal.close',
+		'close':        'deal.close',
 		'stop':        'deal.close',
 		'panic_sell':  'deal.close',
 		'pause':       'deal.pause',
+		'pause_averaging':  'deal.pause',
+		'resume_averaging': 'deal.pause',
 		'update_deal': 'deal.create'
 	}
 };
@@ -280,9 +285,12 @@ const ACTION_CAP_ROUTES = {
 	},
 	deal: {
 		'cancel':      [ 'POST', '/api/deals/d1/cancel' ],
+		'close':        [ 'POST', '/api/deals/d1/close' ],   // graceful profit-respecting close
 		'stop':        [ 'POST', '/api/deals/d1/close' ],   // the Hub "stop" action is a deal close
 		'panic_sell':  [ 'POST', '/api/deals/d1/panic_sell' ],
 		'pause':       [ 'POST', '/api/deals/d1/pause' ],
+		'pause_averaging':  [ 'POST', '/api/deals/d1/pause_averaging' ],
+		'resume_averaging': [ 'POST', '/api/deals/d1/resume_averaging' ],
 		'update_deal': [ 'POST', '/api/deals/d1/update_deal' ]
 	}
 };

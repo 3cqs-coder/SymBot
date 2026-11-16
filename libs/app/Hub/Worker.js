@@ -291,6 +291,24 @@ async function processWorkerTaskMessage(SymBot, message) {
 
 				result = await SymBot.DCABot.panicSellDeal(dealId);
 			}
+			else if (action === 'close') {
+
+				// Graceful, profit-respecting close — the SAME money-path function the instance HTTP close
+				// endpoint and the Signal Bot `close` command use. It closes at market ONLY if the profit
+				// target is met, else leaves the deal open; no new close logic here.
+				result = await SymBot.DCABot.gracefulCloseDeal(dealId);
+			}
+			else if (action === 'pause_averaging') {
+
+				// Pause averaging: stop placing new safety orders; the deal still closes at its target. Addressed
+				// by dealId alone (botId resolved internally) — the SAME function the instance HTTP endpoint and the
+				// signal command call. It wraps the proven pauseDeal (pausedBuy only, sell side untouched).
+				result = await SymBot.DCABot.pauseAveragingDeal(dealId);
+			}
+			else if (action === 'resume_averaging') {
+
+				result = await SymBot.DCABot.resumeAveragingDeal(dealId);
+			}
 			else if (action === 'pause') {
 
 				result = await SymBot.DCABot.pauseDeal(botId, dealId, data.pause, data.pauseBuy, data.pauseSell);

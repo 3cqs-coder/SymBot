@@ -210,6 +210,46 @@
 	}
 
 
+	function pauseAveragingConfirm(dealId) {
+
+		// Dialog markup lives in SymBot.UI (shared with the Hub). This caller supplies only the pause action.
+		SymBot.UI.confirmPauseAveraging({ dealId: dealId, onConfirm: function () { pauseAveragingAction(dealId, 'pause_averaging'); } });
+	}
+
+
+	function resumeAveragingConfirm(dealId) {
+
+		SymBot.UI.confirmResumeAveraging({ dealId: dealId, onConfirm: function () { pauseAveragingAction(dealId, 'resume_averaging'); } });
+	}
+
+
+	// One call for both pause_averaging and resume_averaging (SSOT — they can never diverge). The shared, language-
+	// agnostic SymBot.UI.pauseAveragingResult keys off success / pause_buy via t(), so the instance and Hub grids
+	// word the outcome identically.
+	function pauseAveragingAction(dealId, action) {
+
+		$('#spinner-overlay').fadeIn(100);
+
+		$.ajax({
+					type: 'POST',
+					url: './api/deals/' + dealId + '/' + action,
+					data: {},
+					dataType: 'json',
+					success: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+
+						alertBox(SymBot.UI.pauseAveragingResult(data, dealId), function() { getActiveDeals(); });
+					},
+					error: function(data) {
+
+						$('#spinner-overlay').fadeOut(100);
+						alertBox('Error: ' + JSON.stringify(data), function() { getActiveDeals(); });
+					}
+		});
+	}
+
+
 	function stopBotConfirm(botName, selector, data) {
 
 		_autoRefresh.stop();
@@ -749,8 +789,15 @@
 					resume: { button: resumeButtonDeal },
 					stop: { button: stopButtonDeal },
 					ai: { button: aiButtonDeal },
+					pause_averaging: { button: pauseAveragingButtonDeal },
+					resume_averaging: { button: resumeAveragingButtonDeal },
 					panic: { button: panicButtonDeal }
 			} = actionButtons;
+
+			// The "Pause averaging" pill swaps to "Resume averaging" when the deal's buy side is already paused —
+			// the same pattern as pause/resume. State comes from the single backend flag (deal.info.pause_buy),
+			// the same flag the Pause/Resume dialog's "Pause Buy" checkbox sets, so the two never diverge.
+			let pauseAveragingButton = pauseAveragingButtonDeal;
 
 			let dealVolume = SymBot.UI.dealVolume(deals[i].orders);
 
@@ -830,10 +877,19 @@
 			// can never drift. Track the data-error case as a flag here.
 			let hasDataError = false;
 
-			if (pause || pauseBuy || pauseSell) {
+			// The pause/resume DIALOG button owns full-pause and sell-pause; the buy side has its own dedicated
+			// "Pause averaging" pill below, so pauseBuy alone must NOT flip this to "Resume" (that would show two
+			// resume controls for one state). Single source of truth, no overlap.
+			if (pause || pauseSell) {
 
 				pauseButtonId = 'resume';
 				pauseButtonDeal = resumeButtonDeal;
+			}
+
+			// The averaging pill reflects the buy side: paused → amber "Resume averaging", else "Pause averaging".
+			if (pauseBuy) {
+
+				pauseAveragingButton = resumeAveragingButtonDeal;
 			}
 
 			if (!awaiting && profitPerc <= 0) {
@@ -964,7 +1020,7 @@
 			contentArr.push('<td>' + deal['info']['safety_orders_used'] + ' / ' + safetyOrdersTotalDisplay + '</td>');
 			contentArr.push('<td>' + SymBot.UI.pendingCell(awaiting, dealSym + maxFunds) + '</td>')
 			contentArr.push('<td>' + dealCount + '</td>');
-			const pillContent = aiButtonDeal + editButtonDeal + panicButtonDeal + addFundsButtonDeal + pauseButtonDeal + cancelButtonDeal + (stopButtonDeal || '');
+			const pillContent = aiButtonDeal + editButtonDeal + pauseAveragingButton + panicButtonDeal + addFundsButtonDeal + pauseButtonDeal + cancelButtonDeal + (stopButtonDeal || '');
 			contentArr.push('<td style="text-align: center;" data-pause="' + pause + '" data-pausebuy="' + pauseBuy + '" data-pausesell="' + pauseSell + '" data-pausereason="' + SymBot.UI.esc(pauseReason) + '" data-botid="' + deal['info']['bot_id'] + '" data-botname="' + SymBot.UI.esc(deal['info']['bot_name']) + '"><div class="pill-group" id="actions' + dealId + i + '">' + pillContent + '</div></td>');
 			contentArr.push('</tr>');
 		}
@@ -1676,6 +1732,14 @@ $(document).ready(function() {
 			else if (btnTitle === 'Edit deal') {
 
 				if (dealId) dealEdit(dealId);
+			}
+			else if (btnTitle === 'Pause averaging') {
+
+				if (dealId) pauseAveragingConfirm(dealId);
+			}
+			else if (btnTitle === 'Resume averaging') {
+
+				if (dealId) resumeAveragingConfirm(dealId);
 			}
 			else if (btnTitle === 'Panic sell deal') {
 

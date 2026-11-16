@@ -1859,6 +1859,7 @@ async function apiCloseDeal(req, res, sendResponse = true) {
 	let closed = false;
 	let content = 'Success';
 	let metrics;
+	let reason;
 
 	const data = await shareData.DCABot.getDeals({ 'dealId': dealId });
 
@@ -1883,6 +1884,7 @@ async function apiCloseDeal(req, res, sendResponse = true) {
 			closed = closeData['closed'];
 			content = closeData['data'];
 			metrics = closeData['metrics'];
+			reason = closeData['reason'];
 		}
 	}
 	else {
@@ -1892,6 +1894,11 @@ async function apiCloseDeal(req, res, sendResponse = true) {
 	}
 
 	const resObj = { 'date': new Date(), 'success': success, 'closed': closed, 'data': content };
+
+	// Stable, language-agnostic outcome code (implausible_price / target_not_met / no_live_price / target_met),
+	// so the UI maps it to a localized message instead of parsing the English `data`. Absent on a pre-check
+	// failure (not active / invalid id), where `success:false` already tells the UI everything it needs.
+	if (reason != undefined && reason != null) { resObj['reason'] = reason; }
 
 	if (metrics != undefined && metrics != null) {
 
@@ -1908,6 +1915,54 @@ async function apiCloseDeal(req, res, sendResponse = true) {
 
 	return resObj;
 }
+
+
+// Pause / resume AVERAGING (the DCA safety-order ladder) for a single deal. Resolution so pause and resume can
+// never diverge: a dealId in the URL is used as-is; otherwise the bot's active deal is resolved from botId
+// (+ optional pair), exactly like the close/panic endpoints. It then delegates to the ONE money-path entry
+// point `DCABot.pauseAveragingDeal` / `resumeAveragingDeal` (addressed by dealId, botId resolved internally) —
+// the SAME function the Hub Worker and signal dispatcher call, so every surface behaves identically. That
+// function wraps the proven pauseDeal (pausedBuy flag only; sell side untouched), so the deal still closes at
+// its take-profit target. The response carries a stable `pause_buy` boolean so a caller branches on the state,
+// not on the English `data`.
+async function apiSetPauseAveraging(req, res, pauseBuy, sendResponse = true) {
+
+	let dealId = req.params.dealId;
+
+	if (dealId == undefined || dealId == null || dealId == '') {
+
+		const botId = req.params.botId || req.body.botId;
+		const pair = req.body.pair;
+
+		const resolved = await resolveActiveDealId(botId, pair);
+
+		if (!resolved['success']) {
+
+			const resObj = { 'date': new Date(), 'success': false, 'pause_buy': null, 'data': resolved['error'] };
+			shareData.Common.logger('API Pause Averaging: ' + JSON.stringify(resObj));
+			if (sendResponse) { res.send(resObj); }
+			return resObj;
+		}
+
+		dealId = resolved['dealId'];
+	}
+
+	const result = pauseBuy
+		? await shareData.DCABot.pauseAveragingDeal(dealId)
+		: await shareData.DCABot.resumeAveragingDeal(dealId);
+
+	const resObj = { 'date': new Date(), 'success': result['success'], 'pause_buy': result['pause_buy'], 'data': result['data'] };
+
+	shareData.Common.logger('API Pause Averaging: ' + JSON.stringify(resObj));
+
+	if (sendResponse) { res.send(resObj); }
+
+	return resObj;
+}
+
+async function apiPauseAveragingDeal(req, res, sendResponse = true) { return await apiSetPauseAveraging(req, res, true, sendResponse); }
+
+async function apiResumeAveragingDeal(req, res, sendResponse = true) { return await apiSetPauseAveraging(req, res, false, sendResponse); }
 
 
 /**
@@ -1939,11 +1994,13 @@ async function dispatchSingleAction(req, res) {
 		: '';
 
 	const handlers = {
-		'entry':      apiStartDeal,
-		'add_funds':  apiAddFundsDeal,
-		'close':      apiCloseDeal,
-		'panic_sell': apiPanicSellDeal,
-		'close_all':  apiPanicSellDeal
+		'entry':            apiStartDeal,
+		'add_funds':        apiAddFundsDeal,
+		'close':            apiCloseDeal,
+		'panic_sell':       apiPanicSellDeal,
+		'close_all':        apiPanicSellDeal,
+		'pause_averaging':  apiPauseAveragingDeal,
+		'resume_averaging': apiResumeAveragingDeal
 	};
 
 	const handler = handlers[action];
@@ -1953,7 +2010,7 @@ async function dispatchSingleAction(req, res) {
 		const resObj = {
 			'date': new Date(),
 			'success': false,
-			'data': 'Unknown or missing action "' + action + '". Valid actions: entry, add_funds, close, panic_sell (close_all is accepted as an alias of panic_sell).'
+			'data': 'Unknown or missing action "' + action + '". Valid actions: entry, add_funds, close, panic_sell, pause_averaging, resume_averaging (close_all is accepted as an alias of panic_sell).'
 		};
 
 		shareData.Common.logger('API Signal Dispatch: ' + JSON.stringify(resObj));
@@ -1969,7 +2026,7 @@ async function dispatchSingleAction(req, res) {
 	// A resolved principal must hold the action's capability; owner and the legacy webhook token both
 	// carry deal.close so they are unaffected, and a request with no resolved principal falls through
 	// to the route's own gate unchanged (nothing that worked before breaks).
-	const ACTION_CAPS = { 'entry': 'deal.create', 'add_funds': 'deal.create', 'close': 'deal.close', 'panic_sell': 'deal.close', 'close_all': 'deal.close' };
+	const ACTION_CAPS = { 'entry': 'deal.create', 'add_funds': 'deal.create', 'close': 'deal.close', 'panic_sell': 'deal.close', 'close_all': 'deal.close', 'pause_averaging': 'deal.pause', 'resume_averaging': 'deal.pause' };
 	const neededCap = ACTION_CAPS[action];
 
 	if (req && req.principal && neededCap && shareData.Authz && typeof shareData.Authz.can === 'function' && !shareData.Authz.can(req.principal, neededCap)) {
@@ -1990,7 +2047,7 @@ async function dispatchSingleAction(req, res) {
 	// pin it as req.params.dealId so the handler acts on exactly that deal. Fail closed if the deal is unknown,
 	// inactive, or owned by another bot. Only for actions that target an existing deal; `entry` opens a new one.
 	// Read-only (a getDeals lookup), so it is safe on a dry run too and validates the target before executing.
-	const DEAL_TARGET_ACTIONS = { 'add_funds': true, 'close': true, 'panic_sell': true, 'close_all': true };
+	const DEAL_TARGET_ACTIONS = { 'add_funds': true, 'close': true, 'panic_sell': true, 'close_all': true, 'pause_averaging': true, 'resume_averaging': true };
 
 	if (DEAL_TARGET_ACTIONS[action]) {
 
@@ -4506,6 +4563,8 @@ module.exports = {
 	apiAddFundsDeal,
 	apiPanicSellDeal,
 	apiCloseDeal,
+	apiPauseAveragingDeal,
+	apiResumeAveragingDeal,
 	apiSignalDispatch,
 	apiCreateUpdateBot,
 	apiEnableDisableBot,

@@ -165,5 +165,57 @@ function withChecks(map) {
 	ok(!threw, 'omitted callbacks on cancel/stop builders are safe no-ops');
 }
 
+// ── confirmPauseAveraging (the managed hold) ──
+{
+	let confirmed = 0, canceled = 0;
+	captured = null; lastAlert = null;
+	ui.confirmPauseAveraging({ dealId: 'ZORVX-1', onConfirm: function () { confirmed++; }, onCancel: function () { canceled++; } });
+
+	ok(captured && /Pause averaging on deal ZORVX-1\?/.test(captured.content), 'pause-averaging dialog names the deal');
+	ok(/stop placing <b>new safety orders<\/b>/i.test(captured.content), 'pause-averaging dialog states it stops new safety orders');
+	ok(/take-profit target/i.test(captured.content) && /never sells at a loss/i.test(captured.content), 'pause-averaging dialog states it still closes at the target and never at a loss');
+	ok(/Resume averaging/i.test(captured.content) && /Panic sell/i.test(captured.content), 'pause-averaging dialog explains it is reversible and distinct from Panic sell');
+	// Safe action — a plain confirm, NOT gated behind a random number or a checkbox like panic/cancel.
+	ok(!/Type <b>/.test(captured.content), 'pause-averaging dialog has no random-number gate (safe action)');
+
+	captured.buttons.confirm.action.call({});
+	ok(confirmed === 1, 'pause-averaging confirm fires onConfirm');
+	captured.buttons.cancel.action.call({});
+	ok(canceled === 1, 'pause-averaging cancel fires onCancel');
+
+	let threw = false;
+	captured = null; ui.confirmPauseAveraging({ dealId: 'ZORVX-2' });
+	try { captured.buttons.confirm.action.call({}); captured.buttons.cancel.action.call({}); } catch (e) { threw = true; }
+	ok(!threw, 'omitted callbacks on confirmPauseAveraging are safe no-ops');
+}
+
+// ── confirmResumeAveraging ──
+{
+	let confirmed = 0;
+	captured = null;
+	ui.confirmResumeAveraging({ dealId: 'ZORVX-3', onConfirm: function () { confirmed++; } });
+	ok(captured && /Resume averaging on deal ZORVX-3\?/.test(captured.content), 'resume-averaging dialog names the deal');
+	ok(/safety orders on this deal again/i.test(captured.content), 'resume-averaging dialog states it re-enables safety orders');
+	captured.buttons.confirm.action.call({});
+	ok(confirmed === 1, 'resume-averaging confirm fires onConfirm');
+}
+
+// ── pauseAveragingResult (single-source, language-agnostic outcome message) ──
+// Decides purely on success + the pause_buy boolean, so the instance and Hub grids can never word an
+// outcome differently. English templates come from MESSAGES.en via t() (locale defaults to en here).
+{
+	const id = 'ZORVX-9';
+	ok(/averaging paused/i.test(ui.pauseAveragingResult({ success: true, pause_buy: true }, id)), 'pause_buy:true → "averaging paused" message');
+	ok(/resumed averaging/i.test(ui.pauseAveragingResult({ success: true, pause_buy: false }, id)), 'pause_buy:false → "resumed averaging" message');
+	ok(/Unable to update/i.test(ui.pauseAveragingResult({ success: false, data: 'Deal not active' }, id)), 'failure → "Unable to update" with detail');
+	// Interpolates the deal id (never a raw {id}).
+	var m = ui.pauseAveragingResult({ success: true, pause_buy: true }, id);
+	ok(m.indexOf(id) !== -1 && m.indexOf('{id}') === -1, 'pause-averaging message interpolates the deal id');
+	// Crash-proof on an empty/absent response.
+	let threw = false;
+	try { ui.pauseAveragingResult(null, id); ui.pauseAveragingResult(undefined, id); } catch (e) { threw = true; }
+	ok(!threw, 'pauseAveragingResult is crash-proof on null/undefined response');
+}
+
 console.log('UiConfirmDialogs: ' + passed + ' assertions passed');
 process.exit(0);

@@ -1,0 +1,63 @@
+{
+  "note": "Buy-side partial-fill remainder loop (#66) driven through the REAL DCABot.retryPartialFill — the SAME shared loop the buy path runs before crediting an exchange-cancelled partial buy. Synthetic names only; reproduces the shape of the real 'safety buy partially filled then cancelled' incident (an 89% fill, remainder cancelled) without any real coin. This grades the RETRY step of #66 (how much of the remainder completes). The crediting step itself, creditPartialBuyFill, recomputes the ladder through recalculateOrders (a DB write) and is covered separately by the trust-gate unit test.",
+  "scenarios": [
+    {
+      "name": "safety buy 89% then cancel — remainder completes on one retry, fully filled",
+      "kind": "partial_buy",
+      "tags": ["MFT", "regression"],
+      "pair": "ZORVX/USDT",
+      "input": {
+        "side": "buy",
+        "requestedQty": 2448.6,
+        "initialFilledQty": 2169.8,
+        "initialPrice": 0.0225,
+        "fallbackPrice": 0.0225,
+        "retries": [ { "ask": 0.0225, "fill": 278.8 } ]
+      },
+      "expect": [
+        { "field": "totalFilled", "close": 2448.6, "tol": 0.0001 },
+        { "field": "qtyRemaining", "close": 0, "tol": 0.0001 },
+        { "field": "retryCount", "equals": 1 }
+      ]
+    },
+    {
+      "name": "safety buy 89% then cancel — remainder keeps getting cancelled, stays short (this is the case that then credits the actual fill and would otherwise strand coin)",
+      "kind": "partial_buy",
+      "tags": ["MFT", "regression"],
+      "pair": "ZORVX/USDT",
+      "input": {
+        "side": "buy",
+        "requestedQty": 2448.6,
+        "initialFilledQty": 2169.8,
+        "initialPrice": 0.0225,
+        "fallbackPrice": 0.0225,
+        "maxRetries": 2,
+        "retries": [ { "ask": 0.0225, "fill": 0 }, { "ask": 0.0225, "fill": 0 } ]
+      },
+      "expect": [
+        { "field": "totalFilled", "close": 2169.8, "tol": 0.0001 },
+        { "field": "qtyRemaining", "close": 278.8, "tol": 0.0001 }
+      ]
+    },
+    {
+      "name": "safety buy remainder completes across two partial retries — every chunk accumulated",
+      "kind": "partial_buy",
+      "tags": ["MFT"],
+      "pair": "QORBL/USDT",
+      "input": {
+        "side": "buy",
+        "requestedQty": 1000,
+        "initialFilledQty": 600,
+        "initialPrice": 0.5,
+        "fallbackPrice": 0.5,
+        "maxRetries": 3,
+        "retries": [ { "ask": 0.5, "fill": 250 }, { "ask": 0.5, "fill": 150 } ]
+      },
+      "expect": [
+        { "field": "totalFilled", "close": 1000, "tol": 0.0001 },
+        { "field": "qtyRemaining", "close": 0, "tol": 0.0001 },
+        { "field": "retryCount", "equals": 2 }
+      ]
+    }
+  ]
+}

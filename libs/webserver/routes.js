@@ -1203,6 +1203,34 @@ function initRoutes(router, upload) {
 	});
 
 
+	// Pause / resume averaging — stop or allow new safety orders on the deal; it still closes at its existing
+	// take-profit target. Targeted by deal id or by bot (the bot's active deal is resolved automatically), same
+	// as close/panic_sell. Gated at deal.pause (it pauses/resumes the averaging ladder via the pausedBuy flag).
+	router.post([ '/api/deals/:dealId/pause_averaging', '/api/bots/:botId/pause_averaging' ], (req, res) => {
+
+		if (isAuthenticated(req)) {
+
+			shareData.DCABotManager.apiPauseAveragingDeal(req, res);
+		}
+		else {
+
+			denyUnauthorized(req, res);
+		}
+	});
+
+	router.post([ '/api/deals/:dealId/resume_averaging', '/api/bots/:botId/resume_averaging' ], (req, res) => {
+
+		if (isAuthenticated(req)) {
+
+			shareData.DCABotManager.apiResumeAveragingDeal(req, res);
+		}
+		else {
+
+			denyUnauthorized(req, res);
+		}
+	});
+
+
 	// Single Signal Bot dispatcher: one webhook URL for every command. Reads an
 	// `action` field (entry / add_funds / close / panic_sell) and forwards to the
 	// same per-action handlers above. Convenience only — no new order logic. The

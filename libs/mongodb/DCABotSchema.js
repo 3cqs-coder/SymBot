@@ -39,7 +39,16 @@ const DealSchema = new Schema({
 	isStart: Number,
 	dealCount: Number,
 	dealMax: Number,
-	journal: Object
+	journal: Object,
+	// Persisted per-deal STATE blobs that the engine sets and reads back across restarts. They MUST be
+	// declared here: the schema is strict (Mongoose default), so an undeclared field is silently dropped from
+	// a Deals.updateOne({...}, { field }) write — the flag would appear to work in-memory but never reach the
+	// database, so it would vanish on restart (and a tick that re-reads the deal from the DB would not see it).
+	//   partialSell — the slippage-safe graceful-close hold state (the held remainder + resume info).
+	// (Stopping new safety orders — "pause averaging" — is NOT a separate field: it uses the declared pausedBuy
+	//  flag, the single source of truth the tick guard reads. The persistent-vs-transient classification of a
+	//  buy/sell error likewise lives in the one pauseReason taxonomy, e.g. 'buy_error_persistent'.)
+	partialSell: Object
 }, {
 	collection: 'deals',
 	timestamps: true

@@ -884,6 +884,23 @@ textarea:focus-visible {
 }
 
 
+/* Paused-averaging action pill (shared by the instance and Hub deal grids). A deal whose averaging is paused
+   shows its "Resume averaging" (play) button with a PERSISTENT amber background, so the button itself is the
+   state cue — no separate badge cluttering the row. Uses the semantic warning tokens, which are single-sourced
+   for both themes, so it reads on light and dark and can never drift. The icon takes the warning color. */
+.pill-btn.pill-averaging {
+
+	background: var(--color-warning-soft);
+	color: var(--color-warning);
+}
+
+.pill-btn.pill-averaging:hover {
+
+	background: var(--color-warning-soft);
+	filter: brightness(0.96);
+}
+
+
 
 
 

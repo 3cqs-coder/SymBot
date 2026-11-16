@@ -679,10 +679,17 @@ SymBot.UI = {
 				$('#spinner-overlay').fadeOut(100);
 
 				if (!res || !res.success) {
-					alertBox('Error: ' + ((res && (res.data || res.message)) || 'Unknown error'), onFailure);
+					// failureMsg may be a function(res) for a response-dependent message; otherwise the error text.
+					var failMsg = (typeof opts.failureMsg === 'function') ? opts.failureMsg(res)
+						: (opts.failureMsg != null ? opts.failureMsg : ('Error: ' + ((res && (res.data || res.message)) || 'Unknown error')));
+					alertBox(failMsg, function () { onFailure(res); });
 				}
 				else {
-					alertBox(opts.successMsg || 'Done', onSuccess);
+					// successMsg may be a function(res) so a caller can word the message from the response (e.g. a
+					// graceful close that CLOSED vs. left the deal OPEN). A plain string still works unchanged, and
+					// onSuccess now receives res (zero-arg callbacks simply ignore it) — both backward-compatible.
+					var okMsg = (typeof opts.successMsg === 'function') ? opts.successMsg(res) : (opts.successMsg || 'Done');
+					alertBox(okMsg, function () { onSuccess(res); });
 				}
 			},
 			error: function(err) {
@@ -719,6 +726,20 @@ SymBot.UI = {
 			'ai':     { button: pill('',            'icon-ai',     'AI Analyze deal'),   tooltip: 'AI Analyze deal' },
 			'cancel': { button: pill('pill-danger', 'icon-cancel', 'Cancel deal'),       tooltip: 'Cancel deal' },
 			'edit':   { button: pill('',            'icon-edit',   'Edit deal'),         tooltip: 'Edit deal' },
+			// Pause averaging — stop placing new safety orders on the deal while it keeps running to its EXISTING
+			// take-profit target (caps exposure, same profit, never a loss). It is the one-click form of the Pause/
+			// Resume dialog's "Pause Buy" checkbox — both set the SAME pausedBuy flag, the single source of truth,
+			// so the grid never disagrees with the dialog. Neutral (non-danger) styling + a target icon set it
+			// apart from the red Panic Sell. Reversible: when the buy side is already paused the view swaps this
+			// for the 'resume_averaging' pill. The dispatch in both deal grids keys on these exact title strings.
+			// (There is deliberately no one-shot "close" pill: the bot already auto-closes at target, so a take-
+			// profit-now button is near-useless and confusing — a guaranteed exit is Panic sell, a managed hold is
+			// Pause averaging. The profit-gated `close` stays an API/signal verb only; see the docs.)
+			'pause_averaging': { button: pill('', 'icon-target', 'Pause averaging'),  tooltip: 'Pause averaging — stop adding safety orders; the deal still closes at its take-profit target (never at a loss). It keeps running until the target is reached, or you Panic sell to exit now. Same as the Pause Buy checkbox.' },
+			// The resume pill carries a persistent amber (pill-averaging) background: when the buy side is paused
+			// the action button swaps to this one, so the amber-tinted play button IS the "averaging paused" cue —
+			// no separate badge cluttering the row. Click it to resume averaging.
+			'resume_averaging':{ button: pill('pill-averaging', 'icon-resume', 'Resume averaging'), tooltip: 'Averaging is PAUSED on this deal (no new safety orders; it still closes at its take-profit target). Click to resume averaging.' },
 			'panic':  { button: pill('pill-danger', 'icon-close',  'Panic sell deal'),   tooltip: 'Panic sell — sell now at market, ignoring the profit target' },
 			'pause':  { button: pill('pill-warn',   'icon-pause',  'Pause deal'),        tooltip: 'Pause deal' },
 			'resume': { button: pill('pill-warn',   'icon-resume', 'Resume deal'),       tooltip: 'Resume deal' },
@@ -867,6 +888,85 @@ SymBot.UI = {
 				this.$content.find('form').on('submit', function (e) { e.preventDefault(); jc.$$formSubmit.trigger('click'); });
 			}
 		});
+	},
+
+	// Pause averaging on a deal — the profit-respecting MANAGED hold. It stops SymBot placing new safety orders on
+	// the deal; the deal still closes at its EXISTING take-profit target (it never sells at a loss, and the profit
+	// it was aiming for is unchanged). This is the one-click form of the Pause/Resume dialog's "Pause Buy" checkbox
+	// (same pausedBuy flag). A plain two-button confirm (it is safe — no loss is possible), worded to make the
+	// pause-vs-panic distinction explicit. opts.dealId; onConfirm fires on confirm. Shared by the instance and Hub
+	// deal grids.
+	confirmPauseAveraging: function(opts) {
+
+		opts = opts || {};
+		var dealId    = opts.dealId;
+		var onConfirm = (typeof opts.onConfirm === 'function') ? opts.onConfirm : function () {};
+		var onCancel  = (typeof opts.onCancel  === 'function') ? opts.onCancel  : function () {};
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Pause averaging on deal ' + SymBot.UI.esc(String(dealId)) + '?<br><br>' +
+				'SymBot will stop placing <b>new safety orders</b> on this deal. It keeps running and closes at its <b>take-profit target</b> when the market reaches it — so it never sells at a loss. If the price keeps falling it simply stays open (no more buys) until the target is reached, or you can Panic sell to exit now. You can Resume averaging at any time.</div>',
+			buttons: {
+				confirm: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-danger);">Pause averaging</div>',
+					action: function () { onConfirm(); }
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
+					action: function () { onCancel(); }
+				}
+			}
+		});
+	},
+
+	// Resume averaging on a deal whose buy side is paused — re-enables safety orders. A light plain confirm
+	// (low-risk, fully reversible). opts.dealId; onConfirm fires on confirm. Shared by the instance and Hub grids.
+	confirmResumeAveraging: function(opts) {
+
+		opts = opts || {};
+		var dealId    = opts.dealId;
+		var onConfirm = (typeof opts.onConfirm === 'function') ? opts.onConfirm : function () {};
+		var onCancel  = (typeof opts.onCancel  === 'function') ? opts.onCancel  : function () {};
+
+		$.confirm({
+			title: false,
+			boxWidth: '50%',
+			useBootstrap: false,
+			content: '<div style="font-size: var(--fs-dialog-title); text-align: left;">Resume averaging on deal ' + SymBot.UI.esc(String(dealId)) + '?<br><br>' +
+				'SymBot will place safety orders on this deal again as normal.</div>',
+			buttons: {
+				confirm: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-success);">Resume averaging</div>',
+					action: function () { onConfirm(); }
+				},
+				cancel: {
+					btnClass: 'btn-default',
+					text: '<div style="color: var(--color-neutral);">Cancel</div>',
+					action: function () { onCancel(); }
+				}
+			}
+		});
+	},
+
+	// Single source of truth for the human message after a pause-averaging / resume-averaging action, shared by the
+	// instance and Hub deal grids so they can never word the same outcome differently. Decides purely on the
+	// language-agnostic response fields (success + the pause_buy boolean), then renders through t() so a locale
+	// pack localizes it.
+	pauseAveragingResult: function(res, dealId) {
+
+		res = res || {};
+
+		if (!res.success) { return SymBot.UI.t('deal.pause_averaging.failed', { id: dealId, detail: (res.data || res.message || '') }); }
+		if (res.pause_buy === true)  { return SymBot.UI.t('deal.pause_averaging.on', { id: dealId }); }
+		if (res.pause_buy === false) { return SymBot.UI.t('deal.pause_averaging.off', { id: dealId }); }
+
+		return SymBot.UI.t('deal.pause_averaging.updated', { id: dealId });
 	},
 
 	// Cancel a deal — checkbox-confirmed. Cancelling stops the deal from any further trading but does NOT sell
@@ -1204,7 +1304,11 @@ SymBot.UI = {
 			'bot.deleted':          'Bot "{name}" and all deal history deleted.',
 			'deal.canceled':        'Deal {id} canceled',
 			'deal.panic_requested': 'Deal {id} panic sell requested',
-			'deal.pause_updated':   'Deal {id} pause updated'
+			'deal.pause_updated':   'Deal {id} pause updated',
+			'deal.pause_averaging.on':      'Deal {id} averaging paused — no new safety orders; it will still close at its take-profit target.',
+			'deal.pause_averaging.off':     'Deal {id} resumed averaging — safety orders are active again.',
+			'deal.pause_averaging.updated': 'Deal {id} averaging updated.',
+			'deal.pause_averaging.failed':  'Unable to update deal {id}: {detail}'
 		}
 	},
 

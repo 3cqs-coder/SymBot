@@ -54,7 +54,7 @@ const HubMain = require(__dirname + '/libs/app/Hub/Main.js');
 const HubWorker = require(__dirname + '/libs/app/Hub/Worker.js');
 const WebServer = require(__dirname + '/libs/webserver/Hub');
 const packageJson = require(__dirname + '/package.json');
-const { HUB_TO_WORKER, WORKER_TO_HUB } = require(__dirname + '/libs/app/Hub/MessageTypes.js');
+const WorkerShutdown = require(__dirname + '/libs/app/Hub/workerShutdown.js');
 
 
 let gotSigInt = false;
@@ -447,86 +447,31 @@ async function shutDown() {
 
 		const terminationPromises = [];
 
-		// Set timer to force shutdown if cleanup takes too long
+		// Absolute safety net: if the whole cleanup somehow hangs, force-exit. Kept UNDER a typical process-
+		// manager kill timeout (PM2/systemd) so the Hub exits on its own terms (a recorded exit) rather than
+		// being SIGKILLed mid-shutdown. The per-worker fallback below is tighter still, so this rarely fires.
 		let timeOutShutdown = setTimeout(() => {
 
 			Hub.logger('info', `Cleanup timed out. Forcing shutdown.`);
 
 			process.exit(1);
-		
-		}, (shutdownTimeout + 20000));
+
+		}, (shutdownTimeout + 4000));
 
 		for (const [workerId, { worker, instance }] of workerMap.entries()) {
 
 			const dateStart = instance.dateStart;
 			const upTime = Common.timeDiff(new Date(dateStart), new Date());
 
-			// Create a promise to track the worker shutdown process.
-			// worker.once ensures the listener is removed after the first fire.
-			// The per-worker timeout resolves (not rejects) so one unresponsive
-			// worker does not prevent the others from being cleaned up.
-			const workerTimeoutMs = shutdownTimeout + 10000;
-
-			const shutdownPromise = new Promise((resolve) => {
-
-				let workerShutdownTimeout;
-
-				const onShutdownReceived = async (message) => {
-
-					// Use on() + explicit off() rather than once(): a live worker emits other messages
-					// (log batches, memory polls, dashboard replies) that could arrive before the ACK, and
-					// once() would be consumed by the first of ANY type and miss the real SHUTDOWN_RECEIVED,
-					// leaving the worker to be force-terminated after the full timeout.
-					if (message.type !== WORKER_TO_HUB.SHUTDOWN_RECEIVED) return;
-
-					worker.off('message', onShutdownReceived);
-
-					// Acknowledged — cancel the safety timeout
-					clearTimeout(workerShutdownTimeout);
-
-					// Wait additional short delay to ensure worker shutdown gracefully
-					await Common.delay(shutdownTimeout + 3000);
-
-					// Once shutdown is complete, terminate the worker
-					try {
-
-						await worker.terminate();
-
-						Hub.logger('info', `Worker ${workerId} terminated after ${upTime}.`);
-					}
-					catch (err) {
-
-						Hub.logger('error', `Error terminating instance: ${err}`);
-					}
-
-					resolve();
-				};
-
-				// Use once — listener removed automatically after first matching message
-				worker.once('message', onShutdownReceived);
-
-				// Safety timeout — force-terminate and resolve if worker never responds
-				workerShutdownTimeout = setTimeout(async () => {
-
-					worker.off('message', onShutdownReceived);
-
-					Hub.logger('info', `Worker ${workerId} did not acknowledge shutdown within ${workerTimeoutMs}ms. Forcing termination.`);
-
-					try {
-
-						await worker.terminate();
-					}
-					catch (e) {}
-
-					resolve();
-
-				}, workerTimeoutMs);
-
-				// Send a "shutdown" message to the worker
-				worker.postMessage({
-
-					type: HUB_TO_WORKER.SHUTDOWN
-				});
+			// Shut the worker down via the shared, event-driven helper (single source of truth with the per-
+			// instance restart path in Hub.js). It resolves the instant the worker self-exits — no fixed grace
+			// delay — so the Hub proceeds as soon as each instance is down, and force-terminates only a worker
+			// that never exits. The label carries the instance uptime for the terminated log line.
+			const shutdownPromise = WorkerShutdown.terminateWorkerGracefully({
+				worker,
+				label: `${workerId} (after ${upTime})`,
+				log: (m) => Hub.logger('info', m),
+				shutdownTimeout
 			});
 
 			terminationPromises.push(shutdownPromise);
@@ -541,14 +486,17 @@ async function shutDown() {
 
 			Hub.logger('info', 'All workers have been terminated. Proceeding with shutdown.');
 
-			// A fully graceful shutdown (every worker terminated cleanly) exits 0, so a process manager (PM2 /
-			// systemd) records a clean stop rather than a crash. The forced/timed-out paths above keep a
-			// non-zero code to flag that something did not shut down cleanly.
+			// Everything is torn down (every worker has exited and the Hub store/lock are already released), so
+			// exit NOW. A fully graceful shutdown exits 0 so a process manager (PM2 / systemd) records a clean
+			// stop rather than a crash; the forced/timed-out paths above keep a non-zero code. A brief delay only
+			// lets the final log line flush — far shorter than any process-manager kill window, so we are never
+			// SIGKILLed for overrunning it (the previous multi-second wait here was dead time that did exactly
+			// that).
 			setTimeout(() => {
 
 				process.exit(0);
 
-			}, (shutdownTimeout + 3000));
+			}, 250);
 
 		}
 		catch (err) {

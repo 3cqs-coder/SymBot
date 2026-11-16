@@ -17,7 +17,7 @@
 const Schema = require('../mongodb/SignalActivitySchema');
 const SignalActivity = Schema.SignalActivitySchema;
 
-const ACTIONS = ['entry', 'add_funds', 'close', 'panic_sell', 'close_all'];
+const ACTIONS = ['entry', 'add_funds', 'close', 'panic_sell', 'close_all', 'pause_averaging', 'resume_averaging'];
 
 // The normalized outcome values, in one place: what is stored on each row, what the view's
 // dropdown offers, and what getActivity/summarize filter on. Keep in sync with the schema.
@@ -205,18 +205,18 @@ function metaFromRequest(req, reqPath) {
 		let botId = null;
 		let dealId = null;
 
-		// Per-command bot endpoints: /api/bots/{botId}/start_deal | add_funds | close | panic_sell
-		let m = path.match(/^\/api\/bots\/([^/]+)\/(start_deal|add_funds|close|panic_sell)(?:\/|$|\?)/);
+		// Per-command bot endpoints: /api/bots/{botId}/start_deal | add_funds | close | panic_sell | pause_averaging | resume_averaging
+		let m = path.match(/^\/api\/bots\/([^/]+)\/(start_deal|add_funds|close|panic_sell|pause_averaging|resume_averaging)(?:\/|$|\?)/);
 
 		if (m) {
 
 			botId = m[1];
 			action = (m[2] === 'start_deal') ? 'entry' : m[2];
 		}
-		else if ((m = path.match(/^\/api\/deals\/([^/]+)\/(add_funds|close|panic_sell)(?:\/|$|\?)/))) {
+		else if ((m = path.match(/^\/api\/deals\/([^/]+)\/(add_funds|close|panic_sell|pause_averaging|resume_averaging)(?:\/|$|\?)/))) {
 
 			// Deal-scoped variants (used when a pair runs concurrent deals, so a bot endpoint would be
-			// ambiguous): /api/deals/{dealId}/(add_funds|close|panic_sell). Keyed by deal id, no bot id.
+			// ambiguous): /api/deals/{dealId}/(add_funds|close|panic_sell|pause_averaging|resume_averaging). Keyed by deal id, no bot id.
 			dealId = m[1];
 			action = m[2];
 		}

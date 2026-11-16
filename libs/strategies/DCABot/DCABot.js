@@ -24,6 +24,9 @@ const PriceGuard = require(__dirname + '/priceGuard.js');
 const StopLoss = require(__dirname + '/stopLoss.js');
 const PairStatus = require(__dirname + '/pairStatus.js');
 const SellFloor = require(__dirname + '/sellFloor.js');
+const GracefulClose = require(__dirname + '/gracefulClose.js');
+const OrderErrorClass = require(__dirname + '/orderErrorClass.js');
+const CloseHold = require(__dirname + '/closeHold.js');
 
 const Bots = Schema.Bots;
 const Deals = Schema.Deals;
@@ -1886,6 +1889,25 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 				}
 			}
 
+			// A forced CANCEL reaching finalize with an untrusted / dead price feed (cancelOnly) — e.g. a delisted
+			// pair whose feed returns 0. A cancel places NO order and sells nothing, so it needs no trustworthy
+			// price; record it as cleanly ABANDONED (nothing sold, position kept at its cost basis, ZERO realized
+			// P&L) rather than deriving garbage from a price of 0 (which would read as a phantom −100% loss). This
+			// overrides only the figures, so the SINGLE finalize write below stays the only close path (no drift).
+			// panic_sell is already held above for an untrusted price, so it never reaches this override.
+			if (cancelOnly && isDealCancel) {
+
+				// Single-source-of-truth figures for a priceless cancel (pure CloseHold.canceledNoPriceFigures).
+				const cancelFigures = CloseHold.canceledNoPriceFigures(currentOrder.average);
+
+				sellPriceFinal   = cancelFigures['sellPriceFinal'];
+				profitFinal      = cancelFigures['profitFinal'];
+				profitBaseFinal  = cancelFigures['profitBaseFinal'];
+				profitQuoteFinal = cancelFigures['profitQuoteFinal'];
+				qtySoldFinal     = cancelFigures['qtySoldFinal'];
+				profitSource     = cancelFigures['profitSource'];
+			}
+
 			await updateDealTracker({
 				'exchange': exchange,
 				'deal_id': dealId,
@@ -1957,6 +1979,16 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 			finished = true;
 
 			await deleteDealTracker(dealId);
+
+			// The deal is closed — drop any per-deal zero-price / held-close counters so these maps never
+			// accumulate stale entries across the process lifetime (bounded-memory hygiene). Guarded; a missing
+			// map or key is a no-op.
+			try {
+
+				if (shareData.appData.cb_price_zero_tracker)  { delete shareData.appData.cb_price_zero_tracker[dealId]; }
+				if (shareData.appData.cb_close_held_tracker)  { delete shareData.appData.cb_close_held_tracker[dealId]; }
+			}
+			catch (e) {}
 
 			if (shareData.appData.verboseLog) {
 
@@ -2185,14 +2217,21 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 					//   (a) a panic-sell / stop-loss is not wrongly deferred (nothing is in flight to oversell), and
 					//   (b) the tick-level sell-error reset can lift this pause once the error has had time to
 					//       clear, instead of stranding the deal paused until a manual resume or restart.
-					isDealPauseReason = PR.SELL_ERROR;
+					// #129: a PERSISTENT sell error (e.g. the pair is in limit-only mode, which SymBot cannot
+					// market-sell) gets a distinct pause REASON, so on restart it stays paused instead of being
+					// re-tried every time; a transient/unknown error keeps the normal 'sell_error' reason and
+					// still clears-and-resumes. The persistent-vs-transient distinction lives in the ONE pause
+					// reason (single source of truth) — no separate field — and is classified by the single
+					// OrderErrorClass predicate. isPersistentOrderError is fail-safe (unknown -> false).
+					isDealPauseReason = OrderErrorClass.isPersistentOrderError(sellError) ? PR.SELL_ERROR_PERSISTENT : PR.SELL_ERROR;
 				}
 
 				if (msgErr) {
 
 					await sendDealMessage(msgType, msgErr);
 					// The reason is set by the specific error branch above ('order_verify_sell' for an invalid
-					// order being verified, 'sell_error' for a generic error). Default defensively if unset.
+					// order being verified, 'sell_error'/'sell_error_persistent' for a generic error). Default
+					// defensively if unset.
 					if (!isDealPauseReason) { isDealPauseReason = PR.ORDER_VERIFY_SELL; }
 					await pauseDeal(config.botId, dealId, null, null, true, isDealPauseReason);
 					isDealPauseSell = true;
@@ -2278,29 +2317,33 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 			}
 		}
 
-		if (cancelOnly) {
+		if (CloseHold.holdCloseForUntrustedPrice({ cancelOnly, isDealCancel })) {
 
-			// Untrusted price (a getSymbol error, or an implausible price rejected by the
-			// plausibility guard). NEVER record a close at a price we can't trust, and in
-			// live mode NEVER mark a deal sold when no order was actually placed — the
-			// real sellOrder above is skipped while cancelOnly is set (see the guard on
-			// that call). This branch is only reached via panic_sell / cancel, since the
-			// automatic take-profit sell is itself gated on !cancelOnly in dcaFollow.
+			// Untrusted price (a getSymbol error, or an implausible price rejected by the plausibility guard) while
+			// a price-DEPENDENT close is pending — a panic sell or a stop-loss. Both place a REAL market order and
+			// must record a genuine fill price, so neither is ever executed at a price we can't trust: hold it
+			// until a trustworthy price returns. (The hold decision is the single-source-of-truth pure predicate
+			// CloseHold.holdCloseForUntrustedPrice — a CANCEL is never held; it finalizes cleanly below.)
 			//
-			// Hold the deal: the panic_sell / cancel request stays pending in the deal
-			// tracker (deal_panic_sell / deal_cancel are not cleared until the deal
-			// closes), so it completes on a later tick once a trustworthy price returns —
-			// at the real market price, not this garbage one. The delay paces the retry so
-			// this does not tight-loop fetchTicker (the sell branch returns to the follow
-			// loop immediately, bypassing dcaFollow's own end-of-tick delay).
-			Common.logger(colors.red.bold('Deal ID ' + dealId + ' close/sell HELD: price feed unreliable (cancelOnly). Will complete when a valid price returns.'));
+			// A user CANCEL is deliberately NOT held (note the `&& !isDealCancel`): a cancel places NO order (it is
+			// gated out of every sellOrder call via !isDealCancel) and sells nothing, so it needs no trustworthy
+			// price. It falls through to the finalize below, which records it as cleanly abandoned (nothing sold,
+			// position kept at cost basis, zero realized P&L). This is what lets a deal on a permanently delisted /
+			// dead-feed pair always be closed out via Cancel, instead of being held forever.
+			//
+			// Hold the close: the deal_panic_sell / stop-loss request stays pending (the tracker flag is not
+			// cleared until the deal closes), so it completes on a later tick once a trustworthy price returns — at
+			// the real market price, not this garbage one. The delay paces the retry so this does not tight-loop
+			// fetchTicker (the sell branch returns to the follow loop immediately, bypassing dcaFollow's own delay).
+			const heldKind = isDealPanicSell ? 'panic sell' : (isDealStopLoss ? 'stop-loss close' : 'close');
 
-			// A panic_sell / cancel is pending but cannot execute while the price is
-			// untrusted. That is an emergency user action, so after a few consecutive held
-			// ticks (and periodically after) push a notification so a deal that stays stuck
-			// — e.g. a revoked API key or a prolonged auth outage — is not silently held
-			// with log output only. Deliberately NOT gated on circuit_breaker.enabled: this
-			// is a safety alert about a pending user action, not a circuit-breaker action.
+			Common.logger(colors.red.bold('Deal ID ' + dealId + ' ' + heldKind + ' HELD: price feed unreliable (cancelOnly). Will complete when a valid price returns.'));
+
+			// The pending close cannot execute while the price is untrusted. That is a user / safety action, so
+			// after a few consecutive held ticks (and periodically after) push a notification so a deal that stays
+			// stuck — e.g. a revoked API key or a prolonged auth outage — is not silently held with log output
+			// only. Deliberately NOT gated on circuit_breaker.enabled: this is a safety alert about a pending
+			// action, not a circuit-breaker action.
 			if (!shareData.appData.cb_close_held_tracker) { shareData.appData.cb_close_held_tracker = {}; }
 			const cht = shareData.appData.cb_close_held_tracker;
 			cht[dealId] = (cht[dealId] || 0) + 1;
@@ -2311,7 +2354,7 @@ const handleSell = async ({ config, exchange, dealId, deal, orders, order, curre
 			if (cht[dealId] >= heldAlertThreshold) {
 
 				Common.sendNotification({
-					'message': `⚠️ Close/Panic Held\n\nPair: ${pair}\nDeal ID: ${dealId}\n\nA ${isDealPanicSell ? 'panic sell' : 'cancel/close'} is pending but cannot execute because the exchange price feed is unreliable. The deal is being HELD (not closed) and will complete automatically once a valid price returns. If this persists, check the exchange API key / connection.`,
+					'message': `⚠️ Close Held\n\nPair: ${pair}\nDeal ID: ${dealId}\n\nA ${heldKind} is pending but cannot execute because the exchange price feed is unreliable. The deal is being HELD (not sold) and will complete automatically once a valid price returns. If this persists, check the exchange API key / connection, or use Cancel to close the deal without selling (you keep the coins).`,
 					'type': 'warning',
 					'telegram_id': shareData.appData.telegram_id
 				});
@@ -2499,15 +2542,20 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 
 				isDealVerifying = true;
 
-				// KNOWN LIMITATION (restart during verification): unlike the base-order verify path — which
-				// persists the unverified order ID onto the deal before pausing so the startup resume path can
-				// recover it — the in-flight safety-order ID is held only in memory here. If SymBot restarts
-				// inside this verification window, resumeDeal cannot find the ID and falls back to clearing the
-				// pause and resuming; the fill is not re-verified, so if the order had actually filled, this rung
-				// can be bought again (untracked coin). A correct fix must persist the ID AND reconstruct the
-				// ladder-recalc credit on resume exactly as handleSuccessfulBuy does (updateOrderDeal +
-				// recalculateOrders from the real fill price) — deferred as a dedicated effort. Rare in practice:
-				// it needs an unverifiable order AND a restart within the ~retry window.
+				// Persist the in-flight safety-order ID onto its rung BEFORE the deal is paused, mirroring the
+				// base-order verify path (which stores orders[0].orderId). A field-scoped $set (not a whole-array
+				// write) keeps it race-safe, matching updateOrderDeal. This is what lets the startup resume path
+				// RE-VERIFY this order after a restart instead of blindly clearing the pause: without it the ID
+				// lived only in the closure below, so a restart inside the verify window could re-buy an order
+				// that had actually filled (double-buy / untracked coin). On resume, the ORDER_VERIFY_BUY branch
+				// in resumeDeal finds this ID and, on a confirmed fill, credits the rung via updateOrderDeal
+				// (the same mark-filled step handleSuccessfulBuy uses) so it can never be re-bought. Guarded so a
+				// transient DB error here can never break the tick — worst case it falls back to the prior
+				// clear-and-resume behavior, i.e. no regression.
+				orders[i].orderId = buy['data']['id'];
+				try { await Deals.updateOne({ 'dealId': dealId }, { '$set': { [`orders.${i}.orderId`]: buy['data']['id'] } }); }
+				catch (persistErr) { try { Common.logger('Persisting pending safety-order ID failed for deal ' + dealId + ': ' + ((persistErr && persistErr.message) ? persistErr.message : persistErr)); } catch (le) {} }
+
 				const verifyPromise = verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId: config.botId, dealId, orderId: buy['data']['id'], onSuccessCallback: handleSuccessfulBuyPostVerify, pauseBeforeCallback: false });
 
 				// Reset verifying flag if needed
@@ -2673,7 +2721,15 @@ const handleSafetyOrder = async ({ config, exchange, dealId, deal, orders, order
 				// the deal's BUYS stay paused, but take-profit / stop-loss / panic / cancel can still exit it
 				// (there is no pending coin to strand). This mirrors the base-order path, which likewise
 				// reserves 'order_verify_buy' for an unverified in-flight order only.
-				isDealPauseReason = buyOrderInvalid ? PR.ORDER_VERIFY_BUY : PR.BUY_ERROR;
+				// #129: a generic buy failure (no in-flight order) uses the 'buy_error' reason, UNLESS the error
+				// is a PERSISTENT condition (e.g. a limit-only pair SymBot cannot market-fill) — then it uses the
+				// distinct 'buy_error_persistent' reason so that on restart it stays paused instead of being
+				// re-tried every time. The persistent-vs-transient distinction lives in the ONE pause reason
+				// (single source of truth, no separate field), classified by the single OrderErrorClass predicate
+				// (fail-safe: unknown -> false -> ordinary 'buy_error'). 'order_verify_buy' is unchanged.
+				isDealPauseReason = buyOrderInvalid
+					? PR.ORDER_VERIFY_BUY
+					: (OrderErrorClass.isPersistentOrderError(buyError) ? PR.BUY_ERROR_PERSISTENT : PR.BUY_ERROR);
 				const pauseData = await pauseDeal(config.botId, dealId, null, true, null, isDealPauseReason);
 				isDealPauseBuy = true;
 			}
@@ -3246,6 +3302,12 @@ const dcaFollow = async (configDataObj, exchange, dealId) => {
 						const priceBuyOrder = parseFloat(Number(order.price) - (Number(order.price) * priceSlippageBuyPercent));
 						const priceSellOrder = parseFloat(Number(currentOrder.target) + (Number(currentOrder.target) * priceSlippageSellPercent));
 
+						// Averaging guard: a deal whose buy side is paused (pausedBuy) places NO new safety orders — it
+						// just rides to its existing take-profit target. isDealPauseBuy is read from the deal the tick
+						// re-loaded from the database (so it is crash-safe and survives a restart), and is set by the
+						// Pause/Resume dialog's "Pause Buy" checkbox and the one-click "Pause averaging" action alike —
+						// a single source of truth for "stop adding to this deal". Everything else (take-profit,
+						// stop-loss, panic, cancel) is unchanged.
 						if ((price <= priceBuyOrder && order.filled == 0) && !cancelOnly && !isDealStopLoss && !isDealPause && !isDealPauseBuy && !isDealCancel && !isDealPanicSell) {
 
 							const safetyResult = await handleSafetyOrder({
@@ -6517,9 +6579,12 @@ function buildResumeInfo(deal) {
 		'active': true,
 		// Reflect a persisted pause reason so a paused deal shows its banner immediately; the first live
 		// tick refines the exact pause flags. Not a live value, so it is safe to show now.
-		'pause': !!(deal && deal.pauseReason),
-		'pause_buy': false,
-		'pause_sell': false,
+		// Reflect the persisted pause flags immediately on resume (the single source of truth — the same flags the
+		// engine re-reads each tick), so the pause banner and the "Resume averaging" pill show at once after a
+		// restart, before the first live tick refines them. pausedBuy also drives the averaging (safety-order) state.
+		'pause': !!(deal && (deal.paused || deal.pauseReason)),
+		'pause_buy': !!(deal && deal.pausedBuy),
+		'pause_sell': !!(deal && deal.pausedSell),
 		'pause_reason': (deal && deal.pauseReason) || '',
 		'error': '',
 		'bot_id': config.botId,
@@ -7975,6 +8040,7 @@ async function resumeDeal(dealObj) {
 		// Find the pending order ID from the most recent unfilled order
 		const orders = dealObj.orders || [];
 		let pendingOrderId = null;
+		let pendingOrderIndex = null;
 
 		if (isSell) {
 
@@ -7983,32 +8049,26 @@ async function resumeDeal(dealObj) {
 		}
 		else {
 
-			// Buy: find the last unfilled order with an order ID
+			// Buy: find the last unfilled order with an order ID (base order at index 0, or a safety order
+			// at index > 0 — both now persist their in-flight ID before pausing, so both are recoverable).
 			for (let i = orders.length - 1; i >= 0; i--) {
 
 				if (!orders[i].filled && orders[i].orderId) {
 
 					pendingOrderId = orders[i].orderId;
+					pendingOrderIndex = i;
 					break;
 				}
 			}
 		}
 
-		// If there is no pending order ID to verify, do NOT arm verification. This happens
-		// when the deal was paused with an order_verify_* reason but the order that caused
-		// the pause left no stored ID — most commonly an exchange-cancelled partial buy
-		// (price-protection): that path pauses with pauseReason 'order_verify_buy' but never
-		// persists a pending order ID. Arming verifyInvalidOrder with orderId=null logged a
-		// misleading "verify order ID null / Attempt #1" and immediately resumed anyway.
-		// Instead, clear the stale pause reason and resume cleanly — there is nothing to poll.
-		//
-		// KNOWN LIMITATION: today ONLY the base order persists its unverified ID (as orders[0].orderId),
-		// so only a base-order verification is actually recoverable here. A SAFETY-order or SELL that was
-		// mid-verification at shutdown reaches this branch with no recoverable ID (the safety ID is never
-		// written to orders[i].orderId, and sellData is written only on a clean close), so they always
-		// clear-and-resume rather than re-verify. See the KNOWN LIMITATION notes at the two verify branches
-		// (safety buy / sell) — persisting those IDs and reconstructing their credit/finalize on resume is
-		// deferred as a dedicated effort.
+		// If there is no pending order ID to verify, do NOT arm verification — clear the stale pause reason
+		// and resume cleanly (there is nothing to poll). This happens when the pause left no stored ID:
+		// an exchange-cancelled partial buy (handled inline by the #66 credit path, not here), or a SELL
+		// that was mid-verify at shutdown (sellData.orderId is written only on a clean close, so it is still
+		// not recoverable — see the KNOWN LIMITATION at the sell verify branch). The BASE order and, since
+		// #147, the SAFETY-order buy BOTH persist their in-flight ID onto orders[i].orderId before pausing,
+		// so both are recoverable and take the re-verify path below instead of this clean-resume fallback.
 		if (!pendingOrderId) {
 
 			Common.logger( colors.bgYellow.bold(`Deal ID ${dealId} was paused (${resumePauseReason}) at shutdown but has no pending order ID to verify (e.g. an exchange-cancelled order). Clearing pause and resuming.`) );
@@ -8043,6 +8103,27 @@ async function resumeDeal(dealObj) {
 						}
 					};
 				}
+				else if (!isSell && dealObj.isStart === 1 && pendingOrderIndex !== null && pendingOrderIndex >= 0) {
+
+					// #147: a SAFETY-order buy was mid-verify at shutdown. On a CONFIRMED fill, mark its rung
+					// filled via the shared updateOrderDeal — the exact mark-filled step handleSuccessfulBuy
+					// uses (a race-safe field-scoped $set of filled/orderId/dateFilled). That is what stops the
+					// follow loop from re-buying the rung (the double-buy / untracked-coin risk this closes).
+					// Pre-calculated qty/average/target are preserved, exactly as the base-order resume above
+					// does; the live path's actual-price recompute is intentionally NOT reconstructed from
+					// partial resume state (lower-risk on the money path, and consistent with the base order).
+					// The callback fires ONLY on a confirmed fill — if the order never filled, verifyInvalidOrder
+					// exhausts and this never runs. Idempotent: had the live verify already credited the rung
+					// before the crash it is filled:1, the lookup above skips it, and this branch is unreachable.
+					const soOrders = orders;
+					const soIndex = pendingOrderIndex;
+					const soOrderId = pendingOrderId;
+
+					verifyCallback = async (verifyData) => {
+
+						await updateOrderDeal(dealId, soIndex, soOrderId, soOrders);
+					};
+				}
 
 				verifyInvalidOrder({ count: 0, mins: retryMins, exchange, pair, botId, dealId, orderId: pendingOrderId, onSuccessCallback: verifyCallback, pauseBeforeCallback: !isSell })
 					.catch((e) => { try { Common.logger('verifyInvalidOrder (resume) background error for deal ' + dealId + ': ' + ((e && e.message) ? e.message : e)); } catch (le) {} });
@@ -8051,24 +8132,35 @@ async function resumeDeal(dealObj) {
 	}
 	else if (resumePauseReason === PR.SELL_ERROR) {
 
-		// A generic sell error paused this deal's sells (there is no order to verify). The in-memory
-		// retry/reset tracker that would normally lift that pause does not survive a restart, so clear
-		// the stale sell pause and resume cleanly — otherwise the deal would come back paused for sell
-		// with nothing to lift it. (Mirrors the no-pending-order clean-resume path above.)
+		// A TRANSIENT sell error paused this deal's sells. The in-memory retry/reset tracker that would lift it
+		// does not survive a restart, so clear the stale pause and resume cleanly (the original safe behavior).
 		Common.logger( colors.bgYellow.bold('Deal ID ' + dealId + ' was paused (sell_error) at shutdown; clearing pause and resuming.') );
 
 		await pauseDeal(botId, dealId, false, false, false, '');
 	}
+	else if (resumePauseReason === PR.SELL_ERROR_PERSISTENT) {
+
+		// #129: a PERSISTENT sell error (e.g. the pair went limit-only, which SymBot cannot market-sell). The
+		// distinct pause reason is the single source of truth, so KEEP the pause instead of re-attempting a
+		// doomed sell every restart. The operator resumes once the condition clears (panic-sell / stop-loss can
+		// still exit it).
+		Common.logger( colors.bgYellow.bold('Deal ID ' + dealId + ' stays paused (sell_error_persistent) at shutdown: the order error will keep recurring, so it is NOT auto-resumed — resume manually once the condition clears.') );
+	}
 	else if (resumePauseReason === PR.BUY_ERROR) {
 
-		// A non-in-flight buy failure (insufficient funds / exchange-cancelled / generic) paused this
-		// deal's buys. There is no order to verify, and the in-memory state that would let it lift the
-		// pause does not survive a restart, so clear the stale buy pause and resume cleanly — the same
-		// outcome these failures had before they were split off from 'order_verify_buy' (which, with no
-		// pending order ID, is cleared and resumed by the branch above).
+		// A TRANSIENT, non-in-flight buy failure (insufficient funds / exchange-cancelled / generic) paused this
+		// deal's buys. There is no order to verify and the in-memory state that would lift it does not survive a
+		// restart, so clear the stale pause and resume cleanly (the original safe behavior).
 		Common.logger( colors.bgYellow.bold('Deal ID ' + dealId + ' was paused (buy_error) at shutdown; clearing pause and resuming.') );
 
 		await pauseDeal(botId, dealId, false, false, false, '');
+	}
+	else if (resumePauseReason === PR.BUY_ERROR_PERSISTENT) {
+
+		// #129: a PERSISTENT buy error (e.g. a limit-only pair). KEEP the buy pause instead of re-attempting a
+		// doomed buy every restart — the deal can still take profit / stop-loss / panic to exit, it just will
+		// not retry the safety buy. Resume manually once the condition clears.
+		Common.logger( colors.bgYellow.bold('Deal ID ' + dealId + ' stays paused (buy_error_persistent) at shutdown: the order error will keep recurring, so buys are NOT auto-resumed — resume manually once the condition clears.') );
 	}
 	else if (resumePauseReason === PR.SELL_PARTIAL_HOLD) {
 
@@ -8405,6 +8497,52 @@ async function pauseDeal(botId, dealId, pause, pauseBuy, pauseSell, pauseReason 
 }
 
 
+// Pause or resume AVERAGING (the safety-order ladder) for a deal, addressed by dealId ALONE — it resolves the
+// deal's own botId internally, exactly like panicSellDeal / gracefulCloseDeal / cancelDeal. This is the single
+// entry point every caller uses (instance HTTP endpoint, Hub Worker, signal dispatcher), so none of them has to
+// carry a botId (the reported Hub bug: the Hub deal-action message had no botId, so a botId-keyed write matched
+// nothing). A THIN wrapper over the proven pauseDeal: it toggles ONLY pausedBuy (stop / allow new safety
+// orders) and leaves the sell side untouched, so the deal still closes at its take-profit target. No new order
+// logic. Fully guarded — a missing / non-active deal or a transient error returns success:false, never throws.
+async function setPauseAveraging(dealId, pauseBuy) {
+
+	try {
+
+		const deals = await getDeals({ 'dealId': dealId });
+
+		if (!deals || deals.length === 0) {
+
+			return { 'success': false, 'pause_buy': null, 'data': 'Invalid Deal ID' };
+		}
+
+		if (deals[0]['status'] != 0) {
+
+			return { 'success': false, 'pause_buy': null, 'data': 'Deal ID ' + dealId + ' is not active' };
+		}
+
+		const botId = deals[0]['botId'];
+
+		// pause=false, pauseSell=null (leave the sell side alone), clear pauseReason (manual control).
+		const result = await pauseDeal(botId, dealId, false, !!pauseBuy, null, '');
+
+		if (!result || !result['success']) {
+
+			return { 'success': false, 'pause_buy': null, 'data': (result && result['data']) || 'Pause update failed' };
+		}
+
+		return { 'success': true, 'pause_buy': !!pauseBuy, 'data': 'Deal ID ' + dealId + (pauseBuy ? ' averaging paused' : ' averaging resumed') };
+	}
+	catch (e) {
+
+		return { 'success': false, 'pause_buy': null, 'data': (e && e.message) ? e.message : String(e) };
+	}
+}
+
+async function pauseAveragingDeal(dealId) { return await setPauseAveraging(dealId, true); }
+
+async function resumeAveragingDeal(dealId) { return await setPauseAveraging(dealId, false); }
+
+
 async function refreshUpdateDeal(data) {
 
 	let dealId = data['deal_id'];
@@ -8493,47 +8631,28 @@ async function gracefulCloseDeal(dealId) {
 	}
 	catch (e) {}
 
-	// dealTracker.info.price_last is refreshed each tick from fetchTicker, so during
-	// an exchange auth storm it can hold a nonzero-but-garbage value (the same bad
-	// input the tick-loop guard rejects). A garbage-high price_last would clear the
-	// take-profit target and let this graceful close finalize the deal. Apply the
-	// same plausibility guard here (reference = the deal's DCA average, also in info)
-	// and treat an implausible price as "not determinable" — fail-safe, leave open —
-	// exactly like evaluateGracefulClose does when there is no live price.
-	const cbCfgPrice = shareData.appData.circuit_breaker || {};
-
-	const priceSanity = PriceGuard.evaluatePriceSanity({
-		'price': info['price_last'],
-		'reference': info['price_average'],
-		'maxHighRatio': cbCfgPrice.price_deviation_high_ratio,
-		'maxLowRatio': cbCfgPrice.price_deviation_low_ratio
+	// The close decision — price-plausibility gate THEN profit-target gate — lives in the pure,
+	// unit-tested gracefulClose.decideGracefulClose (single source of truth, the same price guard the
+	// tick loop uses and the same target guard the signal `close` command uses; no engine/DB/tracker
+	// needed to verify it). This function keeps only the impure step below: delegating an eligible
+	// close to the existing panic-sell close path (gated by the decision, never a second close path).
+	const decision = GracefulClose.decideGracefulClose({
+		'info': info,
+		'takeProfitPercent': takeProfitPercent,
+		'cbCfg': shareData.appData.circuit_breaker || {}
 	});
 
-	if (!priceSanity.plausible) {
+	if (!decision['eligible']) {
 
+		// Implausible price, or target not met / not determinable — fail-safe: leave the deal open.
+		// `reason` is the stable, language-agnostic code (implausible_price / target_not_met / no_live_price)
+		// so a caller/UI can map it to a localized message without parsing the English `data` string.
 		return {
 			'success': true,
 			'closed': false,
-			'data': 'Live price appears implausible (' + priceSanity.message + '); deal left open',
-			'metrics': priceSanity
-		};
-	}
-
-	const decision = shareData.SignalBot.evaluateGracefulClose({
-		'price_last': info['price_last'],
-		'price_target': info['price_target'],
-		'profit_percentage': info['profit_percentage'],
-		'take_profit_percent': takeProfitPercent
-	});
-
-	if (!decision['ready']) {
-
-		// Target not met / not determinable — do NOT close.
-		return {
-			'success': true,
-			'closed': false,
-			'data': decision['message'],
-			'metrics': decision
+			'reason': decision['reason'],
+			'data': decision['data'],
+			'metrics': decision['metrics']
 		};
 	}
 
@@ -8544,8 +8663,9 @@ async function gracefulCloseDeal(dealId) {
 	return {
 		'success': closeData['success'],
 		'closed': closeData['success'] ? true : false,
+		'reason': decision['reason'],
 		'data': closeData['success'] ? 'Profit target met; deal closed at market' : closeData['data'],
-		'metrics': decision
+		'metrics': decision['metrics']
 	};
 }
 
@@ -9543,6 +9663,8 @@ module.exports = {
 	recalculateOrders,
 	panicSellDeal,
 	gracefulCloseDeal,
+	pauseAveragingDeal,
+	resumeAveragingDeal,
 	connectExchange,
 	removeConfigData,
 	initBot,

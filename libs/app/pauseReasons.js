@@ -20,8 +20,10 @@
 var REASONS = {
 	'order_verify_buy':    { side: 'buy order',  description: 'a buy order that could not be verified' },
 	'buy_error':           { side: 'buy order',  description: 'a buy order error (buys are paused; the deal can still take profit or stop-loss)' },
+	'buy_error_persistent':{ side: 'buy order',  description: 'a persistent buy order error (e.g. the pair is in limit-only mode); buys stay paused and are NOT retried automatically on restart — resume manually once the condition clears (the deal can still take profit, stop-loss, or be panic sold)' },
 	'order_verify_sell':   { side: 'sell order', description: 'a sell order that could not be verified' },
 	'sell_error':          { side: 'sell order', description: 'a sell order error (it retries automatically)' },
+	'sell_error_persistent':{ side: 'sell order', description: 'a persistent sell order error (e.g. the pair is in limit-only mode); it is NOT retried automatically on restart — resume manually once the condition clears (the deal can still be stopped-out or panic sold)' },
 	'sell_finalize_error': { side: 'sell order', description: 'a sell that filled but could not be finalized' },
 	'sell_partial_hold':   { side: 'sell order', description: 'a slippage-safe close holding the unsold remainder below your break-even floor (it auto-resumes selling when the price recovers above the floor; use panic sell to force an exit now)' }
 };

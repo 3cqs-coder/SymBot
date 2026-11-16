@@ -152,6 +152,11 @@ test('the Hub action→capability map is the single canonical ACTION_CAPS and ag
 	assert.ok(RP.ACTION_CAPS && RP.ACTION_CAPS.bot && RP.ACTION_CAPS.deal, 'ACTION_CAPS is exported with bot + deal groups');
 	assert.strictEqual(RP.ACTION_CAPS.bot.delete, 'bot.delete');
 	assert.strictEqual(RP.ACTION_CAPS.deal.pause, 'deal.pause');
+	assert.strictEqual(RP.ACTION_CAPS.deal.close, 'deal.close', 'the graceful close action requires deal.close (same as the instance /close route)');
+	assert.strictEqual(RP.ACTION_CAPS.deal.pause_averaging, 'deal.pause', 'pause_averaging requires deal.pause (it pauses averaging)');
+	assert.strictEqual(RP.ACTION_CAPS.deal.resume_averaging, 'deal.pause', 'resume_averaging requires deal.pause');
+	assert.strictEqual(RP.required('POST', '/api/deals/d1/pause_averaging'), 'deal.pause', 'the pause_averaging route is gated at deal.pause');
+	assert.strictEqual(RP.required('POST', '/api/bots/b1/pause_averaging'), 'deal.pause', 'the bot-targeted pause_averaging route is gated at deal.pause');
 	assert.deepStrictEqual(RP.auditActionCaps(), [], 'no write action under-gates relative to its HTTP route');
 });
 

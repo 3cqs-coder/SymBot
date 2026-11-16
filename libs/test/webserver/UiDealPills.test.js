@@ -26,7 +26,7 @@ function eq(a, b, m) { assert.strictEqual(a, b, m + ' (got ' + JSON.stringify(a)
 const btns = UI.actionButtons();
 
 // Every key a view addresses by name must be present.
-['add', 'ai', 'cancel', 'edit', 'panic', 'pause', 'resume', 'stop'].forEach(function (k) {
+['add', 'ai', 'cancel', 'pause_averaging', 'resume_averaging', 'edit', 'panic', 'pause', 'resume', 'stop'].forEach(function (k) {
 	ok(btns[k] && typeof btns[k].button === 'string' && typeof btns[k].tooltip === 'string', 'actionButtons has key "' + k + '" with button + tooltip');
 });
 
@@ -40,6 +40,8 @@ eq(btns['add'].button,    pill('',            'icon-add',    'Add funds to deal'
 eq(btns['ai'].button,     pill('',            'icon-ai',     'AI Analyze deal'),   'ai pill markup');
 eq(btns['cancel'].button, pill('pill-danger', 'icon-cancel', 'Cancel deal'),       'cancel pill markup');
 eq(btns['edit'].button,   pill('',            'icon-edit',   'Edit deal'),         'edit pill markup');
+eq(btns['pause_averaging'].button,  pill('', 'icon-target', 'Pause averaging'),  'pause_averaging pill markup (neutral-styled + target icon: the managed hold, distinct from the red Panic Sell)');
+eq(btns['resume_averaging'].button, pill('pill-averaging', 'icon-resume', 'Resume averaging'), 'resume_averaging pill markup (persistent amber pill-averaging background: the button itself signals the paused-averaging state when it swaps in)');
 eq(btns['panic'].button,  pill('pill-danger', 'icon-close',  'Panic sell deal'),   'panic pill markup (danger-styled + honest label: it fires panic_sell, not a graceful close)');
 eq(btns['pause'].button,  pill('pill-warn',   'icon-pause',  'Pause deal'),        'pause pill markup');
 eq(btns['resume'].button, pill('pill-warn',   'icon-resume', 'Resume deal'),       'resume pill markup');
@@ -52,6 +54,9 @@ eq(btns['stop'].tooltip,   'Stop bot',    'stop tooltip');
 // hover tooltip must spell out that it ignores the profit target — the honest-labeling safety fix for a control
 // that sells at market and can realize a loss. The dispatch match lives in both deal views (btnTitle === ...).
 ok(/title="Panic sell deal"/.test(btns['panic'].button), 'panic pill title is the exact string the deal views dispatch on');
+ok(/title="Pause averaging"/.test(btns['pause_averaging'].button), 'pause_averaging pill title is the exact string the deal views dispatch on');
+ok(/title="Resume averaging"/.test(btns['resume_averaging'].button), 'resume_averaging pill title is the exact string the deal views dispatch on');
+ok(!/pill-danger/.test(btns['pause_averaging'].button), 'pause_averaging pill is NOT danger-styled — it is the profit-respecting managed hold, visually distinct from Panic Sell');
 ok(/ignoring the profit target/.test(btns['panic'].tooltip), 'panic tooltip states it ignores the profit target');
 
 // A fresh call returns a fresh object (a view mutates its local copy, e.g. swapping pause→resume or disabling

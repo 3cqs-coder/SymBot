@@ -151,7 +151,7 @@ module.exports = {
 5. Type: `pm2 save` to save the configuration
 6. If you don't already have pm2 starting at system boot time, type this with root privileges: `pm2 startup`. Then type: `pm2 save`
 
-SymBot will now start automatically even when the system is rebooted. With the above configuration pm2 will monitor SymBot and if memory exceeds roughly four gigabytes, a kill signal will be sent to SymBot. pm2 will wait eight seconds before terminating the process to give SymBot some time to safely shut itself down. pm2 will then start SymBot again. You can change those settings to suit your own server requirements and needs.
+SymBot will now start automatically even when the system is rebooted. With the above configuration pm2 will monitor SymBot and if memory exceeds roughly four gigabytes, a kill signal will be sent to SymBot. pm2 will wait up to eight seconds (`kill_timeout`) before force-terminating the process, to give SymBot time to shut itself down cleanly — it halts trading, closes each active instance in turn, and exits on its own, normally within a few seconds. pm2 will then start SymBot again, and any open deals resume automatically. You can change those settings to suit your own server requirements and needs, but keep `kill_timeout` at several seconds (the default here is `8000`) so a graceful shutdown is never cut short — setting it too low would force-kill SymBot mid-shutdown.
 
 ## Installation Video
 
@@ -211,7 +211,7 @@ In addition to instance management, SymBot Hub provides unified views that aggre
 
 - **Dashboard** — the Hub home page shows a live summary refreshed every 30 seconds. Per-instance cards display active deal count, bot count, active P/L, portfolio balance, max funds, and risk percentage (color-coded green / amber / red). A combined totals bar across all instances sits at the top. Sandbox instances are clearly badged.
 
-- **Active Deals** — view all active deals across every instance in a single table. Filter by instance or bot, adjust the refresh interval, and take actions directly from the Hub, including pausing, resuming, canceling, and panic-selling deals, and stopping bots. Clicking on a pair opens a chart for that deal — a Deal tab overlaying the order ladder, average entry, and take-profit on candles, plus a TradingView tab for the same symbol (see [Deal Chart](#deal-chart)). Deals paused automatically by SymBot due to order verification failures are highlighted distinctly from manually paused deals.
+- **Active Deals** — view all active deals across every instance in a single table. Filter by instance or bot, adjust the refresh interval, and take actions directly from the Hub, including pausing, resuming, pausing averaging, canceling, and panic-selling deals, and stopping bots. "Pause averaging" is the profit-respecting managed hold — it stops SymBot placing new safety orders on the deal, which then closes at its existing take-profit target when the market reaches it, so it caps your exposure without ever selling at a loss (it is the one-click form of the Pause Buy option, and is reversible with "Resume averaging"); panic-selling is the separate emergency close that sells right away at market regardless of profit. Clicking on a pair opens a chart for that deal — a Deal tab overlaying the order ladder, average entry, and take-profit on candles, plus a TradingView tab for the same symbol (see [Deal Chart](#deal-chart)). Deals paused automatically by SymBot due to order verification failures are highlighted distinctly from manually paused deals.
 
 - **Bots** — view all bots across every instance in a single table, including the exchange each bot is assigned to. Toggle bots on or off directly from the Hub without navigating to each instance individually. Click any bot row to open the full bot edit page, or use the ✕ button to delete a bot. The + Create DCA Bot button opens a full bot create page for the selected instance. Both create and edit pages include the complete bot configuration form — pairs with exchange-sourced symbol list, all safety order parameters, start conditions, and a preview step that shows the projected order table before saving.
 
@@ -409,7 +409,7 @@ These files are located in the `config` directory
 		- `price_deviation_high_ratio` reject a fetched price more than this multiple above a deal's DCA average as implausible (a corrupt price feed). Must be greater than 1 and above your largest take-profit multiple. Default is `2`.
 		- `price_deviation_low_ratio` reject a fetched price more than this multiple below a deal's DCA average (i.e. price < average ÷ this). Set generously so deep averaging-down is never blocked. Default is `10`.
 		- `price_implausible_alert_count` number of consecutive implausible-price events for the same deal before a Telegram alert is sent. Default is `4`.
-		- `close_held_alert_count` number of consecutive ticks a pending panic sell / cancel is held (because the price feed is unreliable) before a safety alert is sent. This alert is sent regardless of whether the circuit breaker is enabled. Default is `15`.
+		- `close_held_alert_count` number of consecutive ticks a pending panic sell / stop-loss is held (because the price feed is unreliable) before a safety alert is sent. This alert is sent regardless of whether the circuit breaker is enabled. (A **cancel** is never held — it needs no price — so it is not subject to this alert.) Default is `15`.
 		- `portfolio_loss_enabled` whether the portfolio-loss trigger is active — it blocks new buys when the whole portfolio's realized loss (from closed deals) exceeds the limit within the window. Default is `false`.
 		- `loss_window_hours` rolling time window in hours over which the portfolio loss is measured. Default is `24`.
 		- `loss_limit` the portfolio realized-loss threshold that trips the breaker (in the account's quote currency; `0` disables it). Default is `0`.
@@ -809,7 +809,7 @@ The circuit breaker sends Telegram alerts at key events:
 
 **On consecutive implausible price** — if a deal receives an implausible (nonzero but out-of-band) price `price_implausible_alert_count` consecutive times (default 4), a Telegram alert is sent naming the pair and deal ID, noting the deal is being held rather than closed. See [Price Feed Sanity Guards](#price-feed-sanity-guards).
 
-**On a held panic sell / cancel** — if a pending panic sell or cancel cannot execute because the price feed is unreliable, a safety alert is sent after `close_held_alert_count` held ticks (default 15) and periodically thereafter. Unlike the other alerts here, this one is not gated on the circuit breaker being enabled, because it concerns a stuck emergency action rather than a circuit-breaker event.
+**On a held panic sell / stop-loss** — if a pending panic sell or stop-loss cannot execute because the price feed is unreliable (both place a real market order and must record a genuine fill price), the deal is held and a safety alert is sent after `close_held_alert_count` held ticks (default 15) and periodically thereafter. Unlike the other alerts here, this one is not gated on the circuit breaker being enabled, because it concerns a stuck safety action rather than a circuit-breaker event. A **cancel** is never held this way — it sells nothing, so it can always close the deal out (see [Cancel deal](#cancel-deal)); the alert even points the user to Cancel as the way to clear a deal stuck on a dead/delisted feed.
 
 ### Price Feed Sanity Guards
 
@@ -894,7 +894,7 @@ Settings appear on the bot's create/update form (and can be changed per-deal —
 | **Move To Breakeven** | Once the deal reaches the Breakeven Trigger profit, ratchet the stop up to the break-even price (entry plus fees) so a winning deal cannot turn back into a loss. The stop only ever moves up, never down. |
 | **Breakeven Trigger %** | The live net profit % at which the stop moves to break-even (only used when Move To Breakeven is on). |
 
-**It never fires on a bad price feed.** The stop-loss is gated by the same price-plausibility check as the rest of the engine (see [Price Feed Sanity Guards](#price-feed-sanity-guards)), so an implausible or unreliable exchange price *holds* the deal instead of dumping it at a false low. An explicit panic sell or cancel always takes precedence.
+**It never fires on a bad price feed.** The stop-loss is gated by the same price-plausibility check as the rest of the engine (see [Price Feed Sanity Guards](#price-feed-sanity-guards)), so an implausible or unreliable exchange price *holds* the deal instead of dumping it at a false low. An explicit **cancel** always takes precedence and closes the deal immediately (it sells nothing, so it needs no price); a panic sell also takes precedence but, like the stop-loss, is itself held while the price is untrusted until a valid price returns.
 
 **Changing a running deal.** A deal keeps the configuration it opened with, so editing a bot never changes deals that are already running — this is intentional. To change the stop-loss on an active deal, use the Edit action on that deal in the Active Deals view; the stop-loss settings are on the deal-edit form and take effect on the next price check without interrupting the deal. Reconfiguring a deal's stop-loss resets any break-even ratchet so the new settings apply from scratch.
 
@@ -1899,7 +1899,7 @@ The presented credential resolves to a principal carrying a set of capabilities,
 | Action | Endpoint | Capability |
 | --- | --- | --- |
 | Open a deal | `POST /api/bots/{botId}/start_deal` | `deal.create` |
-| Dispatch a signal | `POST /api/signal/{botId}` | `deal.create` — or `deal.close` for the `close` / `panic_sell` / `close_all` actions |
+| Dispatch a signal | `POST /api/signal/{botId}` | `deal.create` — or `deal.close` for the `close` / `panic_sell` / `close_all` actions, or `deal.pause` for the `pause_averaging` / `resume_averaging` actions |
 | Add funds to a deal | `POST /api/{deals\|bots}/{id}/add_funds` | `deal.create` |
 | Update a deal | `POST /api/deals/{dealId}/update_deal` | `deal.create` |
 | Pause a deal | `POST /api/deals/{dealId}/pause` | `deal.pause` |
@@ -2149,6 +2149,8 @@ POST /api/deals/{dealId}/pause
 POST /api/deals/{dealId}/cancel
 ```
 
+Because a cancel places no order and sells nothing, it does **not** need a market price — so it always closes the deal out, **even when the exchange price feed is dead or the pair has been delisted** (where a panic sell would be held until a valid price returns). You keep the coins; the deal is recorded as abandoned with zero realized profit/loss (it does not count toward the circuit breaker's realized-loss trigger). This is the way to clear a deal stuck on a delisted pair.
+
 
 ### Panic sell deal
 
@@ -2188,11 +2190,37 @@ POST /api/deals/{dealId}/close
 POST /api/bots/{botId}/close
 ```
 
-The response includes a `closed` field so you can distinguish an actual close from "handled, but target not met":
+The response includes a `closed` field so you can distinguish an actual close from "handled, but target not met". **An integration must check `closed`, not just `success`** — a request that is accepted but does not close (the target is not met yet, or the live price is not trustworthy) returns `success: true` with `closed: false`, and the position stays open. For a guaranteed exit regardless of profit, use [Panic sell](#panic-sell-deal) instead.
+
+Alongside `closed`, the response carries a stable, language-neutral `reason` code so a client can branch on the outcome without parsing the human-readable `data` text. The codes are `target_met` (closed), `target_not_met`, `no_live_price`, and `implausible_price` (each of the last three means the deal was left open):
 
 ```
-{ "success": true, "closed": false, "data": "Profit target not met (current price below take-profit target); deal left open" }
+{ "success": true, "closed": false, "reason": "target_not_met", "data": "Profit target not met (current price below take-profit target); deal left open" }
 ```
+
+### Pause averaging on a deal
+
+The profit-respecting **managed hold**. Pausing averaging stops SymBot placing any new safety orders on the deal; the deal keeps running and closes at its **existing** take-profit target when the market reaches it. It caps your exposure (no more averaging down) without ever selling at a loss and without changing the profit you were aiming for. If the price keeps falling, the deal simply stays open with no new buys until the target is reached — or you can [Panic sell](#panic-sell-deal) to exit now. It is fully reversible with resume averaging.
+
+This is the same mechanism as the **Pause Buy** option in the Pause/Resume dialog — both set the deal's `pausedBuy` flag — exposed as a one-click action. It is the managed counterpart to the two closes: `panic_sell` exits now at any price, `close` takes profit only if the target is already met, and `pause_averaging` lets the deal ride to that target while it stops adding funds.
+
+Can be targeted by deal id, or by bot (SymBot resolves the bot's active deal automatically).
+
+```
+POST /api/deals/{dealId}/pause_averaging
+POST /api/bots/{botId}/pause_averaging
+
+POST /api/deals/{dealId}/resume_averaging
+POST /api/bots/{botId}/resume_averaging
+```
+
+The response carries a stable `pause_buy` boolean — `true` after `pause_averaging`, `false` after `resume_averaging` — so a client can confirm the state:
+
+```
+{ "success": true, "pause_buy": true, "data": "Deal ID ... averaging paused" }
+```
+
+These two actions require the `deal.pause` capability (they pause and resume averaging), not `deal.close`.
 
 ### Signal dispatcher (single endpoint)
 
@@ -2200,11 +2228,11 @@ A convenience endpoint that routes to the per-action handlers from a single URL,
 
 | Name | Type | Mandatory | Values (default) | Description |
 |----------|----------|---------------|----------------------|-----------------|
-| action   | string   | YES           | entry, add_funds, close, panic_sell | Command to perform. `close_all` is accepted as an alias of `panic_sell` — like `panic_sell` it closes the single resolved deal (by `deal_id`, or the bot's one active deal), not every deal on the bot |
+| action   | string   | YES           | entry, add_funds, close, panic_sell, pause_averaging, resume_averaging | Command to perform. `close_all` is accepted as an alias of `panic_sell` — like `panic_sell` it closes the single resolved deal (by `deal_id`, or the bot's one active deal), not every deal on the bot |
 | pair     | string   | NO            |                      | Only required for multi-pair bots |
 | volume   | number   | NO            |                      | Amount for the `add_funds` action |
 | signalId | string   | NO            |                      | Optional identifier for the signal (used on `entry`) |
-| deal_id  | string   | NO            |                      | Target a SPECIFIC deal for `add_funds` / `close` / `panic_sell` (useful when a bot runs several active deals). The deal must be active and belong to this bot, or the action is refused. Omit to act on the bot's single active deal (optionally narrowed by `pair`) |
+| deal_id  | string   | NO            |                      | Target a SPECIFIC deal for `add_funds` / `close` / `panic_sell` / `pause_averaging` / `resume_averaging` (useful when a bot runs several active deals). The deal must be active and belong to this bot, or the action is refused. Omit to act on the bot's single active deal (optionally narrowed by `pair`) |
 | dry_run  | boolean  | NO            | false                | When true, validates the signal and returns what it *would* do, without executing — no deal is started, funded, or closed. Useful for testing an integration |
 | timestamp | number  | NO            |                      | Optional epoch time (seconds or milliseconds). When the instance's `webhook.max_age_seconds` is set, a signal older than that window (or too far in the future) is rejected, guarding against a delayed or replayed alert |
 
@@ -2872,6 +2900,8 @@ You do not have to worry about the exact symbol format. TradingView sends the ch
 | `add_funds` | Add one safety order to the active deal | `POST /webhook/api/bots/{botId}/add_funds` |
 | `close` | Graceful close — closes only if the profit target is met, otherwise leaves the deal open | `POST /webhook/api/bots/{botId}/close` |
 | `panic_sell` | Emergency close — sells at market now, ignoring profit | `POST /webhook/api/bots/{botId}/panic_sell` |
+| `pause_averaging` | Managed hold — stop new safety orders; the deal still closes at its take-profit target | `POST /webhook/api/bots/{botId}/pause_averaging` |
+| `resume_averaging` | Undo a pause — let the deal place safety orders again | `POST /webhook/api/bots/{botId}/resume_averaging` |
 
 `close` and `panic_sell` are deliberately different. `close` always respects your Target Profit %, so a routine "sell" signal can never dump a deal at a loss — if the target is not yet met the deal is simply left open. `panic_sell` is the emergency red button: it closes immediately at market and may realize a loss. Wire your everyday exit to `close`; reserve `panic_sell` for hard-stop conditions.
 

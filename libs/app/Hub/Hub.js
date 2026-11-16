@@ -6,6 +6,7 @@ const net = require('net');
 const ccxt = require('ccxt');
 const { parseStringPromise } = require('xml2js');
 const { HUB_TO_WORKER, WORKER_TO_HUB } = require(__dirname + '/MessageTypes.js');
+const WorkerShutdown = require(__dirname + '/workerShutdown.js');
 const LogWriter = require(__dirname + '/../LogWriter.js');   // shared, batched, off-event-loop log appender
 
 let shareData;
@@ -1287,74 +1288,16 @@ async function terminateInstance(instanceId) {
 			}
 
 
-			// Wait until shutdown_received is received from worker and delay has passed.
-			// A per-instance timeout prevents an indefinite hang if the worker is
-			// already dead or crashes before it can acknowledge the shutdown request.
-			const terminateTimeoutMs = shareData.appData['shutdown_timeout'] + 8000;
-
-			await new Promise((resolve, reject) => {
-
-				let terminateTimeout;
-
-				const onShutdownReceived = async (message) => {
-
-					// Use on() + explicit off() rather than once(): a live worker emits other messages
-					// (log batches, memory polls, dashboard replies) that could arrive before the ACK, and
-					// once() would be consumed by the first of ANY type and miss the real SHUTDOWN_RECEIVED,
-					// stalling the restart until the full force-terminate timeout.
-					if (message.type !== WORKER_TO_HUB.SHUTDOWN_RECEIVED) return;
-
-					worker.off('message', onShutdownReceived);
-
-					// Message received — cancel the safety timeout
-					clearTimeout(terminateTimeout);
-
-					try {
-
-						// Wait additional delay to ensure graceful shutdown
-						await shareData.Common.delay(shareData.appData['shutdown_timeout'] + 3000);
-
-						// Terminate the worker after the delay
-						await worker.terminate();
-
-						logger('info', `Worker ${workerId} terminated.`);
-
-						resolve();
-					}
-					catch (err) {
-
-						logger('error', `Error terminating instance: ${err}`);
-
-						reject(err);
-					}
-				};
-
-				// Match on the ACK type explicitly (see the handler) and detach with off() once matched
-				worker.once('message', onShutdownReceived);
-
-				// Safety timeout — resolves (not rejects) so one unresponsive worker
-				// does not block the entire shutdown sequence
-				terminateTimeout = setTimeout(async () => {
-
-					worker.off('message', onShutdownReceived);
-
-					logger('info', `Worker ${workerId} did not acknowledge shutdown within ${terminateTimeoutMs}ms. Forcing termination.`);
-
-					try {
-
-						await worker.terminate();
-					}
-					catch (e) {}
-
-					resolve();
-
-				}, terminateTimeoutMs);
-
-				// Send the shutdown request to the worker
-				worker.postMessage({
-
-					type: HUB_TO_WORKER.SHUTDOWN
-				});
+			// Shut the worker down via the shared, event-driven helper — the single source of truth with the
+			// full-Hub shutdown in symbot-hub.js, so the two can never drift. It resolves the instant the
+			// worker self-exits (no fixed grace delay — the old hardcoded wait was dead time) and
+			// force-terminates only a worker that never exits. The crash-restart suppression set above already
+			// covers a forced (non-zero) exit, so it is never mistaken for a crash and resurrected.
+			await WorkerShutdown.terminateWorkerGracefully({
+				worker,
+				label: workerId,
+				log: (m) => logger('info', m),
+				shutdownTimeout: shareData.appData['shutdown_timeout']
 			});
 		}
 	}

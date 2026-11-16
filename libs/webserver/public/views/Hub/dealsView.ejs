@@ -72,6 +72,48 @@
 	}
 
 
+	function pauseAveragingConfirm(instanceId, dealId) {
+
+		_autoRefresh.stop();
+
+		// Dialog markup lives in SymBot.UI (shared with the instance view). The result message is the shared,
+		// language-agnostic SymBot.UI.pauseAveragingResult (keyed off success / pause_buy), passed as a function so
+		// postAction words it from the ACTUAL response. Routes through the Hub deal-action endpoint (action
+		// 'pause_averaging'), which reuses the instance's own pauseDeal — identical behavior to the instance.
+		SymBot.UI.confirmPauseAveraging({
+			dealId: dealId,
+			onConfirm: function() { pauseAveragingAction(instanceId, dealId, 'pause_averaging'); },
+			onCancel: function() { setReloadTimeout(); }
+		});
+	}
+
+
+	function resumeAveragingConfirm(instanceId, dealId) {
+
+		_autoRefresh.stop();
+
+		SymBot.UI.confirmResumeAveraging({
+			dealId: dealId,
+			onConfirm: function() { pauseAveragingAction(instanceId, dealId, 'resume_averaging'); },
+			onCancel: function() { setReloadTimeout(); }
+		});
+	}
+
+
+	// One call for both pause_averaging and resume_averaging (SSOT — they can never diverge).
+	function pauseAveragingAction(instanceId, dealId, action) {
+
+		SymBot.UI.postAction({
+			url: './api/hub/deals/' + dealId + '/action',
+			payload: { instanceId: instanceId, action: action, data: {} },
+			successMsg: function(res) { return SymBot.UI.pauseAveragingResult(res, dealId); },
+			failureMsg: function(res) { return SymBot.UI.pauseAveragingResult(res, dealId); },
+			onSuccess: function() { setReloadTimeout(); },
+			onFailure: function() { setReloadTimeout(); }
+		});
+	}
+
+
 	function cancelDealConfirm(instanceId, dealId, pair) {
 
 		_autoRefresh.stop();
@@ -265,13 +307,20 @@
 			});
 
 			// Button state
-			let { cancel: { button: cancelBtn }, panic: { button: panicBtn },
+			let { cancel: { button: cancelBtn }, pause_averaging: { button: pauseAvgBtn }, resume_averaging: { button: resumeAvgBtn }, panic: { button: panicBtn },
 			      pause:  { button: pauseBtn },  stop:  { button: stopBtn } } = actionButtons;
 
-			if (pause || pauseBuy || pauseSell) {
+			// The pause/resume DIALOG button owns full-pause and sell-pause; the buy side has its own dedicated
+			// "Pause averaging" pill, so pauseBuy alone must NOT flip this (no two resume controls for one state).
+			if (pause || pauseSell) {
 
 				pauseBtn = actionButtons['resume']['button'];
 			}
+
+			// The averaging pill reflects the buy side (deal.info.pause_buy) — the same flag the Pause Buy checkbox
+			// sets, so the two never diverge. Paused → amber "Resume averaging", else "Pause averaging".
+			let pauseAvgBtnShown = pauseAvgBtn;
+			if (pauseBuy) { pauseAvgBtnShown = resumeAvgBtn; }
 
 			if (!botActive) {
 
@@ -300,7 +349,7 @@
 			// instance view.
 			const stopLossDisplay = SymBot.UI.stopLossCell(deal['info'], dealSym, convertNotation);
 
-			const pillContent = panicBtn + pauseBtn + cancelBtn + (stopBtn || '');
+			const pillContent = pauseAvgBtnShown + panicBtn + pauseBtn + cancelBtn + (stopBtn || '');
 
 			// Live health glyph (shared with the instance view via SymBot.UI).
 			const healthCell = SymBot.UI.dealHealthCell({
@@ -415,7 +464,15 @@ $(document).ready(function() {
 			const pauseSell  = $td.data('pausesell');
 			const pauseReason = $td.data('pausereason') || '';
 
-			if (btnTitle === 'Panic sell deal') {
+			if (btnTitle === 'Pause averaging') {
+
+				if (dealId) pauseAveragingConfirm(instanceId, dealId);
+			}
+			else if (btnTitle === 'Resume averaging') {
+
+				if (dealId) resumeAveragingConfirm(instanceId, dealId);
+			}
+			else if (btnTitle === 'Panic sell deal') {
 
 				if (dealId) panicSellConfirm(instanceId, dealId);
 			}
